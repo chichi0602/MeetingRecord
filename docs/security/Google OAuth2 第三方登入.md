@@ -47,7 +47,7 @@
 
 ## 二、系統設定
 
-設定區段位於 `appsettings.json` 的 `GoogleOAuthSettings`，並綁定到強型別 `MyProject.Web.Auth.GoogleOAuthSettings`：
+設定區段位於 `appsettings.json` 的 `GoogleOAuthSettings`，並綁定到強型別 `MeetingRecord.Web.Auth.GoogleOAuthSettings`：
 
 ```json
 "GoogleOAuthSettings": {
@@ -73,10 +73,10 @@
 
 **方式 A：user-secrets（開發環境建議）**
 
-`ClientSecret` 屬機密，**不應寫入版本控管的 `appsettings.json`**。專案已設定 `UserSecretsId`，可直接於 `MyProject.Web` 目錄執行：
+`ClientSecret` 屬機密，**不應寫入版本控管的 `appsettings.json`**。專案已設定 `UserSecretsId`，可直接於 `MeetingRecord.Web` 目錄執行：
 
 ```powershell
-cd src\MyProject\MyProject.Web
+cd src\MeetingRecord\MeetingRecord.Web
 dotnet user-secrets set "GoogleOAuthSettings:Enabled" "true"
 dotnet user-secrets set "GoogleOAuthSettings:ClientId" "你的用戶端ID"
 dotnet user-secrets set "GoogleOAuthSettings:ClientSecret" "你的用戶端密鑰"

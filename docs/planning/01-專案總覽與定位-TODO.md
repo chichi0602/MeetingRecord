@@ -10,8 +10,8 @@
 - [x] 目標說明：本專案定位為未來開發 .NET 10 Blazor + Web API 系統的預設腳手架，提供 UI、資料存取、DTO、API、認證授權、日誌與文件基礎。
 - [x] 現況盤點：目前已有 Blazor Web App、EF Core SQLite 預設、NLog、AutoMapper、DTO 專案、Project/MyTask/Meeting CRUD API、Swagger、Cookie 登入與 JWT Bearer API 認證基礎。（MyTask/Meeting 已於 0.4.24 移除）
 - [x] 實作待辦：已完成第一階段 API/JWT/測試/CI 補強，後續要持續收斂 nullable warning、Program.cs 結構、預設帳號安全與 API versioning。
-- [x] 驗收標準：`dotnet build src/MyProject/MyProject.slnx -v:minimal --no-incremental` 可成功建置；目前摘要為 56 warnings、0 errors。
-- [x] 相關檔案：`src/MyProject/MyProject.slnx`、`src/MyProject/MyProject.Web`、`src/MyProject/MyProject.Dtos`、`src/MyProject/MyProject.Tests`、`.github/workflows/dotnet-ci.yml`。
+- [x] 驗收標準：`dotnet build src/MeetingRecord/MeetingRecord.slnx -v:minimal --no-incremental` 可成功建置；目前摘要為 56 warnings、0 errors。
+- [x] 相關檔案：`src/MeetingRecord/MeetingRecord.slnx`、`src/MeetingRecord/MeetingRecord.Web`、`src/MeetingRecord/MeetingRecord.Dtos`、`src/MeetingRecord/MeetingRecord.Tests`、`.github/workflows/dotnet-ci.yml`。
 - [x] 備註風險：目前仍有 .NET preview SDK 訊息與 0 個 build warning；`Program.cs` 已初步拆分，預設種子帳號已改為可透過 `BootstrapSettings` 覆寫。
 
 ## 後續定位待辦

@@ -64,20 +64,20 @@ View（`MyUserView`）→ `MyUserService` → `BackendDBContext`：
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/MyUserServiceAssignmentTests.cs`：`AddAsync_WithMultipleRolesAndTeams_ShouldPersistUserRoleAndUserTeam`（多角色＋團隊落地 `UserRole`／`UserTeam`）。
-- `MyProject.Tests/RbacWriteServiceTests.cs`：`SyncUserRolesAsync`／`SyncUserTeamsAsync` 差異化增刪對帳。
-- `MyProject.Tests/RbacBackfillServiceTests.cs`：由 `RoleViewId` 建 `UserRole`、由角色預設團隊建 `UserTeam`、冪等。
-- `MyProject.Tests/AuditEventsTests.cs`：`User.Create`／`User.Update`／`User.Delete`（含帳號）與未登入 actor 為 null。
-- `MyProject.Tests/PermissionCheckerTests.cs`：多角色聯集有效權限鍵、管理員短路。
+- `MeetingRecord.Tests/MyUserServiceAssignmentTests.cs`：`AddAsync_WithMultipleRolesAndTeams_ShouldPersistUserRoleAndUserTeam`（多角色＋團隊落地 `UserRole`／`UserTeam`）。
+- `MeetingRecord.Tests/RbacWriteServiceTests.cs`：`SyncUserRolesAsync`／`SyncUserTeamsAsync` 差異化增刪對帳。
+- `MeetingRecord.Tests/RbacBackfillServiceTests.cs`：由 `RoleViewId` 建 `UserRole`、由角色預設團隊建 `UserTeam`、冪等。
+- `MeetingRecord.Tests/AuditEventsTests.cs`：`User.Create`／`User.Update`／`User.Delete`（含帳號）與未登入 actor 為 null。
+- `MeetingRecord.Tests/PermissionCheckerTests.cs`：多角色聯集有效權限鍵、管理員短路。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/Admins/MyUserPage.razor:1`
-- `src/MyProject/MyProject.Web/Components/Views/Admins/MyUserView.razor:44`、`MyUserView.razor.cs:193`（編輯回填）、`:405`（多角色／團隊變更）
-- `src/MyProject/MyProject.Business/Services/DataAccess/MyUserService.cs:210`（Add）、`:250`（Update）、`:305`（雙寫）、`:332`（回填）
-- `src/MyProject/MyProject.Business/Services/Other/RbacWriteService.cs:44`（`SyncUserRolesAsync`）、`:64`（`SyncUserTeamsAsync`）
-- `src/MyProject/MyProject.Business/Services/Other/RbacBackfillService.cs:95`、`:123`（啟動回填）
-- `src/MyProject/MyProject.Business/Services/Other/EffectiveTeamResolver.cs`（有效團隊）
-- RBAC 資料表：`MyUser`、`RoleView`、`UserRole`、`UserTeam`、`RolePermissionMap`、`Permission`（`src/MyProject/MyProject.AccessDatas/Models/`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/MyUserPage.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/MyUserView.razor:44`、`MyUserView.razor.cs:193`（編輯回填）、`:405`（多角色／團隊變更）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MyUserService.cs:210`（Add）、`:250`（Update）、`:305`（雙寫）、`:332`（回填）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs:44`（`SyncUserRolesAsync`）、`:64`（`SyncUserTeamsAsync`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacBackfillService.cs:95`、`:123`（啟動回填）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/EffectiveTeamResolver.cs`（有效團隊）
+- RBAC 資料表：`MyUser`、`RoleView`、`UserRole`、`UserTeam`、`RolePermissionMap`、`Permission`（`src/MeetingRecord/MeetingRecord.AccessDatas/Models/`）
 - 交叉連結：[登入與帳號流程](登入與帳號流程-prd.md)、[角色管理](角色管理-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 - 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[密碼種類與儲存機制](../security/密碼種類與儲存機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)

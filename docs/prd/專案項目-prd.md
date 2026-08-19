@@ -42,7 +42,7 @@
 - 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單（`ProjectViewView.razor.cs:228-237`）。
 - 寫入前清追蹤：`AddAsync`／`UpdateAsync`／`DeleteAsync` 進入時皆呼叫 `CleanTrackingHelper.Clean<Project>(context)`（`ProjectService.cs:201,233,286`）。
 - 附件 Adapter：UI 以 `ProjectUploadFileInput`（FileName/ContentType/FileSize/Content）傳入；Service 依主表 `CreatedAt` 年／月建立目錄，檔名以 GUID 產生，落地後寫入 `ProjectFile`；刪除主表時先刪實體檔再刪紀錄。
-- Migration：模型異動需在 `MyProject.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
+- Migration：模型異動需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
 
 ## 五、權限與安全
 
@@ -60,17 +60,17 @@
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/ProjectServiceTeamAccessTests.cs`：管理員可見全部（3 筆）、非管理員僅見公開＋交集團隊、無團隊者僅見公開、團隊過濾、單筆越界守門回空模型。
-- `MyProject.Tests/PermissionCheckerTests.cs`、`RbacBackfillServiceTests.cs`：動作級授權鍵與 RBAC 回填涵蓋「專案項目」。
+- `MeetingRecord.Tests/ProjectServiceTeamAccessTests.cs`：管理員可見全部（3 筆）、非管理員僅見公開＋交集團隊、無團隊者僅見公開、團隊過濾、單筆越界守門回空模型。
+- `MeetingRecord.Tests/PermissionCheckerTests.cs`、`RbacBackfillServiceTests.cs`：動作級授權鍵與 RBAC 回填涵蓋「專案項目」。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/Projects/ProjectPage.razor:1`
-- `src/MyProject/MyProject.Web/Components/Views/Projects/ProjectViewView.razor.cs:1`
-- `src/MyProject/MyProject.Business/Services/DataAccess/ProjectService.cs:1`
-- `src/MyProject/MyProject.Web/Controllers/ProjectController.cs:1`
-- `src/MyProject/MyProject.AccessDatas/Models/Project.cs:1`、`ProjectFile.cs:1`
-- `src/MyProject/MyProject.Share/Helpers/MagicObjectHelper.cs:30`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Projects/ProjectPage.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor.cs:1`
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs:1`
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs:1`
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Project.cs:1`、`ProjectFile.cs:1`
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:30`
 - 交叉連結：[Web API 設計慣例](../architecture/Web%20API%20設計慣例.md)、[檔案上傳機制](../features/檔案上傳機制.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 
 > 備註：UI 以 `/api/project-files/{id}/download` 下載附件，Service 端 `GetFileDownloadAsync` 具團隊權控守門；對外端點的實際註冊位置未在現行 Controllers 找到（未確認）。

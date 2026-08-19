@@ -10,7 +10,7 @@
 - [x] 明確定義 API、UI、Business、Entity 的資料邊界，避免腳手架日後擴充時直接暴露資料庫 Entity。
 
 ## 邊界原則
-- [x] Web API request/response 只使用 `MyProject.Dtos`，不可直接接收或回傳 `AccessDatas.Models` Entity。
+- [x] Web API request/response 只使用 `MeetingRecord.Dtos`，不可直接接收或回傳 `AccessDatas.Models` Entity。
 - [x] Entity 僅作為 EF Core persistence model 使用。
 - [x] AdapterModel 目前主要供 Blazor UI/後台頁面使用，不應與 API DTO 混用。
 - [x] Controller 使用 AutoMapper 或明確 mapping 在 DTO 與 Entity 之間轉換。

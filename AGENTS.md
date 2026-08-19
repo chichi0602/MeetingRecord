@@ -79,7 +79,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 動手改本專案前，請先讀 **`docs/architecture/開發慣例與限制速查.md`**（相對 repo 根目錄）—— 集中列出設計慣例、不變量與踩雷點；完整文件索引見 `docs/README.md`。
 
 最關鍵的不變量（違反會改壞功能或留下隱患）：
-- 本系統**只支援 SQLite**；模型變更要在 `MyProject.AccessDatas/Migrations/` 產生 migration（0.4.24 起已移除 SQL Server 軌道）。
+- 本系統**只支援 SQLite**；模型變更要在 `MeetingRecord.AccessDatas/Migrations/` 產生 migration（0.4.24 起已移除 SQL Server 軌道）。
 - 分層依賴一律向上：Web → Business → AccessDatas；`Share`/`Models`/`Dtos` 不相依其他專案；UI 不直接 `using BackendDBContext`。
 - Web API 一律回傳 `ApiResult<T>`，分頁包 `PagedResult<T>`；UI 用 Cookie 驗證、API 用 JWT Bearer。受保護 CRUD 另以 `[HasPermission("resource:action")]` + `IPermissionChecker` 做動作級授權（無權限回 403，維持 `ApiResult`；管理員短路）；UI 與 API 共用此單一 RBAC 權威來源。
 - Blazor 檢視編輯前 `Clone()`、Update/Delete 前以 `CleanTrackingHelper` 清除追蹤。

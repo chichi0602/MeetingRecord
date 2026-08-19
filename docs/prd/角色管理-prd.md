@@ -60,21 +60,21 @@ View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/RbacWriteServiceTests.cs`：`SyncRolePermissionsAsync_ShouldAddAndRemoveToMatchKeys`、`ShouldCreateMissingPermissionRows`。
-- `MyProject.Tests/RbacBackfillServiceTests.cs`：建立權限目錄、由 `TabViewJson` 連結角色權限、冪等。
-- `MyProject.Tests/PermissionCheckerTests.cs`：管理員全通過、角色具／缺鍵、裸頁面鍵授予全動作、僅 `view` 不含 `edit`、多角色聯集。
-- `MyProject.Tests/AuditEventsTests.cs`：`Role.Create`／`Role.Delete` 稽核。
+- `MeetingRecord.Tests/RbacWriteServiceTests.cs`：`SyncRolePermissionsAsync_ShouldAddAndRemoveToMatchKeys`、`ShouldCreateMissingPermissionRows`。
+- `MeetingRecord.Tests/RbacBackfillServiceTests.cs`：建立權限目錄、由 `TabViewJson` 連結角色權限、冪等。
+- `MeetingRecord.Tests/PermissionCheckerTests.cs`：管理員全通過、角色具／缺鍵、裸頁面鍵授予全動作、僅 `view` 不含 `edit`、多角色聯集。
+- `MeetingRecord.Tests/AuditEventsTests.cs`：`Role.Create`／`Role.Delete` 稽核。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/Admins/RoleViewPage.razor:1`
-- `src/MyProject/MyProject.Web/Components/Views/Admins/RoleViewView.razor:103`（權限矩陣）、`RoleViewView.razor.cs:368`（矩陣互動）、`:394`（動作欄定義）
-- `src/MyProject/MyProject.Business/Services/DataAccess/RoleViewService.cs:155`（Add）、`:188`（Update）、`:321`（回填矩陣）
-- `src/MyProject/MyProject.Business/Services/Other/RolePermissionService.cs:95`（`SetPermissionInput`）、`:116`（`GetPermissionInput`）
-- `src/MyProject/MyProject.Business/Services/Other/RbacWriteService.cs:16`（`SyncRolePermissionsAsync`）、`:84`（`EnsurePermissionsAsync`）
-- `src/MyProject/MyProject.Business/Services/Other/PermissionChecker.cs:16`（判定）、`RbacBackfillService.cs:35`（權限目錄）
-- `src/MyProject/MyProject.Web/Filters/HasPermissionAttribute.cs:31`（API 403）
-- `src/MyProject/MyProject.Share/Helpers/PermissionKeys.cs:9`（`PermissionActions`／`PermissionKey`）
-- RBAC 資料表：`RoleView`、`Permission`、`RolePermissionMap`、`UserRole`（`src/MyProject/MyProject.AccessDatas/Models/`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor:103`（權限矩陣）、`RoleViewView.razor.cs:368`（矩陣互動）、`:394`（動作欄定義）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs:155`（Add）、`:188`（Update）、`:321`（回填矩陣）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs:95`（`SetPermissionInput`）、`:116`（`GetPermissionInput`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs:16`（`SyncRolePermissionsAsync`）、`:84`（`EnsurePermissionsAsync`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/PermissionChecker.cs:16`（判定）、`RbacBackfillService.cs:35`（權限目錄）
+- `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs:31`（API 403）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`（`PermissionActions`／`PermissionKey`）
+- RBAC 資料表：`RoleView`、`Permission`、`RolePermissionMap`、`UserRole`（`src/MeetingRecord/MeetingRecord.AccessDatas/Models/`）
 - 交叉連結：[使用者管理](使用者管理-prd.md)、[登入與帳號流程](登入與帳號流程-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 - 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)

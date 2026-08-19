@@ -150,24 +150,24 @@
 ## 6. 參考與引用程式碼清單（複製模板時優先順序）
 
 1. **主樣板元件（首要）**
-   - `src/MyProject/MyProject.Web/Components/Views/Admins/RoleViewView.razor`
-   - `src/MyProject/MyProject.Web/Components/Views/Admins/RoleViewView.razor.cs`
-   - `src/MyProject/MyProject.Web/Components/Views/Admins/RoleViewView.razor.css`
+   - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor`
+   - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor.cs`
+   - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor.css`
 
 2. **服務層樣板**
-   - `src/MyProject/MyProject.Business/Services/DataAccess/RoleViewService.cs`
+   - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs`
 
 3. **模型樣板**
-   - `src/MyProject/MyProject.Models/AdapterModel/RoleViewAdapterModel.cs`
-   - `src/MyProject/MyProject.AccessDatas/Models/RoleView.cs`
-   - `src/MyProject/MyProject.Models/Systems/DataRequest.cs`
-   - `src/MyProject/MyProject.Models/Systems/DataRequestResult.cs`
+   - `src/MeetingRecord/MeetingRecord.Models/AdapterModel/RoleViewAdapterModel.cs`
+   - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/RoleView.cs`
+   - `src/MeetingRecord/MeetingRecord.Models/Systems/DataRequest.cs`
+   - `src/MeetingRecord/MeetingRecord.Models/Systems/DataRequestResult.cs`
 
 4. **通用機制樣板**
-   - `src/MyProject/MyProject.Web/Components/Commons/InputWatcher.cs`
-   - `src/MyProject/MyProject.Business/Models/AutoMapping.cs`
-   - `src/MyProject/MyProject.Web/Program.cs`
-   - `src/MyProject/MyProject.Web/Components/Pages/Admins/RoleViewPage.razor`
+   - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/InputWatcher.cs`
+   - `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs`
+   - `src/MeetingRecord/MeetingRecord.Web/Program.cs`
+   - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor`
 
 ---
 

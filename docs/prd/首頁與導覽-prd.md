@@ -69,22 +69,22 @@
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/MenuIconTests.cs::MenuJson_AllIcons_ShouldBeNonEmptyAndAllowed`：`Menu.json` 每項圖示非空且屬允許集合。
+- `MeetingRecord.Tests/MenuIconTests.cs::MenuJson_AllIcons_ShouldBeNonEmptyAndAllowed`：`Menu.json` 每項圖示非空且屬允許集合。
 - 手動驗收：以不同角色登入，確認選單僅顯示具權限之項目；管理員可見全部；重排 `Menu.json` 順序不影響權限對應。
 - 手動驗收（關於）：點右上角使用者名稱 →「關於」，對話窗顯示七列資訊，系統版本須與 `appsettings.json` 之 `SystemVersion` 一致；關閉後再次開啟，「已運作時間」應有增加。
 - 權限判定來源之測試見 `PermissionCheckerTests.cs`（詳「紀錄分類與團隊權控 PRD」）。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/Home.razor:1`（`/` landing）
-- `src/MyProject/MyProject.Web/Components/Pages/HomeAuthed.razor:1`（`/App` dashboard）
-- `src/MyProject/MyProject.Web/Components/Views/Commons/SplashView.razor:1`
-- `src/MyProject/MyProject.Web/Datas/Menu.json:1`
-- `src/MyProject/MyProject.Web/Components/Layout/SidebarMenuService.cs:16`（`MenuPermissionMap`）、`:46`（載入與過濾）
-- `src/MyProject/MyProject.Web/Components/Layout/NavMenu.razor:1`
-- `src/MyProject/MyProject.Web/Components/Layout/MainLayout.razor:1`（使用者選單與「關於」對話窗）
-- `src/MyProject/MyProject.Web/Components/Layout/MainLayout.razor.cs:1`（`OnAboutClick`）
-- `src/MyProject/MyProject.Web/Health/SystemStartupState.cs:1`（啟動時間來源）
-- `src/MyProject/MyProject.Business/Services/Other/AuthenticationStateHelper.cs:179`（`CheckAccessPage`）
-- `src/MyProject/MyProject.Share/Helpers/MagicObjectHelper.cs:28`（角色權限鍵常數）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Home.razor:1`（`/` landing）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/HomeAuthed.razor:1`（`/App` dashboard）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Commons/SplashView.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:16`（`MenuPermissionMap`）、`:46`（載入與過濾）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/NavMenu.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor:1`（使用者選單與「關於」對話窗）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor.cs:1`（`OnAboutClick`）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemStartupState.cs:1`（啟動時間來源）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:179`（`CheckAccessPage`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:28`（角色權限鍵常數）
 - 交叉連結：[紀錄分類與團隊權控 PRD](紀錄分類與團隊權控-prd.md)、[認證授權與權限機制](../security/認證授權與權限機制.md)

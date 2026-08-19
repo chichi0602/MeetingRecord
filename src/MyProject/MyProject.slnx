@@ -1,9 +1,0 @@
-<Solution>
-  <Project Path="MyProject.AccessDatas/MyProject.AccessDatas.csproj" Id="64bb2002-ab71-4163-9758-60e90b47e61b" />
-  <Project Path="MyProject.Business/MyProject.Business.csproj" Id="2af3f3dc-78d7-4bb4-9ad9-049158933a44" />
-  <Project Path="MyProject.Dtos/MyProject.Dtos.csproj" Id="c1f74a59-fdc3-4674-b3cb-7a77c8854f15" />
-  <Project Path="MyProject.Models/MyProject.Models.csproj" Id="e433e6ff-816c-4b7a-b3b2-e0adf521f243" />
-  <Project Path="MyProject.Share/MyProject.Share.csproj" Id="910209cd-aa86-4120-82a5-755e5d61c837" />
-  <Project Path="MyProject.Tests/MyProject.Tests.csproj" />
-  <Project Path="MyProject.Web/MyProject.Web.csproj" />
-</Solution>

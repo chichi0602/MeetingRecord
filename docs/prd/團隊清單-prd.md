@@ -48,7 +48,7 @@
 - Entity `Team`（`Id/Name/Code/Description/IsEnabled/CreatedAt/UpdatedAt`），DbSet 為 `context.Team`。
 - 查詢一律 `AsNoTracking()`；新增前 `CleanTrackingHelper.Clean<Team>` 清追蹤，寫入後再清一次。
 - 編輯前於 UI 以 `Clone()` 複製記錄；`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
-- 模型變更需在 `MyProject.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
+- 模型變更需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
 
 ## 五、權限與安全
 
@@ -68,7 +68,7 @@
 
 ## 七、驗收與測試
 
-對應測試檔 `src/MyProject/MyProject.Tests/TeamServiceTests.cs`：
+對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TeamServiceTests.cs`：
 
 - `BeforeAddCheckAsync_WithUniqueNameAndCode_ShouldSucceed`：名稱與代號皆唯一可新增。
 - `BeforeAddCheckAsync_WithDuplicateName_ShouldFail`：名稱重複被拒。
@@ -82,13 +82,13 @@
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/Teams/TeamPage.razor:1`
-- `src/MyProject/MyProject.Web/Components/Views/Teams/TeamViewView.razor.cs:70`（頁面權限檢查）
-- `src/MyProject/MyProject.Web/Controllers/TeamController.cs:36`（`[HasPermission]` 動作鍵）
-- `src/MyProject/MyProject.Business/Services/DataAccess/TeamService.cs:122`（AddAsync / 前置檢查含代號唯一）
-- `src/MyProject/MyProject.AccessDatas/Models/Team.cs:8`（Entity 欄位）
-- `src/MyProject/MyProject.Dtos/Models/TeamCreateUpdateDto.cs:9`、`src/MyProject/MyProject.Dtos/Commons/TeamSearchRequestDto.cs:6`
-- `src/MyProject/MyProject.Share/Helpers/MagicObjectHelper.cs:38`、`src/MyProject/MyProject.Share/Helpers/PermissionKeys.cs:9`
-- `src/MyProject/MyProject.Web/Components/Layout/SidebarMenuService.cs:28`、`src/MyProject/MyProject.Web/Datas/Menu.json:63`
-- `src/MyProject/MyProject.Tests/TeamServiceTests.cs:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Teams/TeamPage.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Teams/TeamViewView.razor.cs:70`（頁面權限檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/TeamController.cs:36`（`[HasPermission]` 動作鍵）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TeamService.cs:122`（AddAsync / 前置檢查含代號唯一）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Team.cs:8`（Entity 欄位）
+- `src/MeetingRecord/MeetingRecord.Dtos/Models/TeamCreateUpdateDto.cs:9`、`src/MeetingRecord/MeetingRecord.Dtos/Commons/TeamSearchRequestDto.cs:6`
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:38`、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:28`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:63`
+- `src/MeetingRecord/MeetingRecord.Tests/TeamServiceTests.cs:1`
 - 交叉連結：[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../superpowers/specs/2026-06-22-category-team-pages-design.md](../superpowers/specs/2026-06-22-category-team-pages-design.md)、[../prd/紀錄分類與團隊權控-prd.md](../prd/紀錄分類與團隊權控-prd.md)

@@ -11,7 +11,7 @@
 - [x] 現況盤點：第一階段已完成，並保留既有 API 路由相容性。
 - [x] 實作待辦：已新增 Auth DTO、JWT service、AuthController、ApiExceptionFilter、ApiValidationFilter 結構化錯誤、測試專案與 CI。
 - [x] 驗收標準：build 成功、測試通過、弱點掃描未列出風險套件。
-- [x] 相關檔案：`src/MyProject/MyProject.Web/Auth`、`src/MyProject/MyProject.Web/Controllers`、`src/MyProject/MyProject.Tests`、`.github/workflows/dotnet-ci.yml`。
+- [x] 相關檔案：`src/MeetingRecord/MeetingRecord.Web/Auth`、`src/MeetingRecord/MeetingRecord.Web/Controllers`、`src/MeetingRecord/MeetingRecord.Tests`、`.github/workflows/dotnet-ci.yml`。
 - [x] 備註風險：目前 refresh token stateless，不支援單顆 token 撤銷；限制已寫入正式部署安全清單。
 
 ## 第二階段：品質收斂

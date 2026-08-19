@@ -40,7 +40,7 @@ function New-ScaffoldFile {
 }
 
 New-ScaffoldFile "AccessDatas/Models/$Name.cs" @"
-namespace MyProject.AccessDatas.Models;
+namespace MeetingRecord.AccessDatas.Models;
 
 public class $Name
 {
@@ -53,7 +53,7 @@ public class $Name
 "@
 
 New-ScaffoldFile "Dtos/Models/${Name}Dto.cs" @"
-namespace MyProject.Dtos.Models;
+namespace MeetingRecord.Dtos.Models;
 
 public class ${Name}Dto
 {
@@ -68,7 +68,7 @@ public class ${Name}Dto
 New-ScaffoldFile "Dtos/Models/${Name}CreateUpdateDto.cs" @"
 using System.ComponentModel.DataAnnotations;
 
-namespace MyProject.Dtos.Models;
+namespace MeetingRecord.Dtos.Models;
 
 public class ${Name}CreateUpdateDto
 {
@@ -83,7 +83,7 @@ public class ${Name}CreateUpdateDto
 "@
 
 New-ScaffoldFile "Dtos/Commons/${Name}SearchRequestDto.cs" @"
-namespace MyProject.Dtos.Commons;
+namespace MeetingRecord.Dtos.Commons;
 
 public class ${Name}SearchRequestDto : SearchRequestBaseDto
 {
@@ -93,11 +93,11 @@ public class ${Name}SearchRequestDto : SearchRequestBaseDto
 
 New-ScaffoldFile "Business/Repositories/${Name}Repository.cs" @"
 using Microsoft.EntityFrameworkCore;
-using MyProject.AccessDatas;
-using MyProject.AccessDatas.Models;
-using MyProject.Dtos.Commons;
+using MeetingRecord.AccessDatas;
+using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Dtos.Commons;
 
-namespace MyProject.Business.Repositories;
+namespace MeetingRecord.Business.Repositories;
 
 public class ${Name}Repository
 {
@@ -149,11 +149,11 @@ New-ScaffoldFile "Web/Controllers/${Name}Controller.cs" @"
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using MyProject.Dtos.Commons;
-using MyProject.Dtos.Models;
-using MyProject.Web.Filters;
+using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Dtos.Models;
+using MeetingRecord.Web.Filters;
 
-namespace MyProject.Web.Controllers;
+namespace MeetingRecord.Web.Controllers;
 
 [Route("api/[controller]")]
 [Route("api/v1/[controller]")]
@@ -193,7 +193,7 @@ New-ScaffoldFile "Web/Components/Views/${Name}View.razor" @"
 "@
 
 New-ScaffoldFile "Tests/${Name}ApiTests.cs" @"
-namespace MyProject.Tests;
+namespace MeetingRecord.Tests;
 
 public sealed class ${Name}ApiTests
 {

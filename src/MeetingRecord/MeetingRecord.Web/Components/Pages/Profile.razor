@@ -1,0 +1,193 @@
+@page "/Profile"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@using MeetingRecord.Business.Services.DataAccess
+@using MeetingRecord.Business.Services.Other
+
+@inject AuthenticationStateHelper AuthenticationStateHelper
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject MyUserService MyUserService
+@inject NavigationManager NavigationManager
+@inject MessageService MessageService
+@inject NotificationService NotificationService
+@inject ILogger<Profile> Logger
+
+<PageTitle>設定 API 密碼</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(roleMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @roleMessage
+    </div>
+}
+else if (isLoading)
+{
+    <Spin />
+}
+else if (isSupportAccount)
+{
+    <Alert Type="AlertType.Warning"
+           Message="系統預設開發帳號 support 禁止於此變更密碼"
+           ShowIcon="true" />
+}
+else
+{
+    <div class="profile-page">
+        <h1>設定 API 密碼</h1>
+        <p class="profile-account">@currentAccount</p>
+        <Alert Type="AlertType.Info"
+               Message="設定本地 API 密碼後，即可使用「帳號（Email）+ 此密碼」呼叫 /api/v1/auth/login 取得 JWT。"
+               Description="網頁登入可繼續使用 Google 單一登入，此密碼僅供 API 存取使用。"
+               ShowIcon="true"
+               Style="margin-bottom: 20px;" />
+
+        <AntDesign.Form TModel="InputModel"
+                        Model="@input"
+                        Layout="FormLayout.Vertical"
+                        OnFinish="@(_ => OnSubmitAsync())"
+                        OnFinishFailed="@(_ => OnValidationFailedAsync())"
+                        Context="formContext">
+            @if (hasLocalPassword)
+            {
+                <FormItem Label="目前密碼" Required>
+                    <Input Password @bind-Value="input.CurrentPassword" Placeholder="請輸入目前密碼" />
+                    <ValidationMessage For="() => input.CurrentPassword" />
+                </FormItem>
+            }
+
+            <FormItem Label="新密碼" Required>
+                <Input Password @bind-Value="input.NewPassword" Placeholder="請輸入新密碼" />
+                <ValidationMessage For="() => input.NewPassword" />
+            </FormItem>
+
+            <FormItem Label="確認新密碼" Required>
+                <Input Password @bind-Value="input.ConfirmPassword" Placeholder="請再次輸入新密碼" />
+                <ValidationMessage For="() => input.ConfirmPassword" />
+            </FormItem>
+
+            <Space>
+                <SpaceItem>
+                    <Button Type="ButtonType.Primary" HtmlType="submit" Loading="@isSubmitting">
+                        儲存
+                    </Button>
+                </SpaceItem>
+                <SpaceItem>
+                    <Button OnClick="@(() => NavigationManager.NavigateTo("/App"))" Disabled="@isSubmitting">
+                        取消
+                    </Button>
+                </SpaceItem>
+            </Space>
+        </AntDesign.Form>
+    </div>
+}
+
+@code {
+    private readonly InputModel input = new();
+    private bool isLoading = true;
+    private bool isSubmitting;
+    private bool isSupportAccount;
+    private bool hasLocalPassword;
+    private int currentUserId;
+    private string currentAccount = string.Empty;
+    private string roleMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var checkResult = await AuthenticationStateHelper.Check(AuthenticationStateProvider, NavigationManager);
+        if (checkResult != AuthenticationCheckResult.Succeeded)
+        {
+            roleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            isLoading = false;
+            return;
+        }
+
+        var currentUser = await AuthenticationStateHelper.GetUserInformation(AuthenticationStateProvider);
+        if (currentUser is null || currentUser.Id == 0)
+        {
+            roleMessage = "找不到目前登入使用者資料。";
+            isLoading = false;
+            return;
+        }
+
+        currentUserId = currentUser.Id;
+        currentAccount = currentUser.Account;
+        isSupportAccount = string.Equals(currentUser.Account, MagicObjectHelper.開發者帳號, StringComparison.OrdinalIgnoreCase);
+        hasLocalPassword = await MyUserService.HasLocalPasswordAsync(currentUserId);
+        isLoading = false;
+    }
+
+    private async Task OnSubmitAsync()
+    {
+        if (isSubmitting)
+        {
+            return;
+        }
+
+        isSubmitting = true;
+        try
+        {
+            var result = await MyUserService.SetOwnApiPasswordAsync(
+                currentUserId,
+                input.CurrentPassword,
+                input.NewPassword,
+                input.ConfirmPassword);
+
+            if (!result.Success)
+            {
+                await NotificationService.Open(new NotificationConfig
+                {
+                    Message = "設定 API 密碼失敗",
+                    Description = result.Message,
+                    NotificationType = NotificationType.Error,
+                    Placement = NotificationPlacement.BottomRight,
+                    Duration = 5
+                });
+                return;
+            }
+
+            await MessageService.SuccessAsync("API 密碼已設定。");
+            NavigationManager.NavigateTo("/App");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Setting own API password failed unexpectedly. UserId={UserId}", currentUserId);
+            await NotificationService.Open(new NotificationConfig
+            {
+                Message = "設定 API 密碼失敗",
+                Description = "設定密碼時發生未預期的錯誤。",
+                NotificationType = NotificationType.Error,
+                Placement = NotificationPlacement.BottomRight,
+                Duration = 5
+            });
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task OnValidationFailedAsync()
+    {
+        await NotificationService.Open(new NotificationConfig
+        {
+            Message = "設定 API 密碼失敗",
+            Description = "請確認密碼欄位皆已正確填寫。",
+            NotificationType = NotificationType.Error,
+            Placement = NotificationPlacement.BottomRight,
+            Duration = 5
+        });
+    }
+
+    private sealed class InputModel
+    {
+        public string CurrentPassword { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "新密碼 不可為空白")]
+        public string NewPassword { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "確認新密碼 不可為空白")]
+        [Compare(nameof(NewPassword), ErrorMessage = "新密碼與確認密碼不一致")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

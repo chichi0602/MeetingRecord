@@ -61,20 +61,20 @@
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/MyUserServiceLoginTests.cs`：新舊雜湊登入、舊雜湊自動升級、密碼錯誤、5 次失敗鎖定並拒絕正確密碼、成功後歸零、鎖定到期放行、成功／失敗稽核。
-- `MyProject.Tests/MyUserServicePasswordTests.cs`：`ChangeOwnPasswordAsync` 正確／錯誤舊密碼、空白新密碼、確認不一致、`support` 帳號被拒。
-- `MyProject.Tests/SecurePasswordHasherTests.cs`：自述式雜湊、非決定性、新舊格式驗證與要求 rehash。
-- `MyProject.Tests/AuthenticationStateHelperTests.cs`：未驗證／無效 Sid／查無使用者／停用／無角色／壞 RoleJson 導向登出、需改密碼導向、多角色聯集初始化。
-- `MyProject.Tests/TotpServiceTests.cs`：TOTP 產碼／驗證（骨架，預設關閉）。
+- `MeetingRecord.Tests/MyUserServiceLoginTests.cs`：新舊雜湊登入、舊雜湊自動升級、密碼錯誤、5 次失敗鎖定並拒絕正確密碼、成功後歸零、鎖定到期放行、成功／失敗稽核。
+- `MeetingRecord.Tests/MyUserServicePasswordTests.cs`：`ChangeOwnPasswordAsync` 正確／錯誤舊密碼、空白新密碼、確認不一致、`support` 帳號被拒。
+- `MeetingRecord.Tests/SecurePasswordHasherTests.cs`：自述式雜湊、非決定性、新舊格式驗證與要求 rehash。
+- `MeetingRecord.Tests/AuthenticationStateHelperTests.cs`：未驗證／無效 Sid／查無使用者／停用／無角色／壞 RoleJson 導向登出、需改密碼導向、多角色聯集初始化。
+- `MeetingRecord.Tests/TotpServiceTests.cs`：TOTP 產碼／驗證（骨架，預設關閉）。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Auths/Login.razor:36`、`Login.razor.cs:63`（登入表單與 Cookie 簽發）
-- `src/MyProject/MyProject.Web/Components/Auths/Logout.razor.cs:23`、`Pending.razor:1`
-- `src/MyProject/MyProject.Web/Components/Pages/Profile.razor:120`、`ChangePassword.razor:110`
-- `src/MyProject/MyProject.Business/Services/Other/MyUserServiceLogin.cs:40`（鎖定、PBKDF2、升級、稽核）
-- `src/MyProject/MyProject.Business/Services/Other/ExternalLoginService.cs:26`（Google 查找／建立）
-- `src/MyProject/MyProject.Business/Services/Other/AuthenticationStateHelper.cs:43`（登入後檢查與 RBAC 載入）
-- `src/MyProject/MyProject.Web/Controllers/AuthController.cs:33`、`ExternalAuthController.cs:36`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor:36`、`Login.razor.cs:63`（登入表單與 Cookie 簽發）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Logout.razor.cs:23`、`Pending.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Profile.razor:120`、`ChangePassword.razor:110`
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MyUserServiceLogin.cs:40`（鎖定、PBKDF2、升級、稽核）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/ExternalLoginService.cs:26`（Google 查找／建立）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:43`（登入後檢查與 RBAC 載入）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/AuthController.cs:33`、`ExternalAuthController.cs:36`
 - 交叉連結：[使用者管理](使用者管理-prd.md)、[角色管理](角色管理-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 - 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[密碼種類與儲存機制](../security/密碼種類與儲存機制.md)、[Google OAuth2 第三方登入](../security/Google%20OAuth2%20第三方登入.md)、[記住我登入原理說明](../security/記住我登入原理說明.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)

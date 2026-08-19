@@ -23,13 +23,13 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore src/MyProject/MyProject.slnx
+        run: dotnet restore src/MeetingRecord/MeetingRecord.slnx
 
       - name: Build
-        run: dotnet build src/MyProject/MyProject.slnx --configuration Release --no-restore
+        run: dotnet build src/MeetingRecord/MeetingRecord.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test src/MyProject/MyProject.slnx --configuration Release --no-build --verbosity normal
+        run: dotnet test src/MeetingRecord/MeetingRecord.slnx --configuration Release --no-build --verbosity normal
 
       - name: Documentation encoding check
         shell: pwsh
@@ -38,4 +38,4 @@ jobs:
       - name: Vulnerability scan
         env:
           NUGET_HTTP_TIMEOUT_SECONDS: "180"
-        run: dotnet list src/MyProject/MyProject.slnx package --vulnerable --include-transitive
+        run: dotnet list src/MeetingRecord/MeetingRecord.slnx package --vulnerable --include-transitive

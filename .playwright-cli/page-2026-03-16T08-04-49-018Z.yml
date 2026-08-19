@@ -4,14 +4,14 @@
     - generic [ref=e44]:
       - generic [ref=e45]: Select a definition
       - combobox "Select a definition" [ref=e46]:
-        - option "MyProject.Web v1" [selected]
+        - option "MeetingRecord.Web v1" [selected]
   - generic [ref=e47]:
     - generic:
       - img
     - generic [ref=e48]:
       - generic [ref=e53]:
-        - heading "MyProject.Web 1.0 OAS 3.0" [level=1] [ref=e54]:
-          - text: MyProject.Web
+        - heading "MeetingRecord.Web 1.0 OAS 3.0" [level=1] [ref=e54]:
+          - text: MeetingRecord.Web
           - generic [ref=e55]:
             - generic [ref=e57]: "1.0"
             - generic [ref=e59]: OAS 3.0

@@ -2,7 +2,7 @@
 
 一份基於 **.NET 10** 與 **Blazor Server**（全域 SSR）所建立的企業級應用程式樣板，預先整合 Ant Design Blazor、EF Core、Cookie 認證、角色權限、多語系、檔案上傳、Swagger 與 NLog，協助開發團隊以最低成本啟動內部管理類系統。
 
-當前版本資訊定義在 [`src/MyProject/MyProject.Web/appsettings.json`](src/MyProject/MyProject.Web/appsettings.json) 之 `SystemSettings.SystemInformation.SystemVersion` 欄位。
+當前版本資訊定義在 [`src/MeetingRecord/MeetingRecord.Web/appsettings.json`](src/MeetingRecord/MeetingRecord.Web/appsettings.json) 之 `SystemSettings.SystemInformation.SystemVersion` 欄位。
 
 ---
 
@@ -36,19 +36,19 @@
 ## 3. 系統架構速覽
 
 ```
-MyProject.Web ──► MyProject.Business ──► MyProject.AccessDatas
+MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.AccessDatas
        │                  │                       │
-       └──► MyProject.Dtos / MyProject.Models / MyProject.Share
+       └──► MeetingRecord.Dtos / MeetingRecord.Models / MeetingRecord.Share
 ```
 
 | 專案 | 角色 |
 |------|------|
-| `MyProject.Web` | Blazor Server 宿主、Razor 元件、Web API Controller、登入頁、本地化、靜態資源。 |
-| `MyProject.Business` | 商業邏輯：Services、Repositories、AutoMapper Profile、Helpers。 |
-| `MyProject.AccessDatas` | EF Core `BackendDBContext`、Entity 定義、Migrations。 |
-| `MyProject.Models` | 系統設定、AdapterModel、共用領域模型。 |
-| `MyProject.Dtos` | API 對外傳輸物件：`ApiResult<T>`、`PagedResult<T>`、各模組 DTO。 |
-| `MyProject.Share` | 跨層共用：Helpers、Extensions（無外部相依）。 |
+| `MeetingRecord.Web` | Blazor Server 宿主、Razor 元件、Web API Controller、登入頁、本地化、靜態資源。 |
+| `MeetingRecord.Business` | 商業邏輯：Services、Repositories、AutoMapper Profile、Helpers。 |
+| `MeetingRecord.AccessDatas` | EF Core `BackendDBContext`、Entity 定義、Migrations。 |
+| `MeetingRecord.Models` | 系統設定、AdapterModel、共用領域模型。 |
+| `MeetingRecord.Dtos` | API 對外傳輸物件：`ApiResult<T>`、`PagedResult<T>`、各模組 DTO。 |
+| `MeetingRecord.Share` | 跨層共用：Helpers、Extensions（無外部相依）。 |
 
 啟動流程詳見 [docs/architecture/架構總覽.md](docs/architecture/架構總覽.md)。
 
@@ -83,17 +83,17 @@ MyProject.Web ──► MyProject.Business ──► MyProject.AccessDatas
 
 ```powershell
 # 1. 還原與編譯
-cd src/MyProject
+cd src/MeetingRecord
 dotnet restore
 dotnet build
 
 # 2. 第一次跑（會自動建立目錄、套用 Migration、Seed 預設角色與帳號）
-dotnet run --project MyProject.Web/MyProject.Web.csproj
+dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ```
 
 預設帳號 / 密碼由 `appsettings.json` 之 `BootstrapSettings`（`SupportAccount` / `SupportPassword`）定義，首次啟動會自動建立 `support` 管理員帳號；`MagicObjectHelper.開發者帳號` 則用於後續識別並保護該開發者帳號。
 
-外部目錄與資料庫檔位置由 `appsettings.json` 之 `SystemSettings.ExternalFileSystem` 控制，預設位於 `C:\temp\MyProject\…`，啟動時若不存在會自動建立。
+外部目錄與資料庫檔位置由 `appsettings.json` 之 `SystemSettings.ExternalFileSystem` 控制，預設位於 `C:\temp\MeetingRecord\…`，啟動時若不存在會自動建立。
 
 關於 EF Core Migration 指令請見 [docs/guides/EFCore.md](docs/guides/EFCore.md)。
 
@@ -114,9 +114,9 @@ dotnet run --project MyProject.Web/MyProject.Web.csproj
 │   ├── guides/                     ← 開發/操作教學（CRUD、EFCore、測試）
 │   ├── operations/                 ← 維護、部署、設定檔、CI/CD
 │   └── changelog/                  ← 變更紀錄
-└── src/MyProject/
-    ├── MyProject.slnx              ← 方案檔（新版 .slnx 格式）
-    ├── MyProject.Web/              ← Blazor Server 宿主
+└── src/MeetingRecord/
+    ├── MeetingRecord.slnx              ← 方案檔（新版 .slnx 格式）
+    ├── MeetingRecord.Web/              ← Blazor Server 宿主
     │   ├── Components/             ← Pages / Views / Layout / Auths / Commons
     │   ├── Controllers/            ← Web API（Project / Category / Team / Auth …）
     │   ├── Localization/           ← AntDesignLocaleFactory
@@ -124,18 +124,18 @@ dotnet run --project MyProject.Web/MyProject.Web.csproj
     │   ├── Filters/                ← ApiValidationFilter 等
     │   ├── Program.cs              ← 啟動主程式
     │   └── appsettings.json        ← 系統設定（含 SystemVersion）
-    ├── MyProject.Business/
+    ├── MeetingRecord.Business/
     │   ├── Services/DataAccess/    ← Domain Service（CRUD）
     │   ├── Services/Other/         ← AuthenticationStateHelper 等
     │   ├── Repositories/           ← API 層使用的 Repository
     │   └── Models/AutoMapping.cs   ← AutoMapper Profile
-    ├── MyProject.AccessDatas/
+    ├── MeetingRecord.AccessDatas/
     │   ├── BackendDBContext.cs
     │   ├── Models/                 ← Entity（MyUser、Project、Category、Team…）
     │   └── Migrations/
-    ├── MyProject.Models/           ← AdapterModel、Systems、AutoMapper 來源
-    ├── MyProject.Dtos/             ← API DTO（含 ApiResult/PagedResult）
-    └── MyProject.Share/            ← Helpers、Extensions
+    ├── MeetingRecord.Models/           ← AdapterModel、Systems、AutoMapper 來源
+    ├── MeetingRecord.Dtos/             ← API DTO（含 ApiResult/PagedResult）
+    └── MeetingRecord.Share/            ← Helpers、Extensions
 ```
 
 ---
@@ -150,9 +150,9 @@ dotnet run --project MyProject.Web/MyProject.Web.csproj
 | `Cors.AllowedOrigins` | CORS 允許來源白名單（陣列）；留空表示不額外開放跨來源。 |
 | `CacheSettings.Provider` | 快取 provider，支援 `Memory` 與 `Redis`，預設 `Memory`（見 [分散式快取機制](docs/features/分散式快取機制.md)）。 |
 | `CacheSettings.RedisConnection` | `Provider=Redis` 時的 Redis 連線字串；Production 使用 Redis 時必須設定。 |
-| `CacheSettings.InstanceName` | Redis 快取鍵前綴，預設 `MyProject:`。 |
+| `CacheSettings.InstanceName` | Redis 快取鍵前綴，預設 `MeetingRecord:`。 |
 | `CacheSettings.DefaultExpirationMinutes` | 快取項目預設存活時間（分鐘），預設 `30`。 |
-| `NLog.BasePath` | NLog 寫入的根目錄；專案會在其下建立 `MyProject.Web` 子目錄並輸出檔案日誌。 |
+| `NLog.BasePath` | NLog 寫入的根目錄；專案會在其下建立 `MeetingRecord.Web` 子目錄並輸出檔案日誌。 |
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
@@ -257,7 +257,8 @@ dotnet run --project MyProject.Web/MyProject.Web.csproj
 - [移植母專案通用型改善（0.4.2）](docs/changelog/2026-06-22-通用型改善移植.md) — SignalR 上限、Circuit 日誌、CrudActionButton 圖示操作欄、Menu 圖示驗證測試。
 - [側邊欄收合飛出 hover 修正與日誌補缺（0.4.3）](docs/changelog/2026-06-22-側邊欄收合修正與日誌補缺.md) — 收合飛出改自訂橋接、補 2 處日誌缺口。
 - [側邊欄群組圖示依名稱各自顯示（0.4.4）](docs/changelog/2026-06-22-側邊欄群組圖示.md) — 移除群組強制 folder_open，群組圖示改用 Menu.json 各自有效圖示。
-- [移除工作項目、會議記錄與 SQL Server 支援，新增「關於」對話窗（0.4.24）](docs/changelog/2026-08-17-移除工作項目會議記錄與MSSQL支援.md) — 兩項領域作業下架、資料庫收斂為單一 SQLite 軌道、使用者選單新增系統資訊對話窗。
+- [移除工作項目、會議記錄與 SQL Server 支援，新增「關於」對話窗（0.4.24）](docs/changelog/2026-08-17-移除工作項目會議記錄與MSSQL支援.md) — 兩項領域作業下架、資料庫收斂為單一 SQLite 軌道、使用者選單新增系統資訊對話窗。
+- [專案更名：MyProject → MeetingRecord（0.4.25）](docs/changelog/2026-08-19-專案更名為MeetingRecord.md) — 佔位符 `MyProject` 全面更名為 `MeetingRecord`，範本轉為會議紀錄系統的開發基底。
 
 ### 專案規劃（planning）
 

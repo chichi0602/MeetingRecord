@@ -14,11 +14,11 @@
 
 ## 變更範圍
 
-- **`AuthenticationStateHelper`**（`MyProject.Business/Services/Other`）
+- **`AuthenticationStateHelper`**（`MeetingRecord.Business/Services/Other`）
   - 建構子注入 `IPermissionChecker`。
   - `Check`：登入態初始化時以 `GetEffectivePermissionKeysAsync(userId)` 一次載入 RBAC 有效權限鍵（多角色聯集），覆寫 `CopyFrom` 由 `TabViewJson` 得到的 `CurrentUser.RoleList`。UI 判定維持同步比對記憶體集合（不逐項查 DB）。
   - `CheckAccessPage`：補管理員短路（`GetEffectivePermissionKeysAsync` 不含 admin 隱含全通過，回空集合），比照 `CheckAccessAction`，否則管理員選單/頁面會全被隱藏。
-- **測試** `MyProject.Tests/AuthenticationStateHelperTests.cs`
+- **測試** `MeetingRecord.Tests/AuthenticationStateHelperTests.cs`
   - fixture `AddUserAsync` 補雙寫 `RolePermissionMap`（`RbacWriteService.SyncRolePermissionsAsync`），使 RBAC 來源的 `RoleList` 含權限鍵。
   - `CreateHelper` 多傳 `PermissionChecker`。
   - 新增多角色測試 `Check_WithMultipleRoles_ShouldInitializeRoleListAsUnion`（斷言 `RoleList` 為主要∪額外）。

@@ -11,7 +11,7 @@
 - [x] 現況盤點：目前包含 `AccessDatas`、`Business`、`Dtos`、`Models`、`Share`、`Web`、`Tests` 七個專案。
 - [x] 實作待辦：已新增測試專案並加入 solution；Web API 已使用 DTO 作為 request/response，不直接暴露 Entity。
 - [x] 驗收標準：`ProjectController`、`MyTaskController`、`MeetingController` 使用 Create/Update/Search/Dto 類別作為 API 邊界。（後兩者已於 0.4.24 移除）
-- [x] 相關檔案：`src/MyProject/MyProject.Dtos`、`src/MyProject/MyProject.Web/Controllers`、`src/MyProject/MyProject.Tests`。
+- [x] 相關檔案：`src/MeetingRecord/MeetingRecord.Dtos`、`src/MeetingRecord/MeetingRecord.Web/Controllers`、`src/MeetingRecord/MeetingRecord.Tests`。
 - [x] 備註風險：已新增 `ControllerApiResponseExtensions`，Project/MyTask/Meeting controller 的 500 `ApiResult` 封裝已改用共用 helper；後續仍可再深化為 action pipeline 或 service result pattern。
 
 ## 架構整理待辦

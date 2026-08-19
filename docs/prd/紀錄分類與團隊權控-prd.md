@@ -72,21 +72,21 @@
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/TagStringHelperTests.cs`：`ToStored_ThenToList_ShouldRoundTrip`、`ToStored_ShouldTrimDeduplicateAndDropBlanks`、`BuildContainsAnyPredicate_ShouldMatchExactMemberOnly`、`IsTeamAccessible_*`（公開／交集／無交集／管理員）。
-- `MyProject.Tests/EffectiveTeamResolverTests.cs`：`ShouldReturnDirectUserTeams`、`ShouldReturnRoleDefaultTeams`、`ShouldUnionAndDeduplicate`、`ShouldReturnEmptyForUnknownUser`。
-- `MyProject.Tests/ProjectServiceTeamAccessTests.cs`：`GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords`、`GetAsync_NonAdminWithoutTeams_ShouldSeeOnlyPublicRecords`、`GetAsync_WithTeamFilter_ShouldFilterByTeam`。
-- `MyProject.Tests/PermissionCheckerTests.cs`：`HasPermissionAsync_ForAdmin_ShouldReturnTrueForAnyKey`、`HasPermissionAsync_WhenRoleHasKey_ShouldReturnTrue`、`HasPermissionAsync_LegacyBarePageKey_ShouldGrantAnyActionOfThatPage`、`HasPermissionAsync_GranularViewOnly_ShouldNotGrantEdit`、`GetEffectivePermissionKeysAsync_WithMultipleRoles_ShouldReturnUnion`。
+- `MeetingRecord.Tests/TagStringHelperTests.cs`：`ToStored_ThenToList_ShouldRoundTrip`、`ToStored_ShouldTrimDeduplicateAndDropBlanks`、`BuildContainsAnyPredicate_ShouldMatchExactMemberOnly`、`IsTeamAccessible_*`（公開／交集／無交集／管理員）。
+- `MeetingRecord.Tests/EffectiveTeamResolverTests.cs`：`ShouldReturnDirectUserTeams`、`ShouldReturnRoleDefaultTeams`、`ShouldUnionAndDeduplicate`、`ShouldReturnEmptyForUnknownUser`。
+- `MeetingRecord.Tests/ProjectServiceTeamAccessTests.cs`：`GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords`、`GetAsync_NonAdminWithoutTeams_ShouldSeeOnlyPublicRecords`、`GetAsync_WithTeamFilter_ShouldFilterByTeam`。
+- `MeetingRecord.Tests/PermissionCheckerTests.cs`：`HasPermissionAsync_ForAdmin_ShouldReturnTrueForAnyKey`、`HasPermissionAsync_WhenRoleHasKey_ShouldReturnTrue`、`HasPermissionAsync_LegacyBarePageKey_ShouldGrantAnyActionOfThatPage`、`HasPermissionAsync_GranularViewOnly_ShouldNotGrantEdit`、`GetEffectivePermissionKeysAsync_WithMultipleRoles_ShouldReturnUnion`。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Business/Helpers/TagStringHelper.cs:12`（標籤字串、`BuildTeamAccessPredicate:110`、`IsTeamAccessible:142`）
-- `src/MyProject/MyProject.Business/Services/Other/EffectiveTeamResolver.cs:16`（有效團隊解析）
-- `src/MyProject/MyProject.Web/Auth/RecordAccessScopeProvider.cs:34`（存取範圍解析）
-- `src/MyProject/MyProject.Business/Services/Other/IRecordAccessScopeProvider.cs:6`（`RecordAccessScope`）
-- `src/MyProject/MyProject.Business/Services/DataAccess/ProjectService.cs:75`（查詢範圍套用）
-- `src/MyProject/MyProject.Business/Services/Other/PermissionChecker.cs:16`（`HasPermissionAsync`，管理員短路 `:27`）
-- `src/MyProject/MyProject.Web/Filters/HasPermissionAttribute.cs:31`（401/403 與 `ApiResult`）
-- `src/MyProject/MyProject.Web/Controllers/ProjectController.cs:36`（`[HasPermission]` 動作級標註）
-- `src/MyProject/MyProject.Business/Services/Other/AuthenticationStateHelper.cs:202`（`CheckAccessAction`）
-- `src/MyProject/MyProject.Share/Helpers/PermissionKeys.cs:18`（`PermissionKey.For`／`PageOf`）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/TagStringHelper.cs:12`（標籤字串、`BuildTeamAccessPredicate:110`、`IsTeamAccessible:142`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/EffectiveTeamResolver.cs:16`（有效團隊解析）
+- `src/MeetingRecord/MeetingRecord.Web/Auth/RecordAccessScopeProvider.cs:34`（存取範圍解析）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/IRecordAccessScopeProvider.cs:6`（`RecordAccessScope`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs:75`（查詢範圍套用）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/PermissionChecker.cs:16`（`HasPermissionAsync`，管理員短路 `:27`）
+- `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs:31`（401/403 與 `ApiResult`）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs:36`（`[HasPermission]` 動作級標註）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:202`（`CheckAccessAction`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:18`（`PermissionKey.For`／`PageOf`）
 - 交叉連結：[認證授權與權限機制](../security/認證授權與權限機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)、[紀錄標籤與團隊存取設計](../superpowers/specs/2026-06-22-record-tags-team-access-design.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)

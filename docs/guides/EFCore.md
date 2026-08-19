@@ -7,8 +7,8 @@
 - 最後核對日期：2026/07/14
 
 ```
-Add-Migration add-meeting -Project MyProject.AccessDatas -StartupProject MyProject.Web 
-Add-Migration Add-Status -Project MyProject.AccessDatas -StartupProject MyProject.Web 
+Add-Migration add-meeting -Project MeetingRecord.AccessDatas -StartupProject MeetingRecord.Web 
+Add-Migration Add-Status -Project MeetingRecord.AccessDatas -StartupProject MeetingRecord.Web 
 ```
 
 * -Context <String>	
@@ -30,33 +30,33 @@ Add-Migration Add-Status -Project MyProject.AccessDatas -StartupProject MyProjec
 # 更新資料庫
 
 ```
-Update-Database -Context BackendDBContext -StartupProject MyProject.Web -Project MyProject.AccessDatas
+Update-Database -Context BackendDBContext -StartupProject MeetingRecord.Web -Project MeetingRecord.AccessDatas
 ```
 
 # 套用 Migration 
 
 ```
-Add-Migration AddAthleteExamine -Context BackendDBContext -Project MyProject.AccessDatas -StartupProject MyProject.Web 
+Add-Migration AddAthleteExamine -Context BackendDBContext -Project MeetingRecord.AccessDatas -StartupProject MeetingRecord.Web 
 ```
 
 ```
-dotnet ef migrations add AddAthleteExamine --project MyProject.AccessDatas --startup-project MyProject.Web 
+dotnet ef migrations add AddAthleteExamine --project MeetingRecord.AccessDatas --startup-project MeetingRecord.Web 
 ```
 
 
 # 移除 Migration
 
 ```
-Remove-Migration -Context BackendDBContext -Project MyProject.AccessDatas -StartupProject MyProject.Web
+Remove-Migration -Context BackendDBContext -Project MeetingRecord.AccessDatas -StartupProject MeetingRecord.Web
 ```
 
 ```
-dotnet ef migrations remove --project MyProject.AccessDatas --startup-project MyProject.Web
+dotnet ef migrations remove --project MeetingRecord.AccessDatas --startup-project MeetingRecord.Web
 ```
 
 # 套用移轉
 
 ```
-Script-Migration -Project MyProject.AccessDatas -StartupProject MyProject.Web
+Script-Migration -Project MeetingRecord.AccessDatas -StartupProject MeetingRecord.Web
 ```
 

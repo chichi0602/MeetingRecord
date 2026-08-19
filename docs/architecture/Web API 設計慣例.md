@@ -10,7 +10,7 @@
 本文件記錄腳手架 Web API 的固定設計規範，未來新增 API 時應遵守同一套 contract，讓前端與外部用戶端能用一致格式處理成功、失敗、驗證錯誤、授權錯誤與例外。
 
 ## Controller 規範
-- API Controller 放在 `src/MyProject/MyProject.Web/Controllers/`。
+- API Controller 放在 `src/MeetingRecord/MeetingRecord.Web/Controllers/`。
 - 路由需同時提供 `[Route("api/[controller]")]` 與 `[Route("api/v1/[controller]")]`；新用戶端優先使用 `/api/v1/...`。
 - Controller 必須使用 `[ApiController]` 與 `[ApiValidationFilter]`。
 - 需要保護的 CRUD API 必須加上 `[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]`。
@@ -19,7 +19,7 @@
 - Entity 與 DTO 轉換優先使用 AutoMapper profile 維護。
 
 ## 統一回傳格式
-所有一般 Web API 回應固定使用 `MyProject.Dtos.Commons.ApiResult<T>` 或非泛型 `ApiResult`。
+所有一般 Web API 回應固定使用 `MeetingRecord.Dtos.Commons.ApiResult<T>` 或非泛型 `ApiResult`。
 
 標準欄位：
 - `Success`：是否成功。
@@ -60,10 +60,10 @@ JWT access token 與 refresh token 由 `AuthController` 提供：
 - `GET /api/v1/Auth/me`
 
 ## 功能級／動作級授權
-身分驗證（`[Authorize]`）之外，受保護 CRUD **每個動作方法**再以 `[HasPermission(頁面鍵, 動作)]`（`src/MyProject/MyProject.Web/Filters/HasPermissionAttribute.cs`）強制授權：
+身分驗證（`[Authorize]`）之外，受保護 CRUD **每個動作方法**再以 `[HasPermission(頁面鍵, 動作)]`（`src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs`）強制授權：
 
-- 由 `IPermissionChecker`（`MyProject.Business/Services/Other/PermissionChecker.cs`，UI 與 API 共用的單一 RBAC 權威來源）判權；**管理員短路**一律通過。
-- 動作對應：GET/`search`→`view`、POST→`create`、PUT→`edit`、DELETE→`delete`（動作常數見 `MyProject.Share/Helpers/PermissionKeys.cs`）。
+- 由 `IPermissionChecker`（`MeetingRecord.Business/Services/Other/PermissionChecker.cs`，UI 與 API 共用的單一 RBAC 權威來源）判權；**管理員短路**一律通過。
+- 動作對應：GET/`search`→`view`、POST→`create`、PUT→`edit`、DELETE→`delete`（動作常數見 `MeetingRecord.Share/Helpers/PermissionKeys.cs`）。
 - **權限鍵兩型**：裸頁面鍵（如 `專案項目`）＝該頁全動作（向後相容）；動作鍵（如 `專案項目:edit`）＝特定動作。「唯讀角色」只給 `專案項目:view`。
 - 無權限一律回 **403**，Body 維持 `ApiResult` 格式並標示缺少的權限鍵。多角色時權限取聯集。
 - 詳見 [認證授權與權限機制](../security/認證授權與權限機制.md)。

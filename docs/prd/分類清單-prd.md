@@ -49,7 +49,7 @@
 - Entity `Category`（`Id/Name/Description/IsEnabled/CreatedAt/UpdatedAt`），DbSet 為 `context.Category`。
 - 查詢一律 `AsNoTracking()`；新增前 `CleanTrackingHelper.Clean<Category>` 清追蹤，寫入後再清一次。
 - 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
-- 模型變更需在 `MyProject.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
+- 模型變更需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
 
 ## 五、權限與安全
 
@@ -68,7 +68,7 @@
 
 ## 七、驗收與測試
 
-對應測試檔 `src/MyProject/MyProject.Tests/CategoryServiceTests.cs`：
+對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/CategoryServiceTests.cs`：
 
 - `BeforeAddCheckAsync_WithUniqueName_ShouldSucceed`：唯一名稱可新增。
 - `BeforeAddCheckAsync_WithDuplicateName_ShouldFail`：重複名稱被拒。
@@ -81,14 +81,14 @@
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/Categories/CategoryPage.razor:1`
-- `src/MyProject/MyProject.Web/Components/Views/Categories/CategoryViewView.razor:1`
-- `src/MyProject/MyProject.Web/Components/Views/Categories/CategoryViewView.razor.cs:70`（頁面權限檢查）
-- `src/MyProject/MyProject.Web/Controllers/CategoryController.cs:36`（`[HasPermission]` 動作鍵）
-- `src/MyProject/MyProject.Business/Services/DataAccess/CategoryService.cs:113`（AddAsync / 前置檢查）
-- `src/MyProject/MyProject.AccessDatas/Models/Category.cs:8`（Entity 欄位）
-- `src/MyProject/MyProject.Dtos/Models/CategoryCreateUpdateDto.cs:9`、`src/MyProject/MyProject.Dtos/Commons/CategorySearchRequestDto.cs:6`
-- `src/MyProject/MyProject.Share/Helpers/MagicObjectHelper.cs:37`、`src/MyProject/MyProject.Share/Helpers/PermissionKeys.cs:9`
-- `src/MyProject/MyProject.Web/Components/Layout/SidebarMenuService.cs:27`、`src/MyProject/MyProject.Web/Datas/Menu.json:57`
-- `src/MyProject/MyProject.Tests/CategoryServiceTests.cs:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Categories/CategoryPage.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor.cs:70`（頁面權限檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs:36`（`[HasPermission]` 動作鍵）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/CategoryService.cs:113`（AddAsync / 前置檢查）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Category.cs:8`（Entity 欄位）
+- `src/MeetingRecord/MeetingRecord.Dtos/Models/CategoryCreateUpdateDto.cs:9`、`src/MeetingRecord/MeetingRecord.Dtos/Commons/CategorySearchRequestDto.cs:6`
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:37`、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:27`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:57`
+- `src/MeetingRecord/MeetingRecord.Tests/CategoryServiceTests.cs:1`
 - 交叉連結：[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../superpowers/specs/2026-06-22-category-team-pages-design.md](../superpowers/specs/2026-06-22-category-team-pages-design.md)、[../prd/紀錄分類與團隊權控-prd.md](../prd/紀錄分類與團隊權控-prd.md)

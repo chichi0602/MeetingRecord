@@ -10,9 +10,9 @@
 將 `/Auths/Login` 從簡單表單升級為具備玻璃擬態、漸層動畫與企業商務風格的登入頁面，並補齊登入體驗所需的記住我與驗證碼功能。
 
 ## 本次修改檔案
-- `src/MyProject/MyProject.Web/Components/Auths/Login.razor`
-- `src/MyProject/MyProject.Web/Components/Auths/Login.razor.cs`
-- `src/MyProject/MyProject.Web/Components/Auths/Login.razor.css`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor.css`
 - `readme.md`
 - `docs/changelog/login-redesign.md`
 

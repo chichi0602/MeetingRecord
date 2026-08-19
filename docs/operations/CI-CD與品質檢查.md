@@ -27,7 +27,7 @@
 |------|-------------|------|
 | Checkout | `actions/checkout@v6` | 取出原始碼 |
 | Setup .NET | `actions/setup-dotnet@v5`（`10.0.x`） | 安裝 SDK |
-| Restore | `dotnet restore src/MyProject/MyProject.slnx` | 還原相依套件 |
+| Restore | `dotnet restore src/MeetingRecord/MeetingRecord.slnx` | 還原相依套件 |
 | Build | `dotnet build ... --configuration Release --no-restore` | Release 編譯 |
 | Test | `dotnet test ... --configuration Release --no-build --verbosity normal` | 執行 xUnit 測試（見 [測試指南](../guides/測試指南.md)） |
 | Documentation encoding check | `./scripts/Test-DocsEncoding.ps1`（pwsh） | 檢查 `docs/` 文件編碼 |
@@ -67,7 +67,7 @@ pwsh ./scripts/Test-DocsEncoding.ps1
 | 引入來源 | 由 `Microsoft.EntityFrameworkCore.Sqlite 10.0.5` **遞移**引入（EF Core Sqlite → Microsoft.Data.Sqlite.Core → SQLitePCLRaw.bundle_e_sqlite3 → lib.e_sqlite3） |
 | 為何不升級 | NuGet 上 `SQLitePCLRaw.*` 最新即 2.1.11，**尚無修補版**（無 2.1.12 / 2.2.x），EF Core 亦未帶入新版，目前無從升級 |
 | 風險評估 | 低：EF Core 採參數化查詢，無未受信任的原始 SQL 進入 SQLite（0.4.24 起 SQLite 為唯一支援的資料庫） |
-| 處置 | 於 [`src/MyProject/Directory.Build.props`](../../src/MyProject/Directory.Build.props) 以 `NuGetAuditSuppress` 抑制該 advisory，消除 restore/build 的 `NU1903` 警告 |
+| 處置 | 於 [`src/MeetingRecord/Directory.Build.props`](../../src/MeetingRecord/Directory.Build.props) 以 `NuGetAuditSuppress` 抑制該 advisory，消除 restore/build 的 `NU1903` 警告 |
 
 **重要行為差異**：`NuGetAuditSuppress` 只抑制 **restore/build 的 `NU1903` 警告**；上方的 `dotnet list package --vulnerable` 步驟為獨立查詢，**仍會列出**此 advisory（屬資訊性輸出，指令仍回傳 0、不阻斷 CI）。
 

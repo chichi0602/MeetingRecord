@@ -11,7 +11,7 @@
 - [x] 現況盤點：已有 `ApiResult<T>`、DTO 專案、CRUD API、JWT settings、Auth API、Bearer 驗證與 Swagger security definition。
 - [x] 實作待辦：已新增 `Errors`、`TraceId`、`Exception` 欄位並保留 `ErrorMessage`、`ErrorDetail`、`Timestamp` 相容欄位。
 - [x] 驗收標準：成功、驗證失敗、401、403、500 皆以 `ApiResult<T>` 或 `ApiResult` 作為 JSON body；檔案下載成功例外原則保留待未來檔案 API 實作。
-- [x] 相關檔案：`src/MyProject/MyProject.Dtos/Commons/ApiResult.cs`、`src/MyProject/MyProject.Web/Auth`、`src/MyProject/MyProject.Web/Controllers/AuthController.cs`、`src/MyProject/MyProject.Web/Filters`。
+- [x] 相關檔案：`src/MeetingRecord/MeetingRecord.Dtos/Commons/ApiResult.cs`、`src/MeetingRecord/MeetingRecord.Web/Auth`、`src/MeetingRecord/MeetingRecord.Web/Controllers/AuthController.cs`、`src/MeetingRecord/MeetingRecord.Web/Filters`。
 - [x] 備註風險：目前 `ApiResult.Exception` 依需求完整回傳堆疊資訊；正式環境資訊揭露風險已納入 release checklist。
 
 ## API 與 DTO 待辦

@@ -61,19 +61,19 @@
 
 ## 七、驗收與測試
 
-- `MyProject.Tests/SystemHealthTests.cs`：
+- `MeetingRecord.Tests/SystemHealthTests.cs`：
   - `CalculateScore_AllHealthy_ShouldReturnGreen100`、`CalculateScore_DegradedRange_ShouldReturnYellow`、`CalculateScore_UnhealthyRange_ShouldReturnRed`（計分與燈號門檻）。
   - `GetLight_ItemStatus_ShouldMapTrafficLight`（狀態→燈號映射）。
   - `HealthLogReader_ReadLatestLines_ShouldReturnLast100Lines`、`HealthLogReader_MissingFile_ShouldReturnDegraded`（日誌尾端讀取與缺檔降級）。
-- `MyProject.Tests/ApiIntegrationTests.cs`：`/health/ready`、`/health/live` 探針回應。
+- `MeetingRecord.Tests/ApiIntegrationTests.cs`：`/health/ready`、`/health/live` 探針回應。
 
 ## 八、相關程式與文件
 
-- `src/MyProject/MyProject.Web/Components/Pages/SystemHealthPage.razor:1`（含管理員守門 `:99`、燈號/狀態文字 `:109`）
-- `src/MyProject/MyProject.Web/Health/SystemHealthService.cs:60`（`GetReportAsync` 與 8 項檢查）
-- `src/MyProject/MyProject.Web/Health/SystemHealthScoreCalculator.cs:1`（計分與燈號門檻）
-- `src/MyProject/MyProject.Web/Health/SystemHealthModels.cs:1`（報告與項目模型）
-- `src/MyProject/MyProject.Web/Health/HealthLogReader.cs:1`、`DatabaseHealthCheck.cs:1`
-- `src/MyProject/MyProject.Web/Extensions/ServiceCollectionExtensions.cs:208`（`AddConfiguredHealthChecks`，探針 tag `live`/`ready`）
-- `src/MyProject/MyProject.Web/Program.cs:398`（`MapHealthChecks` `/health/live`、`/health/ready`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/SystemHealthPage.razor:1`（含管理員守門 `:99`、燈號/狀態文字 `:109`）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthService.cs:60`（`GetReportAsync` 與 8 項檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs:1`（計分與燈號門檻）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthModels.cs:1`（報告與項目模型）
+- `src/MeetingRecord/MeetingRecord.Web/Health/HealthLogReader.cs:1`、`DatabaseHealthCheck.cs:1`
+- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs:208`（`AddConfiguredHealthChecks`，探針 tag `live`/`ready`）
+- `src/MeetingRecord/MeetingRecord.Web/Program.cs:398`（`MapHealthChecks` `/health/live`、`/health/ready`）
 - 交叉連結：[系統健康監控（機制）](../features/系統健康監控.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)

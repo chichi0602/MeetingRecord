@@ -10,8 +10,8 @@
 - [x] 目標說明：記錄安全、套件、測試、CI、warning、密碼與預設帳號等風險，避免腳手架問題被複製到新系統。
 - [x] 現況盤點：AutoMapper 已為 16.1.1；套件弱點掃描目前未列出已知易受攻擊套件。
 - [x] 實作待辦：已新增 JWT Bearer、ApiResult 例外封裝、測試專案與 CI。
-- [x] 驗收標準：`dotnet list src/MyProject/MyProject.slnx package --vulnerable --include-transitive` 未列出弱點套件。
-- [x] 相關檔案：`src/MyProject/MyProject.Web/MyProject.Web.csproj`、`src/MyProject/MyProject.Tests`、`.github/workflows/dotnet-ci.yml`。
+- [x] 驗收標準：`dotnet list src/MeetingRecord/MeetingRecord.slnx package --vulnerable --include-transitive` 未列出弱點套件。
+- [x] 相關檔案：`src/MeetingRecord/MeetingRecord.Web/MeetingRecord.Web.csproj`、`src/MeetingRecord/MeetingRecord.Tests`、`.github/workflows/dotnet-ci.yml`。
 - [x] 備註風險：`ApiResult.Exception` 已改為依 `Security:ReturnExceptionDetails` 控制；Production 預設不回傳完整堆疊資訊。
 
 ## 尚待處理風險

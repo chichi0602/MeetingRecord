@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DestinationPath,
 
-    [string]$SourceProjectName = "MyProject",
+    [string]$SourceProjectName = "MeetingRecord",
 
     [switch]$Force
 )

@@ -61,6 +61,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 - 登入 / 登出（Cookie 驗證、記住我、4 位數驗證碼、玻璃擬態 UI）
 - 專案領域實體 CRUD（可作為新增其他領域模組的樣板）
 - 資料定義主資料：分類清單（Category）、團隊清單（Team）管理頁面與 Web API
+- 會議紀錄提示詞（PromptTemplate）：維護多組提示詞範本（名稱／內容／描述／啟用狀態／分類・團隊標籤），內容支援 `{{transcript}}`／`{{meetingTitle}}`／`{{meetingDate}}` 變數，供日後產生會議紀錄時套用（**目前尚未串接任何 LLM 或語音轉錄 API**）
 - 紀錄分類/團隊標籤：專案可標記分類與團隊，並支援以角色為基礎的團隊行級權控（非管理員僅見公開或團隊交集紀錄）
 - 每筆紀錄可附加多檔案，自動依年月分目錄存放
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
@@ -156,6 +157,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
+| `LlmSettings` | 會議紀錄產生用的 LLM 供應商設定：`DefaultProvider` 指定要用哪一家，`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`。**目前僅為強型別設定骨架，程式尚未呼叫任何外部 API**；`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
 | `SystemSettings.ConnectionStrings.SQLiteDefaultConnection` | SQLite 連線範本；實際連線字串由 `MagicObjectHelper.GetSQLiteConnectionString` 結合 `DatabasePath` 產生。 |
 | `SystemSettings.SystemInformation.SystemName` | 顯示用系統名稱。 |
 | `SystemSettings.SystemInformation.SystemDescription` | 顯示用系統描述。 |
@@ -241,7 +243,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ### 產品需求文件（prd）
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
-- 9 份能力 PRD：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 10 份已實作能力 PRD：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 規劃中：[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md) — 音檔上傳→轉錄→套用提示詞→產出會議紀錄的目標流程、各階段現況界線與未決議題（**尚未實作**）。
 
 ### 設計規格（superpowers）
 
@@ -257,8 +260,9 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [移植母專案通用型改善（0.4.2）](docs/changelog/2026-06-22-通用型改善移植.md) — SignalR 上限、Circuit 日誌、CrudActionButton 圖示操作欄、Menu 圖示驗證測試。
 - [側邊欄收合飛出 hover 修正與日誌補缺（0.4.3）](docs/changelog/2026-06-22-側邊欄收合修正與日誌補缺.md) — 收合飛出改自訂橋接、補 2 處日誌缺口。
 - [側邊欄群組圖示依名稱各自顯示（0.4.4）](docs/changelog/2026-06-22-側邊欄群組圖示.md) — 移除群組強制 folder_open，群組圖示改用 Menu.json 各自有效圖示。
-- [移除工作項目、會議記錄與 SQL Server 支援，新增「關於」對話窗（0.4.24）](docs/changelog/2026-08-17-移除工作項目會議記錄與MSSQL支援.md) — 兩項領域作業下架、資料庫收斂為單一 SQLite 軌道、使用者選單新增系統資訊對話窗。
+- [移除工作項目、會議記錄與 SQL Server 支援，新增「關於」對話窗（0.4.24）](docs/changelog/2026-08-17-移除工作項目會議記錄與MSSQL支援.md) — 兩項領域作業下架、資料庫收斂為單一 SQLite 軌道、使用者選單新增系統資訊對話窗。
 - [專案更名：MyProject → MeetingRecord（0.4.25）](docs/changelog/2026-08-19-專案更名為MeetingRecord.md) — 佔位符 `MyProject` 全面更名為 `MeetingRecord`，範本轉為會議紀錄系統的開發基底。
+- [新增「會議紀錄提示詞」管理頁面與 LLM 設定區段（0.4.26）](docs/changelog/2026-08-19-會議紀錄提示詞.md) — 提示詞範本 CRUD（含分類/團隊標籤與團隊行級權控），並新增 provider-aware `LlmSettings` 強型別設定骨架，尚未串接任何 LLM／轉錄 API。
 
 ### 專案規劃（planning）
 

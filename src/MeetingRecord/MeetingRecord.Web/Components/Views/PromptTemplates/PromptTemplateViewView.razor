@@ -1,0 +1,172 @@
+@using MeetingRecord.Share.Helpers
+@if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="prompt-template-view-toolbar">
+            <div class="prompt-template-view-toolbar-left">
+                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Create))
+                {
+                    <Tooltip Title="新增">
+                        <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button"
+                                OnClick="@(async () => await OnAddAsync())">
+                            ➕
+                        </Button>
+                    </Tooltip>
+                }
+                <Tooltip Title="重新整理">
+                    <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button"
+                            OnClick="@(async () => await OnRefreshAsync())">
+                        🔄
+                    </Button>
+                </Tooltip>
+            </div>
+            <div class="prompt-template-view-toolbar-right">
+                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
+                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                    @foreach (var c in availableCategories)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                    }
+                </Select>
+                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                        Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
+                        Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                    @foreach (var t in availableTeams)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                    }
+                </Select>
+                <Input class="prompt-template-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <Tooltip Title="清空搜尋">
+                        <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
+                            ❌
+                        </Button>
+                    </Tooltip>
+                }
+                <Tooltip Title="搜尋">
+                    <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button" OnClick="@(async () => await OnSearchAsync())">
+                        🔍
+                    </Button>
+                </Tooltip>
+            </div>
+        </div>
+        <div class="prompt-template-view-table-wrap">
+            <Table @ref="table"
+                   TItem="PromptTemplateAdapterModel"
+                   Class="prompt-template-view-table"
+                   RemoteDataSource="true"
+                   DataSource="@promptTemplateAdapterModels"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total">
+                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Name)" Title="名稱" Sortable />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.ContentPreview)" Title="內容預覽" />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Description)" Title="描述" />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.CategoriesText)" Title="分類" />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.TeamsText)" Title="團隊" />
+                <Column TData="bool" DataIndex="@nameof(PromptTemplateAdapterModel.IsEnabled)" Title="啟用狀態" Sortable>
+                    @if (context.IsEnabled)
+                    {
+                        <span class="prompt-template-status prompt-template-status-enabled">啟用</span>
+                    }
+                    else
+                    {
+                        <span class="prompt-template-status prompt-template-status-disabled">停用</span>
+                    }
+                </Column>
+                <Column TData="DateTime" DataIndex="@nameof(PromptTemplateAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    <Space>
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit"
+                                                  OnClick="@(async () => await OnEditAsync(context))" />
+                            </SpaceItem>
+                        }
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Delete))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                  OnClick="@(async () => await OnDeleteAsync(context))" />
+                            </SpaceItem>
+                        }
+                    </Space>
+                </ActionColumn>
+            </Table>
+        </div>
+    </div>
+
+    <Modal Title="@modalTitle"
+           Class="prompt-template-view-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           OnOk="OnModalOKHandleAsync"
+           OnCancel="OnModalCancelHandleAsync">
+        <div>
+            <EditForm Model="@CurrentRecord" Context="editContext" @onkeydown="OnModalKeyDownAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <InputWatcher EditContextActionChanged="OnEditContestChanged" />
+
+                <AntDesign.Form TModel="PromptTemplateAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                    <FormItem Label="名稱" Required>
+                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入提示詞名稱" />
+                        <ValidationMessage For="() => CurrentRecord.Name" />
+                    </FormItem>
+
+                    <FormItem Label="提示詞內容" Required>
+                        <TextArea @bind-Value="CurrentRecord.Content" Rows="14" Placeholder="請輸入產生會議紀錄時要送給模型的指令內容" />
+                        <div class="prompt-template-view-variable-hint">
+                            可使用的變數：@KnownVariableDescription（產生會議紀錄時會代入實際內容；其他變數會原樣輸出）
+                        </div>
+                        <ValidationMessage For="() => CurrentRecord.Content" />
+                    </FormItem>
+
+                    <FormItem Label="描述">
+                        <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入提示詞用途說明" />
+                        <ValidationMessage For="() => CurrentRecord.Description" />
+                    </FormItem>
+
+                    <FormItem Label="分類">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var c in availableCategories)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Label="團隊">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
+                                Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var t in availableTeams)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Label="啟用狀態">
+                        <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
+                    </FormItem>
+                </AntDesign.Form>
+            </EditForm>
+        </div>
+    </Modal>
+}
+
+<FormModalHelper />

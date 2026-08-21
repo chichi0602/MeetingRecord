@@ -2,9 +2,9 @@
 
 - 文件版本：1.0
 - 文件狀態：已實作
-- 現行系統版本：0.4.24
+- 現行系統版本：0.4.26
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/08/17
+- 最後核對日期：2026/08/19
 
 ## 目標
 - [x] 明確定義 API、UI、Business、Entity 的資料邊界，避免腳手架日後擴充時直接暴露資料庫 Entity。
@@ -23,7 +23,7 @@
 - [ ] 新增 integration tests，確認 JSON body 不含不該暴露的 Entity 導覽屬性或內部欄位。
 
 ## 驗收標準
-- [x] `ProjectController`、`CategoryController`、`TeamController` 目前均使用 DTO 作為 API 邊界。
+- [x] `ProjectController`、`CategoryController`、`TeamController`、`PromptTemplateController` 目前均使用 DTO 作為 API 邊界。
 - [x] integration tests 已驗證 Project CRUD 成功 response 可用 DTO contract 反序列化。
 - [ ] 日後每新增一個 API Controller，都要在 PR checklist 檢查 DTO 邊界。
 

@@ -26,6 +26,7 @@ public sealed class MenuIconTests
         "storage",
         "category",
         "groups",
+        "article",
         "logout",
     };
 

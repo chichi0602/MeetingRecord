@@ -77,6 +77,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();
         services.AddScoped<TeamRepository>();
+        services.AddScoped<PromptTemplateService>();
+        services.AddScoped<PromptTemplateRepository>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, MeetingRecord.Web.Components.ApplicationCircuitHandler>();

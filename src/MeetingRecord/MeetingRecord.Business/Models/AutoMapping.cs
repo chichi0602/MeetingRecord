@@ -45,6 +45,19 @@ public class AutoMapping : Profile
         CreateMap<CategoryCreateUpdateDto, Category>();
         #endregion
 
+        #region PromptTemplate
+        CreateMap<PromptTemplate, PromptTemplateAdapterModel>()
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
+            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToList(s.Teams)));
+        CreateMap<PromptTemplateAdapterModel, PromptTemplate>()
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)))
+            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToStored(s.Teams)));
+        CreateMap<PromptTemplate, PromptTemplateDto>();
+        CreateMap<PromptTemplateDto, PromptTemplate>();
+        CreateMap<PromptTemplate, PromptTemplateCreateUpdateDto>();
+        CreateMap<PromptTemplateCreateUpdateDto, PromptTemplate>();
+        #endregion
+
         #region Team
         CreateMap<Team, TeamAdapterModel>();
         CreateMap<TeamAdapterModel, Team>();

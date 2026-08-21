@@ -34,6 +34,7 @@ public class MagicObjectHelper
     public const string 角色_資料定義 = "資料定義管理功能";
     public const string 角色_分類清單 = "分類清單";
     public const string 角色_團隊清單 = "團隊清單";
+    public const string 角色_提示詞清單 = "提示詞清單";
     public const string 角色_登出 = "登出 ";
     public const string 使用者角色 = "使用者角色";
 

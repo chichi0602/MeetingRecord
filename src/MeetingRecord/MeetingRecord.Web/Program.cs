@@ -232,6 +232,12 @@ namespace MeetingRecord.Web
                 #endregion
 
                 #region 加入設定強型別注入宣告
+                // LLM 供應商設定（0.4.26 起）：僅為強型別骨架，本版尚無任何呼叫端。
+                builder.Services
+                    .AddOptions<LlmSettings>()
+                    .Bind(builder.Configuration.GetSection(LlmSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
                 #endregion
 
                 #region 系統使用的目錄準備

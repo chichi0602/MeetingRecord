@@ -15,6 +15,10 @@ public class RolePermissionService
                 MagicObjectHelper.角色_專案項目,
             ],
             [
+                MagicObjectHelper.角色_會議管理,
+                MagicObjectHelper.角色_會議紀錄,
+            ],
+            [
                 MagicObjectHelper.角色_系統管理,
                 MagicObjectHelper.角色_使用者管理,
                 MagicObjectHelper.角色_角色管理,

@@ -1,10 +1,10 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.26
+- 現行系統版本：0.4.27
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/08/19
+- 最後核對日期：2026/08/21
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
@@ -17,7 +17,7 @@
 
 ## 二、資源 CRUD 控制器
 
-四個資源控制器共用同一組動作樣板（以 `CategoryController` 為代表，`src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs:35`）：
+五個資源控制器共用同一組動作樣板（以 `CategoryController` 為代表，`src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs:35`）：
 
 | 動作 | 路由（相對 `api/` 與 `api/v1/`）| 權限（`PermissionActions`）| 回傳 |
 |------|------|------|------|
@@ -35,8 +35,16 @@
 | `TeamController` | `api/Team`、`api/v1/Team` | `角色_團隊清單` | `Controllers/TeamController.cs` |
 | `ProjectController` | `api/Project`、`api/v1/Project` | `角色_專案項目` | `Controllers/ProjectController.cs` |
 | `PromptTemplateController` | `api/PromptTemplate`、`api/v1/PromptTemplate` | `角色_提示詞清單` | `Controllers/PromptTemplateController.cs` |
+| `MeetingController` | `api/Meeting`、`api/v1/Meeting` | `角色_會議紀錄` | `Controllers/MeetingController.cs` |
 
-> 注意：資源控制器（repository 路徑）**不做團隊列級過濾**。`Project` 與 `PromptTemplate` 的 `Teams` 標籤可見性只在 Blazor Service 層生效，詳見 [開發慣例與限制速查](開發慣例與限制速查.md) §4.1。
+> 注意：資源控制器（repository 路徑）**不做團隊列級過濾**。`Project`、`PromptTemplate` 與 `Meeting` 的 `Teams` 標籤可見性只在 Blazor Service 層生效，詳見 [開發慣例與限制速查](開發慣例與限制速查.md) §4.1。
+
+`MeetingController` 與其他四個的差異：
+
+- **沒有同名衝突檢查**（會議標題可重複），因此新增／更新不會回 `Conflict`。
+- **只開放中繼資料**。影音檔上傳、語音轉錄與逐字稿讀取刻意不開 API——那些操作牽涉實體檔案、背景佇列與長時間外部呼叫，只在 Blazor 服務層提供（見 [會議紀錄 PRD](../prd/會議紀錄-prd.md)）。
+- `PUT` 與 `MeetingRepository.UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位，API 用戶端無法覆寫背景轉錄寫入的狀態。
+- `DELETE` 成功後由控制器呼叫 `MeetingFileStore` 清除影音檔與逐字稿（`Meeting` 沒有附件子表，沒有 Cascade 可依賴）。
 
 ## 三、認證控制器 `AuthController`
 

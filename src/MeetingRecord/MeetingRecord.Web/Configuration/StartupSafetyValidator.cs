@@ -67,6 +67,56 @@ public static class StartupSafetyValidator
             }
         }
 
+        // 語音轉錄：兩種都算「已啟用」——明確指定了 TranscriptionProvider，
+        // 或沿用 DefaultProvider 且該供應商填了 TranscriptionModel。
+        // 只用 LLM、不用轉錄的部署整段跳過，不該被這裡擋住上線。
+        var transcriptionProvider = configuration[$"{LlmSettings.SectionName}:TranscriptionProvider"];
+        var effectiveTranscriptionProvider = !string.IsNullOrWhiteSpace(transcriptionProvider)
+            ? transcriptionProvider.Trim()
+            : llmDefaultProvider?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(effectiveTranscriptionProvider))
+        {
+            var transcriptionPath = $"{LlmSettings.SectionName}:Providers:{effectiveTranscriptionProvider}";
+            var transcriptionModel = configuration[$"{transcriptionPath}:TranscriptionModel"];
+            var transcriptionEnabled =
+                !string.IsNullOrWhiteSpace(transcriptionProvider) || !string.IsNullOrWhiteSpace(transcriptionModel);
+
+            if (transcriptionEnabled && string.IsNullOrWhiteSpace(transcriptionModel))
+            {
+                errors.Add($"{transcriptionPath}:TranscriptionModel 在 Production 啟用語音轉錄後不可留空（例如 gpt-4o-transcribe）。");
+            }
+
+            // 轉錄供應商若與生成端不同，其 ApiKey／Endpoint 尚未被上面的區塊檢查過。
+            if (transcriptionEnabled
+                && !string.Equals(effectiveTranscriptionProvider, llmDefaultProvider?.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                var transcriptionApiKey = configuration[$"{transcriptionPath}:ApiKey"];
+                if (string.IsNullOrWhiteSpace(transcriptionApiKey))
+                {
+                    errors.Add($"{transcriptionPath}:ApiKey 在 Production 指定 {LlmSettings.SectionName}:TranscriptionProvider 後不可留空（請以環境變數 {LlmSettings.SectionName}__Providers__{effectiveTranscriptionProvider}__ApiKey 提供）。");
+                }
+                else if (string.Equals(transcriptionApiKey, DevelopmentLlmApiKey, StringComparison.Ordinal))
+                {
+                    errors.Add($"{transcriptionPath}:ApiKey 不可在 Production 使用開發預設值。");
+                }
+
+                var transcriptionEndpoint = configuration[$"{transcriptionPath}:Endpoint"];
+                if (string.IsNullOrWhiteSpace(transcriptionEndpoint)
+                    || transcriptionEndpoint.Contains(DevelopmentLlmEndpointMarker, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add($"{transcriptionPath}:Endpoint 不可在 Production 留空或沿用開發範例值。");
+                }
+            }
+
+            // 轉錄前必須先以 FFmpeg 轉檔，路徑沒設就一定跑不動。
+            if (transcriptionEnabled
+                && string.IsNullOrWhiteSpace(configuration[$"{MediaSettings.SectionName}:FfmpegPath"]))
+            {
+                errors.Add($"{MediaSettings.SectionName}:FfmpegPath 在 Production 啟用語音轉錄後不可留空。");
+            }
+        }
+
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("Production 啟動安全檢查失敗：" + string.Join(" ", errors));

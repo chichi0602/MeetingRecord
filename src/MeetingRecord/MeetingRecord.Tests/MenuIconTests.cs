@@ -27,6 +27,8 @@ public sealed class MenuIconTests
         "category",
         "groups",
         "article",
+        "event",
+        "mic",
         "logout",
     };
 

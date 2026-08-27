@@ -19,6 +19,19 @@
     ]
   },
   {
+    "id": 6,
+    "name": "會議管理",
+    "icon": "event",
+    "subMenu": [
+      {
+        "id": 61,
+        "name": "會議紀錄",
+        "icon": "mic",
+        "url": "/meetings"
+      }
+    ]
+  },
+  {
     "id": 3,
     "name": "系統管理",
     "icon": "admin_panel_settings",

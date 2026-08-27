@@ -18,6 +18,8 @@ public sealed class SidebarMenuService
         [1] = MagicObjectHelper.角色_首頁,
         [2] = MagicObjectHelper.角色_專案管理,
         [21] = MagicObjectHelper.角色_專案項目,
+        [6] = MagicObjectHelper.角色_會議管理,
+        [61] = MagicObjectHelper.角色_會議紀錄,
         [3] = MagicObjectHelper.角色_系統管理,
         [31] = MagicObjectHelper.角色_使用者管理,
         [32] = MagicObjectHelper.角色_角色管理,

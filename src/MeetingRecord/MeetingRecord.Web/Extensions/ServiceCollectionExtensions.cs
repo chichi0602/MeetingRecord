@@ -6,9 +6,11 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
+using MeetingRecord.Web.BackgroundServices;
 using MeetingRecord.Web.Caching;
 using MeetingRecord.Web.Components.Layout;
 using MeetingRecord.Web.Configuration;
@@ -79,9 +81,34 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TeamRepository>();
         services.AddScoped<PromptTemplateService>();
         services.AddScoped<PromptTemplateRepository>();
+        services.AddScoped<MeetingService>();
+        services.AddScoped<MeetingRepository>();
+        services.AddScoped<MeetingFileStore>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, MeetingRecord.Web.Components.ApplicationCircuitHandler>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// 語音轉錄相關註冊：行程內佇列（Singleton）、背景 worker、供應商實作與其具名 HttpClient。
+    /// 新增其他廠商時，只要多註冊一個 <see cref="ITranscriptionProvider"/> 實作即可。
+    /// </summary>
+    public static IServiceCollection AddTranscriptionServices(this IServiceCollection services)
+    {
+        services.AddSingleton<ITranscriptionQueue, TranscriptionQueue>();
+        services.AddHostedService<TranscriptionBackgroundService>();
+
+        services.AddScoped<IMediaConverter, FfmpegMediaConverter>();
+        services.AddScoped<ITranscriptionProvider, AzureOpenAiTranscriptionProvider>();
+        services.AddScoped<TranscriptionJobRunner>();
+
+        // 轉錄是長時間請求（單段 15 分鐘音訊），預設的 100 秒逾時明顯不夠。
+        services.AddHttpClient(AzureOpenAiTranscriptionProvider.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(10);
+        });
 
         return services;
     }
@@ -93,6 +120,7 @@ public static class ServiceCollectionExtensions
         services.Configure<CorsSettings>(configuration.GetSection(CorsSettings.SectionName));
         services.Configure<SwaggerSettings>(configuration.GetSection(SwaggerSettings.SectionName));
         services.Configure<CacheSettings>(configuration.GetSection(CacheSettings.SectionName));
+        services.Configure<MediaSettings>(configuration.GetSection(MediaSettings.SectionName));
 
         return services;
     }

@@ -24,6 +24,12 @@ public class ExternalFileSystem
     public string DownloadPath { get; set; } = string.Empty;
     public string UploadPath { get; set; } = string.Empty;
     public string ProjectFilePath { get; set; } = string.Empty;
+
+    /// <summary>會議影音檔（原始上傳檔）存放根目錄</summary>
+    public string MeetingMediaPath { get; set; } = string.Empty;
+
+    /// <summary>會議逐字稿（.txt）存放根目錄</summary>
+    public string MeetingTranscriptPath { get; set; } = string.Empty;
 }
 
 public class BootstrapSettings

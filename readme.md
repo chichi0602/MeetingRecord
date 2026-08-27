@@ -61,7 +61,9 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 - 登入 / 登出（Cookie 驗證、記住我、4 位數驗證碼、玻璃擬態 UI）
 - 專案領域實體 CRUD（可作為新增其他領域模組的樣板）
 - 資料定義主資料：分類清單（Category）、團隊清單（Team）管理頁面與 Web API
-- 會議紀錄提示詞（PromptTemplate）：維護多組提示詞範本（名稱／內容／描述／啟用狀態／分類・團隊標籤），內容支援 `{{transcript}}`／`{{meetingTitle}}`／`{{meetingDate}}` 變數，供日後產生會議紀錄時套用（**目前尚未串接任何 LLM 或語音轉錄 API**）
+- 會議紀錄提示詞（PromptTemplate）：維護多組提示詞範本（名稱／內容／描述／啟用狀態／分類・團隊標籤），內容支援 `{{transcript}}`／`{{meetingTitle}}`／`{{meetingDate}}` 變數，供日後產生會議紀錄時套用（**「套用提示詞產生草稿」尚未實作**）
+- 會議紀錄（Meeting）：CRUD + 上傳一個影音檔（mp3／wma／mp4／mkv… 上限 1GB，含百分比進度列），系統以 FFmpeg 轉 mp3 並切段後呼叫 **Azure OpenAI 語音轉文字**，逐字稿存入檔案系統並可在畫面預覽；轉錄走行程內背景佇列，狀態可追蹤、失敗可重跑（見 [會議紀錄 PRD](docs/prd/會議紀錄-prd.md)）
+- AI 供應商可換：`ITranscriptionProvider` 為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
 - 紀錄分類/團隊標籤：專案可標記分類與團隊，並支援以角色為基礎的團隊行級權控（非管理員僅見公開或團隊交集紀錄）
 - 每筆紀錄可附加多檔案，自動依年月分目錄存放
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
@@ -119,7 +121,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     ├── MeetingRecord.slnx              ← 方案檔（新版 .slnx 格式）
     ├── MeetingRecord.Web/              ← Blazor Server 宿主
     │   ├── Components/             ← Pages / Views / Layout / Auths / Commons
-    │   ├── Controllers/            ← Web API（Project / Category / Team / Auth …）
+    │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Auth …）
+    │   ├── BackgroundServices/     ← TranscriptionBackgroundService（轉錄 worker）
     │   ├── Localization/           ← AntDesignLocaleFactory
     │   ├── Datas/Menu.json         ← Sidebar 導覽與權限定義
     │   ├── Filters/                ← ApiValidationFilter 等
@@ -127,16 +130,17 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     │   └── appsettings.json        ← 系統設定（含 SystemVersion）
     ├── MeetingRecord.Business/
     │   ├── Services/DataAccess/    ← Domain Service（CRUD）
-    │   ├── Services/Other/         ← AuthenticationStateHelper 等
+    │   ├── Services/Other/         ← AuthenticationStateHelper、MeetingFileStore 等
+    │   ├── Services/Transcription/ ← 語音轉錄管線（供應商抽象、FFmpeg、佇列、JobRunner）
     │   ├── Repositories/           ← API 層使用的 Repository
     │   └── Models/AutoMapping.cs   ← AutoMapper Profile
     ├── MeetingRecord.AccessDatas/
     │   ├── BackendDBContext.cs
-    │   ├── Models/                 ← Entity（MyUser、Project、Category、Team…）
+    │   ├── Models/                 ← Entity（MyUser、Project、Category、Team、Meeting…）
     │   └── Migrations/
     ├── MeetingRecord.Models/           ← AdapterModel、Systems、AutoMapper 來源
     ├── MeetingRecord.Dtos/             ← API DTO（含 ApiResult/PagedResult）
-    └── MeetingRecord.Share/            ← Helpers、Extensions
+    └── MeetingRecord.Share/            ← Helpers、Enums、Extensions
 ```
 
 ---
@@ -157,7 +161,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
-| `LlmSettings` | 會議紀錄產生用的 LLM 供應商設定：`DefaultProvider` 指定要用哪一家，`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`。**目前僅為強型別設定骨架，程式尚未呼叫任何外部 API**；`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
+| `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`。**語音轉錄已實際呼叫；文字生成端仍無呼叫端**。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
+| `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑。語音轉錄前一律用它把影音檔轉成 mp3 並切段，**是本專案唯一的外部執行檔相依**。 |
 | `SystemSettings.ConnectionStrings.SQLiteDefaultConnection` | SQLite 連線範本；實際連線字串由 `MagicObjectHelper.GetSQLiteConnectionString` 結合 `DatabasePath` 產生。 |
 | `SystemSettings.SystemInformation.SystemName` | 顯示用系統名稱。 |
 | `SystemSettings.SystemInformation.SystemDescription` | 顯示用系統描述。 |
@@ -166,6 +171,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `SystemSettings.ExternalFileSystem.DownloadPath` | `/UploadFiles` 對應的實體目錄（靜態資源外掛）。 |
 | `SystemSettings.ExternalFileSystem.UploadPath` | 通用上傳暫存目錄。 |
 | `SystemSettings.ExternalFileSystem.ProjectFilePath` | 專案附件根目錄（再依年/月細分）。 |
+| `SystemSettings.ExternalFileSystem.MeetingMediaPath` | 會議影音檔根目錄（再依年/月細分）；不對外服務。 |
+| `SystemSettings.ExternalFileSystem.MeetingTranscriptPath` | 會議逐字稿根目錄（再依年/月細分）；不對外服務，也沒有下載端點。 |
 | `AutoMapper:LicenseKey` | AutoMapper 商業授權金鑰（可留空）。 |
 
 各區段詳解見 [docs/operations/日誌與設定檔說明.md](docs/operations/日誌與設定檔說明.md)。
@@ -243,8 +250,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ### 產品需求文件（prd）
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
-- 10 份已實作能力 PRD：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
-- 規劃中：[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md) — 音檔上傳→轉錄→套用提示詞→產出會議紀錄的目標流程、各階段現況界線與未決議題（**尚未實作**）。
+- 11 份已實作能力 PRD：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 部分實作：[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md) — 音檔上傳→轉錄→套用提示詞→產出會議紀錄的完整流程。**前半段（上傳→轉錄→逐字稿）已於 0.4.27 實作**，後半段（套用提示詞→LLM→草稿）仍未實作。
 
 ### 設計規格（superpowers）
 
@@ -263,6 +270,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [移除工作項目、會議記錄與 SQL Server 支援，新增「關於」對話窗（0.4.24）](docs/changelog/2026-08-17-移除工作項目會議記錄與MSSQL支援.md) — 兩項領域作業下架、資料庫收斂為單一 SQLite 軌道、使用者選單新增系統資訊對話窗。
 - [專案更名：MyProject → MeetingRecord（0.4.25）](docs/changelog/2026-08-19-專案更名為MeetingRecord.md) — 佔位符 `MyProject` 全面更名為 `MeetingRecord`，範本轉為會議紀錄系統的開發基底。
 - [新增「會議紀錄提示詞」管理頁面與 LLM 設定區段（0.4.26）](docs/changelog/2026-08-19-會議紀錄提示詞.md) — 提示詞範本 CRUD（含分類/團隊標籤與團隊行級權控），並新增 provider-aware `LlmSettings` 強型別設定骨架，尚未串接任何 LLM／轉錄 API。
+- [新增「會議紀錄」管理頁面與影音語音轉文字（0.4.27）](docs/changelog/2026-08-21-會議紀錄與影音轉錄.md) — 會議紀錄 CRUD、影音檔上傳（含進度列）、FFmpeg 轉檔切段、Azure OpenAI 語音轉錄、逐字稿落檔與預覽；新增行程內背景佇列與 `ITranscriptionProvider` 供應商抽象。
 
 ### 專案規劃（planning）
 

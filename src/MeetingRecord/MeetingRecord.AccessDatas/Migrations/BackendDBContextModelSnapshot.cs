@@ -82,6 +82,69 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("Category");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Meeting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Categories")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MediaContentType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("MediaFileSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MediaOriginalFileName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MediaRelativePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MediaStoredFileName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("MeetingDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Teams")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TranscriptRelativePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TranscriptionCompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TranscriptionError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TranscriptionStartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TranscriptionStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Meeting");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.MyUser", b =>
                 {
                     b.Property<int>("Id")

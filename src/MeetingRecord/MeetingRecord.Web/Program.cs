@@ -16,6 +16,7 @@ using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Components;
@@ -232,7 +233,7 @@ namespace MeetingRecord.Web
                 #endregion
 
                 #region 加入設定強型別注入宣告
-                // LLM 供應商設定（0.4.26 起）：僅為強型別骨架，本版尚無任何呼叫端。
+                // LLM／STT 供應商設定：0.4.27 起由 AzureOpenAiTranscriptionProvider 實際使用轉錄段設定。
                 builder.Services
                     .AddOptions<LlmSettings>()
                     .Bind(builder.Configuration.GetSection(LlmSettings.SectionName))
@@ -248,6 +249,8 @@ namespace MeetingRecord.Web
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.DownloadPath, "download");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.UploadPath, "upload");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.ProjectFilePath, "project file");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingMediaPath, "meeting media");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingTranscriptPath, "meeting transcript");
                 #endregion
 
                 #region EF Core 宣告
@@ -256,6 +259,7 @@ namespace MeetingRecord.Web
 
                 #region 客製服務註冊
                 builder.Services.AddApplicationServices();
+                builder.Services.AddTranscriptionServices();
                 #endregion
 
                 var app = builder.Build();
@@ -361,6 +365,35 @@ namespace MeetingRecord.Web
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "RBAC backfill failed at startup.");
+                    }
+                    #endregion
+
+                    #region 轉錄狀態修復（轉錄佇列不持久化，重啟後殘留的「處理中」不會有人接手）
+                    try
+                    {
+                        var interrupted = dbContext.Meeting
+                            .Where(x => x.TranscriptionStatus == TranscriptionStatus.Processing)
+                            .ToList();
+
+                        if (interrupted.Count > 0)
+                        {
+                            foreach (var meeting in interrupted)
+                            {
+                                meeting.TranscriptionStatus = TranscriptionStatus.Failed;
+                                meeting.TranscriptionError = "應用程式重啟導致轉錄中斷，請重新執行轉錄。";
+                                meeting.TranscriptionCompletedAt = DateTime.Now;
+                                meeting.UpdatedAt = DateTime.Now;
+                            }
+
+                            dbContext.SaveChanges();
+                            logger.LogWarning(
+                                "Reset interrupted transcription jobs at startup. Count={Count}",
+                                interrupted.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to reset interrupted transcription jobs at startup.");
                     }
                     #endregion
                 }

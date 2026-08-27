@@ -58,6 +58,19 @@ public class AutoMapping : Profile
         CreateMap<PromptTemplateCreateUpdateDto, PromptTemplate>();
         #endregion
 
+        #region Meeting
+        CreateMap<Meeting, MeetingAdapterModel>()
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
+            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToList(s.Teams)));
+        CreateMap<MeetingAdapterModel, Meeting>()
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)))
+            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToStored(s.Teams)));
+        CreateMap<Meeting, MeetingDto>();
+        CreateMap<MeetingDto, Meeting>();
+        CreateMap<Meeting, MeetingCreateUpdateDto>();
+        CreateMap<MeetingCreateUpdateDto, Meeting>();
+        #endregion
+
         #region Team
         CreateMap<Team, TeamAdapterModel>();
         CreateMap<TeamAdapterModel, Team>();

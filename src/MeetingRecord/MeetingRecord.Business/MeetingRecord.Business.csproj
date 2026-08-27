@@ -17,8 +17,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 轉錄管線把「URL 組裝」與「FFmpeg 參數組裝」抽成 internal static 純函式，供單元測試直接驗證。 -->
+    <InternalsVisibleTo Include="MeetingRecord.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AutoMapper" Version="16.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 

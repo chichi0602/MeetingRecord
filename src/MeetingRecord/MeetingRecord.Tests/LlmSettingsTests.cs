@@ -131,6 +131,146 @@ public sealed class LlmSettingsTests
         Assert.Empty(Validate(settings));
     }
 
+    #region 語音轉錄段
+
+    [Fact]
+    public void EffectiveTranscriptionProviderName_ShouldFallBackToDefaultProvider()
+    {
+        var settings = new LlmSettings { DefaultProvider = "AzureOpenAI" };
+
+        Assert.Equal("AzureOpenAI", settings.EffectiveTranscriptionProviderName);
+    }
+
+    [Fact]
+    public void EffectiveTranscriptionProviderName_ShouldPreferTranscriptionProvider()
+    {
+        var settings = new LlmSettings
+        {
+            DefaultProvider = "AzureOpenAI",
+            TranscriptionProvider = "OtherVendor",
+        };
+
+        Assert.Equal("OtherVendor", settings.EffectiveTranscriptionProviderName);
+    }
+
+    [Fact]
+    public void IsTranscriptionConfigured_ShouldBeFalse_WhenTranscriptionModelIsBlank()
+    {
+        // 只設 DefaultProvider（用 LLM 但不用轉錄）不算已啟用轉錄。
+        var settings = new LlmSettings
+        {
+            DefaultProvider = "AzureOpenAI",
+            Providers = { ["AzureOpenAI"] = new LlmProviderSettings { Model = "gpt-4o-mini" } },
+        };
+
+        Assert.False(settings.IsTranscriptionConfigured);
+        Assert.Null(settings.GetTranscriptionProvider());
+    }
+
+    [Fact]
+    public void GetTranscriptionProvider_ShouldReturnProvider_WhenTranscriptionModelIsSet()
+    {
+        var settings = new LlmSettings
+        {
+            DefaultProvider = "AzureOpenAI",
+            Providers =
+            {
+                ["AzureOpenAI"] = new LlmProviderSettings
+                {
+                    Model = "gpt-4o-mini",
+                    TranscriptionModel = "gpt-4o-transcribe",
+                },
+            },
+        };
+
+        Assert.True(settings.IsTranscriptionConfigured);
+        Assert.Equal("gpt-4o-transcribe", settings.GetTranscriptionProvider()!.TranscriptionModel);
+    }
+
+    [Fact]
+    public void Validate_ShouldNotRequireTranscriptionModel_WhenTranscriptionProviderIsBlank()
+    {
+        // 未指定 TranscriptionProvider 代表沒打算用轉錄，不該擋住只用 LLM 的部署。
+        var settings = new LlmSettings
+        {
+            DefaultProvider = "AzureOpenAI",
+            Providers =
+            {
+                ["AzureOpenAI"] = new LlmProviderSettings
+                {
+                    Endpoint = "https://demo.openai.azure.com/",
+                    Model = "gpt-4o-mini",
+                    ApiVersion = "2024-10-21",
+                },
+            },
+        };
+
+        Assert.Empty(Validate(settings));
+    }
+
+    [Fact]
+    public void Validate_ShouldReportError_WhenTranscriptionProviderMissingFromProviders()
+    {
+        var settings = new LlmSettings
+        {
+            DefaultProvider = "AzureOpenAI",
+            TranscriptionProvider = "NotConfigured",
+            Providers =
+            {
+                ["AzureOpenAI"] = new LlmProviderSettings
+                {
+                    Endpoint = "https://demo.openai.azure.com/",
+                    Model = "gpt-4o-mini",
+                    ApiVersion = "2024-10-21",
+                    TranscriptionModel = "gpt-4o-transcribe",
+                },
+            },
+        };
+
+        var result = Assert.Single(Validate(settings));
+        Assert.Contains("TranscriptionProvider", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Validate_ShouldReportError_WhenTranscriptionProviderHasBlankTranscriptionModel()
+    {
+        var settings = new LlmSettings
+        {
+            DefaultProvider = "AzureOpenAI",
+            TranscriptionProvider = "AzureOpenAI",
+            Providers =
+            {
+                ["AzureOpenAI"] = new LlmProviderSettings
+                {
+                    Endpoint = "https://demo.openai.azure.com/",
+                    Model = "gpt-4o-mini",
+                    ApiVersion = "2024-10-21",
+                },
+            },
+        };
+
+        var result = Assert.Single(Validate(settings));
+        Assert.Contains("TranscriptionModel", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Bind_ShouldPopulateTranscriptionFields()
+    {
+        var config = BaseSettings();
+        config["LlmSettings:TranscriptionProvider"] = "AzureOpenAI";
+        config["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = "gpt-4o-transcribe";
+        config["LlmSettings:Providers:AzureOpenAI:TranscriptionApiVersion"] = "2025-03-01-preview";
+
+        var settings = Bind(config);
+
+        Assert.Equal("AzureOpenAI", settings.TranscriptionProvider);
+        var provider = settings.Providers["AzureOpenAI"];
+        Assert.Equal("gpt-4o-transcribe", provider.TranscriptionModel);
+        Assert.Equal("2025-03-01-preview", provider.EffectiveTranscriptionApiVersion);
+    }
+
+    #endregion
+
     private static Dictionary<string, string?> BaseSettings() => new()
     {
         ["LlmSettings:DefaultProvider"] = "AzureOpenAI",

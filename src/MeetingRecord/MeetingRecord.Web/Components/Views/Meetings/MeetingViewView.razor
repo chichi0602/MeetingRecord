@@ -1,0 +1,242 @@
+@using MeetingRecord.Share.Helpers
+@using MeetingRecord.Share.Enums
+@using MeetingRecord.Business.Helpers
+@if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div>
+        <div class="meeting-view-toolbar">
+            <div class="meeting-view-toolbar-left">
+                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Create))
+                {
+                    <Tooltip Title="新增">
+                        <Button Type="ButtonType.Default" Class="meeting-view-icon-button"
+                                OnClick="@(async () => await OnAddAsync())">
+                            ➕
+                        </Button>
+                    </Tooltip>
+                }
+                <Tooltip Title="重新整理">
+                    <Button Type="ButtonType.Default" Class="meeting-view-icon-button"
+                            OnClick="@(async () => await OnRefreshAsync())">
+                        🔄
+                    </Button>
+                </Tooltip>
+            </div>
+            <div class="meeting-view-toolbar-right">
+                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
+                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                    @foreach (var c in availableCategories)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                    }
+                </Select>
+                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                        Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
+                        Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                    @foreach (var t in availableTeams)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                    }
+                </Select>
+                <Input class="meeting-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <Tooltip Title="清空搜尋">
+                        <Button Type="ButtonType.Default" Class="meeting-view-icon-button" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
+                            ❌
+                        </Button>
+                    </Tooltip>
+                }
+                <Tooltip Title="搜尋">
+                    <Button Type="ButtonType.Default" Class="meeting-view-icon-button" OnClick="@(async () => await OnSearchAsync())">
+                        🔍
+                    </Button>
+                </Tooltip>
+            </div>
+        </div>
+        <div class="meeting-view-table-wrap">
+            <Table @ref="table"
+                   TItem="MeetingAdapterModel"
+                   Class="meeting-view-table"
+                   RemoteDataSource="true"
+                   DataSource="@meetingAdapterModels"
+                   OnChange="OnTableChange"
+                   @bind-PageIndex="_pageIndex"
+                   @bind-PageSize="_pageSize"
+                   @bind-Total="_total">
+                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable />
+                <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable />
+                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.CategoriesText)" Title="分類" />
+                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.TeamsText)" Title="團隊" />
+                <Column TData="string" Title="影音檔">
+                    @if (context.HasMedia)
+                    {
+                        <div class="meeting-media-cell">
+                            <span class="meeting-media-name" title="@context.MediaOriginalFileName">@context.MediaOriginalFileName</span>
+                            <span class="meeting-media-size">@MeetingMediaPolicy.FormatFileSize(context.MediaFileSize ?? 0)</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="meeting-media-empty">尚未上傳</span>
+                    }
+                </Column>
+                <Column TData="TranscriptionStatus" DataIndex="@nameof(MeetingAdapterModel.TranscriptionStatus)" Title="轉錄狀態" Sortable>
+                    <span class="meeting-status @GetStatusCssClass(context.TranscriptionStatus)">@context.TranscriptionStatusText</span>
+                    @if (context.TranscriptionStatus == TranscriptionStatus.Failed && !string.IsNullOrWhiteSpace(context.TranscriptionError))
+                    {
+                        <Tooltip Title="@context.TranscriptionError">
+                            <span class="meeting-status-error-hint">⚠</span>
+                        </Tooltip>
+                    }
+                </Column>
+                <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    <Space>
+                        @if (context.CanPreviewTranscript)
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="預覽逐字稿" Icon="description"
+                                                  OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
+                            </SpaceItem>
+                        }
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
+                        {
+                            @if (context.CanRetryTranscription)
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="重新轉錄" Icon="autorenew"
+                                                      OnClick="@(async () => await OnRetryTranscriptionAsync(context))" />
+                                </SpaceItem>
+                            }
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit"
+                                                  OnClick="@(async () => await OnEditAsync(context))" />
+                            </SpaceItem>
+                        }
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Delete))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                  OnClick="@(async () => await OnDeleteAsync(context))" />
+                            </SpaceItem>
+                        }
+                    </Space>
+                </ActionColumn>
+            </Table>
+        </div>
+    </div>
+
+    <Modal Title="@modalTitle"
+           Class="meeting-view-modal"
+           @bind-Visible="@modalVisible"
+           Keyboard="true"
+           ConfirmLoading="@isUploading"
+           MaskClosable="false"
+           OnOk="OnModalOKHandleAsync"
+           OnCancel="OnModalCancelHandleAsync">
+        <div>
+            <EditForm Model="@CurrentRecord" Context="editContext" @onkeydown="OnModalKeyDownAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <InputWatcher EditContextActionChanged="OnEditContestChanged" />
+
+                <AntDesign.Form TModel="MeetingAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                    <FormItem Label="會議標題" Required>
+                        <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入會議標題" />
+                        <ValidationMessage For="() => CurrentRecord.Title" />
+                    </FormItem>
+
+                    <FormItem Label="會議日期">
+                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" AllowClear="true" Style="width: 100%;" />
+                        <ValidationMessage For="() => CurrentRecord.MeetingDate" />
+                    </FormItem>
+
+                    <FormItem Label="描述">
+                        <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入會議說明" />
+                        <ValidationMessage For="() => CurrentRecord.Description" />
+                    </FormItem>
+
+                    <FormItem Label="分類">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var c in availableCategories)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Label="團隊">
+                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
+                                Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
+                            @foreach (var t in availableTeams)
+                            {
+                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                            }
+                        </Select>
+                    </FormItem>
+
+                    <FormItem Label="影音檔">
+                        <InputFile OnChange="OnMediaFileSelectedAsync" accept="@MeetingMediaPolicy.AcceptAttribute" disabled="@isUploading" />
+                        <div class="meeting-view-upload-hint">
+                            單檔上限 @MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)，支援格式：@MeetingMediaPolicy.AllowedExtensionsText。
+                            儲存後會自動排入背景轉錄，影片只會取用聲音軌。
+                        </div>
+
+                        @if (pendingMediaFile is not null)
+                        {
+                            <div class="meeting-view-pending-file">
+                                待上傳：@pendingMediaFile.Name（@MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)）
+                                @if (!isUploading)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="ClearPendingMediaFile">移除</button>
+                                }
+                            </div>
+                        }
+                        else if (CurrentRecord.HasMedia)
+                        {
+                            <div class="meeting-view-pending-file">
+                                目前檔案：@CurrentRecord.MediaOriginalFileName（@MeetingMediaPolicy.FormatFileSize(CurrentRecord.MediaFileSize ?? 0)）
+                                <span class="meeting-view-upload-hint">選擇新檔案會取代現有檔案與逐字稿。</span>
+                            </div>
+                        }
+
+                        @if (isUploading || uploadPercent > 0)
+                        {
+                            <Progress Percent="uploadPercent" Status="@(isUploading ? ProgressStatus.Active : ProgressStatus.Success)" />
+                        }
+                    </FormItem>
+                </AntDesign.Form>
+            </EditForm>
+        </div>
+    </Modal>
+
+    <Modal Title="@transcriptModalTitle"
+           Class="meeting-view-transcript-modal"
+           Width="800"
+           @bind-Visible="@transcriptModalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="OnTranscriptModalCancelHandleAsync">
+        @if (string.IsNullOrWhiteSpace(transcriptContent))
+        {
+            <div class="meeting-transcript-empty">目前沒有可顯示的逐字稿內容。</div>
+        }
+        else
+        {
+            <pre class="meeting-transcript-content">@transcriptContent</pre>
+        }
+    </Modal>
+}
+
+<FormModalHelper />

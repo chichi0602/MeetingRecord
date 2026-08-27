@@ -21,6 +21,7 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<Category> Category { get; set; }
     public virtual DbSet<Team> Team { get; set; }
     public virtual DbSet<PromptTemplate> PromptTemplate { get; set; }
+    public virtual DbSet<Meeting> Meeting { get; set; }
     public virtual DbSet<AuditLog> AuditLog { get; set; }
     public virtual DbSet<Permission> Permission { get; set; }
     public virtual DbSet<RolePermissionMap> RolePermissionMap { get; set; }

@@ -4,26 +4,33 @@
 @inject NavigationManager NavigationManager
 @attribute [ExcludeFromInteractiveRouting]
 
-<PageTitle>身分驗證</PageTitle>
+<PageTitle>AI 會議記錄小助手</PageTitle>
 
 <div class="login-container">
     <div class="login-shell">
         <section class="brand-panel">
             <div class="brand-badge">ENTERPRISE ACCESS</div>
             <div class="brand-logo" aria-hidden="true">
+                @* 線稿以 currentColor 描邊，直接繼承 .brand-panel 的文字色，深底淺底都保證有對比。 *@
                 <svg viewBox="0 0 120 120" role="img">
-                    <defs>
-                        <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#37c871" />
-                            <stop offset="100%" stop-color="#118a4d" />
-                        </linearGradient>
-                    </defs>
-                    <rect x="10" y="10" width="100" height="100" rx="28" fill="url(#brandGradient)" />
-                    <path d="M34 66c10-2 18-11 23-24 7 13 16 22 29 24-10 4-18 13-23 26-6-13-15-22-29-26z" fill="#ffffff" opacity="0.95" />
+                    <g fill="none" stroke="currentColor" stroke-width="5">
+                        <ellipse cx="60" cy="60" rx="52" ry="26" />
+                        <ellipse cx="60" cy="60" rx="52" ry="26" transform="rotate(60 60 60)" />
+                        <ellipse cx="60" cy="60" rx="52" ry="26" transform="rotate(120 60 60)" />
+                    </g>
+                    <g fill="currentColor">
+                        <circle cx="34" cy="15" r="7" />
+                        <circle cx="86" cy="15" r="7" />
+                        <circle cx="34" cy="105" r="7" />
+                        <circle cx="86" cy="105" r="7" />
+                    </g>
+                    <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+                          font-family="'Segoe UI', system-ui, sans-serif" font-size="34" font-weight="700"
+                          fill="currentColor">AI</text>
                 </svg>
             </div>
-            <h1 class="app-title">Blazor 專案範本</h1>
-            <p class="brand-description">以現代化企業風格打造的安全登入入口，結合玻璃擬態、動態漸層與清晰的登入流程。</p>
+            <h1 class="app-title">AI 會議記錄小助手</h1>
+            <p class="brand-description">上傳會議影音，自動轉成逐字稿，讓會議紀錄不再靠人工聽打。</p>
         </section>
 
         <section class="login-card">

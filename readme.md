@@ -279,6 +279,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [新增「會議紀錄提示詞」管理頁面與 LLM 設定區段（0.4.26）](docs/changelog/2026-08-19-會議紀錄提示詞.md) — 提示詞範本 CRUD（含分類/團隊標籤與團隊行級權控），並新增 provider-aware `LlmSettings` 強型別設定骨架，尚未串接任何 LLM／轉錄 API。
 - [新增「會議紀錄」管理頁面與影音語音轉文字（0.4.27）](docs/changelog/2026-08-21-會議紀錄與影音轉錄.md) — 會議紀錄 CRUD、影音檔上傳（含進度列）、FFmpeg 轉檔切段、Azure OpenAI 語音轉錄、逐字稿落檔與預覽；新增行程內背景佇列與 `ITranscriptionProvider` 供應商抽象。
 - [FFmpeg 啟動期檢查與設定改走 PATH（0.4.29）](docs/changelog/2026-08-27-FFmpeg啟動檢查.md) — FFmpeg 存在性改在啟動時驗證（Production 中止、其他環境記 WARN），`FfmpegPath` 預設值改為 `ffmpeg`。
+- [登入頁品牌識別改為 AI 會議記錄小助手（0.4.30）](docs/changelog/2026-08-28-登入頁品牌識別.md) — 登入頁名稱、slogan、LOGO 與分頁 icon 換成產品自身識別，新增 SVG favicon。
 
 ### 專案規劃（planning）
 

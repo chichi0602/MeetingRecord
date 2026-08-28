@@ -107,7 +107,7 @@ public sealed class StartupSafetyValidatorTests
     [Fact]
     public void Validate_Production_WithValidTranscriptionSettings_ShouldNotThrow()
     {
-        StartupSafetyValidator.Validate(Build(ValidTranscriptionProductionConfig()), "Production");
+        StartupSafetyValidator.Validate(Build(ValidTranscriptionProductionConfig()), "Production", FfmpegInstalled);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class StartupSafetyValidatorTests
         settings["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = string.Empty;
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => StartupSafetyValidator.Validate(Build(settings), "Production"));
+            () => StartupSafetyValidator.Validate(Build(settings), "Production", FfmpegInstalled));
         Assert.Contains("TranscriptionModel", ex.Message);
     }
 
@@ -129,7 +129,17 @@ public sealed class StartupSafetyValidatorTests
         settings["MediaSettings:FfmpegPath"] = string.Empty;
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => StartupSafetyValidator.Validate(Build(settings), "Production"));
+            () => StartupSafetyValidator.Validate(Build(settings), "Production", FfmpegInstalled));
+        Assert.Contains("FfmpegPath", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_Production_WithTranscriptionEnabledButMissingFfmpegExecutable_ShouldThrow()
+    {
+        // 路徑有填卻指到不存在的檔案，跟沒填一樣跑不動——這正是 0.4.29 之前漏掉的情況。
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => StartupSafetyValidator.Validate(
+                Build(ValidTranscriptionProductionConfig()), "Production", FfmpegMissing));
         Assert.Contains("FfmpegPath", ex.Message);
     }
 
@@ -143,7 +153,7 @@ public sealed class StartupSafetyValidatorTests
         settings["LlmSettings:Providers:OtherVendor:ApiKey"] = string.Empty;
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => StartupSafetyValidator.Validate(Build(settings), "Production"));
+            () => StartupSafetyValidator.Validate(Build(settings), "Production", FfmpegInstalled));
         Assert.Contains("OtherVendor", ex.Message);
     }
 
@@ -156,23 +166,64 @@ public sealed class StartupSafetyValidatorTests
         settings["MediaSettings:FfmpegPath"] = string.Empty;
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => StartupSafetyValidator.Validate(Build(settings), "Production"));
+            () => StartupSafetyValidator.Validate(Build(settings), "Production", FfmpegInstalled));
         Assert.Contains("FfmpegPath", ex.Message);
     }
 
-    private static Dictionary<string, string?> ValidTranscriptionProductionConfig()
+    #endregion
+
+    #region 非 Production 的設定提醒
+
+    [Fact]
+    public void GetDevelopmentWarnings_WithMissingFfmpeg_ShouldWarnWithoutThrowing()
     {
+        // 開發機沒裝 FFmpeg 不該擋住啟動，但要在啟動時就講清楚，別拖到轉錄失敗才發現。
+        var configuration = Build(ValidTranscriptionProductionConfig());
+
+        StartupSafetyValidator.Validate(configuration, "Development", FfmpegMissing);
+
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(configuration, FfmpegMissing);
+        Assert.Single(warnings);
+        Assert.Contains("FfmpegPath", warnings[0]);
+    }
+
+    [Fact]
+    public void GetDevelopmentWarnings_WithBlankFfmpegPath_ShouldWarn()
+    {
+        var settings = ValidTranscriptionProductionConfig();
+        settings["MediaSettings:FfmpegPath"] = string.Empty;
+
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(Build(settings), FfmpegMissing);
+        Assert.Single(warnings);
+        Assert.Contains("FfmpegPath", warnings[0]);
+    }
+
+    [Fact]
+    public void GetDevelopmentWarnings_WithInstalledFfmpeg_ShouldBeSilent()
+    {
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(
+            Build(ValidTranscriptionProductionConfig()), FfmpegInstalled);
+
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    public void GetDevelopmentWarnings_WithoutTranscription_ShouldBeSilent()
+    {
+        // 沒在用轉錄的開發者不該收到 FFmpeg 提醒。
         var settings = BaseValidProductionConfig();
-        settings["LlmSettings:DefaultProvider"] = "AzureOpenAI";
-        settings["LlmSettings:TranscriptionProvider"] = "AzureOpenAI";
-        settings["LlmSettings:Providers:AzureOpenAI:ApiKey"] = "real-production-key";
-        settings["LlmSettings:Providers:AzureOpenAI:Endpoint"] = "https://contoso.openai.azure.com/";
-        settings["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = "gpt-4o-transcribe";
-        settings["MediaSettings:FfmpegPath"] = @"C:\ffmpeg\bin\ffmpeg.exe";
-        return settings;
+        settings["MediaSettings:FfmpegPath"] = string.Empty;
+
+        Assert.Empty(StartupSafetyValidator.GetDevelopmentWarnings(Build(settings), FfmpegMissing));
     }
 
     #endregion
+
+    /// <summary>FFmpeg 已安裝。測試不該依賴執行機器上真的裝了 FFmpeg，所以一律以此覆寫。</summary>
+    private static readonly Func<string, bool> FfmpegInstalled = _ => true;
+
+    /// <summary>FFmpeg 沒安裝（或路徑指到不存在的檔案）。</summary>
+    private static readonly Func<string, bool> FfmpegMissing = _ => false;
 
     /// <summary>
     /// Validate 會累積所有錯誤後一次擲出，因此測 LLM 規則時其他規則必須先通過。
@@ -184,6 +235,22 @@ public sealed class StartupSafetyValidatorTests
         ["Swagger:EnabledInProduction"] = "false",
         ["CacheSettings:Provider"] = "Memory",
     };
+
+    /// <summary>
+    /// FfmpegPath 這裡填的是路徑格式合法、但實際不存在的檔案；
+    /// 是否算「存在」由各測試傳入的 <see cref="FfmpegInstalled"/> ／ <see cref="FfmpegMissing"/> 決定。
+    /// </summary>
+    private static Dictionary<string, string?> ValidTranscriptionProductionConfig()
+    {
+        var settings = BaseValidProductionConfig();
+        settings["LlmSettings:DefaultProvider"] = "AzureOpenAI";
+        settings["LlmSettings:TranscriptionProvider"] = "AzureOpenAI";
+        settings["LlmSettings:Providers:AzureOpenAI:ApiKey"] = "real-production-key";
+        settings["LlmSettings:Providers:AzureOpenAI:Endpoint"] = "https://contoso.openai.azure.com/";
+        settings["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = "gpt-4o-transcribe";
+        settings["MediaSettings:FfmpegPath"] = @"C:\ffmpeg\bin\ffmpeg.exe";
+        return settings;
+    }
 
     private static IConfiguration Build(Dictionary<string, string?> settings)
     {

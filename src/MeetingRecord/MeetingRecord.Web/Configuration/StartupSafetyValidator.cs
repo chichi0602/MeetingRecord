@@ -1,3 +1,4 @@
+using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Web.Auth;
 
@@ -9,7 +10,14 @@ public static class StartupSafetyValidator
     private const string DevelopmentLlmApiKey = "DevelopmentOnly-ChangeThisLlmApiKey";
     private const string DevelopmentLlmEndpointMarker = "your-resource";
 
-    public static void Validate(IConfiguration configuration, string environmentName)
+    /// <param name="ffmpegExists">
+    /// FFmpeg 執行檔是否存在的判斷方式，預設為實際檢查檔案系統與 PATH。
+    /// 開放覆寫是為了讓測試不必依賴執行機器上真的裝了 FFmpeg。
+    /// </param>
+    public static void Validate(
+        IConfiguration configuration,
+        string environmentName,
+        Func<string, bool>? ffmpegExists = null)
     {
         if (!string.Equals(environmentName, Environments.Production, StringComparison.OrdinalIgnoreCase))
         {
@@ -67,20 +75,12 @@ public static class StartupSafetyValidator
             }
         }
 
-        // 語音轉錄：兩種都算「已啟用」——明確指定了 TranscriptionProvider，
-        // 或沿用 DefaultProvider 且該供應商填了 TranscriptionModel。
-        // 只用 LLM、不用轉錄的部署整段跳過，不該被這裡擋住上線。
-        var transcriptionProvider = configuration[$"{LlmSettings.SectionName}:TranscriptionProvider"];
-        var effectiveTranscriptionProvider = !string.IsNullOrWhiteSpace(transcriptionProvider)
-            ? transcriptionProvider.Trim()
-            : llmDefaultProvider?.Trim();
+        var (transcriptionEnabled, effectiveTranscriptionProvider, transcriptionPath) =
+            GetTranscriptionContext(configuration);
 
         if (!string.IsNullOrWhiteSpace(effectiveTranscriptionProvider))
         {
-            var transcriptionPath = $"{LlmSettings.SectionName}:Providers:{effectiveTranscriptionProvider}";
             var transcriptionModel = configuration[$"{transcriptionPath}:TranscriptionModel"];
-            var transcriptionEnabled =
-                !string.IsNullOrWhiteSpace(transcriptionProvider) || !string.IsNullOrWhiteSpace(transcriptionModel);
 
             if (transcriptionEnabled && string.IsNullOrWhiteSpace(transcriptionModel))
             {
@@ -109,11 +109,18 @@ public static class StartupSafetyValidator
                 }
             }
 
-            // 轉錄前必須先以 FFmpeg 轉檔，路徑沒設就一定跑不動。
-            if (transcriptionEnabled
-                && string.IsNullOrWhiteSpace(configuration[$"{MediaSettings.SectionName}:FfmpegPath"]))
+            // 轉錄前必須先以 FFmpeg 轉檔，路徑沒設或指到不存在的檔案都一定跑不動。
+            if (transcriptionEnabled)
             {
-                errors.Add($"{MediaSettings.SectionName}:FfmpegPath 在 Production 啟用語音轉錄後不可留空。");
+                var ffmpegPath = configuration[$"{MediaSettings.SectionName}:FfmpegPath"];
+                if (string.IsNullOrWhiteSpace(ffmpegPath))
+                {
+                    errors.Add($"{MediaSettings.SectionName}:FfmpegPath 在 Production 啟用語音轉錄後不可留空。");
+                }
+                else if (!ResolveFfmpegExists(ffmpegExists)(ffmpegPath))
+                {
+                    errors.Add($"{MediaSettings.SectionName}:FfmpegPath 指向的 FFmpeg 執行檔不存在（{ffmpegPath}），Production 啟用語音轉錄後無法運作。");
+                }
             }
         }
 
@@ -121,5 +128,63 @@ public static class StartupSafetyValidator
         {
             throw new InvalidOperationException("Production 啟動安全檢查失敗：" + string.Join(" ", errors));
         }
+    }
+
+    /// <summary>
+    /// 非 Production 的啟動提醒：這些設定會讓語音轉錄在執行時失敗，但不足以阻擋啟動。
+    /// 沒在用轉錄的開發者不該因此無法啟動，所以只回訊息、不擲例外。
+    /// </summary>
+    public static IReadOnlyList<string> GetDevelopmentWarnings(
+        IConfiguration configuration,
+        Func<string, bool>? ffmpegExists = null)
+    {
+        if (!GetTranscriptionContext(configuration).Enabled)
+        {
+            return [];
+        }
+
+        var ffmpegPath = configuration[$"{MediaSettings.SectionName}:FfmpegPath"];
+        if (string.IsNullOrWhiteSpace(ffmpegPath))
+        {
+            return [$"{MediaSettings.SectionName}:FfmpegPath 未設定，語音轉錄會在執行時失敗。"];
+        }
+
+        if (!ResolveFfmpegExists(ffmpegExists)(ffmpegPath))
+        {
+            return [$"{MediaSettings.SectionName}:FfmpegPath 找不到 FFmpeg 執行檔（目前值：{ffmpegPath}），語音轉錄會在執行時失敗。"];
+        }
+
+        return [];
+    }
+
+    private static Func<string, bool> ResolveFfmpegExists(Func<string, bool>? ffmpegExists)
+        => ffmpegExists ?? FfmpegPathResolver.Exists;
+
+    /// <summary>
+    /// 這份設定是否啟用了語音轉錄，以及該供應商的設定路徑前綴。
+    /// 兩種都算「已啟用」——明確指定了 TranscriptionProvider，
+    /// 或沿用 DefaultProvider 且該供應商填了 TranscriptionModel。
+    /// 只用 LLM、不用轉錄的部署整段跳過，不該被轉錄相關檢查擋住。
+    /// </summary>
+    private static (bool Enabled, string ProviderName, string ProviderPath) GetTranscriptionContext(
+        IConfiguration configuration)
+    {
+        var defaultProvider = configuration[$"{LlmSettings.SectionName}:DefaultProvider"];
+        var transcriptionProvider = configuration[$"{LlmSettings.SectionName}:TranscriptionProvider"];
+
+        var effectiveProvider = !string.IsNullOrWhiteSpace(transcriptionProvider)
+            ? transcriptionProvider.Trim()
+            : defaultProvider?.Trim();
+
+        if (string.IsNullOrWhiteSpace(effectiveProvider))
+        {
+            return (false, string.Empty, string.Empty);
+        }
+
+        var providerPath = $"{LlmSettings.SectionName}:Providers:{effectiveProvider}";
+        var enabled = !string.IsNullOrWhiteSpace(transcriptionProvider)
+            || !string.IsNullOrWhiteSpace(configuration[$"{providerPath}:TranscriptionModel"]);
+
+        return (enabled, effectiveProvider, providerPath);
     }
 }

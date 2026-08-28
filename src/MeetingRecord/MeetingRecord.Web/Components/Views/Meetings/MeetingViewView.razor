@@ -149,73 +149,75 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="MeetingAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <FormItem Label="會議標題" Required>
-                        <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入會議標題" />
-                        <ValidationMessage For="() => CurrentRecord.Title" />
-                    </FormItem>
+                    <div class="meeting-view-form-grid">
+                        <FormItem Label="會議標題" Required>
+                            <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入會議標題" />
+                            <ValidationMessage For="() => CurrentRecord.Title" />
+                        </FormItem>
 
-                    <FormItem Label="會議日期">
-                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" AllowClear="true" Style="width: 100%;" />
-                        <ValidationMessage For="() => CurrentRecord.MeetingDate" />
-                    </FormItem>
+                        <FormItem Label="會議日期">
+                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" AllowClear="true" Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.MeetingDate" />
+                        </FormItem>
 
-                    <FormItem Label="描述">
-                        <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入會議說明" />
-                        <ValidationMessage For="() => CurrentRecord.Description" />
-                    </FormItem>
+                        <FormItem Label="描述" Class="meeting-view-form-full">
+                            <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入會議說明" />
+                            <ValidationMessage For="() => CurrentRecord.Description" />
+                        </FormItem>
 
-                    <FormItem Label="分類">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var c in availableCategories)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
-
-                    <FormItem Label="團隊">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
-                                Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var t in availableTeams)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
-
-                    <FormItem Label="影音檔">
-                        <InputFile OnChange="OnMediaFileSelectedAsync" accept="@MeetingMediaPolicy.AcceptAttribute" disabled="@isUploading" />
-                        <div class="meeting-view-upload-hint">
-                            單檔上限 @MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)，支援格式：@MeetingMediaPolicy.AllowedExtensionsText。
-                            儲存後會自動排入背景轉錄，影片只會取用聲音軌。
-                        </div>
-
-                        @if (pendingMediaFile is not null)
-                        {
-                            <div class="meeting-view-pending-file">
-                                待上傳：@pendingMediaFile.Name（@MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)）
-                                @if (!isUploading)
+                        <FormItem Label="分類">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                    Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var c in availableCategories)
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="ClearPendingMediaFile">移除</button>
+                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
                                 }
-                            </div>
-                        }
-                        else if (CurrentRecord.HasMedia)
-                        {
-                            <div class="meeting-view-pending-file">
-                                目前檔案：@CurrentRecord.MediaOriginalFileName（@MeetingMediaPolicy.FormatFileSize(CurrentRecord.MediaFileSize ?? 0)）
-                                <span class="meeting-view-upload-hint">選擇新檔案會取代現有檔案與逐字稿。</span>
-                            </div>
-                        }
+                            </Select>
+                        </FormItem>
 
-                        @if (isUploading || uploadPercent > 0)
-                        {
-                            <Progress Percent="uploadPercent" Status="@(isUploading ? ProgressStatus.Active : ProgressStatus.Success)" />
-                        }
-                    </FormItem>
+                        <FormItem Label="團隊">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
+                                    Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var t in availableTeams)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
+
+                        <FormItem Label="影音檔" Class="meeting-view-form-full">
+                            <InputFile OnChange="OnMediaFileSelectedAsync" accept="@MeetingMediaPolicy.AcceptAttribute" disabled="@isUploading" />
+                            <div class="meeting-view-upload-hint">
+                                單檔上限 @MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)，支援格式：@MeetingMediaPolicy.AllowedExtensionsText。
+                                儲存後會自動排入背景轉錄，影片只會取用聲音軌。
+                            </div>
+
+                            @if (pendingMediaFile is not null)
+                            {
+                                <div class="meeting-view-pending-file">
+                                    待上傳：@pendingMediaFile.Name（@MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)）
+                                    @if (!isUploading)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="ClearPendingMediaFile">移除</button>
+                                    }
+                                </div>
+                            }
+                            else if (CurrentRecord.HasMedia)
+                            {
+                                <div class="meeting-view-pending-file">
+                                    目前檔案：@CurrentRecord.MediaOriginalFileName（@MeetingMediaPolicy.FormatFileSize(CurrentRecord.MediaFileSize ?? 0)）
+                                    <span class="meeting-view-upload-hint">選擇新檔案會取代現有檔案與逐字稿。</span>
+                                </div>
+                            }
+
+                            @if (isUploading || uploadPercent > 0)
+                            {
+                                <Progress Percent="uploadPercent" Status="@(isUploading ? ProgressStatus.Active : ProgressStatus.Success)" />
+                            }
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

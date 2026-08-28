@@ -83,6 +83,13 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 ## 5. 快速開始
 
 > 需求：Windows 10 / 11、.NET 10 SDK、IDE（Visual Studio 2026 / Rider / VS Code）。
+>
+> 選用：**FFmpeg**——只有語音轉錄會用到，不裝也能啟動（啟動時會記一則 WARN）。安裝後預設走 PATH：
+>
+> ```powershell
+> winget install --id Gyan.FFmpeg -e   # 裝完開新的終端機讓 PATH 生效
+> ffmpeg -version                      # 確認找得到
+> ```
 
 ```powershell
 # 1. 還原與編譯
@@ -162,7 +169,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
 | `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`。**語音轉錄已實際呼叫；文字生成端仍無呼叫端**。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
-| `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑。語音轉錄前一律用它把影音檔轉成 mp3 並切段，**是本專案唯一的外部執行檔相依**。 |
+| `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑，預設 `ffmpeg`（走 PATH）。語音轉錄前一律用它把影音檔轉成 mp3 並切段，**是本專案唯一的外部執行檔相依**。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。 |
 | `SystemSettings.ConnectionStrings.SQLiteDefaultConnection` | SQLite 連線範本；實際連線字串由 `MagicObjectHelper.GetSQLiteConnectionString` 結合 `DatabasePath` 產生。 |
 | `SystemSettings.SystemInformation.SystemName` | 顯示用系統名稱。 |
 | `SystemSettings.SystemInformation.SystemDescription` | 顯示用系統描述。 |
@@ -271,6 +278,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [專案更名：MyProject → MeetingRecord（0.4.25）](docs/changelog/2026-08-19-專案更名為MeetingRecord.md) — 佔位符 `MyProject` 全面更名為 `MeetingRecord`，範本轉為會議紀錄系統的開發基底。
 - [新增「會議紀錄提示詞」管理頁面與 LLM 設定區段（0.4.26）](docs/changelog/2026-08-19-會議紀錄提示詞.md) — 提示詞範本 CRUD（含分類/團隊標籤與團隊行級權控），並新增 provider-aware `LlmSettings` 強型別設定骨架，尚未串接任何 LLM／轉錄 API。
 - [新增「會議紀錄」管理頁面與影音語音轉文字（0.4.27）](docs/changelog/2026-08-21-會議紀錄與影音轉錄.md) — 會議紀錄 CRUD、影音檔上傳（含進度列）、FFmpeg 轉檔切段、Azure OpenAI 語音轉錄、逐字稿落檔與預覽；新增行程內背景佇列與 `ITranscriptionProvider` 供應商抽象。
+- [FFmpeg 啟動期檢查與設定改走 PATH（0.4.29）](docs/changelog/2026-08-27-FFmpeg啟動檢查.md) — FFmpeg 存在性改在啟動時驗證（Production 中止、其他環境記 WARN），`FfmpegPath` 預設值改為 `ffmpeg`。
 
 ### 專案規劃（planning）
 

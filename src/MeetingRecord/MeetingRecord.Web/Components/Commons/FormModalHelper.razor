@@ -3,7 +3,8 @@
     /* form modals: 90% viewport size with scrollable body */
     .role-view-modal,
     .my-user-modal,
-    .project-view-modal {
+    .project-view-modal,
+    .meeting-view-modal {
         width: 90vw !important;
         max-width: 90vw !important;
         top: 5vh !important;
@@ -13,7 +14,8 @@
 
         .role-view-modal .ant-modal-content,
         .my-user-modal .ant-modal-content,
-        .project-view-modal .ant-modal-content {
+        .project-view-modal .ant-modal-content,
+        .meeting-view-modal .ant-modal-content {
             height: 90vh !important;
             max-height: 90vh !important;
             display: flex !important;
@@ -23,13 +25,15 @@
 
         .role-view-modal .ant-modal-header,
         .my-user-modal .ant-modal-header,
-        .project-view-modal .ant-modal-header {
+        .project-view-modal .ant-modal-header,
+        .meeting-view-modal .ant-modal-header {
             flex-shrink: 0;
         }
 
         .role-view-modal .ant-modal-body,
         .my-user-modal .ant-modal-body,
-        .project-view-modal .ant-modal-body {
+        .project-view-modal .ant-modal-body,
+        .meeting-view-modal .ant-modal-body {
             flex: 1 !important;
             min-height: 0 !important;
             overflow-y: auto !important;
@@ -37,9 +41,43 @@
 
         .role-view-modal .ant-modal-footer,
         .my-user-modal .ant-modal-footer,
-        .project-view-modal .ant-modal-footer {
+        .project-view-modal .ant-modal-footer,
+        .meeting-view-modal .ant-modal-footer {
             flex-shrink: 0;
         }
+
+    /* meeting record modal: near full screen, only a small margin on each side */
+    .meeting-view-modal {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        top: 2vh !important;
+    }
+
+        .meeting-view-modal .ant-modal-content {
+            height: 96vh !important;
+            max-height: 96vh !important;
+        }
+
+        /* two fields per row for the short inputs */
+        .meeting-view-modal .meeting-view-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            column-gap: 24px;
+        }
+
+            .meeting-view-modal .meeting-view-form-grid > .ant-form-item {
+                margin-bottom: 16px;
+            }
+
+            .meeting-view-modal .meeting-view-form-grid > .meeting-view-form-full {
+                grid-column: 1 / -1;
+            }
+
+    @@media (max-width: 768px) {
+        .meeting-view-modal .meeting-view-form-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
 
     /* change password modal: compact, auto height */
     .change-password-modal {

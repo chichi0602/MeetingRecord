@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：1.0
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.27
+- 現行系統版本：0.4.29
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/08/21
+- 最後核對日期：2026/08/27
 
 ## 一、目標與範圍
 
@@ -57,6 +57,7 @@
   - 分類 `Categories`（多值標籤，供檢索分群，**不影響可見性**）
   - 團隊 `Teams`（多值標籤，Placeholder「選擇團隊（不設定表示公開）」，**決定可見範圍**）
   - 影音檔（`<InputFile>` 單檔，`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生）
+- **Modal 版面**（0.4.28）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid（`.meeting-view-form-grid`）排列：會議標題／會議日期一列、分類／團隊一列，描述與影音檔以 `.meeting-view-form-full` 佔滿整列；視窗寬度 ≤768px 退回單欄。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。
 - 操作按鈕：
   - 預覽逐字稿（狀態為「已完成」且有逐字稿檔案時才出現）
@@ -143,7 +144,7 @@
 - 替換影音檔：新檔登錄成功後才刪除舊影音檔與舊逐字稿；狀態重設為「待處理」，`TranscriptRelativePath` 清空。
 - 找不到資料：修改／刪除時查無記錄回「找不到要修改／刪除的會議紀錄」；API 回 404 NotFound。
 - 刪除時實體檔案已遺失：只寫 `Warning` 日誌，不阻斷資料列刪除。
-- 未設定 `MediaSettings:FfmpegPath` 或路徑錯誤：轉錄狀態轉「失敗」，錯誤訊息明確指出設定鍵。
+- 未設定 `MediaSettings:FfmpegPath` 或路徑錯誤：0.4.29 起在**啟動時**就會被指出（Production 中止啟動、其他環境記 WARN）。若仍在此狀態下執行轉錄，狀態轉「失敗」，錯誤訊息明確指出設定鍵。
 - 未設定轉錄供應商或 `TranscriptionModel`：`TranscriptionJobRunner` 擲出並記錄「尚未設定語音轉錄供應商」。
 - 找不到對應的 `ITranscriptionProvider` 實作：錯誤訊息列出目前支援的供應商名稱。
 - 轉錄 API 非 2xx：錯誤訊息帶入狀態碼與回應內容前 500 字。
@@ -166,7 +167,7 @@
 
 ```json
 "MediaSettings": {
-  "FfmpegPath": "C:\\ffmpeg\\bin\\ffmpeg.exe"
+  "FfmpegPath": "ffmpeg"
 },
 "LlmSettings": {
   "DefaultProvider": "AzureOpenAI",
@@ -187,6 +188,7 @@
 - `TranscriptionProvider` 留空 → 沿用 `DefaultProvider`（轉錄端與生成端可指向不同廠商）。
 - `TranscriptionApiVersion` 留空 → 沿用 `ApiVersion`。
 - **只設 `DefaultProvider`、不填 `TranscriptionModel` 的部署視為未啟用轉錄**，啟動驗證不會擋。
+- `FfmpegPath` 可填完整路徑，也可只填 `ffmpeg` 走 PATH（0.4.29 起為預設值）。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。
 - 服務一律以 `IOptions<LlmSettings>` / `IOptions<MediaSettings>` 取設定，**禁止**直接讀 `IConfiguration`。
 
 ### 未來支援其他 AI 廠商

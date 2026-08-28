@@ -265,6 +265,19 @@ namespace MeetingRecord.Web
                 var app = builder.Build();
                 logger = app.Services.GetRequiredService<ILogger<Program>>();
                 logger.LogInformation("Application host built successfully.");
+
+                #region 非 Production 的設定提醒（不中止啟動）
+                // StartupSafetyValidator.Validate 在 NLog 接管之前就跑完，記不了 log；
+                // 開發環境的設定問題（例如沒裝 FFmpeg）因此改在這裡提醒，避免拖到轉錄失敗才發現。
+                if (!app.Environment.IsProduction())
+                {
+                    foreach (var warning in StartupSafetyValidator.GetDevelopmentWarnings(app.Configuration))
+                    {
+                        logger.LogWarning("Startup configuration warning. {Warning}", warning);
+                    }
+                }
+                #endregion
+
                 var bootstrapSettings = app.Configuration
                     .GetSection(nameof(BootstrapSettings))
                     .Get<BootstrapSettings>() ?? new BootstrapSettings();

@@ -30,6 +30,7 @@ public partial class NavMenu : ComponentBase, IDisposable
     private SidebarMenuService SidebarMenuService { get; set; } = default!;
 
     private IReadOnlyList<SidebarMenuItemModel> MenuItems { get; set; } = [];
+    private IReadOnlyList<SidebarMenuSection> Sections { get; set; } = [];
     private string? ActiveMenuPath { get; set; }
     private string[] OpenKeys { get; set; } = [];
     private string[] SelectedKeys { get; set; } = [];
@@ -47,6 +48,7 @@ public partial class NavMenu : ComponentBase, IDisposable
         }
 
         MenuItems = await SidebarMenuService.LoadAuthorizedMenuItemsAsync(AuthenticationStateHelper);
+        Sections = SidebarMenuSectionBuilder.Build(MenuItems);
         UpdateActiveMenuPath();
         SyncMenuStateFromRoute();
         NavigationManager.LocationChanged += OnLocationChanged;

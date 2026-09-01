@@ -1,46 +1,37 @@
 [
   {
+    "id": 61,
+    "name": "會議紀錄",
+    "icon": "mic",
+    "url": "/meetings",
+    "section": "核心功能"
+  },
+  {
+    "id": 21,
+    "name": "專案項目",
+    "icon": "workspaces",
+    "url": "/projects",
+    "section": "核心功能"
+  },
+  {
+    "id": 22,
+    "name": "待辦事項",
+    "icon": "checklist",
+    "url": "/todos",
+    "section": "核心功能"
+  },
+  {
     "id": 1,
     "name": "首頁",
     "icon": "space_dashboard",
-    "url": "/App"
-  },
-  {
-    "id": 2,
-    "name": "專案管理",
-    "icon": "work",
-    "subMenu": [
-      {
-        "id": 21,
-        "name": "專案項目",
-        "icon": "workspaces",
-        "url": "/projects"
-      },
-      {
-        "id": 22,
-        "name": "待辦事項",
-        "icon": "checklist",
-        "url": "/todos"
-      }
-    ]
-  },
-  {
-    "id": 6,
-    "name": "會議管理",
-    "icon": "event",
-    "subMenu": [
-      {
-        "id": 61,
-        "name": "會議紀錄",
-        "icon": "mic",
-        "url": "/meetings"
-      }
-    ]
+    "url": "/App",
+    "section": "功能選單"
   },
   {
     "id": 3,
     "name": "系統管理",
     "icon": "admin_panel_settings",
+    "section": "功能選單",
     "subMenu": [
       {
         "id": 31,
@@ -60,6 +51,7 @@
     "id": 5,
     "name": "資料定義",
     "icon": "storage",
+    "section": "功能選單",
     "subMenu": [
       {
         "id": 51,
@@ -85,6 +77,7 @@
     "id": 4,
     "name": "登出",
     "icon": "logout",
-    "url": "/auths/logout"
+    "url": "/auths/logout",
+    "section": "功能選單"
   }
 ]

@@ -104,7 +104,10 @@ public partial class ProjectViewView
             return;
         }
 
-        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_專案管理) == false)
+        // 用葉節點鍵而非群組鍵：工具列與操作鈕都是用 角色_專案項目 判斷，
+        // 頁面守門卻用群組鍵會讓兩者不一致（MeetingViewView 用的就是葉節點鍵）。
+        // 0.4.33 起「專案管理」群組已從選單移除，更沒有理由用群組鍵。
+        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_專案項目) == false)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
             logger.LogWarning("Project management view denied because current user has not this role permission.");

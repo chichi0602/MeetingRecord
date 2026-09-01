@@ -11,9 +11,9 @@ namespace MeetingRecord.Tests;
 /// </summary>
 public sealed class MeetingRegistrationTests
 {
-    private const int MeetingGroupMenuId = 6;
     private const int MeetingMenuId = 61;
     private const string MeetingUrl = "/meetings";
+    private const string CoreSectionName = "核心功能";
 
     [Fact]
     public void RolePermissionCatalog_ShouldContainMeetingPage()
@@ -35,17 +35,6 @@ public sealed class MeetingRegistrationTests
     }
 
     [Fact]
-    public void MenuJson_ShouldContainMeetingGroupNode()
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(FindMenuJsonPath()));
-
-        var node = FindNodeById(document.RootElement, MeetingGroupMenuId);
-
-        Assert.NotNull(node);
-        Assert.True(node!.Value.TryGetProperty("subMenu", out _));
-    }
-
-    [Fact]
     public void MenuJson_ShouldContainMeetingNode()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(FindMenuJsonPath()));
@@ -55,6 +44,35 @@ public sealed class MeetingRegistrationTests
         Assert.NotNull(node);
         Assert.Equal(MagicObjectHelper.角色_會議紀錄, node!.Value.GetProperty("name").GetString());
         Assert.Equal(MeetingUrl, node.Value.GetProperty("url").GetString());
+    }
+
+    [Fact]
+    public void MenuJson_ShouldPlaceMeetingAtTopLevelInCoreSection()
+    {
+        // 0.4.33 起「會議管理」群組已移除，會議紀錄提升為頂層並歸入「核心功能」區塊。
+        // 權限矩陣仍保留 角色_會議管理 群組（見上方 Fact）——選單結構與權限矩陣是獨立的兩件事。
+        using var document = JsonDocument.Parse(File.ReadAllText(FindMenuJsonPath()));
+
+        var topLevel = document.RootElement.EnumerateArray()
+            .Single(x => x.GetProperty("id").GetInt32() == MeetingMenuId);
+
+        Assert.False(topLevel.TryGetProperty("subMenu", out _));
+        Assert.Equal(CoreSectionName, topLevel.GetProperty("section").GetString());
+    }
+
+    [Fact]
+    public void MenuJson_EveryTopLevelNodeShouldDeclareSection()
+    {
+        // 漏標 section 的節點會靜默落到預設區塊，畫面上看不出是設定漏了。
+        using var document = JsonDocument.Parse(File.ReadAllText(FindMenuJsonPath()));
+
+        foreach (var node in document.RootElement.EnumerateArray())
+        {
+            var id = node.GetProperty("id").GetInt32();
+            Assert.True(
+                node.TryGetProperty("section", out var section) && !string.IsNullOrWhiteSpace(section.GetString()),
+                $"Menu.json 的頂層節點 id={id} 未標註 section。");
+        }
     }
 
     private static JsonElement? FindNodeById(JsonElement element, int id)

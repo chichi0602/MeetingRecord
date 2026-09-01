@@ -306,4 +306,32 @@ public class PromptTemplateService
             .Select(x => x.Name)
             .ToListAsync();
     }
+
+    /// <summary>
+    /// 取得啟用中且目前使用者可存取的提示詞，供「AI 轉會議紀錄」的下拉選用。
+    ///
+    /// 與 <see cref="GetAllEnabledNamesAsync"/> 的差別：這裡帶 Id（呼叫端要據以取內容）
+    /// 並套用團隊列級權控——沒有權控的話會出現「選單看得到但讀不到內容」，
+    /// 或讓使用者用到其他團隊的提示詞。
+    /// </summary>
+    public async Task<List<PromptTemplateAdapterModel>> GetEnabledSelectableAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<PromptTemplate> dataSource = context.PromptTemplate
+            .AsNoTracking()
+            .Where(x => x.IsEnabled);
+
+        var scope = await accessScope.GetAsync();
+        if (!scope.IsAdmin)
+        {
+            dataSource = dataSource.Where(
+                TagStringHelper.BuildTeamAccessPredicate<PromptTemplate>(x => x.Teams, scope.Teams));
+        }
+
+        var items = await dataSource
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<PromptTemplateAdapterModel>>(items);
+    }
 }

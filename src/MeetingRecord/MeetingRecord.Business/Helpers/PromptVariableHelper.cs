@@ -60,4 +60,28 @@ public static partial class PromptVariableHelper
     {
         return string.Join("、", KnownVariables.Select(x => $"{{{{{x}}}}}"));
     }
+
+    /// <summary>
+    /// 把提示詞內容中的佔位符代入實際值（產生會議紀錄時的代入端）。
+    ///
+    /// 比對不分大小寫，並允許大括號內有空白（與 <see cref="FindUnknownVariables"/> 同一個規則）。
+    /// <b>找不到對應值的佔位符原樣保留</b>，與「未知變數只提醒、不阻擋」的立場一致：
+    /// 悄悄代入空字串會讓範本作者看不出哪裡沒生效。
+    /// </summary>
+    public static string Render(string? content, IReadOnlyDictionary<string, string?> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        if (string.IsNullOrEmpty(content))
+        {
+            return string.Empty;
+        }
+
+        var lookup = new Dictionary<string, string?>(values, StringComparer.OrdinalIgnoreCase);
+
+        return VariableRegex().Replace(content, match =>
+            lookup.TryGetValue(match.Groups[1].Value, out var replacement)
+                ? replacement ?? string.Empty
+                : match.Value);
+    }
 }

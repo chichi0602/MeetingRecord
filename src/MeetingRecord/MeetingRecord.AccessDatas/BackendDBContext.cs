@@ -53,6 +53,13 @@ public partial class BackendDBContext : DbContext
                 .WithOne(x => x.Project)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // 會議紀錄不是專案的附件：刪專案只解除歸屬，逐字稿與 AI 草稿保留。
+            // 上面的迴圈已把所有外部索引鍵預設為 Restrict，因此這裡必須明寫 SetNull。
+            entity.HasMany(x => x.Meetings)
+                .WithOne(x => x.Project)
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         #region RBAC 關聯（多對多）與唯一鍵

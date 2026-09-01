@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
@@ -106,6 +107,28 @@ public static class ServiceCollectionExtensions
 
         // 轉錄是長時間請求（單段 15 分鐘音訊），預設的 100 秒逾時明顯不夠。
         services.AddHttpClient(AzureOpenAiTranscriptionProvider.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(10);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// 會議紀錄草稿生成相關註冊，形狀比照 <see cref="AddTranscriptionServices"/>。
+    /// 佇列與背景 worker 刻意與轉錄分開，避免長音檔的轉錄把草稿生成堵在後面。
+    /// 新增其他廠商時，只要多註冊一個 <see cref="ITextGenerationProvider"/> 實作即可。
+    /// </summary>
+    public static IServiceCollection AddTextGenerationServices(this IServiceCollection services)
+    {
+        services.AddSingleton<IMeetingDraftQueue, MeetingDraftQueue>();
+        services.AddHostedService<MeetingDraftBackgroundService>();
+
+        services.AddScoped<ITextGenerationProvider, AzureOpenAiTextGenerationProvider>();
+        services.AddScoped<MeetingDraftJobRunner>();
+
+        // 長逐字稿的生成可能耗時數分鐘，預設的 100 秒逾時不夠。
+        services.AddHttpClient(AzureOpenAiTextGenerationProvider.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromMinutes(10);
         });

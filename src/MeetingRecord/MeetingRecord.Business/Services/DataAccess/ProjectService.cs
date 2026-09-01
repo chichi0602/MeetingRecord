@@ -560,6 +560,27 @@ public class ProjectService
         File.Delete(fullPath);
     }
 
+    /// <summary>
+    /// 取得目前使用者可存取的全部專案（依標題排序），供專案項目頁的專案選擇器使用。
+    /// 這個畫面以下拉選單取代分頁表格，因此不分頁；專案數量成長到數百筆時要重新檢討。
+    /// </summary>
+    public async Task<List<ProjectAdapterModel>> GetSelectableAsync(CancellationToken cancellationToken = default)
+    {
+        IQueryable<Project> dataSource = context.Project.AsNoTracking();
+
+        var scope = await accessScope.GetAsync();
+        if (!scope.IsAdmin)
+        {
+            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Project>(x => x.Teams, scope.Teams));
+        }
+
+        var items = await dataSource
+            .OrderBy(x => x.Title)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<ProjectAdapterModel>>(items);
+    }
+
     private string GetFullPath(string relativePath)
     {
         var normalizedRelativePath = relativePath

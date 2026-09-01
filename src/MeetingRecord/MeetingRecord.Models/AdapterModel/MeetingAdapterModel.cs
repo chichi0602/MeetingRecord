@@ -67,6 +67,53 @@ public class MeetingAdapterModel : ICloneable
 
     #endregion
 
+    #region 專案歸屬
+
+    public int? ProjectId { get; set; }
+
+    /// <summary>所屬專案名稱。跨物件欄位，由服務層另外填入（AutoMapper 的同名慣例對應不到）。</summary>
+    public string? ProjectTitle { get; set; }
+
+    /// <summary>尚未被任何專案取用</summary>
+    public bool IsUnassigned => ProjectId is null;
+
+    /// <summary>歸屬狀態的顯示文字（清單欄位用）</summary>
+    public string ProjectTitleText => ProjectTitle ?? "— 未歸屬";
+
+    #endregion
+
+    #region AI 會議紀錄草稿
+
+    public string? DraftContent { get; set; }
+
+    public DraftStatus DraftStatus { get; set; } = DraftStatus.NotGenerated;
+
+    public string? DraftError { get; set; }
+
+    public int? DraftPromptTemplateId { get; set; }
+
+    public string? DraftPromptTemplateName { get; set; }
+
+    public DateTime? DraftStartedAt { get; set; }
+
+    public DateTime? DraftCompletedAt { get; set; }
+
+    /// <summary>草稿狀態的顯示文字（清單欄位用）</summary>
+    public string DraftStatusText => Share.Enums.DraftStatusText.Describe(DraftStatus);
+
+    /// <summary>草稿已產生，可供檢視與編修</summary>
+    public bool HasDraft =>
+        DraftStatus == DraftStatus.Completed
+        && !string.IsNullOrWhiteSpace(DraftContent);
+
+    /// <summary>可送出生成（逐字稿已完成，且目前不在生成中）</summary>
+    public bool CanGenerateDraft =>
+        CanPreviewTranscript
+        && DraftStatus != DraftStatus.Processing
+        && DraftStatus != DraftStatus.Pending;
+
+    #endregion
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime UpdatedAt { get; set; } = DateTime.Now;

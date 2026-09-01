@@ -90,7 +90,8 @@ public class MeetingRepository
     }
 
     /// <summary>
-    /// 更新中繼資料。影音檔與轉錄欄位一律沿用既有值，避免 API 用戶端覆寫背景轉錄的狀態。
+    /// 更新中繼資料。影音檔、轉錄與草稿欄位一律沿用既有值，
+    /// 避免 API 用戶端覆寫背景轉錄與背景生成寫入的狀態。
     /// </summary>
     public async Task<bool> UpdateAsync(Meeting meeting)
     {
@@ -112,6 +113,13 @@ public class MeetingRepository
         meeting.TranscriptionError = existing.TranscriptionError;
         meeting.TranscriptionStartedAt = existing.TranscriptionStartedAt;
         meeting.TranscriptionCompletedAt = existing.TranscriptionCompletedAt;
+        meeting.DraftContent = existing.DraftContent;
+        meeting.DraftStatus = existing.DraftStatus;
+        meeting.DraftError = existing.DraftError;
+        meeting.DraftPromptTemplateId = existing.DraftPromptTemplateId;
+        meeting.DraftPromptTemplateName = existing.DraftPromptTemplateName;
+        meeting.DraftStartedAt = existing.DraftStartedAt;
+        meeting.DraftCompletedAt = existing.DraftCompletedAt;
 
         context.Entry(existing).CurrentValues.SetValues(meeting);
         await context.SaveChangesAsync();

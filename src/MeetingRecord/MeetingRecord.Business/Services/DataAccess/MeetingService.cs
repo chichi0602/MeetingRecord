@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
@@ -23,6 +24,7 @@ public class MeetingService
     private readonly IRecordAccessScopeProvider accessScope;
     private readonly MeetingFileStore fileStore;
     private readonly ITranscriptionQueue transcriptionQueue;
+    private readonly IMeetingDraftQueue draftQueue;
 
     public IMapper Mapper { get; }
     public ILogger<MeetingService> Logger { get; }
@@ -33,7 +35,8 @@ public class MeetingService
         ILogger<MeetingService> logger,
         IRecordAccessScopeProvider accessScope,
         MeetingFileStore fileStore,
-        ITranscriptionQueue transcriptionQueue)
+        ITranscriptionQueue transcriptionQueue,
+        IMeetingDraftQueue draftQueue)
     {
         this.context = context;
         Mapper = mapper;
@@ -41,6 +44,7 @@ public class MeetingService
         this.accessScope = accessScope;
         this.fileStore = fileStore;
         this.transcriptionQueue = transcriptionQueue;
+        this.draftQueue = draftQueue;
     }
 
     #region 查詢
@@ -239,6 +243,16 @@ public class MeetingService
             itemData.TranscriptionError = item.TranscriptionError;
             itemData.TranscriptionStartedAt = item.TranscriptionStartedAt;
             itemData.TranscriptionCompletedAt = item.TranscriptionCompletedAt;
+
+            // 草稿同樣由背景工作寫入，畫面上的舊複本不得覆寫。
+            // ProjectId 刻意不在此列——歸屬本來就要能從畫面改。
+            itemData.DraftContent = item.DraftContent;
+            itemData.DraftStatus = item.DraftStatus;
+            itemData.DraftError = item.DraftError;
+            itemData.DraftPromptTemplateId = item.DraftPromptTemplateId;
+            itemData.DraftPromptTemplateName = item.DraftPromptTemplateName;
+            itemData.DraftStartedAt = item.DraftStartedAt;
+            itemData.DraftCompletedAt = item.DraftCompletedAt;
 
             CleanTrackingHelper.Clean<Meeting>(context);
             context.Entry(itemData).State = EntityState.Modified;
@@ -496,6 +510,211 @@ public class MeetingService
         }
 
         return await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken);
+    }
+
+    #endregion
+
+    #region AI 會議紀錄草稿
+
+    /// <summary>
+    /// 把會議排入草稿生成佇列，同時把它歸屬到指定專案。
+    ///
+    /// 一份逐字稿只能屬於一個專案：已被「其他」專案取用的會拒絕，
+    /// 但屬於同一個專案的可以重跑（換提示詞重新生成，會覆蓋既有草稿）。
+    /// </summary>
+    public async Task<VerifyRecordResult> RequestDraftAsync(
+        int meetingId,
+        int projectId,
+        int promptTemplateId,
+        CancellationToken cancellationToken = default)
+    {
+        Logger.LogInformation(
+            "Requesting meeting draft. MeetingId={MeetingId}, ProjectId={ProjectId}, PromptTemplateId={PromptTemplateId}",
+            meetingId,
+            projectId,
+            promptTemplateId);
+
+        try
+        {
+            CleanTrackingHelper.Clean<Meeting>(context);
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+            if (meeting is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到要產生會議紀錄的逐字稿。");
+            }
+
+            var scope = await accessScope.GetAsync();
+            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Draft request denied by team scope. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, "沒有權限對這筆逐字稿產生會議紀錄。");
+            }
+
+            if (meeting.TranscriptionStatus != TranscriptionStatus.Completed
+                || string.IsNullOrWhiteSpace(meeting.TranscriptRelativePath))
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆逐字稿尚未轉錄完成，無法產生會議紀錄。");
+            }
+
+            if (meeting.DraftStatus == DraftStatus.Processing)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆逐字稿正在產生會議紀錄中，請稍候。");
+            }
+
+            if (meeting.ProjectId is not null && meeting.ProjectId != projectId)
+            {
+                return VerifyRecordResultFactory.Build(false, "這份逐字稿已歸屬於其他專案，無法重複取用。");
+            }
+
+            var project = await context.Project.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == projectId, cancellationToken);
+            if (project is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
+            }
+
+            if (!TagStringHelper.IsTeamAccessible(project.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Draft request denied by project team scope. ProjectId={ProjectId}", projectId);
+                return VerifyRecordResultFactory.Build(false, "沒有權限存取指定的專案項目。");
+            }
+
+            var template = await context.PromptTemplate.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == promptTemplateId, cancellationToken);
+            if (template is null || !template.IsEnabled)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到指定的提示詞，或該提示詞已停用。");
+            }
+
+            if (!TagStringHelper.IsTeamAccessible(template.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Draft request denied by prompt template team scope. PromptTemplateId={PromptTemplateId}", promptTemplateId);
+                return VerifyRecordResultFactory.Build(false, "沒有權限使用指定的提示詞。");
+            }
+
+            meeting.ProjectId = projectId;
+            meeting.DraftPromptTemplateId = template.Id;
+            meeting.DraftPromptTemplateName = template.Name;
+            meeting.DraftStatus = DraftStatus.Pending;
+            meeting.DraftError = null;
+            meeting.DraftStartedAt = null;
+            meeting.DraftCompletedAt = null;
+            meeting.UpdatedAt = DateTime.Now;
+            await context.SaveChangesAsync(cancellationToken);
+            CleanTrackingHelper.Clean<Meeting>(context);
+
+            await draftQueue.EnqueueAsync(meetingId, cancellationToken);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to request meeting draft. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "排入會議紀錄生成失敗。", ex);
+        }
+    }
+
+    /// <summary>
+    /// 取得可供「AI 轉會議紀錄」選用的逐字稿（轉錄已完成者）。
+    /// 一併回傳歸屬資訊，讓畫面把已被其他專案取用的項目標示為不可選。
+    /// </summary>
+    public async Task<List<MeetingAdapterModel>> GetSelectableTranscriptsAsync(CancellationToken cancellationToken = default)
+    {
+        IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking()
+            .Where(x => x.TranscriptionStatus == TranscriptionStatus.Completed);
+
+        var scope = await accessScope.GetAsync();
+        if (!scope.IsAdmin)
+        {
+            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
+        }
+
+        var items = await dataSource
+            .Include(x => x.Project)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return MapWithProjectTitle(items);
+    }
+
+    /// <summary>取得某專案底下的會議紀錄（歷史清單）。</summary>
+    public async Task<List<MeetingAdapterModel>> GetByProjectAsync(int projectId, CancellationToken cancellationToken = default)
+    {
+        IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking()
+            .Where(x => x.ProjectId == projectId);
+
+        var scope = await accessScope.GetAsync();
+        if (!scope.IsAdmin)
+        {
+            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
+        }
+
+        var items = await dataSource
+            .Include(x => x.Project)
+            .OrderByDescending(x => x.DraftCompletedAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return MapWithProjectTitle(items);
+    }
+
+    /// <summary>人工編修 AI 產生的會議紀錄草稿。</summary>
+    public async Task<VerifyRecordResult> UpdateDraftAsync(
+        int meetingId,
+        string? content,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            CleanTrackingHelper.Clean<Meeting>(context);
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+            if (meeting is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到要修改的會議紀錄。");
+            }
+
+            var scope = await accessScope.GetAsync();
+            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Draft update denied by team scope. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
+            }
+
+            if (meeting.DraftStatus == DraftStatus.Processing)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄正在重新產生中，請稍候再編修。");
+            }
+
+            meeting.DraftContent = content;
+            meeting.UpdatedAt = DateTime.Now;
+            await context.SaveChangesAsync(cancellationToken);
+            CleanTrackingHelper.Clean<Meeting>(context);
+
+            Logger.LogInformation("Meeting draft updated. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update meeting draft. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "修改會議紀錄失敗。", ex);
+        }
+    }
+
+    /// <summary>
+    /// 對應成 AdapterModel 並補上專案名稱。
+    /// ProjectTitle 是跨物件欄位，AutoMapper 的同名慣例對應不到，因此在這裡填。
+    /// </summary>
+    private List<MeetingAdapterModel> MapWithProjectTitle(List<Meeting> items)
+    {
+        var result = new List<MeetingAdapterModel>();
+        foreach (var item in items)
+        {
+            var model = Mapper.Map<MeetingAdapterModel>(item);
+            model.ProjectTitle = item.Project?.Title;
+            result.Add(model);
+        }
+
+        return result;
     }
 
     #endregion

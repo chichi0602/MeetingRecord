@@ -9,6 +9,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
@@ -379,6 +380,156 @@ public sealed class MeetingServiceTests
 
     #endregion
 
+    #region AI 會議紀錄草稿
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldEnqueueAndAssignProject_WhenTranscriptIsReady()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(meeting.Id, Assert.Single(fixture.DraftQueue.Enqueued));
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(project.Id, saved.ProjectId);
+        Assert.Equal(DraftStatus.Pending, saved.DraftStatus);
+        Assert.Equal(template.Id, saved.DraftPromptTemplateId);
+        // 提示詞名稱以快照保存，日後範本改名或刪除仍看得出當初用了什麼。
+        Assert.Equal("標準會議紀錄", saved.DraftPromptTemplateName);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldReject_WhenTranscriptIsNotCompleted()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddMeetingAsync("尚未轉錄的會議");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldReject_WhenTranscriptBelongsToAnotherProject()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var owner = await fixture.AddProjectAsync("客戶訪談專案");
+        var other = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: owner.Id);
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, other.Id, template.Id);
+
+        Assert.False(result.Success);
+        Assert.Contains("已歸屬於其他專案", result.Message);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldAllowRegeneration_WhenTranscriptBelongsToSameProject()
+    {
+        // 換提示詞重新生成是預期用法，會覆蓋既有草稿。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("決議導向摘要");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: project.Id);
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.True(result.Success);
+        Assert.Single(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldReject_WhenDraftIsAlreadyProcessing()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync(
+            "需求確認會議",
+            draftStatus: DraftStatus.Processing);
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldReject_WhenMeetingIsOutOfTeamScope()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("團隊B會議", teams: ["團隊B"]);
+        var service = fixture.CreateService(isAdmin: false, "團隊A");
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task GetSelectableTranscriptsAsync_ShouldReturnCompletedOnlyWithAssignment()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        await fixture.AddMeetingAsync("尚未轉錄的會議");
+        await fixture.AddCompletedMeetingAsync("未歸屬逐字稿");
+        await fixture.AddCompletedMeetingAsync("已歸屬逐字稿", projectId: project.Id);
+        var service = fixture.CreateService();
+
+        var result = await service.GetSelectableTranscriptsAsync();
+
+        Assert.Equal(2, result.Count);
+        Assert.True(result.Single(x => x.Title == "未歸屬逐字稿").IsUnassigned);
+        Assert.Equal("客戶訪談專案", result.Single(x => x.Title == "已歸屬逐字稿").ProjectTitle);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldNotOverwriteDraftWrittenByBackgroundJob()
+    {
+        // 畫面上的舊複本存檔時，不得清掉背景生成寫入的草稿。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        meeting.DraftContent = "AI 產生的會議紀錄";
+        meeting.DraftStatus = DraftStatus.Completed;
+        fixture.Context.Meeting.Update(meeting);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var stale = await service.GetAsync(meeting.Id);
+        stale.Title = "改過標題的舊複本";
+        stale.DraftContent = null;
+        stale.DraftStatus = DraftStatus.NotGenerated;
+
+        var result = await service.UpdateAsync(stale);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal("改過標題的舊複本", saved.Title);
+        Assert.Equal("AI 產生的會議紀錄", saved.DraftContent);
+        Assert.Equal(DraftStatus.Completed, saved.DraftStatus);
+    }
+
+    #endregion
+
     #region 團隊可見性
 
     [Fact]
@@ -510,6 +661,20 @@ public sealed class MeetingServiceTests
             => throw new NotSupportedException("測試不會消費佇列。");
     }
 
+    private sealed class FakeMeetingDraftQueue : IMeetingDraftQueue
+    {
+        public List<int> Enqueued { get; } = [];
+
+        public ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default)
+        {
+            Enqueued.Add(meetingId);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<int> DequeueAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException("測試不會消費佇列。");
+    }
+
     private sealed class CollectingProgress(List<int> reported) : IProgress<int>
     {
         public void Report(int value) => reported.Add(value);
@@ -548,6 +713,8 @@ public sealed class MeetingServiceTests
 
         public FakeTranscriptionQueue Queue { get; } = new();
 
+        public FakeMeetingDraftQueue DraftQueue { get; } = new();
+
         public string MediaRoot => Path.Combine(rootPath, "media");
 
         public string TranscriptRoot => Path.Combine(rootPath, "transcript");
@@ -578,7 +745,8 @@ public sealed class MeetingServiceTests
                 loggerFactory.CreateLogger<MeetingService>(),
                 new FakeScopeProvider(isAdmin, teams),
                 fileStore,
-                Queue);
+                Queue,
+                DraftQueue);
         }
 
         public async Task<Meeting> AddMeetingAsync(
@@ -597,6 +765,62 @@ public sealed class MeetingServiceTests
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
             return meeting;
+        }
+
+        /// <summary>建立一筆轉錄已完成、可供產生草稿的會議。</summary>
+        public async Task<Meeting> AddCompletedMeetingAsync(
+            string title,
+            int? projectId = null,
+            DraftStatus draftStatus = DraftStatus.NotGenerated,
+            IEnumerable<string>? teams = null)
+        {
+            var meeting = new Meeting
+            {
+                Title = title,
+                Teams = TagStringHelper.ToStored(teams),
+                TranscriptionStatus = TranscriptionStatus.Completed,
+                TranscriptRelativePath = $"2026/08/{Guid.NewGuid():N}.txt",
+                ProjectId = projectId,
+                DraftStatus = draftStatus,
+            };
+
+            Context.Meeting.Add(meeting);
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return meeting;
+        }
+
+        public async Task<Project> AddProjectAsync(string title, IEnumerable<string>? teams = null)
+        {
+            var project = new Project
+            {
+                Title = title,
+                Status = "進行中",
+                Priority = "中",
+                Owner = "王小明",
+                Teams = TagStringHelper.ToStored(teams),
+            };
+
+            Context.Project.Add(project);
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return project;
+        }
+
+        public async Task<PromptTemplate> AddPromptTemplateAsync(string name, IEnumerable<string>? teams = null)
+        {
+            var template = new PromptTemplate
+            {
+                Name = name,
+                Content = "請根據以下逐字稿整理會議紀錄：{{transcript}}",
+                IsEnabled = true,
+                Teams = TagStringHelper.ToStored(teams),
+            };
+
+            Context.PromptTemplate.Add(template);
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return template;
         }
 
         public async Task<Dictionary<string, int>> SeedDefaultMeetingsAsync()

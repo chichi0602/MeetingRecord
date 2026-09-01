@@ -1,17 +1,19 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：1.0
+- 文件版本：2.0
 - 文件狀態：已實作
-- 現行系統版本：0.4.26
-- 首次實作版本：既有腳手架核心功能
-- 最後核對日期：2026/08/19
+- 現行系統版本：0.4.31
+- 首次實作版本：既有腳手架核心功能（0.4.31 頁面全面改版）
+- 最後核對日期：2026/08/31
 
 ## 一、目標與範圍
 
 提供「專案項目（Project）」的建立、查詢、修改、刪除與附件管理能力，同時作為新增其他領域 CRUD 模組時的參考樣板。
 
-- 範圍：清單查詢（關鍵字搜尋、分類／團隊過濾、排序、分頁）、單筆維護（含表單驗證）、多檔附件上傳／下載／刪除、動作級授權與團隊可見範圍控管。
-- 非範圍：專案間的相依關係／甘特圖、工時統計、跨專案報表、附件線上預覽；本頁面不涉及任何 LLM 產生內容（提示詞範本維護見 [會議紀錄提示詞](會議紀錄提示詞-prd.md)，規劃中的自動產出流程見 [會議紀錄產生流程](會議紀錄產生流程-prd.md)）。
+- 範圍：專案選擇與單筆維護（含表單驗證）、多檔附件上傳／下載／刪除、動作級授權與團隊可見範圍控管；**0.4.31 起**另含「挑一份逐字稿以 AI 產生會議紀錄」與本專案的歷史會議紀錄清單（檢視／編修）。
+- 非範圍：專案間的相依關係／甘特圖、工時統計、跨專案報表、附件線上預覽；待辦事項的抽取與管理（TodoList 尚未實作）。
+
+> **0.4.31 版面變更**：本頁由分頁表格 CRUD 改為以專案為中心的操作介面（專案選擇器 + 摘要列 + AI 區塊 + 歷史會議紀錄）。**副作用是分頁、分類過濾、團隊過濾與關鍵字搜尋隨表格一併移除**，改以專案下拉的搜尋替代；專案數量成長到數百筆時這個版面要重新檢討。設計依據見 [會議記錄流程 Wireframe 設計規格](../superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)。
 
 ## 二、使用者與入口
 
@@ -27,11 +29,11 @@
 
 ## 三、畫面與欄位
 
-- 工具列：新增、重新整理、分類過濾（多選）、團隊過濾（多選）、關鍵字輸入、清空、搜尋。
-- 清單欄位（`ProjectViewView.razor:72-83`）：標題、描述、開始日期、結束日期、狀態、優先級、完成百分比、負責人、分類、團隊、建立時間、更新時間；標題預設遞增排序。
-- 可排序欄位（`ProjectService.cs:81-155`）：Title、StartDate、EndDate、Status、Priority、CompletionPercentage、Owner、CreatedAt、UpdatedAt。
-- 搜尋比對欄位（`ProjectService.cs:57-62`）：Title、Description、Status、Priority、Owner。
-- 分頁：`RemoteDataSource`，預設每頁 `MagicObjectHelper.PageSize`。
+- 專案選擇列：可搜尋的專案下拉（`ProjectService.GetSelectableAsync`，依標題排序、不分頁）＋ 新增／編輯／刪除／重新整理四顆 Material Icon 按鈕。
+- 專案摘要列：負責人、期程、狀態、完成度、本專案的會議紀錄份數。
+- AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生（會先跳確認對話框，因為會覆蓋）。
+- 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（檢視／編修草稿、預覽逐字稿）。不分頁。
+- Icon 一律使用 Material Icons Outlined，不使用 emoji。
 - 編輯表單欄位（`Project` 實體 / `ProjectCreateUpdateDto`）：標題（必填）、描述、開始日期、結束日期、狀態（必填，`StatusOptions`）、優先級（必填，`PriorityOptions`）、完成百分比（0-100）、負責人（必填）、分類（多值標籤）、團隊（多值標籤，不設定＝公開）。
 - 附件：`專案附件` 一次可多選，單檔上限 1GB；待上傳清單可移除，已上傳檔案可下載（`/api/project-files/{id}/download`）或標記移除。
 
@@ -39,7 +41,9 @@
 
 - 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectRepository`（與 UI 的 Service 為兩條路徑，皆回 `ApiResult`）。
 - 讀取：清單 `GetAsync(DataRequest)` 使用 `AsNoTracking`；單筆 `GetAsync(int)` 以 `Include(x => x.Files)` 帶附件。
-- 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單（`ProjectViewView.razor.cs:228-237`）。
+- 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單。
+- AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。
+- 刪除專案：`OnDelete(DeleteBehavior.SetNull)` —— 底下的會議紀錄不會被刪除，只解除歸屬；確認對話框會明白告知這件事。
 - 寫入前清追蹤：`AddAsync`／`UpdateAsync`／`DeleteAsync` 進入時皆呼叫 `CleanTrackingHelper.Clean<Project>(context)`（`ProjectService.cs:201,233,286`）。
 - 附件 Adapter：UI 以 `ProjectUploadFileInput`（FileName/ContentType/FileSize/Content）傳入；Service 依主表 `CreatedAt` 年／月建立目錄，檔名以 GUID 產生，落地後寫入 `ProjectFile`；刪除主表時先刪實體檔再刪紀錄。
 - Migration：模型異動需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。

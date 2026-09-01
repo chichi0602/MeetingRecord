@@ -260,6 +260,7 @@ namespace MeetingRecord.Web
                 #region 客製服務註冊
                 builder.Services.AddApplicationServices();
                 builder.Services.AddTranscriptionServices();
+                builder.Services.AddTextGenerationServices();
                 #endregion
 
                 var app = builder.Build();
@@ -407,6 +408,35 @@ namespace MeetingRecord.Web
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Failed to reset interrupted transcription jobs at startup.");
+                    }
+                    #endregion
+
+                    #region 草稿生成狀態修復（生成佇列同樣不持久化，殘留的「生成中」不會有人接手）
+                    try
+                    {
+                        var interruptedDrafts = dbContext.Meeting
+                            .Where(x => x.DraftStatus == DraftStatus.Processing)
+                            .ToList();
+
+                        if (interruptedDrafts.Count > 0)
+                        {
+                            foreach (var meeting in interruptedDrafts)
+                            {
+                                meeting.DraftStatus = DraftStatus.Failed;
+                                meeting.DraftError = "應用程式重啟導致會議紀錄生成中斷，請重新產生。";
+                                meeting.DraftCompletedAt = DateTime.Now;
+                                meeting.UpdatedAt = DateTime.Now;
+                            }
+
+                            dbContext.SaveChanges();
+                            logger.LogWarning(
+                                "Reset interrupted draft generation jobs at startup. Count={Count}",
+                                interruptedDrafts.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to reset interrupted draft generation jobs at startup.");
                     }
                     #endregion
                 }

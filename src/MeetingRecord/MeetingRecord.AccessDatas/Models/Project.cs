@@ -38,4 +38,10 @@ public class Project
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
     public ICollection<ProjectFile> Files { get; set; } = [];
+
+    /// <summary>
+    /// 歸屬於本專案的會議紀錄（逐字稿與 AI 草稿）。
+    /// 與 Files 不同，刪除專案時不串連刪除，只把 Meeting.ProjectId 設為 null。
+    /// </summary>
+    public ICollection<Meeting> Meetings { get; set; } = [];
 }

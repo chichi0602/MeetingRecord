@@ -1,10 +1,10 @@
 ﻿# 文件目錄索引
 
-- 文件版本：1.8
+- 文件版本：2.0
 - 文件狀態：維護中
-- 現行系統版本：0.4.30
+- 現行系統版本：0.4.31
 - 首次實作版本：0.2.8
-- 最後核對日期：2026/08/28
+- 最後核對日期：2026/08/31
 
 本目錄收錄 NET10-Blazor-Starter 的所有設計、規範與教學文件。文件依「特性」分類到下列子目錄；新增文件時請先依特性歸入既有分類，**若沒有任何分類適用，請自動新增一個語意明確的英文小寫分類目錄**，並同步更新本檔與主 [`readme.md`](../readme.md) 第 9 節「文件索引」。
 
@@ -92,6 +92,7 @@
 ### superpowers — 設計規格
 - [分類清單 / 團隊清單管理頁面（階段一）](superpowers/specs/2026-06-22-category-team-pages-design.md)
 - [紀錄分類/團隊標籤與團隊權控（階段二）](superpowers/specs/2026-06-22-record-tags-team-access-design.md)
+- [會議記錄流程 Wireframe 設計規格](superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)
 
 ### changelog — 變更紀錄
 - [Login 頁面改版紀錄](changelog/login-redesign.md)
@@ -114,3 +115,4 @@
 - [會議紀錄新增/修改對話框改為近滿版與雙欄排版（0.4.28）](changelog/2026-08-27-會議紀錄對話框近滿版與雙欄.md)
 - [FFmpeg 啟動期檢查與設定改走 PATH（0.4.29）](changelog/2026-08-27-FFmpeg啟動檢查.md)
 - [登入頁品牌識別改為 AI 會議記錄小助手（0.4.30）](changelog/2026-08-28-登入頁品牌識別.md)
+- [AI 整理逐字稿產生會議紀錄、逐字稿歸屬專案、`/projects` 改版（0.4.31）](changelog/2026-08-31-AI會議紀錄生成.md)

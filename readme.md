@@ -1,4 +1,4 @@
-# NET10-Blazor-Starter
+﻿# NET10-Blazor-Starter
 
 一份基於 **.NET 10** 與 **Blazor Server**（全域 SSR）所建立的企業級應用程式樣板，預先整合 Ant Design Blazor、EF Core、Cookie 認證、角色權限、多語系、檔案上傳、Swagger 與 NLog，協助開發團隊以最低成本啟動內部管理類系統。
 
@@ -262,7 +262,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 ### 設計規格（superpowers）
 
-- [docs/superpowers/](docs/superpowers/) — 以 brainstorming 流程產出的設計規格（分類/團隊頁面、紀錄權控）。
+- [docs/superpowers/](docs/superpowers/) — 以 brainstorming 流程產出的設計規格（分類/團隊頁面、紀錄權控、會議記錄流程 Wireframe）。
 
 ### 變更紀錄（changelog）
 

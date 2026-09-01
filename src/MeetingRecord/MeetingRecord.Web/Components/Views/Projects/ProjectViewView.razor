@@ -1,4 +1,5 @@
-﻿@using MeetingRecord.Share.Helpers
+@using MeetingRecord.Share.Helpers
+@using MeetingRecord.Share.Enums
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -8,99 +9,210 @@
 else
 {
     <div>
-        <div class="project-view-toolbar">
-            <div class="project-view-toolbar-left">
-                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Create))
-                {
-                    <Tooltip Title="新增">
-                        <Button Type="ButtonType.Default" Class="project-view-icon-button"
-                                OnClick="@(async () => await OnAddAsync(true))">
-                            ➕
-                        </Button>
-                    </Tooltip>
-                }
-                <Tooltip Title="重新整理">
+        <div class="project-view-picker">
+            <span class="project-view-field-label">專案</span>
+            <Select TItem="ProjectAdapterModel"
+                    TItemValue="int"
+                    Value="@selectedProjectId"
+                    ValueChanged="OnProjectSelectedAsync"
+                    DataSource="@projects"
+                    LabelName="@nameof(ProjectAdapterModel.Title)"
+                    ValueName="@nameof(ProjectAdapterModel.Id)"
+                    Placeholder="請選擇專案"
+                    EnableSearch
+                    Class="project-view-project-select" />
+
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Create))
+            {
+                <Tooltip Title="新增專案">
                     <Button Type="ButtonType.Default" Class="project-view-icon-button"
-                            OnClick="@(async () => await OnRefreshAsync())">
-                        🔄
+                            OnClick="@(async () => await OnAddAsync(true))">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" />
                     </Button>
                 </Tooltip>
+            }
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+            {
+                <Tooltip Title="編輯專案">
+                    <Button Type="ButtonType.Default" Class="project-view-icon-button"
+                            Disabled="@(SelectedProject is null)"
+                            OnClick="@(async () => await OnEditSelectedAsync())">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="edit" />
+                    </Button>
+                </Tooltip>
+            }
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
+            {
+                <Tooltip Title="刪除專案">
+                    <Button Type="ButtonType.Default" Class="project-view-icon-button project-view-icon-button-danger"
+                            Disabled="@(SelectedProject is null)"
+                            OnClick="@(async () => await OnDeleteSelectedAsync())">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete" />
+                    </Button>
+                </Tooltip>
+            }
+            <Tooltip Title="重新整理">
+                <Button Type="ButtonType.Default" Class="project-view-icon-button"
+                        OnClick="@(async () => await OnRefreshAsync())">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" />
+                </Button>
+            </Tooltip>
+        </div>
+
+        @if (SelectedProject is null)
+        {
+            <div class="project-view-empty">
+                @(projects.Count == 0 ? "目前沒有可存取的專案，請先新增一個專案。" : "請先從上方選擇一個專案。")
             </div>
-            <div class="project-view-toolbar-right">
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
-                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
-                    @foreach (var c in availableCategories)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                    }
-                </Select>
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
-                        Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 160px;">
-                    @foreach (var t in availableTeams)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                    }
-                </Select>
-                <Input class="project-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
-                @if (!string.IsNullOrWhiteSpace(searchText))
-                {
-                    <Tooltip Title="清空搜尋">
-                        <Button Type="ButtonType.Default" Class="project-view-icon-button" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
-                            ❌
+        }
+        else
+        {
+            <div class="project-view-summary">
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">負責人</span>
+                    <span class="project-view-summary-value">@SelectedProject.Owner</span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">期程</span>
+                    <span class="project-view-summary-value">@FormatDateRange(SelectedProject.StartDate, SelectedProject.EndDate)</span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">狀態</span>
+                    <span class="project-view-summary-value">@SelectedProject.Status</span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">完成度</span>
+                    <span class="project-view-summary-value">
+                        <Progress Type="ProgressType.Line" Percent="@SelectedProject.CompletionPercentage" Size="ProgressSize.Small" />
+                    </span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">會議紀錄</span>
+                    <span class="project-view-summary-value">@projectMeetings.Count 份</span>
+                </div>
+            </div>
+
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+            {
+                <div class="project-view-ai-panel">
+                    <div class="project-view-ai-head">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
+                        <h3>用 AI 把逐字稿整理成會議紀錄</h3>
+                    </div>
+
+                    <div class="project-view-ai-controls">
+                        <div class="project-view-ai-field project-view-ai-field-grow">
+                            <span class="project-view-field-label">選擇逐字稿</span>
+                            <Select TItem="MeetingAdapterModel"
+                                    TItemValue="int"
+                                    @bind-Value="selectedTranscriptId"
+                                    DataSource="@selectableTranscripts"
+                                    LabelName="@nameof(MeetingAdapterModel.Title)"
+                                    ValueName="@nameof(MeetingAdapterModel.Id)"
+                                    ItemDisabled="IsTranscriptDisabled"
+                                    Placeholder="請選擇逐字稿"
+                                    EnableSearch
+                                    Style="width: 100%;">
+                                <ItemTemplate Context="transcript">
+                                    <div class="project-view-dd-item">
+                                        <span class="project-view-dd-name">@transcript.Title</span>
+                                        <span class="project-view-dd-meta">@DescribeTranscriptOwnership(transcript)</span>
+                                    </div>
+                                </ItemTemplate>
+                            </Select>
+                            <span class="project-view-hint">
+                                共 @selectableTranscripts.Count 份逐字稿，@selectableTranscripts.Count(x => x.IsUnassigned) 份未歸屬；已被其他專案取用的無法選取。
+                            </span>
+                        </div>
+
+                        <div class="project-view-ai-field">
+                            <span class="project-view-field-label">提示詞</span>
+                            <Select TItem="PromptTemplateAdapterModel"
+                                    TItemValue="int"
+                                    @bind-Value="selectedPromptTemplateId"
+                                    DataSource="@promptTemplates"
+                                    LabelName="@nameof(PromptTemplateAdapterModel.Name)"
+                                    ValueName="@nameof(PromptTemplateAdapterModel.Id)"
+                                    Placeholder="請選擇提示詞"
+                                    EnableSearch
+                                    Style="min-width: 190px;" />
+                        </div>
+
+                        <Button Type="ButtonType.Primary"
+                                Class="project-view-cta"
+                                Loading="@isGenerating"
+                                Disabled="@(selectedTranscriptId <= 0 || selectedPromptTemplateId <= 0)"
+                                OnClick="@(async () => await OnGenerateDraftAsync())">
+                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
+                            <span class="project-view-cta-text">AI 轉會議紀錄</span>
                         </Button>
-                    </Tooltip>
-                }
-                <Tooltip Title="搜尋">
-                    <Button Type="ButtonType.Default" Class="project-view-icon-button" OnClick="@(async () => await OnSearchAsync())">
-                        🔍
-                    </Button>
-                </Tooltip>
+                    </div>
+
+                    <div class="project-view-ai-note">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+                        <span>一份逐字稿只能歸屬一個專案。若這份逐字稿已產生過會議紀錄，重新產生會覆蓋舊的內容。</span>
+                    </div>
+                </div>
+            }
+
+            <h3 class="project-view-section-title">
+                歷史會議紀錄
+                <span class="project-view-section-count">本專案共 @projectMeetings.Count 份</span>
+            </h3>
+
+            <div class="project-view-table-wrap">
+                <Table TItem="MeetingAdapterModel"
+                       Class="project-view-table"
+                       DataSource="@projectMeetings"
+                       HidePagination="true">
+                    <Column TData="string" Title="來源逐字稿">
+                        <span class="project-view-cell-strong">@context.Title</span>
+                    </Column>
+                    <Column TData="string" Title="使用提示詞">
+                        @(context.DraftPromptTemplateName ?? "—")
+                    </Column>
+                    <Column TData="string" Title="狀態">
+                        <span class="project-view-status @DraftStatusCssClass(context.DraftStatus)">@context.DraftStatusText</span>
+                        @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
+                        {
+                            <Tooltip Title="@context.DraftError">
+                                <span class="project-view-error-hint">
+                                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error_outline" />
+                                </span>
+                            </Tooltip>
+                        }
+                    </Column>
+                    <Column TData="DateTime?" Title="產生時間">
+                        @(context.DraftCompletedAt?.ToString("yyyy/MM/dd HH:mm") ?? "—")
+                    </Column>
+                    <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                        <Space>
+                            @if (context.HasDraft)
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="檢視會議紀錄" Icon="visibility"
+                                                      OnClick="@(() => OnViewDraftAsync(context))" />
+                                </SpaceItem>
+                            }
+                            @if (context.HasDraft && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="編修會議紀錄" Icon="edit"
+                                                      OnClick="@(() => OnEditDraftAsync(context))" />
+                                </SpaceItem>
+                            }
+                            @if (context.CanPreviewTranscript)
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="預覽逐字稿" Icon="description"
+                                                      OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
+                                </SpaceItem>
+                            }
+                        </Space>
+                    </ActionColumn>
+                </Table>
             </div>
-        </div>
-        <div class="project-view-table-wrap">
-            <Table @ref="table"
-                   TItem="ProjectAdapterModel"
-                   Class="project-view-table"
-                   RemoteDataSource="true"
-                   DataSource="@projectAdapterModels"
-                   OnChange="OnTableChange"
-                   @bind-PageIndex="_pageIndex"
-                   @bind-PageSize="_pageSize"
-                   @bind-Total="_total">
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Title)" Title="標題" Sortable DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Description)" Title="描述" />
-                <Column TData="DateTime?" DataIndex="@nameof(ProjectAdapterModel.StartDate)" Title="開始日期" Sortable />
-                <Column TData="DateTime?" DataIndex="@nameof(ProjectAdapterModel.EndDate)" Title="結束日期" Sortable />
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Status)" Title="狀態" Sortable />
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Priority)" Title="優先級" Sortable />
-                <Column TData="int" DataIndex="@nameof(ProjectAdapterModel.CompletionPercentage)" Title="完成百分比" Sortable />
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.Owner)" Title="負責人" Sortable />
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.CategoriesText)" Title="分類" />
-                <Column TData="string" DataIndex="@nameof(ProjectAdapterModel.TeamsText)" Title="團隊" />
-                <Column TData="DateTime" DataIndex="@nameof(ProjectAdapterModel.CreatedAt)" Title="建立時間" Sortable />
-                <Column TData="DateTime" DataIndex="@nameof(ProjectAdapterModel.UpdatedAt)" Title="更新時間" Sortable />
-                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
-                    <Space>
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
-                        {
-                            <SpaceItem>
-                                <CrudActionButton Title="修改" Icon="edit"
-                                                  OnClick="@(async () => await OnEditAsync(context))" />
-                            </SpaceItem>
-                        }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
-                        {
-                            <SpaceItem>
-                                <CrudActionButton Title="刪除" Icon="delete" Danger
-                                                  OnClick="@(async () => await OnDeleteAsync(context))" />
-                            </SpaceItem>
-                        }
-                    </Space>
-                </ActionColumn>
-            </Table>
-        </div>
+        }
     </div>
 
     <Modal Title="@modalTitle"
@@ -228,6 +340,39 @@ else
                 </AntDesign.Form>
             </EditForm>
         </div>
+    </Modal>
+
+    <Modal Title="@draftModalTitle"
+           Class="project-view-draft-modal"
+           Width="800"
+           @bind-Visible="@draftViewModalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="OnDraftViewModalCancelAsync">
+        <pre class="project-view-draft-content">@draftContent</pre>
+    </Modal>
+
+    <Modal Title="@draftModalTitle"
+           Class="project-view-draft-modal"
+           Width="800"
+           @bind-Visible="@draftEditModalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("儲存")"
+           CancelText="@("取消")"
+           OnOk="OnDraftEditModalOkAsync"
+           OnCancel="OnDraftEditModalCancelAsync">
+        <TextArea @bind-Value="draftContent" Rows="20" Placeholder="會議紀錄內容" />
+    </Modal>
+
+    <Modal Title="@transcriptModalTitle"
+           Class="project-view-transcript-modal"
+           Width="800"
+           @bind-Visible="@transcriptModalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="OnTranscriptModalCancelAsync">
+        <pre class="project-view-draft-content">@transcriptContent</pre>
     </Modal>
 }
 

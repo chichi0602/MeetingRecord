@@ -44,4 +44,10 @@ public class Project
     /// 與 Files 不同，刪除專案時不串連刪除，只把 Meeting.ProjectId 設為 null。
     /// </summary>
     public ICollection<Meeting> Meetings { get; set; } = [];
+
+    /// <summary>
+    /// 本專案的待辦事項。與 Meetings 不同，刪除專案時一併刪除——
+    /// 待辦沒有專案就沒有意義。
+    /// </summary>
+    public ICollection<Todo> Todos { get; set; } = [];
 }

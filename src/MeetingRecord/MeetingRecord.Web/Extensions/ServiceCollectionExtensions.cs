@@ -82,6 +82,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TeamRepository>();
         services.AddScoped<PromptTemplateService>();
         services.AddScoped<PromptTemplateRepository>();
+        services.AddScoped<TodoService>();
+        services.AddScoped<TodoRepository>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();

@@ -28,6 +28,7 @@ public class MagicObjectHelper
     public const string 角色_首頁 = "首頁";
     public const string 角色_專案管理 = "專案管理功能";
     public const string 角色_專案項目 = "專案項目";
+    public const string 角色_待辦事項 = "待辦事項";
     public const string 角色_系統管理 = "系統管理功能";
     public const string 角色_使用者管理 = "使用者管理";
     public const string 角色_角色管理 = "角色管理 ";

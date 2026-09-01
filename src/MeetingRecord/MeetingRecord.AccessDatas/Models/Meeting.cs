@@ -96,6 +96,9 @@ public class Meeting
 
     public DateTime? DraftCompletedAt { get; set; }
 
+    /// <summary>由本會議紀錄產生的待辦事項。會議刪除時待辦保留，只是失去來源。</summary>
+    public ICollection<Todo> Todos { get; set; } = [];
+
     #endregion
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;

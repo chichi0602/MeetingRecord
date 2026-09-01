@@ -22,6 +22,7 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<Team> Team { get; set; }
     public virtual DbSet<PromptTemplate> PromptTemplate { get; set; }
     public virtual DbSet<Meeting> Meeting { get; set; }
+    public virtual DbSet<Todo> Todo { get; set; }
     public virtual DbSet<AuditLog> AuditLog { get; set; }
     public virtual DbSet<Permission> Permission { get; set; }
     public virtual DbSet<RolePermissionMap> RolePermissionMap { get; set; }
@@ -59,6 +60,21 @@ public partial class BackendDBContext : DbContext
             entity.HasMany(x => x.Meetings)
                 .WithOne(x => x.Project)
                 .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // 待辦與會議紀錄不同：沒有專案的待辦沒有意義，跟著專案一起刪。
+            entity.HasMany(x => x.Todos)
+                .WithOne(x => x.Project)
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Meeting>(entity =>
+        {
+            // 待辦可回溯到來源會議紀錄；會議紀錄被刪除時待辦保留，只是失去來源。
+            entity.HasMany(x => x.Todos)
+                .WithOne(x => x.Meeting)
+                .HasForeignKey(x => x.MeetingId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

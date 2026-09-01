@@ -35,4 +35,10 @@ public class DataRequest
 
     //     依「團隊」過濾（選取多個時以 OR 比對，含任一即符合）
     public List<string> TeamFilters { get; set; } = [];
+
+    //     依「所屬專案」過濾（null 或 0 表示不過濾），目前僅待辦事項使用
+    public int? ProjectFilter { get; set; }
+
+    //     依「狀態」過濾（空字串表示不過濾），目前僅待辦事項使用
+    public string? StatusFilter { get; set; }
 }

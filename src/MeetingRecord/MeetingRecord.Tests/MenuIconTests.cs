@@ -30,6 +30,7 @@ public sealed class MenuIconTests
         "event",
         "mic",
         "logout",
+        "checklist",
     };
 
     [Fact]

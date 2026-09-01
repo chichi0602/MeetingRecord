@@ -15,6 +15,12 @@
         "name": "專案項目",
         "icon": "workspaces",
         "url": "/projects"
+      },
+      {
+        "id": 22,
+        "name": "待辦事項",
+        "icon": "checklist",
+        "url": "/todos"
       }
     ]
   },

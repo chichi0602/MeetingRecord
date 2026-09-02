@@ -256,6 +256,9 @@ public sealed class MeetingDraftJobRunnerTests
             return new DraftJobFixture(connection, context, rootPath, providerName);
         }
 
+        /// <summary>進度通知器沒有外部相依，直接用真的。</summary>
+        public MeetingDraftProgressNotifier ProgressNotifier { get; } = new();
+
         public MeetingDraftJobRunner CreateRunner(ITextGenerationProvider provider)
         {
             return new MeetingDraftJobRunner(
@@ -263,6 +266,7 @@ public sealed class MeetingDraftJobRunnerTests
                 [provider],
                 fileStore,
                 llmSettings,
+                ProgressNotifier,
                 loggerFactory.CreateLogger<MeetingDraftJobRunner>());
         }
 

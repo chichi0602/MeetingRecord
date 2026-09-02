@@ -249,3 +249,11 @@
     white-space: pre-wrap;
     word-break: break-word;
 }
+
+/* 生成進行中時，狀態徽章旁的即時百分比（資料來自 IMeetingDraftProgressNotifier）。 */
+.project-view-status-percent {
+    margin-left: 6px;
+    color: #6b7a8d;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}

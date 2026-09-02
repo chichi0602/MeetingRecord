@@ -32,6 +32,7 @@ public class MeetingDraftJobRunner
     private readonly IEnumerable<ITextGenerationProvider> textGenerationProviders;
     private readonly MeetingFileStore fileStore;
     private readonly IOptions<LlmSettings> llmSettings;
+    private readonly IMeetingDraftProgressNotifier progressNotifier;
     private readonly ILogger<MeetingDraftJobRunner> logger;
 
     public MeetingDraftJobRunner(
@@ -39,12 +40,14 @@ public class MeetingDraftJobRunner
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         MeetingFileStore fileStore,
         IOptions<LlmSettings> llmSettings,
+        IMeetingDraftProgressNotifier progressNotifier,
         ILogger<MeetingDraftJobRunner> logger)
     {
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
         this.fileStore = fileStore;
         this.llmSettings = llmSettings;
+        this.progressNotifier = progressNotifier;
         this.logger = logger;
     }
 
@@ -73,6 +76,8 @@ public class MeetingDraftJobRunner
         meeting.DraftError = null;
         await context.SaveChangesAsync(cancellationToken);
 
+        progressNotifier.ReportPreparing(meetingId);
+
         try
         {
             var provider = ResolveProvider();
@@ -94,6 +99,7 @@ public class MeetingDraftJobRunner
             });
 
             cancellationToken.ThrowIfCancellationRequested();
+            progressNotifier.ReportGenerating(meetingId);
             var draft = await provider.GenerateAsync(SystemPrompt, userPrompt, cancellationToken);
 
             meeting.DraftContent = draft;
@@ -102,6 +108,8 @@ public class MeetingDraftJobRunner
             meeting.DraftCompletedAt = DateTime.Now;
             meeting.UpdatedAt = DateTime.Now;
             await context.SaveChangesAsync(cancellationToken);
+
+            progressNotifier.ReportCompleted(meetingId);
 
             logger.LogInformation(
                 "Draft generation completed. MeetingId={MeetingId}, Length={Length}",
@@ -139,6 +147,8 @@ public class MeetingDraftJobRunner
             meetingId,
             chunks.Count);
 
+        progressNotifier.ReportSummarizing(meetingId, 0, chunks.Count);
+
         var summaries = new StringBuilder();
         for (var index = 0; index < chunks.Count; index++)
         {
@@ -157,6 +167,10 @@ public class MeetingDraftJobRunner
                 chunks[index];
 
             var summary = await provider.GenerateAsync(SystemPrompt, chunkPrompt, cancellationToken);
+
+            // 進度必須在 continue 之前回報，否則整段空白的段落會被跳過不計。
+            progressNotifier.ReportSummarizing(meetingId, index + 1, chunks.Count);
+
             if (string.IsNullOrWhiteSpace(summary))
             {
                 continue;
@@ -231,6 +245,8 @@ public class MeetingDraftJobRunner
 
     private async Task MarkFailedAsync(AccessDatas.Models.Meeting meeting, string message)
     {
+        progressNotifier.ReportFailed(meeting.Id, message);
+
         try
         {
             meeting.DraftStatus = DraftStatus.Failed;

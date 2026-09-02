@@ -129,6 +129,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTextGenerationServices(this IServiceCollection services)
     {
         services.AddSingleton<IMeetingDraftQueue, MeetingDraftQueue>();
+
+        // 進度同樣只存在記憶體，理由見 ITranscriptionProgressNotifier。
+        services.AddSingleton<IMeetingDraftProgressNotifier, MeetingDraftProgressNotifier>();
         services.AddHostedService<MeetingDraftBackgroundService>();
 
         services.AddScoped<ITextGenerationProvider, AzureOpenAiTextGenerationProvider>();

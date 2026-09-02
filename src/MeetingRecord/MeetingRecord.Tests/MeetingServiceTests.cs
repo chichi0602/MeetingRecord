@@ -751,6 +751,8 @@ public sealed class MeetingServiceTests
 
         public FakeMeetingDraftQueue DraftQueue { get; } = new();
 
+        public MeetingDraftProgressNotifier DraftProgressNotifier { get; } = new();
+
         /// <summary>進度通知器沒有外部相依，直接用真的，順便驗證服務層有把工作登錄進去。</summary>
         public TranscriptionProgressNotifier ProgressNotifier { get; } = new();
 
@@ -786,7 +788,8 @@ public sealed class MeetingServiceTests
                 fileStore,
                 Queue,
                 ProgressNotifier,
-                DraftQueue);
+                DraftQueue,
+                DraftProgressNotifier);
         }
 
         public async Task<Meeting> AddMeetingAsync(

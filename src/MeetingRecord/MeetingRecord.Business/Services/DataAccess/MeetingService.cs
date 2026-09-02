@@ -26,6 +26,7 @@ public class MeetingService
     private readonly ITranscriptionQueue transcriptionQueue;
     private readonly ITranscriptionProgressNotifier progressNotifier;
     private readonly IMeetingDraftQueue draftQueue;
+    private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
 
     public IMapper Mapper { get; }
     public ILogger<MeetingService> Logger { get; }
@@ -38,7 +39,8 @@ public class MeetingService
         MeetingFileStore fileStore,
         ITranscriptionQueue transcriptionQueue,
         ITranscriptionProgressNotifier progressNotifier,
-        IMeetingDraftQueue draftQueue)
+        IMeetingDraftQueue draftQueue,
+        IMeetingDraftProgressNotifier draftProgressNotifier)
     {
         this.context = context;
         Mapper = mapper;
@@ -48,6 +50,7 @@ public class MeetingService
         this.transcriptionQueue = transcriptionQueue;
         this.progressNotifier = progressNotifier;
         this.draftQueue = draftQueue;
+        this.draftProgressNotifier = draftProgressNotifier;
     }
 
     #region 查詢
@@ -613,6 +616,8 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            // 先登錄進度再入列，理由同轉錄：背景工作要等輪到才知道，先登錄畫面才立刻看得到「排隊中」。
+            draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
             await draftQueue.EnqueueAsync(meetingId, cancellationToken);
             return VerifyRecordResultFactory.Build(true);
         }

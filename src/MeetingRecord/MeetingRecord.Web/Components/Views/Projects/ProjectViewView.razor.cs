@@ -7,6 +7,7 @@ using Microsoft.JSInterop;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
@@ -15,7 +16,7 @@ using MeetingRecord.Web.Services;
 
 namespace MeetingRecord.Web.Components.Views.Projects;
 
-public partial class ProjectViewView
+public partial class ProjectViewView : IDisposable
 {
     private readonly ILogger<ProjectViewView> logger;
     private readonly ProjectService projectService;
@@ -25,6 +26,10 @@ public partial class ProjectViewView
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
     private readonly FileDownloadInterop fileDownloadInterop;
+    private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
+
+    /// <summary>已因「生成結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
+    private readonly HashSet<int> reloadedFinishedMeetingIds = [];
 
     private List<ProjectAdapterModel> projects = [];
     private int selectedProjectId;
@@ -78,7 +83,8 @@ public partial class ProjectViewView
         ModalService modalService,
         MessageService messageService,
         NotificationService notificationService,
-        FileDownloadInterop fileDownloadInterop)
+        FileDownloadInterop fileDownloadInterop,
+        IMeetingDraftProgressNotifier draftProgressNotifier)
     {
         this.logger = logger;
         this.projectService = projectService;
@@ -88,6 +94,7 @@ public partial class ProjectViewView
         this.messageService = messageService;
         this.notificationService = notificationService;
         this.fileDownloadInterop = fileDownloadInterop;
+        this.draftProgressNotifier = draftProgressNotifier;
     }
 
     protected override async Task OnInitializedAsync()
@@ -110,8 +117,40 @@ public partial class ProjectViewView
             return;
         }
 
+        draftProgressNotifier.Changed += OnDraftProgressChanged;
+
         await ReloadAsync();
     }
+
+    /// <summary>
+    /// 草稿生成進度變動時更新「狀態」欄。
+    ///
+    /// <para>
+    /// 由背景執行緒引發，必須切回 UI 執行緒。進行中只重繪（百分比來自記憶體，不必查庫）；
+    /// 只有工作結束時才重新載入，讓狀態欄從「生成中」翻成資料庫裡的「已完成／失敗」。
+    /// </para>
+    /// </summary>
+    private void OnDraftProgressChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            // 已完成的項目會留在通知器裡直到使用者關閉，所以要記下已處理過的 Id，
+            // 否則之後每一次進度變動都會再重新載入一次。
+            var finishedIds = draftProgressNotifier
+                .GetSnapshot()
+                .Where(x => x.Phase is MeetingDraftPhase.Completed or MeetingDraftPhase.Failed)
+                .Select(x => x.MeetingId)
+                .ToList();
+
+            // 用 Count 而非 Any——Any 會短路，漏掉同時完成的其他筆。
+            var newlyFinishedCount = finishedIds.Count(reloadedFinishedMeetingIds.Add);
+
+            if (newlyFinishedCount > 0)
+            {
+                await ReloadProjectContextAsync();
+            }
+
+            StateHasChanged();
+        });
 
     #region 載入
 
@@ -251,7 +290,7 @@ public partial class ProjectViewView
                 return;
             }
 
-            NotifySuccess("已排入生成佇列，請稍後重新整理查看結果。");
+            NotifySuccess("已排入生成佇列，可在右下角看到進度，完成後清單會自動更新。");
             await ReloadProjectContextAsync();
         }
         finally
@@ -639,6 +678,25 @@ public partial class ProjectViewView
         return $"{start} – {end}";
     }
 
+    /// <summary>
+    /// 取這一列目前的即時生成進度；沒有進行中的工作時回傳 null（狀態欄就只顯示徽章）。
+    /// 資料來自記憶體中的通知器，不查資料庫。
+    /// </summary>
+    private MeetingDraftProgressItem? GetLiveDraftProgress(int meetingId)
+    {
+        var item = draftProgressNotifier.Find(meetingId);
+        return item is { IsRunning: true } ? item : null;
+    }
+
+    private static string DescribeDraftPhase(MeetingDraftProgressItem item) => item.Phase switch
+    {
+        MeetingDraftPhase.Queued => "排隊中",
+        MeetingDraftPhase.Preparing => "讀取逐字稿與提示詞",
+        MeetingDraftPhase.Summarizing => $"分段摘要中（第 {item.CompletedChunks}/{item.TotalChunks} 段）",
+        MeetingDraftPhase.Generating => "產生會議紀錄中",
+        _ => string.Empty,
+    };
+
     private static string DraftStatusCssClass(DraftStatus status) => status switch
     {
         DraftStatus.Completed => "project-view-status-completed",
@@ -691,6 +749,8 @@ public partial class ProjectViewView
     }
 
     #endregion
+
+    public void Dispose() => draftProgressNotifier.Changed -= OnDraftProgressChanged;
 
     private sealed class PendingUploadFileItem
     {

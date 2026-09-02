@@ -173,6 +173,15 @@ else
                     </Column>
                     <Column TData="string" Title="狀態">
                         <span class="project-view-status @DraftStatusCssClass(context.DraftStatus)">@context.DraftStatusText</span>
+                        @{
+                            var draftProgress = GetLiveDraftProgress(context.Id);
+                        }
+                        @if (draftProgress is not null)
+                        {
+                            <Tooltip Title="@DescribeDraftPhase(draftProgress)">
+                                <span class="project-view-status-percent">@draftProgress.Percent%</span>
+                            </Tooltip>
+                        }
                         @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
                         {
                             <Tooltip Title="@context.DraftError">

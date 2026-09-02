@@ -214,6 +214,42 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task SaveMediaAsync_ShouldFillMeetingDate_WhenNotProvided()
+    {
+        // 使用者常常只丟檔案不填日期，此時以上傳當天為準，之後可再手動更正。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("沒填日期的會議");
+        Assert.Null(existing.MeetingDate);
+        var service = fixture.CreateService();
+
+        var result = await service.SaveMediaAsync(existing.Id, NewUpload("錄音.mp3", [1, 2, 3]));
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Equal(DateTime.Today, saved.MeetingDate);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_ShouldKeepMeetingDate_WhenAlreadySet()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("已填日期的會議");
+        var originalDate = new DateTime(2026, 8, 20);
+        existing.MeetingDate = originalDate;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+
+        var result = await service.SaveMediaAsync(existing.Id, NewUpload("錄音.mp3", [1, 2, 3]));
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Equal(originalDate, saved.MeetingDate);
+    }
+
+    [Fact]
     public async Task SaveMediaAsync_ShouldRejectUnsupportedExtension()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();

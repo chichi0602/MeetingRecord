@@ -29,22 +29,6 @@ else
                 </Tooltip>
             </div>
             <div class="meeting-view-toolbar-right">
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
-                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
-                    @foreach (var c in availableCategories)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                    }
-                </Select>
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
-                        Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 160px;">
-                    @foreach (var t in availableTeams)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                    }
-                </Select>
                 <Input class="meeting-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
@@ -73,8 +57,6 @@ else
                    @bind-Total="_total">
                 <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable />
                 <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable />
-                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.CategoriesText)" Title="分類" />
-                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.TeamsText)" Title="團隊" />
                 <Column TData="string" Title="影音檔">
                     @if (context.HasMedia)
                     {
@@ -163,28 +145,6 @@ else
                         <FormItem Label="描述" Class="meeting-view-form-full">
                             <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入會議說明" />
                             <ValidationMessage For="() => CurrentRecord.Description" />
-                        </FormItem>
-
-                        <FormItem Label="分類">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                    Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var c in availableCategories)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                                }
-                            </Select>
-                        </FormItem>
-
-                        <FormItem Label="團隊">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
-                                    Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var t in availableTeams)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                                }
-                            </Select>
                         </FormItem>
 
                         <FormItem Label="影音檔" Class="meeting-view-form-full">

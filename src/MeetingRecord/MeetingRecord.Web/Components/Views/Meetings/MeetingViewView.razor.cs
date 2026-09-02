@@ -18,17 +18,11 @@ public partial class MeetingViewView
 {
     private readonly ILogger<MeetingViewView> logger;
     private readonly MeetingService meetingService;
-    private readonly CategoryService categoryService;
-    private readonly TeamService teamService;
     private readonly ModalService modalService;
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
     private ITable? table;
 
-    private List<string> availableCategories = [];
-    private List<string> availableTeams = [];
-    private List<string> selectedCategoryFilters = [];
-    private List<string> selectedTeamFilters = [];
     private int _pageIndex = 1;
     private int _pageSize = MagicObjectHelper.PageSize;
     private int _total;
@@ -65,16 +59,12 @@ public partial class MeetingViewView
     public MeetingViewView(
         ILogger<MeetingViewView> logger,
         MeetingService meetingService,
-        CategoryService categoryService,
-        TeamService teamService,
         ModalService modalService,
         MessageService messageService,
         NotificationService notificationService)
     {
         this.logger = logger;
         this.meetingService = meetingService;
-        this.categoryService = categoryService;
-        this.teamService = teamService;
         this.modalService = modalService;
         this.messageService = messageService;
         this.notificationService = notificationService;
@@ -97,9 +87,6 @@ public partial class MeetingViewView
             return;
         }
 
-        availableCategories = await categoryService.GetAllEnabledNamesAsync();
-        availableTeams = await teamService.GetAllEnabledNamesAsync();
-
         await ReloadAsync();
     }
 
@@ -121,8 +108,6 @@ public partial class MeetingViewView
             CurrentPage = _pageIndex,
             PageSize = _pageSize,
             Take = 0,
-            CategoryFilters = selectedCategoryFilters.ToList(),
-            TeamFilters = selectedTeamFilters.ToList(),
         });
 
         meetingAdapterModels = dataRequestResult.Result.ToList();
@@ -132,30 +117,6 @@ public partial class MeetingViewView
     }
 
     #region 過濾、排序與分頁
-
-    private async Task OnCategoryFilterChanged(IEnumerable<string> values)
-    {
-        selectedCategoryFilters = values?.ToList() ?? [];
-        _pageIndex = 1;
-        await ReloadAsync();
-    }
-
-    private async Task OnTeamFilterChanged(IEnumerable<string> values)
-    {
-        selectedTeamFilters = values?.ToList() ?? [];
-        _pageIndex = 1;
-        await ReloadAsync();
-    }
-
-    private void OnRecordCategoriesChanged(IEnumerable<string> values)
-    {
-        CurrentRecord.Categories = values?.ToList() ?? [];
-    }
-
-    private void OnRecordTeamsChanged(IEnumerable<string> values)
-    {
-        CurrentRecord.Teams = values?.ToList() ?? [];
-    }
 
     private async Task OnTableChange(QueryModel<MeetingAdapterModel> args)
     {

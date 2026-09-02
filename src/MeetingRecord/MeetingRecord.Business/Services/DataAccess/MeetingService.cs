@@ -415,6 +415,10 @@ public class MeetingService
             meeting.TranscriptionError = null;
             meeting.TranscriptionStartedAt = null;
             meeting.TranscriptionCompletedAt = null;
+
+            // 會議日期沒填就帶入上傳當天；已填的不覆蓋，要更正仍可從畫面編輯。
+            meeting.MeetingDate ??= DateTime.Today;
+
             meeting.UpdatedAt = DateTime.Now;
 
             await context.SaveChangesAsync(cancellationToken);

@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.29
+- 現行系統版本：0.4.35
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/08/27
+- 最後核對日期：2026/09/02
 
 ## 一、目標與範圍
 
@@ -46,18 +46,17 @@
 單頁清單 + Modal 表單（`MeetingViewView`）：
 
 - 搜尋：關鍵字比對 `Title`、`Description` 或 `MediaOriginalFileName`（`Contains`）。清空搜尋鈕在有輸入時出現。
-- 工具列：新增、重新整理、分類過濾（多選）、團隊過濾（多選）、關鍵字、清空搜尋、搜尋。
+- 工具列：新增、重新整理、關鍵字、清空搜尋、搜尋。**0.4.35 移除分類過濾與團隊過濾**。
 - 排序：可排序欄位 `Title`、`MeetingDate`、`TranscriptionStatus`、`CreatedAt`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。
 - 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。
-- 清單欄位：會議標題、會議日期、分類、團隊、影音檔（檔名＋大小，未上傳顯示「尚未上傳」）、轉錄狀態（彩色標籤；失敗時附 ⚠ 並以 Tooltip 顯示錯誤訊息）、更新時間、操作。
+- 清單欄位：會議標題、會議日期、影音檔（檔名＋大小，未上傳顯示「尚未上傳」）、轉錄狀態（彩色標籤；失敗時附 ⚠ 並以 Tooltip 顯示錯誤訊息）、更新時間、操作。**0.4.35 移除分類與團隊兩欄**。
 - 新增／編輯表單欄位：
   - 會議標題 `Title`（必填，最長 200）
-  - 會議日期 `MeetingDate`（選填，`DatePicker`）
+  - 會議日期 `MeetingDate`（選填，`DatePicker`）。**0.4.35 起：留空時於影音檔上傳成功當下自動帶入上傳當天**（`MeetingService.SaveMediaAsync` 以 `??=` 補值，已填的不覆蓋），要更正仍可從畫面編輯
   - 描述 `Description`（選填，最長 2000，3 列 `TextArea`）
-  - 分類 `Categories`（多值標籤，供檢索分群，**不影響可見性**）
-  - 團隊 `Teams`（多值標籤，Placeholder「選擇團隊（不設定表示公開）」，**決定可見範圍**）
+  - ~~分類 `Categories`／團隊 `Teams`~~ —— **0.4.35 已從表單移除**，改由專案項目頁負責歸屬與分類。資料庫欄位與服務層權限判斷都保留，詳見下方「0.4.35 的權限副作用」
   - 影音檔（`<InputFile>` 單檔，`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生）
-- **Modal 版面**（0.4.28）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid（`.meeting-view-form-grid`）排列：會議標題／會議日期一列、分類／團隊一列，描述與影音檔以 `.meeting-view-form-full` 佔滿整列；視窗寬度 ≤768px 退回單欄。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
+- **Modal 版面**（0.4.28）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid（`.meeting-view-form-grid`）排列：會議標題／會議日期一列，描述與影音檔以 `.meeting-view-form-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。
 - 操作按鈕：
   - 預覽逐字稿（狀態為「已完成」且有逐字稿檔案時才出現）
@@ -134,6 +133,17 @@
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路。
 - **團隊列級權控只在 Blazor Service 層生效**：非管理員於 `MeetingService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的會議；單筆讀取、上傳影音檔、重新轉錄、逐字稿預覽皆以 `TagStringHelper.IsTeamAccessible` 守門。**Web API 的 repository 路徑不做列級過濾**，與 `ProjectController`／`PromptTemplateController` 一致（見 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §4.1）。
 - 逐字稿內容為高敏感資料：預覽走 Blazor 服務層（Cookie 驗證 + 團隊守門），**沒有任何可直接下載檔案的 HTTP 端點**。
+
+### ⚠️ 0.4.35 的權限副作用（刻意為之，非 bug）
+
+0.4.35 依使用者要求把「分類／團隊」從清單欄位、工具列過濾與新增/編輯表單**全部移除**，理由是會議紀錄頁只負責「上傳音檔 → 產出逐字稿」，歸屬與分類改到專案項目頁處理。
+
+副作用是 **`Teams` 是會議唯一的列權限來源**（沒有 owner 欄位，`ProjectId` 可為空無法替代），而 `TagStringHelper.ToStored([])` 回傳 `null`、predicate 把 `null` 視為公開，因此：
+
+- **0.4.35 之後新建的會議一律是公開的**，任何有「會議紀錄」頁權限的人都看得到，**包含逐字稿預覽**。
+- 0.4.35 之前已標團隊的舊資料**維持原本的可見範圍**——DB 欄位與服務層 11 處權限判斷都沒有動。
+
+要把團隊控管收回來，只需要把表單那個團隊 `Select` 加回 `MeetingViewView.razor`，服務層不必改。
 - 新增權限鍵後，掛「預設角色」的使用者需重啟一次應用程式才會生效；掛自訂角色者需由管理員到 `/roleviews` 手動勾選。
 - 會議逐字稿會外送第三方 LLM 供應商，導入前應確認資料處理、留存與跨境政策符合組織要求。
 

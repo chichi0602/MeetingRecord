@@ -37,7 +37,7 @@
 | `PromptTemplateController` | `api/PromptTemplate`、`api/v1/PromptTemplate` | `角色_提示詞清單` | `Controllers/PromptTemplateController.cs` |
 | `MeetingController` | `api/Meeting`、`api/v1/Meeting` | `角色_會議紀錄` | `Controllers/MeetingController.cs` |
 
-> 注意：資源控制器（repository 路徑）**不做團隊列級過濾**。`Project`、`PromptTemplate` 與 `Meeting` 的 `Teams` 標籤可見性只在 Blazor Service 層生效，詳見 [開發慣例與限制速查](開發慣例與限制速查.md) §4.1。
+> 注意：資源控制器（repository 路徑）**不做團隊列級過濾**。`PromptTemplate` 與 `Meeting` 的 `Teams` 標籤可見性只在 Blazor Service 層生效，詳見 [開發慣例與限制速查](開發慣例與限制速查.md) §4.1。**`Project` 自 0.4.39 起已無 `Teams` 欄位**，兩條路徑都不做列級過濾。
 
 `MeetingController` 與其他四個的差異：
 

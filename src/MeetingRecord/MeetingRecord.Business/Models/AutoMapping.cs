@@ -15,12 +15,8 @@ public class AutoMapping : Profile
         #region Blazor AdapterModel
 
         #region Project
-        CreateMap<Project, ProjectAdapterModel>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToList(s.Teams)));
-        CreateMap<ProjectAdapterModel, Project>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToStored(s.Teams)));
+        CreateMap<Project, ProjectAdapterModel>();
+        CreateMap<ProjectAdapterModel, Project>();
         CreateMap<Project, ProjectDto>();
         CreateMap<ProjectDto, Project>();
         CreateMap<Project, ProjectCreateUpdateDto>();

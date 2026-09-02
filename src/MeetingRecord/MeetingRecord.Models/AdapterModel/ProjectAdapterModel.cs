@@ -13,19 +13,10 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
         "等待"
     ];
 
-    public static readonly IReadOnlyList<string> PriorityOptions =
-    [
-        "低",
-        "中",
-        "高"
-    ];
-
     public int Id { get; set; }
 
     [Required(ErrorMessage = "專案標題 不可為空白")]
     public string Title { get; set; } = string.Empty;
-
-    public string? Description { get; set; }
 
     public DateTime? StartDate { get; set; }
 
@@ -34,22 +25,11 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
     [Required(ErrorMessage = "狀態 不可為空白")]
     public string Status { get; set; } = StatusOptions[0];
 
-    [Required(ErrorMessage = "優先級 不可為空白")]
-    public string Priority { get; set; } = PriorityOptions[1];
-
     [Range(0, 100, ErrorMessage = "完成百分比 必須介於 0 到 100")]
     public int CompletionPercentage { get; set; }
 
     [Required(ErrorMessage = "負責人 不可為空白")]
     public string Owner { get; set; } = string.Empty;
-
-    public List<string> Categories { get; set; } = [];
-
-    public List<string> Teams { get; set; } = [];
-
-    public string CategoriesText => string.Join("、", Categories);
-
-    public string TeamsText => string.Join("、", Teams);
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 

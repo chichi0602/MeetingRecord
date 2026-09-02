@@ -30,13 +30,6 @@ public class ProjectCreateUpdateDto
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
-    /// 專案說明
-    /// </summary>
-    [StringLength(2000, ErrorMessage = "描述長度不可超過 2000 字元")]
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
-    /// <summary>
     /// 專案開始日期
     /// </summary>
     [Required(ErrorMessage = "開始日期 不可為空白")]
@@ -58,13 +51,6 @@ public class ProjectCreateUpdateDto
     public string Status { get; set; } = string.Empty;
 
     /// <summary>
-    /// 優先順序 (低/中/高/緊急)
-    /// </summary>
-    [Required(ErrorMessage = "優先順序 不可為空白")]
-    [JsonPropertyName("priority")]
-    public string Priority { get; set; } = string.Empty;
-
-    /// <summary>
     /// 完成百分比 (0-100)
     /// </summary>
     [Range(0, 100, ErrorMessage = "完成百分比必須在 0-100 之間")]
@@ -76,18 +62,6 @@ public class ProjectCreateUpdateDto
     /// </summary>
     [JsonPropertyName("owner")]
     public string? Owner { get; set; }
-
-    /// <summary>
-    /// 分類標籤（多值，以換行分隔字串儲存，可空）
-    /// </summary>
-    [JsonPropertyName("categories")]
-    public string? Categories { get; set; }
-
-    /// <summary>
-    /// 團隊標籤（多值，以換行分隔字串儲存，可空）
-    /// </summary>
-    [JsonPropertyName("teams")]
-    public string? Teams { get; set; }
 
     /// <summary>
     /// 建立時間

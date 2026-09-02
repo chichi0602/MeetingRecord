@@ -292,18 +292,6 @@ public sealed class TodoServiceTests
         Assert.Contains("專案", result.Message);
     }
 
-    [Fact]
-    public async Task BeforeAddCheckAsync_ShouldFail_WhenProjectIsOutOfTeamScope()
-    {
-        await using var fixture = await TodoServiceFixture.CreateAsync();
-        var project = await fixture.AddProjectAsync("團隊B的專案", teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
-
-        var result = await service.BeforeAddCheckAsync(new TodoAdapterModel { Title = "待辦", ProjectId = project.Id });
-
-        Assert.False(result.Success);
-    }
-
     #endregion
 
     #region 測試輔助
@@ -366,15 +354,13 @@ public sealed class TodoServiceTests
                 new FakeScopeProvider(isAdmin, teams));
         }
 
-        public async Task<Project> AddProjectAsync(string title, IEnumerable<string>? teams = null)
+        public async Task<Project> AddProjectAsync(string title)
         {
             var project = new Project
             {
                 Title = title,
                 Status = "進行中",
-                Priority = "中",
                 Owner = "王小明",
-                Teams = TagStringHelper.ToStored(teams),
             };
 
             Context.Project.Add(project);
@@ -405,7 +391,6 @@ public sealed class TodoServiceTests
                 Title = title,
                 ProjectId = projectId,
                 MeetingId = meetingId,
-                Priority = "中",
                 Status = status,
                 Categories = TagStringHelper.ToStored(categories),
                 Teams = TagStringHelper.ToStored(teams),

@@ -362,13 +362,6 @@ public class TodoService
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
         }
 
-        var scope = await accessScope.GetAsync();
-        if (!TagStringHelper.IsTeamAccessible(project.Teams, scope.Teams, scope.IsAdmin))
-        {
-            Logger.LogWarning("Pre-create validation denied by project team scope. ProjectId={ProjectId}", paraObject.ProjectId);
-            return VerifyRecordResultFactory.Build(false, "沒有權限在這個專案下新增待辦事項。");
-        }
-
         return VerifyRecordResultFactory.Build(true);
     }
 

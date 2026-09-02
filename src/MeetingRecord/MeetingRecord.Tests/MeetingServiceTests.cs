@@ -820,11 +820,11 @@ public sealed class MeetingServiceTests
             var meeting = new Meeting
             {
                 Title = title,
-                Teams = TagStringHelper.ToStored(teams),
                 TranscriptionStatus = TranscriptionStatus.Completed,
                 TranscriptRelativePath = $"2026/08/{Guid.NewGuid():N}.txt",
                 ProjectId = projectId,
                 DraftStatus = draftStatus,
+                Teams = TagStringHelper.ToStored(teams),
             };
 
             Context.Meeting.Add(meeting);
@@ -833,15 +833,13 @@ public sealed class MeetingServiceTests
             return meeting;
         }
 
-        public async Task<Project> AddProjectAsync(string title, IEnumerable<string>? teams = null)
+        public async Task<Project> AddProjectAsync(string title)
         {
             var project = new Project
             {
                 Title = title,
                 Status = "進行中",
-                Priority = "中",
                 Owner = "王小明",
-                Teams = TagStringHelper.ToStored(teams),
             };
 
             Context.Project.Add(project);

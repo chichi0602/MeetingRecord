@@ -146,7 +146,6 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
             Id = 0,
             Title = "should be forbidden",
             Status = "進行中",
-            Priority = "中",
             Owner = "viewer",
         });
         Assert.Equal(HttpStatusCode.Forbidden, createResponse.StatusCode);
@@ -222,11 +221,9 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         {
             Id = 1,
             Title = $"Integration Project {Guid.NewGuid():N}",
-            Description = "Integration test project",
             StartDate = DateTime.Today,
             EndDate = DateTime.Today.AddDays(7),
             Status = "進行中",
-            Priority = "中",
             CompletionPercentage = 10,
             Owner = "integration-test"
         };

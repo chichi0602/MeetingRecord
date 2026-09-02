@@ -55,9 +55,6 @@ public class CombinedSearchHelper
             "status" => descending
                 ? projects.OrderByDescending(p => p.Status).ToList()
                 : projects.OrderBy(p => p.Status).ToList(),
-            "priority" => descending
-                ? projects.OrderByDescending(p => p.Priority).ToList()
-                : projects.OrderBy(p => p.Priority).ToList(),
             "completionpercentage" => descending
                 ? projects.OrderByDescending(p => p.CompletionPercentage).ToList()
                 : projects.OrderBy(p => p.CompletionPercentage).ToList(),

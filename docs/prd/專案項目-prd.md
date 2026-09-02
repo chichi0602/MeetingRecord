@@ -1,8 +1,8 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：2.3
+- 文件版本：3.0
 - 文件狀態：已實作
-- 現行系統版本：0.4.38
+- 現行系統版本：0.4.39
 - 首次實作版本：既有腳手架核心功能（0.4.31 頁面全面改版）
 - 最後核對日期：2026/09/02
 
@@ -35,8 +35,8 @@
 - 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（檢視／編修草稿、**匯出 Markdown**、預覽逐字稿）。不分頁。
 - **匯出 Markdown**（0.4.34）：把表頭（專案、會議、日期、使用提示詞、產生時間）加上會議紀錄內文組成 `.md` 檔，經 JS interop 直接推給瀏覽器下載，**檔案不落地、不新增 HTTP 檔案輸出面**。內容不含逐字稿。檔名為 `會議紀錄_{標題}_{產生日}.md`，會去除影音副檔名與檔名非法字元。
 - Icon 一律使用 Material Icons Outlined，不使用 emoji。
-- 編輯表單欄位：標題（必填）、開始日期、結束日期、狀態（必填，`StatusOptions`）、完成百分比（0-100）、負責人（必填）。**0.4.37 移除描述、優先級、分類、團隊四欄**；實體與 DTO 的欄位都保留未動，API 路徑仍可寫入這四個欄位。
-  - ⚠️ **優先級雖已從表單移除，但仍是必填**且 `ProjectService.ValidateBusinessRulesAsync` 會驗證它必須是 `低/中/高` 之一，因此新增時由 `OnAddAsync` 帶入預設「中」。動這段程式碼時不能把預設值拿掉，否則所有新增／修改都會被擋下並回「專案優先順序不合法。」
+- 編輯表單欄位：標題（必填）、開始日期、結束日期、狀態（必填，`StatusOptions`）、完成百分比（0-100）、負責人（必填）、專案附件。
+  - **0.4.39 起，描述、優先級、分類、團隊四個欄位已從系統中完全移除**——不只是表單，實體、`ProjectAdapterModel`、DTO、服務層、API 搜尋與排序都已清除，並以 migration `RemoveProjectDescriptionPriorityCategoriesTeams` 刪除四個資料庫欄位。0.4.37 只移除表單，這一版才是徹底移除。
 - 附件：`專案附件` 一次可多選，單檔上限 1GB；待上傳清單可移除，已上傳檔案可下載（`/api/project-files/{id}/download`）或標記移除。
 
 ## 四、內部系統運作
@@ -54,31 +54,40 @@
 
 - 動作級授權：`ProjectController` 各端點標註 `[HasPermission(角色_專案項目, 動作)]`（`ProjectController.cs:36,67,113,152,201`）；無權限回 403 且維持 `ApiResult` 結構；管理員短路。
 - UI 與 API 共用同一 RBAC 權威（`IPermissionChecker`）。
-- 團隊可見範圍：非管理員清單以 `TagStringHelper.BuildTeamAccessPredicate` 只看到公開（無團隊）或與自身團隊交集的專案；單筆／附件下載以 `IsTeamAccessible` 守門，越界回空模型或 `null`（`ProjectService.cs:75-79,185-190,360-365`）。**0.4.37 起表單已不能設定團隊，這些判斷對新資料形同虛設**，詳見下方專節。
+- **專案沒有列級可見性控管**（0.4.39 起）：只要具備「專案項目」頁面權限就看得到所有專案，動作（新增／修改／刪除／匯出）另以 `[HasPermission("resource:action")]` 與 `CheckAccessAction` 控管。這是刻意的設計——**角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**。
 
-### ⚠️ 0.4.37 的權限副作用（刻意為之，非 bug）
+### 0.4.39：四個欄位與列級權限已徹底移除
 
-0.4.37 依使用者要求把描述、優先級、分類、**團隊**四欄整組從表單移除（理由：「不太需要用到團隊這個欄位」）。
+使用者的定位是「**角色權限應該只跟功能有關，不會跟能否看到這個會議紀錄有關**」，因此 0.4.39 把描述、優先級、分類、團隊四欄從系統中完全移除，連同專案的列級權限機制一併拿掉。
 
-`Project.Teams` 是專案唯一的列權限來源，共 6 處在用：`ProjectService` 4 處（清單、單筆、附件下載守門、`GetSelectableAsync`）、`MeetingService.RequestDraftAsync`、`TodoService.BeforeAddCheckAsync`。因此：
+移除的內容：
 
-- **新建的專案一律公開**，任何有「專案項目」頁權限的人都看得到。
-- **既有已設團隊的專案，只要被編輯一次就會被清成公開**——`ProjectService.UpdateAsync` 用表單值覆寫 `Teams`，而表單移除後傳入的是空 List，`TagStringHelper.ToStored([])` 回傳 `null`。這點與 0.4.35 會議紀錄那次**不同**（那次舊資料不受影響）。
-- 連帶影響：選到專案就能看該專案下的歷史會議紀錄、預覽逐字稿、匯出 Markdown；`RequestDraftAsync` 與 `TodoService` 的專案守門對公開專案永遠通過。
+| 層 | 內容 |
+|---|---|
+| 實體／模型 | `Project`、`ProjectAdapterModel`（含 `PriorityOptions`、`CategoriesText`、`TeamsText`）四個欄位 |
+| DTO | `ProjectCreateUpdateDto` 四欄、`ProjectSearchRequestDto.Priority` |
+| AutoMapper | Project 的兩組 `ForMember`（`TagStringHelper` 轉換） |
+| ProjectService | 關鍵字搜尋、分類／團隊過濾、優先級排序、優先級驗證、`UpdateAsync` 逐欄寫入，以及 **4 處團隊權限判斷**；`IRecordAccessScopeProvider` 注入隨之移除 |
+| 其他 service | `MeetingService.RequestDraftAsync` 與 `TodoService.BeforeAddCheckAsync` 的**專案**團隊守門 |
+| API | `ProjectRepository` 搜尋與排序、`ProjectController` log 參數、`CombinedSearchHelper` 排序 |
+| 資料庫 | migration `RemoveProjectDescriptionPriorityCategoriesTeams`（四個 `DropColumn`） |
+| 測試 | `ProjectServiceTeamAccessTests` 整檔刪除；`TodoServiceTests` 的專案越界測試刪除 |
 
-服務層 6 處判斷與資料庫欄位**全部保留未動**。要恢復控管只需把表單的團隊 `Select` 加回 `ProjectViewView.razor`，服務層一行都不必改。
+**保留未動**：Meeting、PromptTemplate、Todo 各自的 `Categories`/`Teams` 與其列級權限判斷（`MeetingService.RequestDraftAsync` 對逐字稿與提示詞的兩處守門仍在）、`TagStringHelper`、`DataRequest.CategoryFilters/TeamFilters`、`IRecordAccessScopeProvider` 的 DI 註冊、專案附件功能。
+
+結果：**只要具備「專案項目」頁面權限就看得到所有專案**，動作層級的授權（新增／修改／刪除／匯出）不受影響。
 
 ## 六、錯誤與邊界
 
 - 標題重複：`Create` 回 409、`Update` 回 409（`ExistsByNameAsync`）。
 - 路由 ID 與 payload ID 不一致：`Update` 回 400。
-- 結束日期早於開始日期、狀態／優先級不合法、完成百分比超出 0-100、未設定附件根目錄：`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 回失敗訊息。
+- 結束日期早於開始日期、狀態不合法、完成百分比超出 0-100、未設定附件根目錄：`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 回失敗訊息。（優先級驗證已於 0.4.39 隨欄位移除。）
 - 附件超過 1GB：前端即時提示並略過，後端再次驗證。
 - 刪除時仍有關聯資料（FK 衝突）：回「此專案仍有關聯資料，無法刪除」。
 
 ## 七、驗收與測試
 
-- `MeetingRecord.Tests/ProjectServiceTeamAccessTests.cs`：管理員可見全部（3 筆）、非管理員僅見公開＋交集團隊、無團隊者僅見公開、團隊過濾、單筆越界守門回空模型。
+
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`、`RbacBackfillServiceTests.cs`：動作級授權鍵與 RBAC 回填涵蓋「專案項目」。
 
 ## 八、相關程式與文件

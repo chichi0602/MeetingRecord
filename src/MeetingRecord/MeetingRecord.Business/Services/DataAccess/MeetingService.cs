@@ -586,12 +586,6 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
             }
 
-            if (!TagStringHelper.IsTeamAccessible(project.Teams, scope.Teams, scope.IsAdmin))
-            {
-                Logger.LogWarning("Draft request denied by project team scope. ProjectId={ProjectId}", projectId);
-                return VerifyRecordResultFactory.Build(false, "沒有權限存取指定的專案項目。");
-            }
-
             var template = await context.PromptTemplate.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == promptTemplateId, cancellationToken);
             if (template is null || !template.IsEnabled)

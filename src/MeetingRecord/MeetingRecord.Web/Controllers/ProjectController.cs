@@ -70,11 +70,10 @@ public class ProjectController : ControllerBase
         try
         {
             logger.LogDebug(
-                "Received project search request. Keyword={Keyword}, Owner={Owner}, Status={Status}, Priority={Priority}, PageIndex={PageIndex}, PageSize={PageSize}, SortBy={SortBy}, SortDescending={SortDescending}, IncludeRelatedData={IncludeRelatedData}",
+                "Received project search request. Keyword={Keyword}, Owner={Owner}, Status={Status}, PageIndex={PageIndex}, PageSize={PageSize}, SortBy={SortBy}, SortDescending={SortDescending}, IncludeRelatedData={IncludeRelatedData}",
                 request.Keyword,
                 request.Owner,
                 request.Status,
-                request.Priority,
                 request.PageIndex,
                 request.PageSize,
                 request.SortBy,
@@ -116,11 +115,10 @@ public class ProjectController : ControllerBase
         try
         {
             logger.LogDebug(
-                "Received project create request. Title={Title}, Owner={Owner}, Status={Status}, Priority={Priority}",
+                "Received project create request. Title={Title}, Owner={Owner}, Status={Status}",
                 projectDto.Title,
                 projectDto.Owner,
-                projectDto.Status,
-                projectDto.Priority);
+                projectDto.Status);
 
             if (await projectRepository.ExistsByNameAsync(projectDto.Title))
             {

@@ -462,8 +462,6 @@ public partial class ProjectViewView : IDisposable
         CurrentRecord = new ProjectAdapterModel
         {
             Status = StatusOptions.First(),
-            // 優先級已從表單移除，但仍是必填且服務層會驗證合法值，因此在此帶入預設「中」。
-            Priority = ProjectAdapterModel.PriorityOptions[1],
             CompletionPercentage = 0,
             Files = []
         };

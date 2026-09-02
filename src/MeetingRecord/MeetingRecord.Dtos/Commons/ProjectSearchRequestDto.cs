@@ -20,11 +20,6 @@ public class ProjectSearchRequestDto : SearchRequestBaseDto
     public string? Status { get; set; }
 
     /// <summary>
-    /// 優先順序
-    /// </summary>
-    public string? Priority { get; set; }
-
-    /// <summary>
     /// 開始日期(起)
     /// </summary>
     public DateTime? StartDateFrom { get; set; }

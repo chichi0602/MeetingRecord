@@ -1,8 +1,8 @@
 ﻿# 紀錄分類與團隊權控 PRD
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.37
+- 現行系統版本：0.4.39
 - 首次實作版本：0.4.0
 - 最後核對日期：2026/09/02
 
@@ -42,16 +42,13 @@
 
 這是使用者在知悉副作用後所做的決定。要恢復控管只需把表單的團隊 `Select` 加回 `MeetingViewView.razor`。細節見 [會議紀錄 PRD](會議紀錄-prd.md)。
 
-### ⚠️ 專案項目自 0.4.37 起也不再從 UI 設定團隊（且會回溯影響舊資料）
+### 專案項目已完全退出團隊權控（0.4.39）
 
-專案項目頁（`/projects`）於 0.4.37 移除了描述、優先級、分類、**團隊**四個表單欄位。
+`Project` 的 `Categories`／`Teams` 兩個欄位已於 0.4.39 **從資料庫中刪除**（migration `RemoveProjectDescriptionPriorityCategoriesTeams`），連同 6 處團隊權限判斷一併移除：`ProjectService` 4 處、`MeetingService.RequestDraftAsync` 的專案守門、`TodoService.BeforeAddCheckAsync`。
 
-`Project.Teams` 是專案唯一的列權限來源，用在 6 處：`ProjectService` 4 處（清單、單筆、附件下載守門、`GetSelectableAsync`）、`MeetingService.RequestDraftAsync`、`TodoService.BeforeAddCheckAsync`。全部保留未動，但：
+設計理由（使用者決定）：**角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**。專案的存取改為純粹的功能級 RBAC——具備「專案項目」頁面權限即可看到所有專案，動作另以 `[HasPermission]` 控管。
 
-- 新建的專案 `Teams` 恆為 `null`＝公開；
-- **既有已設團隊的專案只要被編輯一次就會被清成公開**——`ProjectService.UpdateAsync` 用表單值覆寫 `Teams`。**這點與會議紀錄不同**（會議只影響新資料）。
-
-連帶使該專案下的歷史會議紀錄、逐字稿預覽與 Markdown 匯出一併對所有人開放。細節見 [專案項目 PRD](專案項目-prd.md)。
+因此本文件的團隊可見性規則**不再適用於 `Project`**，僅適用於 `Meeting`、`PromptTemplate` 與 `Todo`。細節見 [專案項目 PRD](專案項目-prd.md)。
 
 ## 三、畫面與欄位
 

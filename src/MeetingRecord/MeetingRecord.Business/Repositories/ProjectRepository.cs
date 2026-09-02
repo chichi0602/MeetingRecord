@@ -47,8 +47,7 @@ public class ProjectRepository
 
         if (!string.IsNullOrEmpty(request.Keyword))
         {
-            predicate = p => p.Title.Contains(request.Keyword) ||
-                            (p.Description != null && p.Description.Contains(request.Keyword));
+            predicate = p => p.Title.Contains(request.Keyword);
         }
 
         if (!string.IsNullOrEmpty(request.Owner))
@@ -61,12 +60,6 @@ public class ProjectRepository
         {
             var statusPredicate = (Expression<Func<Project, bool>>)(p => p.Status == request.Status);
             predicate = predicate == null ? statusPredicate : CombinedSearchHelper.ProjectCombinePredicates(predicate, statusPredicate);
-        }
-
-        if (string.IsNullOrEmpty(request.Priority) == false)
-        {
-            var priorityPredicate = (Expression<Func<Project, bool>>)(p => p.Priority == request.Priority);
-            predicate = predicate == null ? priorityPredicate : CombinedSearchHelper.ProjectCombinePredicates(predicate, priorityPredicate);
         }
 
         if (request.StartDateFrom.HasValue)
@@ -116,9 +109,6 @@ public class ProjectRepository
                 "status" => request.SortDescending
                     ? query.OrderByDescending(p => p.Status)
                     : query.OrderBy(p => p.Status),
-                "priority" => request.SortDescending
-                    ? query.OrderByDescending(p => p.Priority)
-                    : query.OrderBy(p => p.Priority),
                 "completionpercentage" => request.SortDescending
                     ? query.OrderByDescending(p => p.CompletionPercentage)
                     : query.OrderBy(p => p.CompletionPercentage),

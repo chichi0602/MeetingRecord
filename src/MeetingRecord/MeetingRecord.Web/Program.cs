@@ -382,11 +382,14 @@ namespace MeetingRecord.Web
                     }
                     #endregion
 
-                    #region 轉錄狀態修復（轉錄佇列不持久化，重啟後殘留的「處理中」不會有人接手）
+                    #region 轉錄狀態修復（轉錄佇列不持久化，重啟後殘留的「待處理」與「處理中」都不會有人接手）
                     try
                     {
+                        // Pending 也要一併復原：佇列不持久化，重啟後「已入列但還沒被 worker 撿走」的
+                        // 紀錄同樣沒有人會接手，只掃 Processing 會讓它們永遠卡在「待處理」。
                         var interrupted = dbContext.Meeting
-                            .Where(x => x.TranscriptionStatus == TranscriptionStatus.Processing)
+                            .Where(x => x.TranscriptionStatus == TranscriptionStatus.Processing
+                                     || x.TranscriptionStatus == TranscriptionStatus.Pending)
                             .ToList();
 
                         if (interrupted.Count > 0)
@@ -411,11 +414,13 @@ namespace MeetingRecord.Web
                     }
                     #endregion
 
-                    #region 草稿生成狀態修復（生成佇列同樣不持久化，殘留的「生成中」不會有人接手）
+                    #region 草稿生成狀態修復（生成佇列同樣不持久化，殘留的「待處理」與「生成中」都不會有人接手）
                     try
                     {
+                        // 同轉錄：Pending 代表已入列但還沒開工，重啟後一樣沒有人接手。
                         var interruptedDrafts = dbContext.Meeting
-                            .Where(x => x.DraftStatus == DraftStatus.Processing)
+                            .Where(x => x.DraftStatus == DraftStatus.Processing
+                                     || x.DraftStatus == DraftStatus.Pending)
                             .ToList();
 
                         if (interruptedDrafts.Count > 0)

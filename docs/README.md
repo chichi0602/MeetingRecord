@@ -1,6 +1,6 @@
 ﻿# 文件目錄索引
 
-- 文件版本：2.2
+- 文件版本：2.3
 - 文件狀態：維護中
 - 現行系統版本：0.4.33
 - 首次實作版本：0.2.8
@@ -41,6 +41,7 @@
 ### architecture — 系統架構與設計規範
 - [開發慣例與限制速查（AI/開發者必讀）](architecture/開發慣例與限制速查.md)
 - [架構總覽](architecture/架構總覽.md)
+- [系統功能總覽](architecture/系統功能總覽.md)
 - [資料模型與資料庫](architecture/資料模型與資料庫.md)
 - [DTO 與模型邊界規範](architecture/DTO%20與模型邊界規範.md)
 - [Web API 設計慣例](architecture/Web%20API%20設計慣例.md)

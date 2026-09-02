@@ -218,6 +218,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [開發慣例與限制速查](docs/architecture/開發慣例與限制速查.md) — **AI/開發者必讀**：分層、SQLite migration、追蹤清理、權限同步等不變量速查。
 - [架構總覽](docs/architecture/架構總覽.md) — 6 個專案分層、依賴方向、啟動流程、DI 註冊清單。
+- [系統功能總覽](docs/architecture/系統功能總覽.md) — 功能面全貌：端到端流程、每個選單頁在做什麼、權限與背景工作、已知問題與限制。
 - [資料模型與資料庫](docs/architecture/資料模型與資料庫.md) — `BackendDBContext`、主要 Entity、關聯與刪除政策。
 - [DTO 與模型邊界規範](docs/architecture/DTO%20與模型邊界規範.md) — API / UI / Business / Entity 資料邊界原則與新 CRUD 模組待辦。
 - [Web API 設計慣例](docs/architecture/Web%20API%20設計慣例.md) — Controller 樣板、`ApiResult<T>`、`PagedResult<T>`、Search DTO。

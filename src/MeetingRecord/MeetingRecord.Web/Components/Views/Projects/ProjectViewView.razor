@@ -201,6 +201,13 @@ else
                                                       OnClick="@(() => OnEditDraftAsync(context))" />
                                 </SpaceItem>
                             }
+                            @if (context.HasDraft && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="匯出 Markdown" Icon="download"
+                                                      OnClick="@(async () => await OnExportDraftAsync(context))" />
+                                </SpaceItem>
+                            }
                             @if (context.CanPreviewTranscript)
                             {
                                 <SpaceItem>

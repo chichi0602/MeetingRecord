@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
 using MeetingRecord.Business.Services.DataAccess;
+using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Services;
 
 namespace MeetingRecord.Web.Components.Views.Projects;
 
@@ -23,6 +26,7 @@ public partial class ProjectViewView
     private readonly ModalService modalService;
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
+    private readonly FileDownloadInterop fileDownloadInterop;
 
     private List<string> availableCategories = [];
     private List<string> availableTeams = [];
@@ -81,7 +85,8 @@ public partial class ProjectViewView
         TeamService teamService,
         ModalService modalService,
         MessageService messageService,
-        NotificationService notificationService)
+        NotificationService notificationService,
+        FileDownloadInterop fileDownloadInterop)
     {
         this.logger = logger;
         this.projectService = projectService;
@@ -92,6 +97,7 @@ public partial class ProjectViewView
         this.modalService = modalService;
         this.messageService = messageService;
         this.notificationService = notificationService;
+        this.fileDownloadInterop = fileDownloadInterop;
     }
 
     protected override async Task OnInitializedAsync()
@@ -283,6 +289,33 @@ public partial class ProjectViewView
         draftContent = meeting.DraftContent;
         draftEditModalVisible = true;
         return Task.CompletedTask;
+    }
+
+    /// <summary>把會議紀錄匯出成 Markdown 檔並直接推給瀏覽器下載（檔案不落地）。</summary>
+    private async Task OnExportDraftAsync(MeetingAdapterModel meeting)
+    {
+        if (!meeting.HasDraft)
+        {
+            return;
+        }
+
+        try
+        {
+            var fileName = MeetingMarkdownExporter.BuildFileName(meeting);
+            var document = MeetingMarkdownExporter.BuildDocument(meeting, SelectedProject?.Title);
+
+            await fileDownloadInterop.SaveTextAsync(fileName, document);
+
+            logger.LogInformation(
+                "Meeting draft exported as markdown. MeetingId={MeetingId}, FileName={FileName}",
+                meeting.Id,
+                fileName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to export meeting draft. MeetingId={MeetingId}", meeting.Id);
+            NotifyError("匯出會議紀錄失敗。");
+        }
     }
 
     private Task OnDraftViewModalCancelAsync(MouseEventArgs args)

@@ -87,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();
+        services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, MeetingRecord.Web.Components.ApplicationCircuitHandler>();

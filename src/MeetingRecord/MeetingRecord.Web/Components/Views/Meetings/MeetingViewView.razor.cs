@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components.Web;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
@@ -14,13 +15,14 @@ using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Components.Views.Meetings;
 
-public partial class MeetingViewView
+public partial class MeetingViewView : IDisposable
 {
     private readonly ILogger<MeetingViewView> logger;
     private readonly MeetingService meetingService;
     private readonly ModalService modalService;
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
+    private readonly ITranscriptionProgressNotifier progressNotifier;
     private ITable? table;
 
     private int _pageIndex = 1;
@@ -29,6 +31,9 @@ public partial class MeetingViewView
     private string searchText = string.Empty;
     private string sortField = string.Empty;
     private string sortDirection = "None";
+
+    /// <summary>已因「轉錄結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
+    private readonly HashSet<int> reloadedFinishedMeetingIds = [];
 
     private List<MeetingAdapterModel> meetingAdapterModels = [];
 
@@ -61,13 +66,15 @@ public partial class MeetingViewView
         MeetingService meetingService,
         ModalService modalService,
         MessageService messageService,
-        NotificationService notificationService)
+        NotificationService notificationService,
+        ITranscriptionProgressNotifier progressNotifier)
     {
         this.logger = logger;
         this.meetingService = meetingService;
         this.modalService = modalService;
         this.messageService = messageService;
         this.notificationService = notificationService;
+        this.progressNotifier = progressNotifier;
     }
 
     protected override async Task OnInitializedAsync()
@@ -87,8 +94,44 @@ public partial class MeetingViewView
             return;
         }
 
+        progressNotifier.Changed += OnTranscriptionProgressChanged;
+
         await ReloadAsync();
     }
+
+    /// <summary>
+    /// 轉錄進度變動時更新「轉錄狀態」欄。
+    ///
+    /// <para>
+    /// 由背景執行緒引發，必須切回 UI 執行緒。進行中只重繪（百分比來自記憶體，不必查庫）；
+    /// 只有工作結束時才重新載入，讓狀態欄從「處理中」翻成資料庫裡的「已完成／失敗」。
+    /// 每段都重新查一次資料庫是沒有必要的負擔。
+    /// </para>
+    /// </summary>
+    private void OnTranscriptionProgressChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            // 已完成的項目會留在通知器裡直到使用者關閉，所以要記下已處理過的 Id，
+            // 否則之後每一次進度變動都會再重新載入一次。
+            var finishedIds = progressNotifier
+                .GetSnapshot()
+                .Where(x => x.Phase is TranscriptionPhase.Completed or TranscriptionPhase.Failed)
+                .Select(x => x.MeetingId)
+                .ToList();
+
+            // HashSet.Add 回傳 true 代表這一筆是新完成的。用 Count 而非 Any，
+            // 確保整個清單都被走過（Any 會短路，漏掉同時完成的其他筆）。
+            var newlyFinishedCount = finishedIds.Count(reloadedFinishedMeetingIds.Add);
+
+            if (newlyFinishedCount > 0)
+            {
+                await ReloadAsync();
+            }
+            else
+            {
+                StateHasChanged();
+            }
+        });
 
     public async Task ReloadAsync()
     {
@@ -509,6 +552,24 @@ public partial class MeetingViewView
 
     #endregion
 
+    /// <summary>
+    /// 取這一列目前的即時進度；沒有進行中的工作時回傳 null（狀態欄就只顯示徽章）。
+    /// 資料來自記憶體中的通知器，不查資料庫。
+    /// </summary>
+    private TranscriptionProgressItem? GetLiveProgress(int meetingId)
+    {
+        var item = progressNotifier.Find(meetingId);
+        return item is { IsRunning: true } ? item : null;
+    }
+
+    private static string DescribeProgressPhase(TranscriptionProgressItem item) => item.Phase switch
+    {
+        TranscriptionPhase.Queued => "排隊中",
+        TranscriptionPhase.Converting => "轉檔中",
+        TranscriptionPhase.Transcribing => $"轉錄中（第 {item.CompletedSegments}/{item.TotalSegments} 段）",
+        _ => string.Empty,
+    };
+
     private static string GetStatusCssClass(TranscriptionStatus status) => status switch
     {
         TranscriptionStatus.Pending => "meeting-status-pending",
@@ -553,4 +614,6 @@ public partial class MeetingViewView
 
         public void Report(int value) => onReport(value);
     }
+
+    public void Dispose() => progressNotifier.Changed -= OnTranscriptionProgressChanged;
 }

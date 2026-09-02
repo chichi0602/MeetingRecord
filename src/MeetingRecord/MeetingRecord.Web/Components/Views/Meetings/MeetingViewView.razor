@@ -72,6 +72,15 @@ else
                 </Column>
                 <Column TData="TranscriptionStatus" DataIndex="@nameof(MeetingAdapterModel.TranscriptionStatus)" Title="轉錄狀態" Sortable>
                     <span class="meeting-status @GetStatusCssClass(context.TranscriptionStatus)">@context.TranscriptionStatusText</span>
+                    @{
+                        var progress = GetLiveProgress(context.Id);
+                    }
+                    @if (progress is not null)
+                    {
+                        <Tooltip Title="@DescribeProgressPhase(progress)">
+                            <span class="meeting-status-percent">@progress.Percent%</span>
+                        </Tooltip>
+                    }
                     @if (context.TranscriptionStatus == TranscriptionStatus.Failed && !string.IsNullOrWhiteSpace(context.TranscriptionError))
                     {
                         <Tooltip Title="@context.TranscriptionError">

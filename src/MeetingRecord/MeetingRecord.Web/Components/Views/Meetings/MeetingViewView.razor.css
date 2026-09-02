@@ -125,3 +125,11 @@
     padding: 24px 0;
     text-align: center;
 }
+
+/* 轉錄進行中時，狀態徽章旁的即時百分比（資料來自 ITranscriptionProgressNotifier）。 */
+.meeting-status-percent {
+    margin-left: 6px;
+    color: #6b7a8d;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}

@@ -751,6 +751,9 @@ public sealed class MeetingServiceTests
 
         public FakeMeetingDraftQueue DraftQueue { get; } = new();
 
+        /// <summary>進度通知器沒有外部相依，直接用真的，順便驗證服務層有把工作登錄進去。</summary>
+        public TranscriptionProgressNotifier ProgressNotifier { get; } = new();
+
         public string MediaRoot => Path.Combine(rootPath, "media");
 
         public string TranscriptRoot => Path.Combine(rootPath, "transcript");
@@ -782,6 +785,7 @@ public sealed class MeetingServiceTests
                 new FakeScopeProvider(isAdmin, teams),
                 fileStore,
                 Queue,
+                ProgressNotifier,
                 DraftQueue);
         }
 

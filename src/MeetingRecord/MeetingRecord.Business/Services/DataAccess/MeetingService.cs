@@ -24,6 +24,7 @@ public class MeetingService
     private readonly IRecordAccessScopeProvider accessScope;
     private readonly MeetingFileStore fileStore;
     private readonly ITranscriptionQueue transcriptionQueue;
+    private readonly ITranscriptionProgressNotifier progressNotifier;
     private readonly IMeetingDraftQueue draftQueue;
 
     public IMapper Mapper { get; }
@@ -36,6 +37,7 @@ public class MeetingService
         IRecordAccessScopeProvider accessScope,
         MeetingFileStore fileStore,
         ITranscriptionQueue transcriptionQueue,
+        ITranscriptionProgressNotifier progressNotifier,
         IMeetingDraftQueue draftQueue)
     {
         this.context = context;
@@ -44,6 +46,7 @@ public class MeetingService
         this.accessScope = accessScope;
         this.fileStore = fileStore;
         this.transcriptionQueue = transcriptionQueue;
+        this.progressNotifier = progressNotifier;
         this.draftQueue = draftQueue;
     }
 
@@ -428,6 +431,8 @@ public class MeetingService
             fileStore.TryDeleteMedia(previousMediaRelativePath);
             fileStore.TryDeleteTranscript(previousTranscriptRelativePath);
 
+            // 先登錄進度再入列：背景工作要等輪到才會知道這件事，先登錄畫面才立刻看得到「排隊中」。
+            progressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
             await transcriptionQueue.EnqueueAsync(meetingId, cancellationToken);
 
             Logger.LogInformation("Meeting media uploaded and queued for transcription. MeetingId={MeetingId}", meetingId);
@@ -482,6 +487,7 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            progressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
             await transcriptionQueue.EnqueueAsync(meetingId, cancellationToken);
             return VerifyRecordResultFactory.Build(true);
         }

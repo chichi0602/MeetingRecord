@@ -102,6 +102,10 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTranscriptionServices(this IServiceCollection services)
     {
         services.AddSingleton<ITranscriptionQueue, TranscriptionQueue>();
+
+        // 進度只存在記憶體：跨 circuit 共用、隨行程重啟消失（重啟時殘留的「處理中」本來就會被標記為失敗）。
+        services.AddSingleton<ITranscriptionProgressNotifier, TranscriptionProgressNotifier>();
+
         services.AddHostedService<TranscriptionBackgroundService>();
 
         services.AddScoped<IMediaConverter, FfmpegMediaConverter>();

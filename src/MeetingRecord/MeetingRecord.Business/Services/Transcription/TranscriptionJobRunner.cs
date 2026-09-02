@@ -25,6 +25,7 @@ public class TranscriptionJobRunner
     private readonly IEnumerable<ITranscriptionProvider> transcriptionProviders;
     private readonly MeetingFileStore fileStore;
     private readonly IOptions<LlmSettings> llmSettings;
+    private readonly ITranscriptionProgressNotifier progressNotifier;
     private readonly ILogger<TranscriptionJobRunner> logger;
 
     public TranscriptionJobRunner(
@@ -33,6 +34,7 @@ public class TranscriptionJobRunner
         IEnumerable<ITranscriptionProvider> transcriptionProviders,
         MeetingFileStore fileStore,
         IOptions<LlmSettings> llmSettings,
+        ITranscriptionProgressNotifier progressNotifier,
         ILogger<TranscriptionJobRunner> logger)
     {
         this.context = context;
@@ -40,6 +42,7 @@ public class TranscriptionJobRunner
         this.transcriptionProviders = transcriptionProviders;
         this.fileStore = fileStore;
         this.llmSettings = llmSettings;
+        this.progressNotifier = progressNotifier;
         this.logger = logger;
     }
 
@@ -71,6 +74,8 @@ public class TranscriptionJobRunner
             var provider = ResolveProvider();
             var sourceFullPath = fileStore.GetMediaFullPath(meeting.MediaRelativePath);
 
+            progressNotifier.ReportConverting(meetingId);
+
             using var segments = await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
 
             var transcript = new StringBuilder();
@@ -87,6 +92,9 @@ public class TranscriptionJobRunner
 
                 await using var segmentStream = File.OpenRead(segmentPath);
                 var segmentText = await provider.TranscribeAsync(segmentStream, Path.GetFileName(segmentPath), cancellationToken);
+
+                // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
+                progressNotifier.ReportSegment(meetingId, index + 1, segments.SegmentFullPaths.Count);
 
                 if (string.IsNullOrWhiteSpace(segmentText))
                 {
@@ -112,6 +120,8 @@ public class TranscriptionJobRunner
             meeting.TranscriptionCompletedAt = DateTime.Now;
             meeting.UpdatedAt = DateTime.Now;
             await context.SaveChangesAsync(cancellationToken);
+
+            progressNotifier.ReportCompleted(meetingId);
 
             // 重跑轉錄時，舊逐字稿在新檔寫入成功後才刪除，避免中途失敗兩份都沒有。
             if (!string.IsNullOrWhiteSpace(previousTranscriptRelativePath)
@@ -161,6 +171,8 @@ public class TranscriptionJobRunner
 
     private async Task MarkFailedAsync(AccessDatas.Models.Meeting meeting, string message)
     {
+        progressNotifier.ReportFailed(meeting.Id, message);
+
         try
         {
             meeting.TranscriptionStatus = TranscriptionStatus.Failed;

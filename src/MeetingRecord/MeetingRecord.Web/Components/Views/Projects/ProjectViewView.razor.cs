@@ -21,15 +21,10 @@ public partial class ProjectViewView
     private readonly ProjectService projectService;
     private readonly MeetingService meetingService;
     private readonly PromptTemplateService promptTemplateService;
-    private readonly CategoryService categoryService;
-    private readonly TeamService teamService;
     private readonly ModalService modalService;
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
     private readonly FileDownloadInterop fileDownloadInterop;
-
-    private List<string> availableCategories = [];
-    private List<string> availableTeams = [];
 
     private List<ProjectAdapterModel> projects = [];
     private int selectedProjectId;
@@ -65,7 +60,6 @@ public partial class ProjectViewView
     private ProjectAdapterModel? SelectedProject => projects.FirstOrDefault(x => x.Id == selectedProjectId);
 
     private IReadOnlyList<string> StatusOptions => ProjectAdapterModel.StatusOptions;
-    private IReadOnlyList<string> PriorityOptions => ProjectAdapterModel.PriorityOptions;
 
     [Inject]
     public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
@@ -81,8 +75,6 @@ public partial class ProjectViewView
         ProjectService projectService,
         MeetingService meetingService,
         PromptTemplateService promptTemplateService,
-        CategoryService categoryService,
-        TeamService teamService,
         ModalService modalService,
         MessageService messageService,
         NotificationService notificationService,
@@ -92,8 +84,6 @@ public partial class ProjectViewView
         this.projectService = projectService;
         this.meetingService = meetingService;
         this.promptTemplateService = promptTemplateService;
-        this.categoryService = categoryService;
-        this.teamService = teamService;
         this.modalService = modalService;
         this.messageService = messageService;
         this.notificationService = notificationService;
@@ -119,9 +109,6 @@ public partial class ProjectViewView
             logger.LogWarning("Project management view denied because current user has not this role permission.");
             return;
         }
-
-        availableCategories = await categoryService.GetAllEnabledNamesAsync();
-        availableTeams = await teamService.GetAllEnabledNamesAsync();
 
         await ReloadAsync();
     }
@@ -369,16 +356,6 @@ public partial class ProjectViewView
 
     #region 專案維護
 
-    private void OnRecordCategoriesChanged(IEnumerable<string> values)
-    {
-        CurrentRecord.Categories = values?.ToList() ?? [];
-    }
-
-    private void OnRecordTeamsChanged(IEnumerable<string> values)
-    {
-        CurrentRecord.Teams = values?.ToList() ?? [];
-    }
-
     private async Task OnEditSelectedAsync()
     {
         if (SelectedProject is null)
@@ -446,7 +423,8 @@ public partial class ProjectViewView
         CurrentRecord = new ProjectAdapterModel
         {
             Status = StatusOptions.First(),
-            Priority = PriorityOptions[1],
+            // 優先級已從表單移除，但仍是必填且服務層會驗證合法值，因此在此帶入預設「中」。
+            Priority = ProjectAdapterModel.PriorityOptions[1],
             CompletionPercentage = 0,
             Files = []
         };

@@ -1,3 +1,4 @@
+using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Web.Auth;
@@ -130,31 +131,44 @@ public static class StartupSafetyValidator
         }
     }
 
+
     /// <summary>
-    /// 非 Production 的啟動提醒：這些設定會讓語音轉錄在執行時失敗，但不足以阻擋啟動。
-    /// 沒在用轉錄的開發者不該因此無法啟動，所以只回訊息、不擲例外。
+    /// 非 Production 的啟動提醒：這些設定會讓功能在執行時失敗，但不足以阻擋啟動。
+    /// 沒在用這些功能的開發者不該因此無法啟動，所以只回訊息、不擲例外。
     /// </summary>
+    /// <param name="ffmpegExists">FFmpeg 存在性判斷，開放覆寫是為了讓測試不依賴執行機器的安裝狀態。</param>
+    /// <param name="browserExists">瀏覽器存在性判斷，同上。</param>
     public static IReadOnlyList<string> GetDevelopmentWarnings(
         IConfiguration configuration,
-        Func<string, bool>? ffmpegExists = null)
+        Func<string, bool>? ffmpegExists = null,
+        Func<string, bool>? browserExists = null)
     {
-        if (!GetTranscriptionContext(configuration).Enabled)
+        var warnings = new List<string>();
+
+        // 語音轉錄：沒啟用就整段跳過。
+        if (GetTranscriptionContext(configuration).Enabled)
         {
-            return [];
+            var ffmpegPath = configuration[$"{MediaSettings.SectionName}:FfmpegPath"];
+            if (string.IsNullOrWhiteSpace(ffmpegPath))
+            {
+                warnings.Add($"{MediaSettings.SectionName}:FfmpegPath 未設定，語音轉錄會在執行時失敗。");
+            }
+            else if (!ResolveFfmpegExists(ffmpegExists)(ffmpegPath))
+            {
+                warnings.Add($"{MediaSettings.SectionName}:FfmpegPath 找不到 FFmpeg 執行檔（目前值：{ffmpegPath}），語音轉錄會在執行時失敗。");
+            }
         }
 
-        var ffmpegPath = configuration[$"{MediaSettings.SectionName}:FfmpegPath"];
-        if (string.IsNullOrWhiteSpace(ffmpegPath))
+        // 匯出 PDF：與轉錄無關，只要有草稿就能用，所以一律檢查。
+        var browserPath = configuration[$"{ExportSettings.SectionName}:BrowserPath"];
+        if (BrowserPathResolver.Resolve(browserPath, browserExists) is null)
         {
-            return [$"{MediaSettings.SectionName}:FfmpegPath 未設定，語音轉錄會在執行時失敗。"];
+            warnings.Add(string.IsNullOrWhiteSpace(browserPath)
+                ? $"找不到可用來產生 PDF 的瀏覽器（已試過 Edge 與 Chrome 的常見安裝位置），匯出會議紀錄 PDF 會在執行時失敗。可於 {ExportSettings.SectionName}:BrowserPath 指定路徑。"
+                : $"{ExportSettings.SectionName}:BrowserPath 找不到瀏覽器執行檔（目前值：{browserPath}），匯出會議紀錄 PDF 會在執行時失敗。");
         }
 
-        if (!ResolveFfmpegExists(ffmpegExists)(ffmpegPath))
-        {
-            return [$"{MediaSettings.SectionName}:FfmpegPath 找不到 FFmpeg 執行檔（目前值：{ffmpegPath}），語音轉錄會在執行時失敗。"];
-        }
-
-        return [];
+        return warnings;
     }
 
     private static Func<string, bool> ResolveFfmpegExists(Func<string, bool>? ffmpegExists)

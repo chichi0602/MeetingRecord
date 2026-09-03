@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using MeetingRecord.Models.Systems;
 using MeetingRecord.Web.Configuration;
 
 namespace MeetingRecord.Tests;
@@ -182,7 +183,7 @@ public sealed class StartupSafetyValidatorTests
 
         StartupSafetyValidator.Validate(configuration, "Development", FfmpegMissing);
 
-        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(configuration, FfmpegMissing);
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(configuration, FfmpegMissing, BrowserInstalled);
         Assert.Single(warnings);
         Assert.Contains("FfmpegPath", warnings[0]);
     }
@@ -193,7 +194,7 @@ public sealed class StartupSafetyValidatorTests
         var settings = ValidTranscriptionProductionConfig();
         settings["MediaSettings:FfmpegPath"] = string.Empty;
 
-        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(Build(settings), FfmpegMissing);
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(Build(settings), FfmpegMissing, BrowserInstalled);
         Assert.Single(warnings);
         Assert.Contains("FfmpegPath", warnings[0]);
     }
@@ -202,7 +203,7 @@ public sealed class StartupSafetyValidatorTests
     public void GetDevelopmentWarnings_WithInstalledFfmpeg_ShouldBeSilent()
     {
         var warnings = StartupSafetyValidator.GetDevelopmentWarnings(
-            Build(ValidTranscriptionProductionConfig()), FfmpegInstalled);
+            Build(ValidTranscriptionProductionConfig()), FfmpegInstalled, BrowserInstalled);
 
         Assert.Empty(warnings);
     }
@@ -214,10 +215,40 @@ public sealed class StartupSafetyValidatorTests
         var settings = BaseValidProductionConfig();
         settings["MediaSettings:FfmpegPath"] = string.Empty;
 
-        Assert.Empty(StartupSafetyValidator.GetDevelopmentWarnings(Build(settings), FfmpegMissing));
+        Assert.Empty(StartupSafetyValidator.GetDevelopmentWarnings(Build(settings), FfmpegMissing, BrowserInstalled));
+    }
+
+    [Fact]
+    public void GetDevelopmentWarnings_WithMissingBrowser_ShouldWarnAboutPdfExport()
+    {
+        // 匯出 PDF 與轉錄無關，沒啟用轉錄也要提醒。
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(
+            Build(BaseValidProductionConfig()), FfmpegMissing, BrowserMissing);
+
+        Assert.Single(warnings);
+        Assert.Contains("PDF", warnings[0]);
+    }
+
+    [Fact]
+    public void GetDevelopmentWarnings_WithConfiguredButMissingBrowser_ShouldNameTheSetting()
+    {
+        var settings = BaseValidProductionConfig();
+        settings[$"{ExportSettings.SectionName}:BrowserPath"] = @"C:\nowhere\msedge.exe";
+
+        var warnings = StartupSafetyValidator.GetDevelopmentWarnings(
+            Build(settings), FfmpegMissing, BrowserMissing);
+
+        Assert.Single(warnings);
+        Assert.Contains("BrowserPath", warnings[0]);
     }
 
     #endregion
+
+    /// <summary>瀏覽器一律視為存在，讓既有測試的斷言不受執行機器上有沒有 Edge 影響。</summary>
+    private static readonly Func<string, bool> BrowserInstalled = _ => true;
+
+    /// <summary>找不到任何可用的瀏覽器。</summary>
+    private static readonly Func<string, bool> BrowserMissing = _ => false;
 
     /// <summary>FFmpeg 已安裝。測試不該依賴執行機器上真的裝了 FFmpeg，所以一律以此覆寫。</summary>
     private static readonly Func<string, bool> FfmpegInstalled = _ => true;

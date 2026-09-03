@@ -169,7 +169,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
 | `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`。**語音轉錄已實際呼叫；文字生成端仍無呼叫端**。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
-| `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑，預設 `ffmpeg`（走 PATH）。語音轉錄前一律用它把影音檔轉成 mp3 並切段，**是本專案唯一的外部執行檔相依**。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。 |
+| `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑，預設 `ffmpeg`（走 PATH）。語音轉錄前一律用它把影音檔轉成 mp3 並切段。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。 |
+| `ExportSettings.BrowserPath` | 產生會議紀錄 PDF 用的瀏覽器執行檔（Edge 或 Chrome）。**留空即自動偵測**常見安裝位置，Windows 內建 Edge 因此通常不必設定。找不到時啟動記 WARN，匯出當下會回明確錯誤。 |
 | `SystemSettings.ConnectionStrings.SQLiteDefaultConnection` | SQLite 連線範本；實際連線字串由 `MagicObjectHelper.GetSQLiteConnectionString` 結合 `DatabasePath` 產生。 |
 | `SystemSettings.SystemInformation.SystemName` | 顯示用系統名稱。 |
 | `SystemSettings.SystemInformation.SystemDescription` | 顯示用系統描述。 |

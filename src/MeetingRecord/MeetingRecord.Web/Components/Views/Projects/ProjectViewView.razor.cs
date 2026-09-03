@@ -27,6 +27,13 @@ public partial class ProjectViewView : IDisposable
     private readonly NotificationService notificationService;
     private readonly FileDownloadInterop fileDownloadInterop;
     private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
+    private readonly IPdfRenderer pdfRenderer;
+
+    /// <summary>PDF 的 MIME，讓瀏覽器認得下載下來的是什麼。</summary>
+    private const string PdfContentType = "application/pdf";
+
+    /// <summary>正在匯出的會議 Id；用來顯示 loading 並擋重複點擊。</summary>
+    private int? exportingMeetingId;
 
     /// <summary>已因「生成結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
     private readonly HashSet<int> reloadedFinishedMeetingIds = [];
@@ -84,7 +91,8 @@ public partial class ProjectViewView : IDisposable
         MessageService messageService,
         NotificationService notificationService,
         FileDownloadInterop fileDownloadInterop,
-        IMeetingDraftProgressNotifier draftProgressNotifier)
+        IMeetingDraftProgressNotifier draftProgressNotifier,
+        IPdfRenderer pdfRenderer)
     {
         this.logger = logger;
         this.projectService = projectService;
@@ -95,6 +103,7 @@ public partial class ProjectViewView : IDisposable
         this.notificationService = notificationService;
         this.fileDownloadInterop = fileDownloadInterop;
         this.draftProgressNotifier = draftProgressNotifier;
+        this.pdfRenderer = pdfRenderer;
     }
 
     protected override async Task OnInitializedAsync()
@@ -318,29 +327,43 @@ public partial class ProjectViewView : IDisposable
     }
 
     /// <summary>把會議紀錄匯出成 Markdown 檔並直接推給瀏覽器下載（檔案不落地）。</summary>
+    /// <summary>
+    /// 把會議紀錄匯出成 PDF 並直接推給瀏覽器下載（檔案不落地）。
+    /// PDF 由無頭瀏覽器列印產生，會啟動外部程序，通常數秒，因此要擋重複點擊。
+    /// </summary>
     private async Task OnExportDraftAsync(MeetingAdapterModel meeting)
     {
-        if (!meeting.HasDraft)
+        if (!meeting.HasDraft || exportingMeetingId is not null)
         {
             return;
         }
 
+        exportingMeetingId = meeting.Id;
+        StateHasChanged();
+
         try
         {
-            var fileName = MeetingMarkdownExporter.BuildFileName(meeting);
-            var document = MeetingMarkdownExporter.BuildDocument(meeting, SelectedProject?.Title);
+            var fileName = MeetingDocumentExporter.BuildFileName(meeting);
+            var html = MeetingDocumentExporter.BuildHtml(meeting, SelectedProject?.Title);
+            var pdf = await pdfRenderer.RenderAsync(html);
 
-            await fileDownloadInterop.SaveTextAsync(fileName, document);
+            await fileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
 
             logger.LogInformation(
-                "Meeting draft exported as markdown. MeetingId={MeetingId}, FileName={FileName}",
+                "Meeting draft exported as pdf. MeetingId={MeetingId}, FileName={FileName}, Bytes={Bytes}",
                 meeting.Id,
-                fileName);
+                fileName,
+                pdf.Length);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to export meeting draft. MeetingId={MeetingId}", meeting.Id);
-            NotifyError("匯出會議紀錄失敗。");
+            NotifyError($"匯出 PDF 失敗：{ex.Message}");
+        }
+        finally
+        {
+            exportingMeetingId = null;
+            StateHasChanged();
         }
     }
 

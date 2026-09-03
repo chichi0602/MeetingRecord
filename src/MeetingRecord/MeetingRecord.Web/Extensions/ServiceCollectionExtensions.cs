@@ -88,6 +88,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();
         services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
+        services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, MeetingRecord.Web.Components.ApplicationCircuitHandler>();
@@ -154,6 +155,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SwaggerSettings>(configuration.GetSection(SwaggerSettings.SectionName));
         services.Configure<CacheSettings>(configuration.GetSection(CacheSettings.SectionName));
         services.Configure<MediaSettings>(configuration.GetSection(MediaSettings.SectionName));
+        services.Configure<ExportSettings>(configuration.GetSection(ExportSettings.SectionName));
 
         return services;
     }

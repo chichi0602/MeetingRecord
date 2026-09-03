@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.JSInterop;
 
 namespace MeetingRecord.Web.Services;
@@ -23,21 +22,13 @@ public sealed class FileDownloadInterop
         this.jsRuntime = jsRuntime;
     }
 
-    /// <summary>以 UTF-8（含 BOM）把文字內容下載成檔案。</summary>
-    /// <remarks>
-    /// 帶 BOM 的理由與 <c>MeetingFileStore.SaveTranscriptAsync</c> 相同：
-    /// Windows 記事本開沒有 BOM 的 UTF-8 中文檔案會是亂碼。
-    /// </remarks>
-    public Task SaveTextAsync(string fileName, string content, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-
-        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(content ?? string.Empty);
-        return SaveBytesAsync(fileName, bytes, cancellationToken);
-    }
-
     /// <summary>把位元組內容下載成檔案。</summary>
-    public async Task SaveBytesAsync(string fileName, byte[] content, CancellationToken cancellationToken = default)
+    /// <param name="contentType">Blob 的 MIME；決定瀏覽器怎麼看待這份檔案。</param>
+    public async Task SaveBytesAsync(
+        string fileName,
+        byte[] content,
+        string contentType,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(content);
@@ -45,6 +36,6 @@ public sealed class FileDownloadInterop
         using var stream = new MemoryStream(content);
         using var streamReference = new DotNetStreamReference(stream, leaveOpen: true);
 
-        await jsRuntime.InvokeVoidAsync(SaveAsFileFunction, cancellationToken, fileName, streamReference);
+        await jsRuntime.InvokeVoidAsync(SaveAsFileFunction, cancellationToken, fileName, streamReference, contentType);
     }
 }

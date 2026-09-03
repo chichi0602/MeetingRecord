@@ -213,7 +213,8 @@ else
                             @if (context.HasDraft && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export))
                             {
                                 <SpaceItem>
-                                    <CrudActionButton Title="匯出 Markdown" Icon="download"
+                                    <CrudActionButton Title="@(exportingMeetingId == context.Id ? "匯出中…" : "匯出 PDF")" Icon="download"
+                                                      Disabled="@(exportingMeetingId is not null)"
                                                       OnClick="@(async () => await OnExportDraftAsync(context))" />
                                 </SpaceItem>
                             }

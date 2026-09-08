@@ -73,7 +73,7 @@ else
                     </Button>
                 </SpaceItem>
                 <SpaceItem>
-                    <Button OnClick="@(() => NavigationManager.NavigateTo("/App"))" Disabled="@isSubmitting">
+                    <Button OnClick="@(() => NavigationManager.NavigateTo("/meetings"))" Disabled="@isSubmitting">
                         取消
                     </Button>
                 </SpaceItem>
@@ -147,7 +147,7 @@ else
             }
 
             await MessageService.SuccessAsync("API 密碼已設定。");
-            NavigationManager.NavigateTo("/App");
+            NavigationManager.NavigateTo("/meetings");
         }
         catch (Exception ex)
         {

@@ -21,13 +21,6 @@
     "section": "核心功能"
   },
   {
-    "id": 1,
-    "name": "首頁",
-    "icon": "space_dashboard",
-    "url": "/App",
-    "section": "功能選單"
-  },
-  {
     "id": 3,
     "name": "系統管理",
     "icon": "admin_panel_settings",

@@ -122,6 +122,6 @@ public class ExternalAuthController : Controller
             return returnUrl;
         }
 
-        return "/App";
+        return "/meetings";
     }
 }

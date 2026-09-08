@@ -20,7 +20,7 @@ public sealed class RbacBackfillServiceTests
         await service.RunAsync();
 
         var keys = await fixture.Context.Permission.AsNoTracking().Select(x => x.Key).ToListAsync();
-        Assert.Contains(MagicObjectHelper.角色_首頁, keys);
+        Assert.Contains(MagicObjectHelper.角色_會議紀錄, keys);
         Assert.Contains(MagicObjectHelper.角色_專案項目, keys);
         Assert.Contains(MagicObjectHelper.角色_使用者管理, keys);
     }
@@ -31,7 +31,7 @@ public sealed class RbacBackfillServiceTests
         await using var fixture = await Fixture.CreateAsync();
         var role = await fixture.AddRoleAsync(
             "檢視員",
-            new[] { MagicObjectHelper.角色_首頁, MagicObjectHelper.角色_專案項目 });
+            new[] { MagicObjectHelper.角色_會議紀錄, MagicObjectHelper.角色_專案項目 });
         var service = fixture.CreateService();
 
         await service.RunAsync();
@@ -42,7 +42,7 @@ public sealed class RbacBackfillServiceTests
             .ToListAsync();
 
         Assert.Equal(2, linkedKeys.Count);
-        Assert.Contains(MagicObjectHelper.角色_首頁, linkedKeys);
+        Assert.Contains(MagicObjectHelper.角色_會議紀錄, linkedKeys);
         Assert.Contains(MagicObjectHelper.角色_專案項目, linkedKeys);
     }
 
@@ -50,7 +50,7 @@ public sealed class RbacBackfillServiceTests
     public async Task RunAsync_ShouldCreateUserRoleFromRoleViewId()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var role = await fixture.AddRoleAsync("一般", new[] { MagicObjectHelper.角色_首頁 });
+        var role = await fixture.AddRoleAsync("一般", new[] { MagicObjectHelper.角色_會議紀錄 });
         var user = await fixture.AddUserAsync("alice", role.Id);
         var service = fixture.CreateService();
 
@@ -66,7 +66,7 @@ public sealed class RbacBackfillServiceTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var team = await fixture.AddTeamAsync("團隊A");
-        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_首頁 }, defaultTeams: new[] { "團隊A" });
+        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_會議紀錄 }, defaultTeams: new[] { "團隊A" });
         var user = await fixture.AddUserAsync("bob", role.Id);
         var service = fixture.CreateService();
 
@@ -82,7 +82,7 @@ public sealed class RbacBackfillServiceTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var team = await fixture.AddTeamAsync("團隊A");
-        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_首頁 }, defaultTeams: new[] { "團隊A" });
+        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_會議紀錄 }, defaultTeams: new[] { "團隊A" });
         var user = await fixture.AddUserAsync("bob", role.Id);
         var service = fixture.CreateService();
 
@@ -94,7 +94,7 @@ public sealed class RbacBackfillServiceTests
         Assert.Equal(1, await fixture.Context.RolePermissionMap.CountAsync(x => x.RoleViewId == role.Id));
         Assert.Equal(
             1,
-            await fixture.Context.Permission.CountAsync(x => x.Key == MagicObjectHelper.角色_首頁));
+            await fixture.Context.Permission.CountAsync(x => x.Key == MagicObjectHelper.角色_會議紀錄));
     }
 
     private sealed class Fixture : IAsyncDisposable

@@ -24,8 +24,8 @@ public partial class SplashView
             .Check(authStateProvider, NavigationManager);
             if (checkResult == AuthenticationCheckResult.Succeeded)
             {
-                Logger.LogInformation("Splash view authentication succeeded. Redirecting to /app.");
-                NavigationManager.NavigateTo("/app", true, true);
+                Logger.LogInformation("Splash view authentication succeeded. Redirecting to /meetings.");
+                NavigationManager.NavigateTo("/meetings", true, true);
             }
             else
             {

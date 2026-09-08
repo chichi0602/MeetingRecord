@@ -1,20 +1,31 @@
+@* 收合鈕已於 0.4.44 移到 MainLayout，浮在側邊欄的右邊界上，這裡只剩品牌識別。 *@
 <div class="top-row navbar-dark @(IsSidebarCollapsed ? "top-row-collapsed" : string.Empty)">
-    <button type="button"
-            class="sidebar-hamburger"
-            @onclick="ToggleSidebar"
-            aria-label="切換側邊欄"
-            aria-expanded="@(!IsSidebarCollapsed)"
-            title="@(IsSidebarCollapsed ? "展開側邊欄" : "收起側邊欄")">
-        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined"
-                      Kind="@(IsSidebarCollapsed ? "menu_open" : "menu")" />
-    </button>
-
     <div class="sidebar-brand @(IsSidebarCollapsed ? "sidebar-brand-collapsed" : string.Empty)">
-        <div class="sidebar-brand-icon">
-            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="dashboard_customize" />
+        <div class="sidebar-brand-icon" aria-hidden="true">
+            @* 與登入頁同一份標誌（也是 wwwroot/favicon.svg）。
+               以 currentColor 描邊，顏色跟著文字走。 *@
+            @* viewBox 收緊到圖形的實際邊界（含 stroke 與四個圓點約落在 5～115），
+               原本的 0 0 120 120 四周各留了一圈空白，圖看起來會比實際尺寸小。 *@
+            <svg viewBox="5 5 110 110" role="img">
+                <g fill="none" stroke="currentColor" stroke-width="6">
+                    <ellipse cx="60" cy="60" rx="52" ry="26" />
+                    <ellipse cx="60" cy="60" rx="52" ry="26" transform="rotate(60 60 60)" />
+                    <ellipse cx="60" cy="60" rx="52" ry="26" transform="rotate(120 60 60)" />
+                </g>
+                <g fill="currentColor">
+                    <circle cx="34" cy="15" r="8" />
+                    <circle cx="86" cy="15" r="8" />
+                    <circle cx="34" cy="105" r="8" />
+                    <circle cx="86" cy="105" r="8" />
+                </g>
+                <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+                      font-family="'Segoe UI', system-ui, sans-serif" font-size="36" font-weight="700"
+                      fill="currentColor">AI</text>
+            </svg>
         </div>
         <div class="sidebar-brand-text">
-            <a class="navbar-brand" href="">MeetingRecord.Web</a>
+            @* 系統名稱以設定檔為單一來源，不寫死。 *@
+            <a class="navbar-brand" href="">@SystemName</a>
             <div class="navbar-subtitle">管理後台功能清單</div>
         </div>
     </div>

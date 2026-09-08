@@ -2,7 +2,9 @@ using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Web.Components.Layout;
 
@@ -10,9 +12,6 @@ public partial class NavMenu : ComponentBase, IDisposable
 {
     [Parameter]
     public bool IsSidebarCollapsed { get; set; }
-
-    [Parameter]
-    public EventCallback OnSidebarToggle { get; set; }
 
     [Inject]
     private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
@@ -28,6 +27,12 @@ public partial class NavMenu : ComponentBase, IDisposable
 
     [Inject]
     private SidebarMenuService SidebarMenuService { get; set; } = default!;
+
+    [Inject]
+    private IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
+
+    /// <summary>側邊欄顯示的系統名稱。以設定檔為單一來源，不寫死在標記裡。</summary>
+    private string SystemName => SystemSettingsOptions.Value.SystemInformation.SystemName;
 
     private IReadOnlyList<SidebarMenuItemModel> MenuItems { get; set; } = [];
     private IReadOnlyList<SidebarMenuSection> Sections { get; set; } = [];
@@ -222,11 +227,6 @@ public partial class NavMenu : ComponentBase, IDisposable
     private void HandleOpenKeysChanged(string[] openKeys)
     {
         OpenKeys = openKeys;
-    }
-
-    private Task ToggleSidebar()
-    {
-        return OnSidebarToggle.InvokeAsync();
     }
 
     public void Dispose()

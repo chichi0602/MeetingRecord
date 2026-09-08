@@ -15,7 +15,6 @@ public sealed class SidebarMenuService
     /// </summary>
     private static readonly IReadOnlyDictionary<int, string> MenuPermissionMap = new Dictionary<int, string>
     {
-        [1] = MagicObjectHelper.角色_首頁,
         [21] = MagicObjectHelper.角色_專案項目,
         [22] = MagicObjectHelper.角色_待辦事項,
         [61] = MagicObjectHelper.角色_會議紀錄,

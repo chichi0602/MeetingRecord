@@ -2,8 +2,20 @@
 
 <div class="page @(isSidebarCollapsed ? "sidebar-collapsed" : string.Empty)">
     <div class="sidebar">
-        <NavMenu IsSidebarCollapsed="isSidebarCollapsed" OnSidebarToggle="ToggleSidebar" />
+        <NavMenu IsSidebarCollapsed="isSidebarCollapsed" />
     </div>
+
+    @* 收合鈕放在 .sidebar 外面而不是裡面：.sidebar 有 overflow: hidden，
+       擺在內部就沒辦法讓按鈕跨出邊界。定位靠 .page 上的 --sidebar-width。 *@
+    <button type="button"
+            class="sidebar-toggle-edge"
+            @onclick="ToggleSidebar"
+            aria-label="切換側邊欄"
+            aria-expanded="@(!isSidebarCollapsed)"
+            title="@(isSidebarCollapsed ? "展開側邊欄" : "收起側邊欄")">
+        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined"
+                      Kind="@(isSidebarCollapsed ? "chevron_right" : "chevron_left")" />
+    </button>
 
     <main>
         <div class="top-row px-4">

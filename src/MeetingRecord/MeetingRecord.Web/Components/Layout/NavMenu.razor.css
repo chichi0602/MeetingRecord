@@ -1,44 +1,14 @@
+/* 高度與底線都必須與 MainLayout 的 .top-row 完全一致（min-height: 4.5rem + 1px 底線），
+   否則側邊欄與內容區的頁首邊界會錯開一截、看起來像兩條沒對齊的線。
+   垂直 padding 拿掉改靠 align-items: center，高度就只由 min-height 決定。 */
 .top-row {
-    min-height: 5rem;
-    padding: 1.1rem 1rem 1rem;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(244, 246, 248, 0.88) 100%);
+    min-height: 4.5rem;
+    padding: 0 1rem;
+    background: linear-gradient(180deg, var(--oat-100) 0%, var(--oat-200) 100%);
+    border-bottom: 1px solid rgba(67, 54, 44, 0.10);
     display: flex;
     align-items: center;
     gap: 0.9rem;
-}
-
-.sidebar-hamburger {
-    align-items: center;
-    background: linear-gradient(135deg, #4ea8ff 0%, #2f80ed 100%);
-    border: none;
-    border-radius: 14px;
-    box-shadow: 0 12px 24px rgba(47, 128, 237, 0.28);
-    color: #fff;
-    display: inline-flex;
-    flex: 0 0 auto;
-    height: 2.75rem;
-    justify-content: center;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-    width: 2.75rem;
-}
-
-.sidebar-hamburger:hover {
-    box-shadow: 0 16px 30px rgba(47, 128, 237, 0.35);
-    filter: brightness(1.03);
-    transform: translateY(-1px);
-}
-
-.sidebar-hamburger:focus-visible {
-    outline: 3px solid rgba(96, 165, 250, 0.35);
-    outline-offset: 3px;
-}
-
-.sidebar-hamburger ::deep .material-icons,
-.sidebar-hamburger ::deep .material-icons-outlined,
-.sidebar-hamburger ::deep .material-icons-round,
-.sidebar-hamburger ::deep .material-icons-sharp,
-.sidebar-hamburger ::deep .material-icons-two-tone {
-    font-size: 1.1rem;
 }
 
 .sidebar-brand {
@@ -48,25 +18,24 @@
     min-width: 0;
 }
 
+/* 0.4.44：改用專案標誌（與登入頁、favicon 同一份三橢圓「AI」線稿）。
+   線稿本身已有造型，不再套深色方塊底——原本兩顆深色方塊並排是標題區看起來沉重的主因。 */
+/* 標誌是品牌識別，不必跟選單圖示（1rem）等大——等大會顯得單薄。
+   2rem 約與標題兩行文字的高度相當，視覺上成組。 */
 .sidebar-brand-icon {
     align-items: center;
-    background: linear-gradient(135deg, #64748b 0%, #334155 100%);
-    border-radius: 18px;
-    box-shadow: 0 12px 28px rgba(148, 163, 184, 0.2);
-    color: white;
+    color: var(--oat-ink);
     display: inline-flex;
-    font-size: 1.15rem;
-    height: 3rem;
+    flex: 0 0 auto;
+    height: 2rem;
     justify-content: center;
-    width: 3rem;
+    width: 2rem;
 }
 
-.sidebar-brand-icon ::deep .material-icons,
-.sidebar-brand-icon ::deep .material-icons-outlined,
-.sidebar-brand-icon ::deep .material-icons-round,
-.sidebar-brand-icon ::deep .material-icons-sharp,
-.sidebar-brand-icon ::deep .material-icons-two-tone {
-    font-size: 1.3rem;
+.sidebar-brand-icon svg {
+    display: block;
+    height: 100%;
+    width: 100%;
 }
 
 .sidebar-brand-text {
@@ -78,28 +47,31 @@
     transition: opacity 0.2s ease, width 0.2s ease;
 }
 
+/* 收合時要用 display: none，不能只靠 opacity/width 歸零——
+   那樣文字雖然看不見，兩行的「高度」還在，會把整個標題列撐得很長。 */
 .sidebar-brand-collapsed .sidebar-brand-text {
-    opacity: 0;
-    pointer-events: none;
-    width: 0;
+    display: none;
 }
 
+/* 字級由 1.15rem 調小：側邊欄 300px 扣掉 padding、標誌與間距後約剩 237px，
+   「AI 會議記錄小助手」在 1.15rem 下會被裁掉。允許換行，長系統名也不會被切。 */
 .navbar-brand {
-    color: #1f2937;
-    font-size: 1.15rem;
+    color: var(--oat-ink);
+    font-size: 0.98rem;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
     text-decoration: none;
 }
 
 .navbar-subtitle {
-    color: #64748b;
+    color: var(--oat-ink-mid);
     font-size: 0.8rem;
     letter-spacing: 0.05em;
 }
 
 .nav-section-title {
-    color: #6b7280;
+    color: var(--oat-ink-mid);
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.12em;
@@ -110,9 +82,9 @@
 
 .nav-item ::deep .nav-link-disabled {
     align-items: center;
-    background: rgba(255, 255, 255, 0.78);
+    background: var(--oat-50);
     border-radius: 14px;
-    color: #6b7280;
+    color: var(--oat-ink-mid);
     cursor: default;
     display: flex;
     min-height: 3rem;
@@ -139,7 +111,7 @@
 .sidebar-menu-shell ::deep .ant-menu-submenu-title {
     align-items: center;
     border-radius: 14px;
-    color: #1f2937 !important;
+    color: var(--oat-ink) !important;
     display: flex;
     font-size: 0.92rem;
     font-weight: 500;
@@ -152,20 +124,38 @@
     transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+/* hover 用比選中態淺一階的色，兩者才分得出來（選中是 --oat-300）。 */
 .sidebar-menu-shell ::deep .ant-menu-item:hover,
 .sidebar-menu-shell ::deep .ant-menu-submenu-title:hover {
-    background: linear-gradient(90deg, rgba(203, 213, 225, 0.42), rgba(226, 232, 240, 0.72)) !important;
-    box-shadow: 0 10px 24px rgba(148, 163, 184, 0.18);
-    color: #0f172a !important;
-    transform: translateX(2px);
+    background: var(--oat-200) !important;
+    color: var(--oat-ink) !important;
 }
 
+/* 選單項的文字包在 AntDesign 自己渲染的 <a> 裡（MenuItem RouterLink），
+   而它有自己的 color 宣告（主色藍）。父層即使寫了 !important 也蓋不到子元素自己的宣告，
+   所以必須直接對 <a> 下 inherit——0.4.44 之前選中項是藍字壓深棕底就是這個原因。 */
+.sidebar-menu-shell ::deep .ant-menu-item a,
+.sidebar-menu-shell ::deep .ant-menu-item a:hover,
+.sidebar-menu-shell ::deep .ant-menu-item-selected a {
+    color: inherit !important;
+}
+
+/* AntDesign inline 選單用 ::after 在右緣畫一條主色藍的指示線。
+   這裡改用左側色條，右緣那條要關掉。 */
+.sidebar-menu-shell ::deep .ant-menu-item::after,
+.sidebar-menu-shell ::deep .ant-menu-item-selected::after {
+    display: none !important;
+}
+
+/* 0.4.45：選中態就是一塊「比側邊欄底色深一階」的圓角色塊，沒有色條、沒有陰影。
+   深棕字壓在 #D4BDA8 上是 6.4:1，過 WCAG AA。 */
 .sidebar-menu-shell ::deep .ant-menu-item-selected,
 .sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title,
 .sidebar-menu-shell ::deep .ant-menu-submenu-open > .ant-menu-submenu-title {
-    background: linear-gradient(90deg, rgba(191, 219, 254, 0.92), rgba(226, 232, 240, 0.96)) !important;
-    box-shadow: 0 14px 28px rgba(148, 163, 184, 0.2);
-    color: #0f172a !important;
+    background: var(--oat-300) !important;
+    box-shadow: none;
+    color: var(--oat-ink) !important;
+    font-weight: 600;
 }
 
 .sidebar-menu-shell ::deep .ant-menu-item .material-icons,
@@ -178,7 +168,7 @@
 .sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-round,
 .sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-sharp,
 .sidebar-menu-shell ::deep .ant-menu-submenu-title .material-icons-two-tone {
-    color: #475569;
+    color: var(--oat-ink-mid);
     font-size: 1rem;
 }
 
@@ -197,7 +187,7 @@
 .sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-round,
 .sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-sharp,
 .sidebar-menu-shell ::deep .ant-menu-submenu-selected > .ant-menu-submenu-title .material-icons-two-tone {
-    color: #0f172a;
+    color: var(--oat-ink);
 }
 
 .sidebar-menu-shell ::deep .ant-menu-inline .ant-menu-sub {
@@ -205,7 +195,7 @@
 }
 
 .sidebar-menu-shell ::deep .ant-menu-submenu-arrow {
-    color: #64748b !important;
+    color: var(--oat-ink-mid) !important;
 }
 
 @media (max-width: 640.98px) {
@@ -215,32 +205,32 @@
 }
 
 @media (min-width: 641px) {
+    /* 高度不覆寫——收合態同樣要與內容區的頁首切齊。 */
     .top-row-collapsed {
         justify-content: center;
-        min-height: auto;
-        padding: 0.45rem 0.35rem 0.25rem;
+        padding: 0 0.35rem;
     }
 
-    .top-row-collapsed .sidebar-hamburger {
-        border-radius: 12px;
-        height: 2.2rem;
-        width: 2.2rem;
-    }
-
-    .top-row-collapsed .sidebar-hamburger ::deep .material-icons,
-    .top-row-collapsed .sidebar-hamburger ::deep .material-icons-outlined,
-    .top-row-collapsed .sidebar-hamburger ::deep .material-icons-round,
-    .top-row-collapsed .sidebar-hamburger ::deep .material-icons-sharp,
-    .top-row-collapsed .sidebar-hamburger ::deep .material-icons-two-tone {
-        font-size: 0.95rem;
-    }
-
+    /* 收合態只留標誌。0.4.44 之前這裡是 display: none 把整個品牌區藏掉、只留漢堡鈕；
+       漢堡鈕搬走後若沿用就會變成一列空白，所以改成讓標誌留下來當識別。
+       文字本身已由 .sidebar-brand-collapsed .sidebar-brand-text 收掉。 */
     .top-row-collapsed .sidebar-brand {
-        display: none;
+        gap: 0;
+        justify-content: center;
+        width: 100%;
     }
 
+    /* 收合態欄寬 64px，扣掉 .top-row-collapsed 的左右 padding 只剩約 53px；
+       2.5rem（40px）讓標誌填滿大部分寬度，兩側不會留下大片空白。 */
+    .top-row-collapsed .sidebar-brand-icon {
+        height: 2.5rem;
+        width: 2.5rem;
+    }
+
+    /* 扣掉的必須是 .top-row 的實際高度（min-height 4.5rem + 1px 底線），
+       數字對不上會多出一段死空間或提早出現捲軸。 */
     .nav-scrollable {
-        height: calc(100vh - 5rem);
+        height: calc(100vh - 4.5rem - 1px);
     }
 
     .nav-scrollable::-webkit-scrollbar {
@@ -248,13 +238,16 @@
     }
 
     .nav-scrollable::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.35);
+        background: var(--oat-400);
         border-radius: 999px;
     }
 
     .sidebar-menu-shell-collapsed {
         padding-left: 0.3rem;
         padding-right: 0.3rem;
+        /* 展開態的間距是由 .nav-section-title 的 padding 撐出來的，
+           但收合態把區塊標題隱藏了，第一顆圖示會直接貼著標題列。 */
+        padding-top: 0.85rem;
     }
 
     .sidebar-menu-shell-collapsed .nav-section-title {
@@ -296,7 +289,7 @@
     background: transparent;
     border: none;
     border-radius: 14px;
-    color: #475569;
+    color: var(--oat-ink-mid);
     cursor: pointer;
     display: inline-flex;
     height: 3rem;
@@ -311,14 +304,18 @@
     display: flex;
 }
 
+/* 與展開態同一套：比底色深一階的圓角色塊。 */
 .collapsed-menu-trigger:hover,
 .collapsed-menu-trigger:focus-visible,
-.collapsed-menu-item:hover > .collapsed-menu-trigger,
-.collapsed-menu-item-active > .collapsed-menu-trigger {
-    background: linear-gradient(90deg, rgba(191, 219, 254, 0.92), rgba(226, 232, 240, 0.96));
-    box-shadow: 0 14px 28px rgba(148, 163, 184, 0.2);
-    color: #0f172a;
+.collapsed-menu-item:hover > .collapsed-menu-trigger {
+    background: var(--oat-200);
+    color: var(--oat-ink);
     outline: none;
+}
+
+.collapsed-menu-item-active > .collapsed-menu-trigger {
+    background: var(--oat-300);
+    color: var(--oat-ink);
 }
 
 .collapsed-menu-trigger ::deep .material-icons,
@@ -331,8 +328,8 @@
 }
 
 .collapsed-menu-flyout {
-    background: rgba(255, 255, 255, 0.98);
-    border: 1px solid rgba(226, 232, 240, 0.95);
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
     border-radius: 8px;
     box-shadow: 0 18px 38px rgba(15, 23, 42, 0.12);
     display: flex;
@@ -369,7 +366,7 @@
 .collapsed-flyout-item {
     align-items: center;
     border-radius: 6px;
-    color: #1f2937;
+    color: var(--oat-ink);
     display: flex;
     font-size: 0.92rem;
     font-weight: 500;
@@ -383,8 +380,8 @@
 .collapsed-flyout-item:hover,
 .collapsed-flyout-item:focus-visible,
 .collapsed-flyout-item-active {
-    background: rgba(219, 234, 254, 0.82);
-    color: #0f172a;
+    background: var(--oat-300);
+    color: var(--oat-ink);
     outline: none;
 }
 
@@ -393,7 +390,7 @@
 .collapsed-flyout-item ::deep .material-icons-round,
 .collapsed-flyout-item ::deep .material-icons-sharp,
 .collapsed-flyout-item ::deep .material-icons-two-tone {
-    color: #475569;
+    color: var(--oat-ink-mid);
     font-size: 1.1rem;
 }
 
@@ -401,18 +398,18 @@
 .collapsed-flyout-item:hover ::deep .material-icons-outlined,
 .collapsed-flyout-item-active ::deep .material-icons,
 .collapsed-flyout-item-active ::deep .material-icons-outlined {
-    color: #0f172a;
+    color: var(--oat-ink);
 }
 
 /* ===== 側邊欄分區（0.4.33）=====
    第二個以後的區塊標題加上分隔線與間距；收合態標題被隱藏，改用獨立分隔線。 */
 .nav-section-title-subsequent {
-    border-top: 1px solid rgba(203, 213, 225, 0.7);
+    border-top: 1px solid var(--oat-200);
     margin-top: 0.35rem;
     padding-top: 1.1rem;
 }
 
 .collapsed-section-divider {
-    border-top: 1px solid rgba(203, 213, 225, 0.7);
+    border-top: 1px solid var(--oat-200);
     margin: 0.75rem 0.35rem;
 }

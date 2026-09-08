@@ -23,7 +23,7 @@ public sealed class PermissionCheckerTests
     public async Task HasPermissionAsync_WhenRoleHasKey_ShouldReturnTrue()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var user = await fixture.AddUserAsync("alice", isAdmin: false, permissions: new[] { "專案項目", "首頁" });
+        var user = await fixture.AddUserAsync("alice", isAdmin: false, permissions: new[] { "專案項目", "會議紀錄" });
         var checker = new PermissionChecker(fixture.Context);
 
         Assert.True(await checker.HasPermissionAsync(user.Id, "專案項目"));
@@ -33,7 +33,7 @@ public sealed class PermissionCheckerTests
     public async Task HasPermissionAsync_WhenRoleLacksKey_ShouldReturnFalse()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var user = await fixture.AddUserAsync("bob", isAdmin: false, permissions: new[] { "首頁" });
+        var user = await fixture.AddUserAsync("bob", isAdmin: false, permissions: new[] { "會議紀錄" });
         var checker = new PermissionChecker(fixture.Context);
 
         Assert.False(await checker.HasPermissionAsync(user.Id, "專案項目"));
@@ -69,19 +69,19 @@ public sealed class PermissionCheckerTests
         await using var fixture = await Fixture.CreateAsync();
         var checker = new PermissionChecker(fixture.Context);
 
-        Assert.False(await checker.HasPermissionAsync(999, "首頁"));
+        Assert.False(await checker.HasPermissionAsync(999, "會議紀錄"));
     }
 
     [Fact]
     public async Task GetEffectivePermissionKeysAsync_ShouldReturnRoleKeys()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var user = await fixture.AddUserAsync("carol", isAdmin: false, permissions: new[] { "首頁", "分類清單" });
+        var user = await fixture.AddUserAsync("carol", isAdmin: false, permissions: new[] { "會議紀錄", "分類清單" });
         var checker = new PermissionChecker(fixture.Context);
 
         var keys = await checker.GetEffectivePermissionKeysAsync(user.Id);
 
-        Assert.Contains("首頁", keys);
+        Assert.Contains("會議紀錄", keys);
         Assert.Contains("分類清單", keys);
         Assert.Equal(2, keys.Count);
     }
@@ -92,13 +92,13 @@ public sealed class PermissionCheckerTests
         await using var fixture = await Fixture.CreateAsync();
         var user = await fixture.AddMultiRoleUserAsync(
             "dave",
-            new[] { "首頁" },
-            new[] { "專案項目", "首頁" });
+            new[] { "會議紀錄" },
+            new[] { "專案項目", "會議紀錄" });
         var checker = new PermissionChecker(fixture.Context);
 
         var keys = await checker.GetEffectivePermissionKeysAsync(user.Id);
 
-        Assert.Contains("首頁", keys);
+        Assert.Contains("會議紀錄", keys);
         Assert.Contains("專案項目", keys);
         Assert.Equal(2, keys.Count);
         Assert.True(await checker.HasPermissionAsync(user.Id, "專案項目"));

@@ -62,7 +62,7 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
             var role = new RoleView
             {
                 Name = $"受限角色-{Guid.NewGuid():N}",
-                TabViewJson = JsonSerializer.Serialize(new[] { "首頁" }),
+                TabViewJson = JsonSerializer.Serialize(new[] { "會議紀錄" }),
             };
             db.RoleView.Add(role);
             await db.SaveChangesAsync();

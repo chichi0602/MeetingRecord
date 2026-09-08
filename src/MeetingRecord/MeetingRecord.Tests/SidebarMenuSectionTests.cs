@@ -17,7 +17,7 @@ public sealed class SidebarMenuSectionTests
         {
             new() { Id = 61, Name = "會議紀錄", Section = "核心功能" },
             new() { Id = 21, Name = "專案項目", Section = "核心功能" },
-            new() { Id = 1, Name = "首頁", Section = "功能選單" },
+            new() { Id = 3, Name = "系統管理", Section = "功能選單" },
             new() { Id = 4, Name = "登出", Section = "功能選單" },
         };
 
@@ -27,7 +27,7 @@ public sealed class SidebarMenuSectionTests
         Assert.Equal("核心功能", sections[0].Name);
         Assert.Equal("功能選單", sections[1].Name);
         Assert.Equal(["會議紀錄", "專案項目"], sections[0].Entries.Select(x => x.Item.Name));
-        Assert.Equal(["首頁", "登出"], sections[1].Entries.Select(x => x.Item.Name));
+        Assert.Equal(["系統管理", "登出"], sections[1].Entries.Select(x => x.Item.Name));
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public sealed class SidebarMenuSectionTests
         var items = new List<SidebarMenuItemModel>
         {
             new() { Id = 61, Name = "會議紀錄", Section = "核心功能" },
-            new() { Id = 1, Name = "首頁", Section = "功能選單" },
+            new() { Id = 3, Name = "系統管理", Section = "功能選單" },
             new() { Id = 21, Name = "專案項目", Section = "核心功能" },
             new() { Id = 4, Name = "登出", Section = "功能選單" },
         };

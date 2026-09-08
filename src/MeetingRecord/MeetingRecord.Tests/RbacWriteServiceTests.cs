@@ -15,8 +15,8 @@ public sealed class RbacWriteServiceTests
         var role = await fixture.AddRoleAsync("R1");
         var service = new RbacWriteService(fixture.Context);
 
-        await service.SyncRolePermissionsAsync(role.Id, new[] { "首頁", "專案項目" });
-        await service.SyncRolePermissionsAsync(role.Id, new[] { "首頁", "分類清單" }); // 移除專案項目、加入分類清單
+        await service.SyncRolePermissionsAsync(role.Id, new[] { "會議紀錄", "專案項目" });
+        await service.SyncRolePermissionsAsync(role.Id, new[] { "會議紀錄", "分類清單" }); // 移除專案項目、加入分類清單
 
         var keys = await fixture.Context.RolePermissionMap.AsNoTracking()
             .Where(x => x.RoleViewId == role.Id)
@@ -24,7 +24,7 @@ public sealed class RbacWriteServiceTests
             .ToListAsync();
 
         Assert.Equal(2, keys.Count);
-        Assert.Contains("首頁", keys);
+        Assert.Contains("會議紀錄", keys);
         Assert.Contains("分類清單", keys);
         Assert.DoesNotContain("專案項目", keys);
     }

@@ -1,105 +1,53 @@
-:root {
-    --login-bg-1: #0f172a;
-    --login-bg-2: #123c3a;
-    --login-bg-3: #1d6b52;
-    --login-bg-4: #7ad9ab;
-    --login-surface: rgba(255, 255, 255, 0.14);
-    --login-surface-strong: rgba(255, 255, 255, 0.2);
-    --login-border: rgba(255, 255, 255, 0.24);
-    --login-text: #f8fafc;
-    --login-muted: rgba(248, 250, 252, 0.72);
-    --login-accent: #6ee7b7;
-    --login-accent-strong: #22c55e;
-    --login-shadow: 0 30px 80px rgba(15, 23, 42, 0.35);
-}
+/*
+    登入頁樣式。
 
+    ⚠️ 變數定義在 .login-container 而不是 :root——Blazor 的 CSS isolation 會把「每個」
+    選擇器都加上 scope 屬性，寫 :root 會產生 :root[b-xxxxx]，而 <html> 由 App.razor 輸出、
+    身上沒有任何 scope 屬性，於是整組變數永遠選不到、全部 undefined。0.4.41 之前就是這樣，
+    導致背景漸層變 transparent、寫死 #ffffff 的欄位標籤變成白字白底（對比 1.00:1）。
+    在這個檔案裡新增變數時，一律掛在 .login-container 上。
+*/
 .login-container {
+    /* 燕麥奶茶色票。定義在全域 app.css 的 :root，這裡只取用。 */
+    --accent: var(--oat-ink);
+    --ink: var(--oat-ink);
+    --ink-soft: var(--oat-ink-mid);
+    --surface: var(--oat-surface);
+    --line: var(--oat-400);
+    --danger: var(--oat-err);
+
     position: relative;
     min-height: 100vh;
     overflow: hidden;
-    padding: 32px;
+    padding: 32px 32px 96px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--login-bg-1), var(--login-bg-2), var(--login-bg-3), var(--login-bg-4));
-    background-size: 300% 300%;
-    animation: gradientShift 18s ease infinite;
-}
-
-.login-container::before,
-.login-container::after {
-    content: "";
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(8px);
-    opacity: 0.55;
-    pointer-events: none;
-}
-
-.login-container::before {
-    width: 420px;
-    height: 420px;
-    top: -120px;
-    left: -120px;
-    background: radial-gradient(circle, rgba(110, 231, 183, 0.45), rgba(110, 231, 183, 0));
-    animation: floatBlob 14s ease-in-out infinite;
-}
-
-.login-container::after {
-    width: 360px;
-    height: 360px;
-    right: -80px;
-    bottom: -80px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0));
-    animation: floatBlobReverse 16s ease-in-out infinite;
+    background: linear-gradient(160deg, var(--oat-100) 0%, var(--oat-200) 48%, var(--oat-300) 100%);
 }
 
 .login-shell {
     position: relative;
     z-index: 1;
     width: min(1120px, 100%);
+    /* flex item 預設 min-width:auto，會被內容撐開而溢出容器；grid item 同理。 */
+    min-width: 0;
     display: grid;
     grid-template-columns: 1.1fr 0.9fr;
-    gap: 28px;
-    align-items: stretch;
+    gap: 48px;
+    align-items: center;
 }
 
-.brand-panel,
-.login-card {
-    position: relative;
-    border: 1px solid var(--login-border);
-    background: var(--login-surface);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    box-shadow: var(--login-shadow);
-    border-radius: 28px;
-}
+/* ---------- 品牌區：深棕字壓在奶茶漸層上，對比 8.1:1 ---------- */
 
 .brand-panel {
-    padding: 48px;
-    color: var(--login-text);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    min-width: 0;
+    color: var(--ink);
 }
 
-.brand-badge {
-    width: fit-content;
-    margin-bottom: 24px;
-    padding: 8px 16px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
-    border: 1px solid rgba(255, 255, 255, 0.24);
-    color: var(--login-accent);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-}
-
-/* 線稿風格的圖示不加底襯，直接浮在版面上；顏色由 .brand-panel 的 color 帶下去。 */
 .brand-logo {
-    width: 108px;
-    height: 108px;
+    width: 96px;
+    height: 96px;
     margin-bottom: 28px;
 }
 
@@ -111,87 +59,88 @@
 
 .app-title {
     margin: 0;
-    font-size: clamp(2.3rem, 4vw, 3.6rem);
+    /* 明確指定：AntDesign 與 Bootstrap 的 reset 都會對 h1 設 color，只靠 .brand-panel 繼承會被蓋掉。 */
+    color: var(--ink);
+    font-size: clamp(2.4rem, 4.4vw, 3.8rem);
     font-weight: 800;
-    line-height: 1.08;
-    letter-spacing: -0.04em;
+    line-height: 1.05;
+    letter-spacing: -0.045em;
 }
 
 .brand-description {
-    margin: 20px 0 0;
-    max-width: 560px;
-    font-size: 1.02rem;
+    margin: 22px 0 0;
+    max-width: 100%;
+    font-size: 1.05rem;
     line-height: 1.85;
-    color: var(--login-muted);
+    color: var(--ink-soft);
 }
+
+/* ---------- 登入卡：實心白底。玻璃擬態拿掉了—— */
+/* 半透明 + backdrop-filter 本質上就是低對比，是舊版看不清楚的根源之一。 */
 
 .login-card {
+    min-width: 0;
     padding: 40px 36px;
-    color: var(--login-text);
+    border-radius: 26px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 28px 64px rgba(67, 54, 44, 0.16);
 }
 
-.login-header {
-    margin-bottom: 28px;
-}
-
-.login-header-kicker {
-    display: inline-block;
-    margin-bottom: 10px;
-    color: var(--login-accent);
-    font-size: 0.82rem;
-    letter-spacing: 0.16em;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.login-header h2 {
-    margin: 0;
-    font-size: 2rem;
+.login-title {
+    margin: 0 0 28px;
+    color: var(--ink);
+    font-size: 1.9rem;
     font-weight: 800;
-}
-
-.login-header p {
-    margin: 10px 0 0;
-    color: var(--login-muted);
-    line-height: 1.7;
+    letter-spacing: -0.02em;
 }
 
 .form-group {
-    margin-bottom: 22px;
+    margin-bottom: 20px;
 }
 
 .form-label {
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     font-size: 0.95rem;
     font-weight: 700;
-    color: #ffffff;
-    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+    color: var(--ink);
+    transition: color 0.2s ease;
+}
+
+/* 聚焦時標籤跟著變色，讓「現在在填哪一格」不必只靠邊框判斷。 */
+.form-group:focus-within .form-label {
+    color: var(--accent);
 }
 
 .form-input {
     width: 100%;
     min-height: 52px;
     padding: 14px 16px;
-    border-radius: 16px;
-    border: 1px solid rgba(15, 23, 42, 0.22);
-    background: rgba(255, 255, 255, 0.94);
-    color: #0f172a;
+    border-radius: 14px;
+    /* 邊框對比 3.4:1，過非文字元件的 3:1 門檻；舊版的 rgba(15,23,42,.22) 只有 1.61:1。 */
+    border: 2px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
     font-size: 1rem;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+    font-family: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .form-input::placeholder {
-    color: rgba(15, 23, 42, 0.48);
+    /* 4.6:1，過 AA；舊版是 3.20:1。 */
+    color: var(--ink-soft);
+}
+
+.form-input:hover {
+    border-color: var(--ink-soft);
 }
 
 .form-input:focus {
     outline: none;
-    transform: translateY(-1px);
-    border-color: rgba(22, 163, 74, 0.9);
-    box-shadow: 0 0 0 4px rgba(110, 231, 183, 0.22), 0 14px 32px rgba(15, 23, 42, 0.16);
-    background: #ffffff;
+    border-color: var(--accent);
+    /* outline 拿掉了就必須給實體可見的替代，否則鍵盤使用者失去 focus 指示。 */
+    box-shadow: 0 0 0 4px rgba(199, 170, 143, 0.55);
 }
 
 .captcha-layout {
@@ -200,8 +149,8 @@
 
 .captcha-group {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px;
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr) 128px;
+    gap: 12px;
     align-items: center;
 }
 
@@ -210,92 +159,132 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 16px;
-    border: 1px solid rgba(5, 46, 22, 0.28);
-    background: linear-gradient(135deg, rgba(236, 253, 245, 0.98), rgba(187, 247, 208, 0.95));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 10px 24px rgba(21, 128, 61, 0.16);
-    color: #14532d;
-    font-size: 1.3rem;
+    border-radius: 14px;
+    background: var(--ink);
+    color: var(--oat-50);
+    font-size: 1.35rem;
     font-weight: 800;
-    letter-spacing: 0.16em;
-    text-indent: 0.16em;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
     user-select: none;
 }
 
-.form-options {
-    margin-bottom: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-}
+/* ---------- 記住我：原生 checkbox 藏起來，用 span 畫勾選框 ---------- */
 
 .remember-me {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: var(--login-text);
+    margin-bottom: 26px;
+    color: var(--ink);
     font-size: 0.95rem;
     cursor: pointer;
+    user-select: none;
 }
 
 .remember-me input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--login-accent-strong);
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
 }
 
-.security-note {
-    font-size: 0.88rem;
-    color: var(--login-muted);
+.remember-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border-radius: 7px;
+    border: 2px solid var(--line);
+    background: var(--surface);
+    color: var(--surface);
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
-.login-actions {
-    display: flex;
+.remember-box svg {
+    width: 14px;
+    height: 14px;
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    transition: stroke-dashoffset 0.22s ease;
 }
+
+.remember-me input:checked + .remember-box {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* 勾勾用描邊長度畫出來，比單純 opacity 切換更有回饋感。 */
+.remember-me input:checked + .remember-box svg {
+    stroke-dashoffset: 0;
+}
+
+.remember-me input:focus-visible + .remember-box {
+    box-shadow: 0 0 0 4px rgba(199, 170, 143, 0.55);
+}
+
+.remember-me:active .remember-box {
+    transform: scale(0.92);
+}
+
+/* ---------- 按鈕 ---------- */
 
 .login-button {
     width: 100%;
     min-height: 54px;
     border: none;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #34d399, #16a34a);
-    color: #052e16;
-    font-size: 1rem;
+    border-radius: 16px;
+    /* 深棕底 + 奶油字 = 9.4:1，是這組淺色系裡唯一能做出強對比的組合。 */
+    background: var(--ink);
+    color: var(--oat-50);
+    font-size: 1.02rem;
     font-weight: 800;
-    letter-spacing: 0.04em;
+    font-family: inherit;
+    letter-spacing: 0.02em;
     cursor: pointer;
-    box-shadow: 0 18px 32px rgba(22, 163, 74, 0.28);
-    transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+    box-shadow: 0 12px 24px rgba(67, 54, 44, 0.22);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 
 .login-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 22px 36px rgba(22, 163, 74, 0.34);
+    box-shadow: 0 18px 32px rgba(67, 54, 44, 0.28);
     filter: brightness(1.04);
 }
 
 .login-button:active {
     transform: translateY(0);
-    box-shadow: 0 12px 22px rgba(22, 163, 74, 0.22);
+    box-shadow: 0 8px 16px rgba(67, 54, 44, 0.18);
+}
+
+.login-button:focus-visible {
+    outline: 3px solid var(--ink);
+    outline-offset: 3px;
 }
 
 .error-message {
-    min-height: 24px;
-    margin-top: 18px;
-    color: #fecaca;
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border-left: 4px solid var(--danger);
+    background: var(--oat-err-bg);
+    /* 6.1:1，過 AA；舊版寫死 #fecaca 疊白底只有 1.45:1，等於看不到。 */
+    color: var(--danger);
     font-size: 0.95rem;
-    text-align: center;
+    font-weight: 600;
 }
+
+/* ---------- Google 登入 ---------- */
 
 .oauth-divider {
     display: flex;
     align-items: center;
     gap: 14px;
-    margin: 22px 0 18px;
-    color: var(--login-muted);
+    margin: 24px 0 18px;
+    color: var(--ink-soft);
     font-size: 0.85rem;
-    letter-spacing: 0.08em;
 }
 
 .oauth-divider::before,
@@ -303,37 +292,39 @@
     content: "";
     flex: 1;
     height: 1px;
-    background: rgba(255, 255, 255, 0.28);
+    background: var(--oat-200);
 }
 
 .google-login-button {
     width: 100%;
-    min-height: 54px;
+    min-height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    border-radius: 18px;
-    border: 1px solid rgba(15, 23, 42, 0.16);
-    background: #ffffff;
-    color: #1f2937;
-    font-size: 1rem;
+    border-radius: 16px;
+    border: 2px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 0.98rem;
     font-weight: 700;
-    letter-spacing: 0.02em;
     text-decoration: none;
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
-    transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+    transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .google-login-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 20px 34px rgba(15, 23, 42, 0.24);
-    filter: brightness(1.02);
+    border-color: var(--ink-soft);
+    box-shadow: 0 12px 24px rgba(67, 54, 44, 0.14);
 }
 
 .google-login-button:active {
     transform: translateY(0);
-    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+}
+
+.google-login-button:focus-visible {
+    outline: 3px solid var(--ink);
+    outline-offset: 3px;
 }
 
 .google-icon {
@@ -344,80 +335,85 @@
     height: 20px;
 }
 
-.alert-danger {
-    display: block;
+/* ---------- 主角時刻：音波帶 ---------- */
+/* 這是把會議錄音轉成文字的工具，所以唯一的自動動態直接取材自主題，
+   而不是通用的漸層流動。幅度小、週期長——每天要登入好幾次的工具不能吵。 */
+
+.wave-band {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 62px;
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    padding: 0 10px;
+    pointer-events: none;
 }
 
-@keyframes gradientShift {
-    0% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
-    }
+.wave-bar {
+    flex: 1;
+    min-width: 3px;
+    border-radius: 99px;
+    transform-origin: bottom center;
+    /* 高度由 Razor 算好傳進來——CSS 的 calc 沒有模運算子（% 是百分比單位）。 */
+    height: var(--h);
+    background: var(--oat-500);
+    /* 週期 1.5s 搭配 -0.02s 的相位差，76 根剛好涵蓋一個完整週期，
+       看起來就是一道波浪橫向推過去，而不是各自亂跳。 */
+    animation: waveBounce 1.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+    animation-delay: calc(var(--i) * -0.02s);
 }
 
-@keyframes floatBlob {
-    0%,
-    100% {
-        transform: translate3d(0, 0, 0);
-    }
-    50% {
-        transform: translate3d(40px, 30px, 0);
-    }
+/* 用同色系的明度差做出律動，不引入撞色。 */
+.wave-bar:nth-child(5n + 1) { background: var(--oat-500); }
+.wave-bar:nth-child(5n + 2) { background: var(--ink-soft); }
+.wave-bar:nth-child(5n + 3) { background: var(--oat-400); }
+.wave-bar:nth-child(5n + 4) { background: var(--oat-500); }
+.wave-bar:nth-child(5n + 5) { background: var(--oat-300); }
+
+@keyframes waveBounce {
+    0%, 100% { transform: scaleY(0.4); }
+    50%      { transform: scaleY(1.15); }
 }
 
-@keyframes floatBlobReverse {
-    0%,
-    100% {
-        transform: translate3d(0, 0, 0);
-    }
-    50% {
-        transform: translate3d(-36px, -28px, 0);
-    }
-}
+/* ---------- RWD ---------- */
 
 @media (max-width: 960px) {
     .login-shell {
         grid-template-columns: 1fr;
+        gap: 32px;
     }
 
-    .brand-panel,
     .login-card {
-        padding: 32px;
+        padding: 32px 28px;
     }
 }
 
 @media (max-width: 768px) {
     .login-container {
-        padding: 20px;
+        padding: 24px 20px 84px;
     }
 
     .app-title {
         font-size: 2.4rem;
     }
 
-    .brand-description {
-        margin-bottom: 24px;
-    }
-
-    .form-options {
-        flex-direction: column;
-        align-items: flex-start;
+    .brand-logo {
+        width: 72px;
+        height: 72px;
+        margin-bottom: 20px;
     }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 560px) {
     .login-container {
-        padding: 14px;
+        padding: 16px 14px 72px;
     }
 
-    .brand-panel,
     .login-card {
-        padding: 24px 20px;
+        padding: 26px 20px;
         border-radius: 22px;
     }
 
@@ -425,12 +421,28 @@
         grid-template-columns: 1fr;
     }
 
-    .captcha-display {
-        letter-spacing: 0.2em;
-        text-indent: 0.2em;
+    .wave-band {
+        height: 56px;
+    }
+}
+
+/* 前庭敏感的使用者不該被無限循環的動畫困擾；音波帶靜止但仍保留造型。 */
+@media (prefers-reduced-motion: reduce) {
+    .wave-bar {
+        animation: none;
     }
 
-    .login-header h2 {
-        font-size: 1.75rem;
+    .login-button,
+    .google-login-button,
+    .form-input,
+    .remember-box,
+    .remember-box svg,
+    .form-label {
+        transition: none;
+    }
+
+    .login-button:hover,
+    .google-login-button:hover {
+        transform: none;
     }
 }

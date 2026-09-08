@@ -28,15 +28,15 @@
 .meeting-view-upload-hint {
     margin-top: 4px;
     font-size: 12px;
-    color: #8c8c8c;
+    color: var(--oat-ink-mid);
 }
 
 .meeting-view-pending-file {
     margin-top: 8px;
     padding: 6px 10px;
-    border: 1px solid #d9d9d9;
+    border: 1px solid var(--oat-300);
     border-radius: 4px;
-    background: #fafafa;
+    background: var(--oat-50);
     font-size: 13px;
 }
 
@@ -55,7 +55,7 @@
 
 .meeting-media-size {
     font-size: 12px;
-    color: #8c8c8c;
+    color: var(--oat-ink-mid);
 }
 
 .meeting-media-empty {
@@ -70,38 +70,38 @@
 }
 
 .meeting-status-none {
-    color: #8c8c8c;
-    background: #fafafa;
-    border: 1px solid #d9d9d9;
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
+    border: 1px solid var(--oat-300);
 }
 
 .meeting-status-pending {
-    color: #d46b08;
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    border: 1px solid var(--oat-warn);
 }
 
 .meeting-status-processing {
-    color: #096dd9;
-    background: #e6f7ff;
-    border: 1px solid #91d5ff;
+    color: var(--oat-ink);
+    background: var(--oat-100);
+    border: 1px solid var(--oat-400);
 }
 
 .meeting-status-completed {
-    color: #389e0d;
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    color: var(--oat-ok);
+    background: var(--oat-ok-bg);
+    border: 1px solid var(--oat-ok);
 }
 
 .meeting-status-failed {
-    color: #cf1322;
-    background: #fff1f0;
-    border: 1px solid #ffa39e;
+    color: var(--oat-err);
+    background: var(--oat-err-bg);
+    border: 1px solid var(--oat-err);
 }
 
 .meeting-status-error-hint {
     margin-left: 4px;
-    color: #cf1322;
+    color: var(--oat-err);
     cursor: help;
 }
 
@@ -115,13 +115,13 @@
     line-height: 1.7;
     margin: 0;
     padding: 12px;
-    background: #fafafa;
+    background: var(--oat-50);
     border: 1px solid #f0f0f0;
     border-radius: 4px;
 }
 
 .meeting-transcript-empty {
-    color: #8c8c8c;
+    color: var(--oat-ink-mid);
     padding: 24px 0;
     text-align: center;
 }

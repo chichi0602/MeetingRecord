@@ -31,15 +31,15 @@
     padding: 24px 16px;
     margin-bottom: 12px;
     text-align: center;
-    color: #8c8c8c;
+    color: var(--oat-ink-mid);
     background: rgba(248, 250, 252, 0.9);
-    border: 1px dashed #d9d9d9;
+    border: 1px dashed var(--oat-300);
     border-radius: 12px;
 }
 
 /* ===== 清單內容 ===== */
 .todo-view-title {
-    color: #0f172a;
+    color: var(--oat-ink);
     font-weight: 600;
 }
 
@@ -63,7 +63,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    color: #1d4ed8;
+    color: var(--oat-ink);
     font-size: 0.82rem;
 }
 
@@ -72,14 +72,14 @@
 }
 
 .todo-view-overdue {
-    color: #cf1322;
+    color: var(--oat-err);
     font-weight: 600;
 }
 
 .todo-view-readonly {
     padding: 5px 11px;
-    color: #64748b;
-    background: #fafafa;
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
     border: 1px solid #f0f0f0;
     border-radius: 6px;
 }
@@ -93,37 +93,37 @@
 }
 
 .todo-view-status-pending {
-    color: #d46b08;
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    border: 1px solid var(--oat-warn);
 }
 
 .todo-view-status-processing {
-    color: #096dd9;
-    background: #e6f7ff;
-    border: 1px solid #91d5ff;
+    color: var(--oat-ink);
+    background: var(--oat-100);
+    border: 1px solid var(--oat-400);
 }
 
 .todo-view-status-completed {
-    color: #389e0d;
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    color: var(--oat-ok);
+    background: var(--oat-ok-bg);
+    border: 1px solid var(--oat-ok);
 }
 
 .todo-view-priority-high {
-    color: #cf1322;
-    background: #fff1f0;
-    border: 1px solid #ffa39e;
+    color: var(--oat-err);
+    background: var(--oat-err-bg);
+    border: 1px solid var(--oat-err);
 }
 
 .todo-view-priority-medium {
-    color: #d46b08;
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    border: 1px solid var(--oat-warn);
 }
 
 .todo-view-priority-low {
-    color: #8c8c8c;
-    background: #fafafa;
-    border: 1px solid #d9d9d9;
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
+    border: 1px solid var(--oat-300);
 }

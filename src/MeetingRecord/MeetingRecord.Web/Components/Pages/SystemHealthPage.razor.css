@@ -7,7 +7,7 @@
 .system-health-loading,
 .empty-log {
     padding: 16px;
-    border: 1px solid #d9d9d9;
+    border: 1px solid var(--oat-300);
     background: #fff;
 }
 
@@ -17,7 +17,7 @@
     align-items: center;
     gap: 16px;
     padding: 18px;
-    border: 1px solid #d9d9d9;
+    border: 1px solid var(--oat-300);
     background: #fff;
 }
 
@@ -85,7 +85,7 @@
 
 .health-item {
     padding: 14px;
-    border: 1px solid #d9d9d9;
+    border: 1px solid var(--oat-300);
     background: #fff;
 }
 
@@ -123,8 +123,8 @@
     margin-top: 10px;
     padding: 10px;
     color: #8a1f18;
-    background: #fff1f0;
-    border: 1px solid #ffa39e;
+    background: var(--oat-err-bg);
+    border: 1px solid var(--oat-err);
 }
 
 .log-heading {

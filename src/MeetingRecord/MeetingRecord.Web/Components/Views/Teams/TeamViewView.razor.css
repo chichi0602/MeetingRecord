@@ -33,13 +33,13 @@
 }
 
 .team-status-enabled {
-    color: #389e0d;
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    color: var(--oat-ok);
+    background: var(--oat-ok-bg);
+    border: 1px solid var(--oat-ok);
 }
 
 .team-status-disabled {
-    color: #8c8c8c;
-    background: #fafafa;
-    border: 1px solid #d9d9d9;
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
+    border: 1px solid var(--oat-300);
 }

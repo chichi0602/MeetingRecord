@@ -4,7 +4,7 @@
     align-items: center;
     justify-content: center;
     padding: 32px;
-    background: linear-gradient(135deg, #0f172a, #123c3a, #1d6b52, #7ad9ab);
+    background: linear-gradient(135deg, var(--oat-ink), #123c3a, #1d6b52, #7ad9ab);
     background-size: 300% 300%;
     animation: pendingGradient 18s ease infinite;
 }

@@ -13,7 +13,9 @@ namespace MeetingRecord.Web.Components.Auths
     {
         private const int CaptchaLength = 4;
 
-        string errorMessage = string.Empty;
+        /// <summary>登入頁底部音波帶的條數。純視覺，改這個值不影響任何行為。</summary>
+        private const int WaveBarCount = 76;
+
         string captchaCode = string.Empty;
 
         [CascadingParameter]
@@ -63,12 +65,10 @@ namespace MeetingRecord.Web.Components.Auths
         public async Task LoginUser()
         {
             message = string.Empty;
-            errorMessage = string.Empty;
 
             if (string.IsNullOrWhiteSpace(Input.Account))
             {
                 message = "請輸入帳號";
-                errorMessage = "alert-danger";
                 Logger.LogWarning("Login submission rejected because account is empty.");
                 return;
             }
@@ -76,7 +76,6 @@ namespace MeetingRecord.Web.Components.Auths
             if (string.IsNullOrWhiteSpace(Input.Password))
             {
                 message = "請輸入密碼";
-                errorMessage = "alert-danger";
                 Logger.LogWarning("Login submission rejected because password is empty. Account={Account}", Input.Account);
                 return;
             }
@@ -84,7 +83,6 @@ namespace MeetingRecord.Web.Components.Auths
             if (string.IsNullOrWhiteSpace(Input.CaptchaInput))
             {
                 message = "請輸入驗證碼";
-                errorMessage = "alert-danger";
                 Logger.LogWarning("Login submission rejected because captcha is empty. Account={Account}", Input.Account);
                 return;
             }
@@ -92,7 +90,6 @@ namespace MeetingRecord.Web.Components.Auths
             if (!string.Equals(Input.CaptchaInput.Trim(), Input.CaptchaCode, StringComparison.Ordinal))
             {
                 message = "驗證碼錯誤";
-                errorMessage = "alert-danger";
                 RefreshCaptcha();
                 Input.CaptchaInput = string.Empty;
                 Logger.LogWarning("Login submission rejected because captcha is invalid. Account={Account}", Input.Account);
@@ -119,7 +116,7 @@ namespace MeetingRecord.Web.Components.Auths
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
 
-                string returnUrl = string.IsNullOrEmpty(ReturnUrl) ? "/App" : ReturnUrl;
+                string returnUrl = string.IsNullOrEmpty(ReturnUrl) ? "/meetings" : ReturnUrl;
                 var authProperties = new AuthenticationProperties
                 {
                     IsPersistent = Input.RememberMe,
@@ -147,8 +144,6 @@ namespace MeetingRecord.Web.Components.Auths
                     Logger.LogError(ex, "Sign-in failed for Account={Account}.", Input.Account);
                 }
             }
-
-            errorMessage = string.IsNullOrEmpty(message) ? string.Empty : "alert-danger";
         }
 
         private sealed class InputModel

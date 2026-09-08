@@ -29,9 +29,9 @@
 
 .crud-action-button-danger:hover,
 .crud-action-button-danger:focus {
-    color: #cf1322;
+    color: var(--oat-err);
     border-color: #ffccc7;
-    background: #fff1f0;
+    background: var(--oat-err-bg);
 }
 
 .crud-action-button[disabled],

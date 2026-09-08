@@ -1,4 +1,4 @@
-﻿@page "/Auths/Login"
+@page "/Auths/Login"
 @layout NoFooterLayout
 
 @inject NavigationManager NavigationManager
@@ -9,7 +9,6 @@
 <div class="login-container">
     <div class="login-shell">
         <section class="brand-panel">
-            <div class="brand-badge">ENTERPRISE ACCESS</div>
             <div class="brand-logo" aria-hidden="true">
                 @* 線稿以 currentColor 描邊，直接繼承 .brand-panel 的文字色，深底淺底都保證有對比。 *@
                 <svg viewBox="0 0 120 120" role="img">
@@ -34,11 +33,7 @@
         </section>
 
         <section class="login-card">
-            <div class="login-header">
-                <span class="login-header-kicker">Welcome Back</span>
-                <h2>使用者登入</h2>
-                <p>請輸入您的帳號資訊以存取系統。</p>
-            </div>
+            <h2 class="login-title">登入</h2>
 
             <EditForm Model="@Input" method="post" OnValidSubmit="LoginUser" FormName="login">
                 <input type="hidden" name="Input.CaptchaCode" value="@Input.CaptchaCode" />
@@ -66,23 +61,25 @@
                     </div>
                 </div>
 
-                <div class="form-options">
-                    <label class="remember-me">
-                        <InputCheckbox id="rememberMe" name="Input.RememberMe" @bind-Value="Input.RememberMe" />
-                        <span>記住我</span>
-                    </label>
-                    <span class="security-note">企業級安全登入</span>
-                </div>
+                @* 原生 checkbox 而非 InputCheckbox：靜態 SSR 下兩者渲染結果相同，
+                   但原生的才吃得到本元件的 scoped CSS，也才用得上 :checked 選擇器做勾選動畫。 *@
+                <label class="remember-me">
+                    <input type="checkbox" id="rememberMe" name="Input.RememberMe" value="true" checked="@Input.RememberMe" />
+                    <span class="remember-box" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" role="img">
+                            <path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor"
+                                  stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </span>
+                    <span class="remember-text">記住我</span>
+                </label>
 
-                <div class="login-actions">
-                    <button class="login-button" type="submit">
-                        登入系統
-                    </button>
-                </div>
+                <button class="login-button" type="submit">登入系統</button>
 
-                <div class="@errorMessage error-message">
-                    @message
-                </div>
+                @if (!string.IsNullOrEmpty(message))
+                {
+                    <p class="error-message" role="alert">@message</p>
+                }
             </EditForm>
 
             @if (ShowGoogleLogin)
@@ -103,5 +100,13 @@
             }
         </section>
     </div>
-</div>
 
+    @* 主角時刻：音波帶。這是把會議錄音轉成文字的工具，所以動態直接取材自主題，
+       而不是通用的漸層流動。每根條子靠 --i 錯開相位，純 CSS、無 JS。 *@
+    <div class="wave-band" aria-hidden="true">
+        @for (var i = 0; i < WaveBarCount; i++)
+        {
+            <span class="wave-bar" style="--i: @i; --h: @(14 + (i % 9) * 4)px"></span>
+        }
+    </div>
+</div>

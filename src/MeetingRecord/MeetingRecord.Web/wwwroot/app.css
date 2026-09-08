@@ -1,3 +1,35 @@
+/*
+    燕麥奶茶色票（0.4.41）。全站共用的單一色彩來源。
+
+    這個檔案是全域樣式（非 CSS isolation），所以 :root 在這裡是有效的——
+    scoped 的 .razor.css 裡千萬不要寫 :root，Blazor 會把它變成 :root[b-xxxxx]
+    而選不到 <html>。要在元件內用這些色，直接 var(--oat-...) 即可。
+
+    ⚠️ --oat-ink / --oat-ink-mid 不在使用者提供的六色色票內，是必要的延伸：
+    六色全是淺色，最深的 #C2A284 配白字對比只有 2.4:1，遠低於 WCAG AA 的 4.5:1。
+    深棕在全部六色上都過 AA（4.9:1 ~ 9.4:1），是這組色系唯一可用的文字色。
+*/
+:root {
+    --oat-50: #EEE5DE;
+    --oat-100: #E3D4C7;
+    --oat-200: #DBC8B7;
+    --oat-300: #D4BDA8;
+    --oat-400: #C7AA8F;
+    --oat-500: #C2A284;
+
+    --oat-ink: #43362C;
+    --oat-ink-mid: #7A6A5A;
+    --oat-surface: #FFFFFF;
+
+    /* 語意色：AntDesign 預設的螢光紅綠橘在奶茶底上太跳，改用同明度的暖色版本。 */
+    --oat-ok: #6B7A4A;
+    --oat-ok-bg: #EDF0E4;
+    --oat-warn: #B07D3A;
+    --oat-warn-bg: #FAF0DF;
+    --oat-err: #A6483C;
+    --oat-err-bg: #F7E8E5;
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }

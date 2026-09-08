@@ -1,8 +1,8 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.23
+- 現行系統版本：0.4.41
 - 首次實作版本：既有腳手架核心功能
 - 最後核對日期：2026/07/14
 
@@ -69,7 +69,7 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor:36`、`Login.razor.cs:63`（登入表單與 Cookie 簽發）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor:38`、`Login.razor.cs:65`（登入表單與 Cookie 簽發）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Logout.razor.cs:23`、`Pending.razor:1`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Profile.razor:120`、`ChangePassword.razor:110`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/MyUserServiceLogin.cs:40`（鎖定、PBKDF2、升級、稽核）

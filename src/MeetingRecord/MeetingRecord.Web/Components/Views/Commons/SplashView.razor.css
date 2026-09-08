@@ -51,7 +51,7 @@
 }
 
 .splash-eyebrow {
-    color: #2563eb;
+    color: var(--oat-ink);
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.16em;
@@ -60,7 +60,7 @@
 }
 
 .splash-title {
-    color: #0f172a;
+    color: var(--oat-ink);
     font-size: clamp(1.8rem, 2.5vw, 2.6rem);
     font-weight: 800;
     letter-spacing: -0.03em;
@@ -69,7 +69,7 @@
 }
 
 .splash-description {
-    color: #475569;
+    color: var(--oat-ink-mid);
     font-size: 1rem;
     line-height: 1.7;
     margin: 0;
@@ -78,7 +78,7 @@
 
 .splash-status {
     align-items: center;
-    color: #334155;
+    color: var(--oat-ink);
     display: inline-flex;
     gap: 0.7rem;
     margin-top: 1.5rem;
@@ -92,7 +92,7 @@
 
 .splash-status-dot {
     animation: splash-pulse 1.2s ease-in-out infinite;
-    background: #2563eb;
+    background: var(--oat-ink);
     border-radius: 999px;
     display: inline-block;
     height: 0.75rem;

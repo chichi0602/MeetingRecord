@@ -49,34 +49,45 @@ public sealed class TextGenerationRequestTests
 
     #endregion
 
-    #region 回應內容取值
+    #region 串流片段取值
 
     [Fact]
-    public void ExtractContent_ShouldReturnFirstChoiceMessage()
+    public void ExtractDelta_ShouldReturnFirstChoiceDeltaContent()
     {
-        const string body = """
-            {"choices":[{"message":{"role":"assistant","content":"  會議紀錄內容  "}}]}
+        const string payload = """
+            {"choices":[{"delta":{"role":"assistant","content":"會議"}}]}
             """;
 
-        Assert.Equal("會議紀錄內容", AzureOpenAiTextGenerationProvider.ExtractContent(body));
+        Assert.Equal("會議", AzureOpenAiTextGenerationProvider.ExtractDelta(payload));
     }
 
     [Fact]
-    public void ExtractContent_ShouldThrow_WhenResponseIsNotJson()
+    public void ExtractDelta_ShouldPreserveWhitespace()
     {
-        Assert.Throws<InvalidOperationException>(
-            () => AzureOpenAiTextGenerationProvider.ExtractContent("<html>gateway error</html>"));
+        // 增量會被逐片接起來，這裡若順手 Trim 就會把字與字之間的空白吃掉。
+        const string payload = """
+            {"choices":[{"delta":{"content":" and "}}]}
+            """;
+
+        Assert.Equal(" and ", AzureOpenAiTextGenerationProvider.ExtractDelta(payload));
     }
 
     [Theory]
     [InlineData("""{"choices":[]}""")]
-    [InlineData("""{"choices":[{"message":{"content":""}}]}""")]
+    [InlineData("""{"choices":[{"delta":{}}]}""")]
+    [InlineData("""{"choices":[{"finish_reason":"stop"}]}""")]
     [InlineData("{}")]
-    public void ExtractContent_ShouldThrow_WhenNoContentIsReturned(string body)
+    public void ExtractDelta_ShouldReturnNull_WhenChunkCarriesNoText(string payload)
     {
-        // 內容過濾或模型無輸出時會走到這裡，必須是失敗而不是靜靜寫入空草稿。
+        // 沒有文字是常態：第一片只帶內容過濾註記、最後一片只帶 finish_reason。
+        Assert.Null(AzureOpenAiTextGenerationProvider.ExtractDelta(payload));
+    }
+
+    [Fact]
+    public void ExtractDelta_ShouldThrow_WhenChunkIsNotJson()
+    {
         Assert.Throws<InvalidOperationException>(
-            () => AzureOpenAiTextGenerationProvider.ExtractContent(body));
+            () => AzureOpenAiTextGenerationProvider.ExtractDelta("<html>gateway error</html>"));
     }
 
     #endregion

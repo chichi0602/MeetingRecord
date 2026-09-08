@@ -229,4 +229,111 @@ public sealed class MeetingDraftProgressNotifierTests
     }
 
     #endregion
+
+    #region 串流字數推動的生成進度
+
+    [Fact]
+    public void CalculatePercent_Generating_ShouldRiseWithCharactersAndNeverReachHundred()
+    {
+        var previous = MeetingDraftProgressNotifier.CalculatePercent(MeetingDraftPhase.Generating, 0, 0, 0);
+        Assert.Equal(MeetingDraftProgressNotifier.GeneratingPercent, previous);
+
+        foreach (var characters in new[] { 100, 500, 900, 2000, 5000, 50000, int.MaxValue })
+        {
+            var current = MeetingDraftProgressNotifier.CalculatePercent(
+                MeetingDraftPhase.Generating, 0, 0, characters);
+
+            Assert.True(current >= previous, $"進度必須單調遞增，{characters} 字時卻從 {previous} 掉到 {current}。");
+
+            // 100% 只有 Completed 給得出來，否則會出現「先衝到 100 再乾等」的失信畫面。
+            Assert.True(current <= MeetingDraftProgressNotifier.MaxGeneratingPercent);
+
+            previous = current;
+        }
+
+        // 極大字數要真的貼近上限，不能因為整數運算或溢位而卡在起點。
+        Assert.InRange(
+            MeetingDraftProgressNotifier.CalculatePercent(MeetingDraftPhase.Generating, 0, 0, int.MaxValue),
+            MeetingDraftProgressNotifier.MaxGeneratingPercent - 1,
+            MeetingDraftProgressNotifier.MaxGeneratingPercent);
+    }
+
+    [Fact]
+    public void CalculatePercent_Generating_HalfLifeCharacters_ShouldReachHalfOfTheSpan()
+    {
+        var expected = MeetingDraftProgressNotifier.GeneratingPercent
+            + ((MeetingDraftProgressNotifier.MaxGeneratingPercent
+                - MeetingDraftProgressNotifier.GeneratingPercent) / 2);
+
+        Assert.Equal(
+            expected,
+            MeetingDraftProgressNotifier.CalculatePercent(
+                MeetingDraftPhase.Generating,
+                0,
+                0,
+                MeetingDraftProgressNotifier.GeneratingCharacterHalfLife));
+    }
+
+    [Fact]
+    public void CalculatePercent_Failed_DuringGenerating_ShouldKeepCharacterProgress()
+    {
+        // 失敗時停在中斷當下的進度，才看得出是生成到一半掛的，而不是根本沒開始。
+        Assert.Equal(
+            MeetingDraftProgressNotifier.CalculatePercent(MeetingDraftPhase.Generating, 0, 0, 1800),
+            MeetingDraftProgressNotifier.CalculatePercent(MeetingDraftPhase.Failed, 0, 0, 1800));
+    }
+
+    [Fact]
+    public void ReportGeneratedCharacters_ShouldNotifyOnlyWhenPercentChanges()
+    {
+        // 每個 SSE 片段只有幾個字，逐片通知會用上百次重繪轟炸 Blazor circuit。
+        var notifier = new MeetingDraftProgressNotifier();
+        notifier.Enqueued(5, "需求確認會議", teams: null);
+        notifier.ReportGenerating(5);
+
+        var count = 0;
+        notifier.Changed += () => count++;
+
+        notifier.ReportGeneratedCharacters(5, 1);
+        notifier.ReportGeneratedCharacters(5, 2);
+        notifier.ReportGeneratedCharacters(5, 3);
+
+        // 字數確實更新了，但這三次都還換算成同一個百分比，所以一次事件都不該發。
+        Assert.Equal(3, notifier.Find(5)!.GeneratedCharacters);
+        Assert.Equal(0, count);
+
+        notifier.ReportGeneratedCharacters(5, 2000);
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void ReportGeneratedCharacters_ShouldIgnoreUnknownMeeting()
+    {
+        var notifier = new MeetingDraftProgressNotifier();
+        var count = 0;
+        notifier.Changed += () => count++;
+
+        notifier.ReportGeneratedCharacters(12345, 500);
+
+        Assert.Null(notifier.Find(12345));
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void ReportGenerating_ShouldResetCharactersFromPreviousRun()
+    {
+        // 重新產生時若沿用上一輪的字數，進度會從高檔往下掉。
+        var notifier = new MeetingDraftProgressNotifier();
+        notifier.Enqueued(8, "季度檢討會議", teams: null);
+        notifier.ReportGenerating(8);
+        notifier.ReportGeneratedCharacters(8, 3000);
+
+        notifier.ReportGenerating(8);
+
+        var item = notifier.Find(8)!;
+        Assert.Equal(0, item.GeneratedCharacters);
+        Assert.Equal(MeetingDraftProgressNotifier.GeneratingPercent, item.Percent);
+    }
+
+    #endregion
 }

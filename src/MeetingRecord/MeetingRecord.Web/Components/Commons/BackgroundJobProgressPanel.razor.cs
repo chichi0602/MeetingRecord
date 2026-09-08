@@ -184,7 +184,7 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
             MeetingDraftPhase.Queued => "排隊中",
             MeetingDraftPhase.Preparing => "讀取逐字稿與提示詞",
             MeetingDraftPhase.Summarizing => $"分段摘要中（第 {item.CompletedChunks}/{item.TotalChunks} 段）",
-            MeetingDraftPhase.Generating => "產生會議紀錄中",
+            MeetingDraftPhase.Generating => $"產生會議紀錄中（已產生 {item.GeneratedCharacters} 字）",
             MeetingDraftPhase.Completed => "已完成",
             MeetingDraftPhase.Failed => "失敗",
             _ => string.Empty,

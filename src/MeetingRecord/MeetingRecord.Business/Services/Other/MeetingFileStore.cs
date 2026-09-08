@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Business.Services.Other;
@@ -122,7 +123,15 @@ public class MeetingFileStore
         return relativePath;
     }
 
-    /// <summary>讀取逐字稿內容；檔案不存在時回傳 null。</summary>
+    /// <summary>
+    /// 讀取逐字稿內容；檔案不存在時回傳 null。
+    ///
+    /// <para>
+    /// 讀出來後會再過濾一次供應商的指令外漏。0.4.42 起寫入端已經會擋掉，
+    /// 但在那之前存下來的逐字稿檔案裡還留著，這裡補一道讓舊資料不必重新轉錄
+    /// 也不會把那段英文指令帶進預覽畫面與草稿生成的輸入。
+    /// </para>
+    /// </summary>
     public async Task<string?> ReadTranscriptAsync(string? relativePath, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
@@ -137,7 +146,8 @@ public class MeetingFileStore
             return null;
         }
 
-        return await File.ReadAllTextAsync(fullPath, cancellationToken);
+        var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
+        return TranscriptionNoiseFilter.Strip(content);
     }
 
     /// <summary>刪除影音檔實體檔案。失敗只記 Warning，不阻斷主流程。</summary>

@@ -100,7 +100,11 @@ public class MeetingDraftJobRunner
 
             cancellationToken.ThrowIfCancellationRequested();
             progressNotifier.ReportGenerating(meetingId);
-            var draft = await provider.GenerateAsync(SystemPrompt, userPrompt, cancellationToken);
+            var draft = await provider.GenerateAsync(
+                SystemPrompt,
+                userPrompt,
+                characters => progressNotifier.ReportGeneratedCharacters(meetingId, characters),
+                cancellationToken);
 
             meeting.DraftContent = draft;
             meeting.DraftStatus = DraftStatus.Completed;
@@ -166,7 +170,8 @@ public class MeetingDraftJobRunner
                 "不要加上開場白或結語，直接輸出摘要內容。\n\n" +
                 chunks[index];
 
-            var summary = await provider.GenerateAsync(SystemPrompt, chunkPrompt, cancellationToken);
+            // 這裡不接字元進度：分段摘要本來就是逐段回報，粒度已經夠細。
+            var summary = await provider.GenerateAsync(SystemPrompt, chunkPrompt, null, cancellationToken);
 
             // 進度必須在 continue 之前回報，否則整段空白的段落會被跳過不計。
             progressNotifier.ReportSummarizing(meetingId, index + 1, chunks.Count);

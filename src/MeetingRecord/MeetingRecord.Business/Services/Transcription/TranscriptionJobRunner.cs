@@ -96,6 +96,19 @@ public class TranscriptionJobRunner
                 // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
                 progressNotifier.ReportSegment(meetingId, index + 1, segments.SegmentFullPaths.Count);
 
+                // 沒有可辨識語音時，供應商可能不回空字串，而是把自己的系統指令當成結果吐回來。
+                // 這種段落等同無語音，直接丟棄；記 Warning 是為了日後看得出模型在漏指令，而不是默默吃掉。
+                if (TranscriptionNoiseFilter.IsProviderInstructionLeak(segmentText))
+                {
+                    logger.LogWarning(
+                        "Discarded transcription segment because the provider returned its own instructions. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}",
+                        meetingId,
+                        index + 1,
+                        segments.SegmentFullPaths.Count);
+
+                    continue;
+                }
+
                 if (string.IsNullOrWhiteSpace(segmentText))
                 {
                     continue;

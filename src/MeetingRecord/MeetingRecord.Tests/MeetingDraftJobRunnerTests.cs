@@ -186,7 +186,11 @@ public sealed class MeetingDraftJobRunnerTests
 
         public string ProviderName => "AzureOpenAI";
 
-        public Task<string> GenerateAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
+        public Task<string> GenerateAsync(
+            string systemPrompt,
+            string userPrompt,
+            Action<int>? onCharactersGenerated,
+            CancellationToken cancellationToken)
         {
             Calls.Add(new GenerateCall(systemPrompt, userPrompt));
 
@@ -194,6 +198,9 @@ public sealed class MeetingDraftJobRunnerTests
             {
                 throw failure;
             }
+
+            // 模擬串流：一次把最終字數回報出去，讓 runner 的接線也被測到。
+            onCharactersGenerated?.Invoke(response!.Length);
 
             return Task.FromResult(response!);
         }

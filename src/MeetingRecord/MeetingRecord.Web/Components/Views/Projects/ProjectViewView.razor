@@ -90,6 +90,22 @@ else
                     <span class="project-view-summary-key">會議紀錄</span>
                     <span class="project-view-summary-value">@projectMeetings.Count 份</span>
                 </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">附件</span>
+                    <span class="project-view-summary-value">
+                        @* 0 份不做成可點的——點開空清單沒有意義。 *@
+                        @if (projectFiles.Count > 0)
+                        {
+                            <button type="button" class="project-view-summary-link" @onclick="OpenAttachmentModal">
+                                @projectFiles.Count 份
+                            </button>
+                        }
+                        else
+                        {
+                            <span>0 份</span>
+                        }
+                    </span>
+                </div>
             </div>
 
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
@@ -138,14 +154,22 @@ else
                                     Style="min-width: 190px;" />
                         </div>
 
-                        <Button Type="ButtonType.Primary"
-                                Class="project-view-cta"
-                                Loading="@isGenerating"
-                                Disabled="@(selectedTranscriptId <= 0 || selectedPromptTemplateId <= 0)"
-                                OnClick="@(async () => await OnGenerateDraftAsync())">
-                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
-                            <span class="project-view-cta-text">AI 轉會議紀錄</span>
-                        </Button>
+                        @* 按鈕包在與兩個下拉相同的欄位堆疊裡，上面墊一個佔位標籤。
+                           這樣頂緣由同一組 font-size 與 gap 決定，不必用魔術 margin 去湊。 *@
+                        <div class="project-view-ai-field">
+                            <span class="project-view-field-label" aria-hidden="true">&nbsp;</span>
+                            <Button Type="ButtonType.Primary"
+                                    Loading="@isGenerating"
+                                    Disabled="@(selectedTranscriptId <= 0 || selectedPromptTemplateId <= 0)"
+                                    OnClick="@(async () => await OnGenerateDraftAsync())">
+                                @* 內容包一層自己的 span：CSS isolation 的 scope 屬性只會加在本檔寫的
+                                   HTML 元素上，掛在 <Button> 元件的 Class 是選不到的。 *@
+                                <span class="project-view-cta">
+                                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
+                                    <span class="project-view-cta-text">AI 轉會議紀錄</span>
+                                </span>
+                            </Button>
+                        </div>
                     </div>
 
                     <div class="project-view-ai-note">
@@ -271,7 +295,10 @@ else
                     </FormItem>
 
                     <FormItem Label="完成百分比" Required>
-                        <AntDesign.InputNumber TValue="int" @bind-Value="CurrentRecord.CompletionPercentage" Min="0" Max="100" Step="1" Style="width: 100%;" />
+                        <div class="project-view-completion-slider">
+                            <Slider TValue="double" @bind-Value="CompletionPercentageValue"
+                                    Min="0" Max="100" Step="1" Marks="CompletionMarks" />
+                        </div>
                         <ValidationMessage For="() => CurrentRecord.CompletionPercentage" />
                     </FormItem>
 
@@ -307,7 +334,13 @@ else
                                 @foreach (var file in CurrentRecord.Files)
                                 {
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <a href="@GetProjectFileDownloadUrl(file.Id)" target="_blank">@file.OriginalFileName</a>
+                                        @* 不能用 <a href>：API 全是 JWT Bearer，瀏覽器導航帶 Cookie 一定 401，
+                                           而 0.4.43 之前指向的那個端點更是從來沒存在過。走 JS interop 下載。 *@
+                                        <button type="button" class="btn btn-link p-0 text-start"
+                                                disabled="@(downloadingFileId is not null)"
+                                                @onclick="() => OnDownloadProjectFileAsync(file)">
+                                            @file.OriginalFileName
+                                        </button>
                                         <span>
                                             @FormatFileSize(file.FileSize)
                                             <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="() => RemoveExistingFile(file.Id)">移除</button>
@@ -343,6 +376,33 @@ else
            OnOk="OnDraftEditModalOkAsync"
            OnCancel="OnDraftEditModalCancelAsync">
         <TextArea @bind-Value="draftContent" Rows="20" Placeholder="會議紀錄內容" />
+    </Modal>
+
+    <Modal Title="@("專案附件")"
+           Width="720"
+           @bind-Visible="@attachmentModalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="OnAttachmentModalCancel">
+        <ul class="project-view-attachment-list">
+            @foreach (var file in projectFiles)
+            {
+                <li class="project-view-attachment-row" @key="file.Id">
+                    <div class="project-view-attachment-main">
+                        <span class="project-view-attachment-name" title="@file.OriginalFileName">@file.OriginalFileName</span>
+                        <span class="project-view-attachment-meta">
+                            @FormatFileSize(file.FileSize) · 上傳於 @file.CreatedAt.ToString("yyyy/MM/dd HH:mm")
+                        </span>
+                    </div>
+                    <Button Type="ButtonType.Default"
+                            Loading="@(downloadingFileId == file.Id)"
+                            Disabled="@(downloadingFileId is not null && downloadingFileId != file.Id)"
+                            OnClick="@(async () => await OnDownloadProjectFileAsync(file))">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" />
+                    </Button>
+                </li>
+            }
+        </ul>
     </Modal>
 
     <Modal Title="@transcriptModalTitle"

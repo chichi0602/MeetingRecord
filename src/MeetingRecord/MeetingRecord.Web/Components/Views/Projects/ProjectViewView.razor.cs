@@ -69,6 +69,33 @@ public partial class ProjectViewView : IDisposable
     private string transcriptModalTitle = "逐字稿預覽";
     private string? transcriptContent;
 
+    /// <summary>目前選取專案的附件。由 <see cref="ReloadProjectContextAsync"/> 載入。</summary>
+    private List<ProjectFileAdapterModel> projectFiles = [];
+    private bool attachmentModalVisible;
+
+    /// <summary>正在下載的附件 Id；用來顯示 loading 並擋重複點擊。</summary>
+    private int? downloadingFileId;
+
+    /// <summary>完成百分比滑桿的刻度標記，對齊常用的四分位。</summary>
+    private static readonly SliderMark[] CompletionMarks =
+    [
+        new(0, "0%"),
+        new(25, "25%"),
+        new(50, "50%"),
+        new(75, "75%"),
+        new(100, "100%"),
+    ];
+
+    /// <summary>
+    /// 完成百分比的滑桿轉接屬性。
+    /// AntDesign 的 Slider 只吃 double，而 <c>CompletionPercentage</c> 是 int，中間需要一層換算。
+    /// </summary>
+    private double CompletionPercentageValue
+    {
+        get => CurrentRecord.CompletionPercentage;
+        set => CurrentRecord.CompletionPercentage = (int)Math.Round(value);
+    }
+
     private ProjectAdapterModel? SelectedProject => projects.FirstOrDefault(x => x.Id == selectedProjectId);
 
     private IReadOnlyList<string> StatusOptions => ProjectAdapterModel.StatusOptions;
@@ -184,10 +211,15 @@ public partial class ProjectViewView : IDisposable
         if (selectedProjectId <= 0)
         {
             projectMeetings = [];
+            projectFiles = [];
             selectableTranscripts = [];
             promptTemplates = [];
             return;
         }
+
+        // 附件另外撈：專案選擇器用的 GetSelectableAsync 沒有 Include(x => x.Files)，
+        // 而畫面一次只顯示一個專案，替全部專案都撈附件並不划算。
+        projectFiles = (await projectService.GetAsync(selectedProjectId)).Files;
 
         projectMeetings = await meetingService.GetByProjectAsync(selectedProjectId);
         selectableTranscripts = await meetingService.GetSelectableTranscriptsAsync();
@@ -714,7 +746,7 @@ public partial class ProjectViewView : IDisposable
         MeetingDraftPhase.Queued => "排隊中",
         MeetingDraftPhase.Preparing => "讀取逐字稿與提示詞",
         MeetingDraftPhase.Summarizing => $"分段摘要中（第 {item.CompletedChunks}/{item.TotalChunks} 段）",
-        MeetingDraftPhase.Generating => "產生會議紀錄中",
+        MeetingDraftPhase.Generating => $"產生會議紀錄中（已產生 {item.GeneratedCharacters} 字）",
         _ => string.Empty,
     };
 
@@ -727,9 +759,63 @@ public partial class ProjectViewView : IDisposable
         _ => "project-view-status-none",
     };
 
-    private static string GetProjectFileDownloadUrl(int fileId)
+    private void OpenAttachmentModal() => attachmentModalVisible = true;
+
+    private void OnAttachmentModalCancel() => attachmentModalVisible = false;
+
+    /// <summary>
+    /// 下載專案附件。
+    ///
+    /// <para>
+    /// 走 <see cref="FileDownloadInterop"/> 而非 <c>&lt;a href&gt;</c>：所有 API controller 都是
+    /// JWT Bearer 驗證，瀏覽器導航帶的是 Cookie，連結一定 401。0.4.43 之前這裡指向的
+    /// <c>/api/project-files/{id}/download</c> 端點其實**從來沒有存在過**，所以是 404。
+    /// </para>
+    ///
+    /// <para>
+    /// <c>GetFileDownloadAsync</c> 只依 Id 查、不做專案層權控。這與 0.4.39 的現況一致
+    /// （專案項目已無列級權控，有頁面權限就看得到所有專案），且 Id 只可能來自已載入的清單。
+    /// </para>
+    /// </summary>
+    private async Task OnDownloadProjectFileAsync(ProjectFileAdapterModel file)
     {
-        return $"/api/project-files/{fileId}/download";
+        if (downloadingFileId is not null)
+        {
+            return;
+        }
+
+        downloadingFileId = file.Id;
+        StateHasChanged();
+
+        try
+        {
+            var download = await projectService.GetFileDownloadAsync(file.Id);
+            if (download is null)
+            {
+                logger.LogWarning("Project file download failed because the file is missing. ProjectFileId={ProjectFileId}", file.Id);
+                NotifyError($"找不到「{file.OriginalFileName}」的實體檔案，可能已被移除。");
+                return;
+            }
+
+            // GetFileDownloadAsync 回傳的是開著的 FileStream，一定要收掉。
+            await using var content = download.Content;
+            await fileDownloadInterop.SaveStreamAsync(download.DownloadFileName, content, download.ContentType);
+
+            logger.LogInformation(
+                "Project file downloaded. ProjectFileId={ProjectFileId}, FileName={FileName}",
+                file.Id,
+                download.DownloadFileName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Project file download failed. ProjectFileId={ProjectFileId}", file.Id);
+            NotifyError($"下載「{file.OriginalFileName}」失敗：{ex.Message}");
+        }
+        finally
+        {
+            downloadingFileId = null;
+            StateHasChanged();
+        }
     }
 
     private static string FormatFileSize(long fileSize)

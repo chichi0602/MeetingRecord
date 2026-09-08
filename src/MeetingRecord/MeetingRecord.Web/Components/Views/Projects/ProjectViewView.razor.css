@@ -11,7 +11,7 @@
 }
 
 .project-view-field-label {
-    color: #475569;
+    color: var(--oat-ink-mid);
     font-size: 0.82rem;
     font-weight: 600;
 }
@@ -25,17 +25,17 @@
 }
 
 .project-view-icon-button-danger:hover {
-    color: #cf1322;
+    color: var(--oat-err);
     border-color: #ffccc7;
-    background: #fff1f0;
+    background: var(--oat-err-bg);
 }
 
 .project-view-empty {
     padding: 40px 16px;
     text-align: center;
-    color: #8c8c8c;
+    color: var(--oat-ink-mid);
     background: rgba(248, 250, 252, 0.9);
-    border: 1px dashed #d9d9d9;
+    border: 1px dashed var(--oat-300);
     border-radius: 12px;
 }
 
@@ -59,14 +59,14 @@
 }
 
 .project-view-summary-key {
-    color: #64748b;
+    color: var(--oat-ink-mid);
     font-size: 0.72rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
 
 .project-view-summary-value {
-    color: #0f172a;
+    color: var(--oat-ink);
     font-size: 0.9rem;
     font-weight: 600;
 }
@@ -88,13 +88,13 @@
 }
 
 .project-view-ai-head ::deep .material-icons-outlined {
-    color: #2563eb;
+    color: var(--oat-ink);
     font-size: 1.15rem;
 }
 
 .project-view-ai-head h3 {
     margin: 0;
-    color: #0f172a;
+    color: var(--oat-ink);
     font-size: 0.95rem;
     font-weight: 700;
 }
@@ -118,15 +118,26 @@
 }
 
 .project-view-hint {
-    color: #64748b;
+    color: var(--oat-ink-mid);
     font-size: 0.75rem;
 }
 
+/* 按鈕內容。這一層 span 是在 .razor 裡自己寫的，所以拿得到 scope 屬性——
+   直接寫 <Button Class="..."> 的話選擇器會被加上 [b-xxx] 而永遠選不到那顆 button。
+   （按鈕與兩個下拉的頂緣對齊則由外層 .project-view-ai-field 的佔位標籤負責，
+   不再用先前 margin-top: 22px 那個對不準的魔術數字。） */
 .project-view-cta {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-top: 22px;
+    line-height: 1;
+}
+
+/* Material Icon 預設 24px，不指定就會比 14px 的按鈕文字大一截，也把基線帶歪。
+   本檔其他放圖示的地方（.project-view-ai-head、.project-view-ai-note）都有設，這裡先前漏了。 */
+.project-view-cta ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1;
 }
 
 .project-view-cta-text {
@@ -138,7 +149,7 @@
     align-items: center;
     gap: 5px;
     margin-top: 14px;
-    color: #d46b08;
+    color: var(--oat-warn);
     font-size: 0.76rem;
 }
 
@@ -170,7 +181,7 @@
     align-items: center;
     gap: 8px;
     margin: 0 0 12px;
-    color: #0f172a;
+    color: var(--oat-ink);
     font-size: 0.95rem;
     font-weight: 700;
 }
@@ -182,7 +193,7 @@
 }
 
 .project-view-cell-strong {
-    color: #0f172a;
+    color: var(--oat-ink);
     font-weight: 600;
 }
 
@@ -194,38 +205,38 @@
 }
 
 .project-view-status-none {
-    color: #8c8c8c;
-    background: #fafafa;
-    border: 1px solid #d9d9d9;
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
+    border: 1px solid var(--oat-300);
 }
 
 .project-view-status-pending {
-    color: #d46b08;
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    border: 1px solid var(--oat-warn);
 }
 
 .project-view-status-processing {
-    color: #096dd9;
-    background: #e6f7ff;
-    border: 1px solid #91d5ff;
+    color: var(--oat-ink);
+    background: var(--oat-100);
+    border: 1px solid var(--oat-400);
 }
 
 .project-view-status-completed {
-    color: #389e0d;
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    color: var(--oat-ok);
+    background: var(--oat-ok-bg);
+    border: 1px solid var(--oat-ok);
 }
 
 .project-view-status-failed {
-    color: #cf1322;
-    background: #fff1f0;
-    border: 1px solid #ffa39e;
+    color: var(--oat-err);
+    background: var(--oat-err-bg);
+    border: 1px solid var(--oat-err);
 }
 
 .project-view-error-hint {
     margin-left: 4px;
-    color: #cf1322;
+    color: var(--oat-err);
     cursor: help;
 }
 
@@ -240,7 +251,7 @@
     overflow: auto;
     margin: 0;
     padding: 12px;
-    background: #fafafa;
+    background: var(--oat-50);
     border: 1px solid #f0f0f0;
     border-radius: 6px;
     font-family: inherit;
@@ -256,4 +267,67 @@
     color: #6b7a8d;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+}
+
+/* 完成百分比滑桿。刻度文字會掛在滑軌下方，不留空間的話會壓到下一個 FormItem 的標籤。 */
+.project-view-completion-slider {
+    padding: 0 8px;
+    margin-bottom: 24px;
+}
+
+/* 摘要列裡可點的數值（目前只有附件用到）。做成 button 而非 a，因為它開的是 Modal 不是導航。 */
+.project-view-summary-link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--oat-ink);
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.project-view-summary-link:hover {
+    color: var(--oat-ink-mid);
+}
+
+.project-view-attachment-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.project-view-attachment-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--oat-100);
+}
+
+.project-view-attachment-row:last-child {
+    border-bottom: none;
+}
+
+.project-view-attachment-main {
+    flex: 1;
+    /* flex item 預設 min-width:auto，長檔名會把整列撐開而不是省略。 */
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.project-view-attachment-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.project-view-attachment-meta {
+    color: var(--oat-ink-mid);
+    font-size: 0.76rem;
 }

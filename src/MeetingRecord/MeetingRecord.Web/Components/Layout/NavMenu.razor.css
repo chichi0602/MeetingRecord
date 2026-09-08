@@ -70,12 +70,15 @@
     letter-spacing: 0.05em;
 }
 
+/* 上下間距寫在這裡而不是 -subsequent，兩個區塊標題才會一致——
+   否則第一個（核心功能）只有 0.25rem 的上緣，擠在頁首底下。 */
 .nav-section-title {
     color: var(--oat-ink-mid);
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.12em;
-    padding: 0.25rem 1.5rem 1rem;
+    margin-top: 0.35rem;
+    padding: 1.1rem 1.5rem 1rem;
     text-transform: uppercase;
     transition: opacity 0.2s ease;
 }
@@ -402,11 +405,10 @@
 }
 
 /* ===== 側邊欄分區（0.4.33）=====
-   第二個以後的區塊標題加上分隔線與間距；收合態標題被隱藏，改用獨立分隔線。 */
+   第二個以後的區塊標題多一條分隔線；收合態標題被隱藏，改用獨立分隔線。
+   上下間距已由 .nav-section-title 統一（0.4.50），這裡不再覆寫。 */
 .nav-section-title-subsequent {
     border-top: 1px solid var(--oat-200);
-    margin-top: 0.35rem;
-    padding-top: 1.1rem;
 }
 
 .collapsed-section-divider {

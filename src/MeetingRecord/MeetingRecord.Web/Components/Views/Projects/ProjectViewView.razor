@@ -57,6 +57,19 @@ else
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" />
                 </Button>
             </Tooltip>
+
+            @* 刻意放在工具列而不是下方的 AI 生成區塊——那一整塊需要 Edit 權限，
+               而問答是唯讀操作，有頁面權限就該能用。 *@
+            <Tooltip Title="就整個專案的會議紀錄與附件提問">
+                <Button Type="ButtonType.Default"
+                        Disabled="@(SelectedProject is null)"
+                        OnClick="OpenProjectChat">
+                    <span class="project-view-cta">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="forum" />
+                        <span class="project-view-cta-text">AI 問答</span>
+                    </span>
+                </Button>
+            </Tooltip>
         </div>
 
         @if (SelectedProject is null)
@@ -249,6 +262,11 @@ else
                                                       OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
                                 </SpaceItem>
                             }
+                            @* 不加動作權限檢查，與同列的「檢視會議紀錄」一致（只有編修要 Edit、匯出要 Export）。 *@
+                            <SpaceItem>
+                                <CrudActionButton Title="AI 問答" Icon="forum"
+                                                  OnClick="@(() => OpenMeetingChat(context))" />
+                            </SpaceItem>
                         </Space>
                     </ActionColumn>
                 </Table>
@@ -404,6 +422,11 @@ else
             }
         </ul>
     </Modal>
+
+    <AiChatModal @bind-Visible="aiChatVisible"
+                 Scope="@aiChatScope"
+                 TargetId="@aiChatTargetId"
+                 Title="@aiChatTitle" />
 
     <Modal Title="@transcriptModalTitle"
            Class="project-view-transcript-modal"

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
@@ -137,6 +138,11 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ITextGenerationProvider, AzureOpenAiTextGenerationProvider>();
         services.AddScoped<MeetingDraftJobRunner>();
+
+        // AI 問答（0.4.51）：複用上面那個 ITextGenerationProvider，不另接一條到 Azure OpenAI。
+        // 沒有佇列與背景 worker——問答是使用者等在畫面前的同步互動，不是背景工作。
+        services.AddScoped<AttachmentTextExtractor>();
+        services.AddScoped<AiChatService>();
 
         // 長逐字稿的生成可能耗時數分鐘，預設的 100 秒逾時不夠。
         services.AddHttpClient(AzureOpenAiTextGenerationProvider.HttpClientName, client =>

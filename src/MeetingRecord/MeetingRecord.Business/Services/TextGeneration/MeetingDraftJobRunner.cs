@@ -100,10 +100,16 @@ public class MeetingDraftJobRunner
 
             cancellationToken.ThrowIfCancellationRequested();
             progressNotifier.ReportGenerating(meetingId);
+            // 供應商回報的是「增量」，這裡自己累加成長度——進度只在意產出了多少字。
+            var generatedCharacters = 0;
             var draft = await provider.GenerateAsync(
                 SystemPrompt,
                 userPrompt,
-                characters => progressNotifier.ReportGeneratedCharacters(meetingId, characters),
+                delta =>
+                {
+                    generatedCharacters += delta.Length;
+                    progressNotifier.ReportGeneratedCharacters(meetingId, generatedCharacters);
+                },
                 cancellationToken);
 
             meeting.DraftContent = draft;

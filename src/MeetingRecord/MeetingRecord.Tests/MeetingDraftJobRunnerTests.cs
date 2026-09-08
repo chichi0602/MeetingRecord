@@ -189,7 +189,7 @@ public sealed class MeetingDraftJobRunnerTests
         public Task<string> GenerateAsync(
             string systemPrompt,
             string userPrompt,
-            Action<int>? onCharactersGenerated,
+            Action<string>? onDelta,
             CancellationToken cancellationToken)
         {
             Calls.Add(new GenerateCall(systemPrompt, userPrompt));
@@ -199,10 +199,13 @@ public sealed class MeetingDraftJobRunnerTests
                 throw failure;
             }
 
-            // 模擬串流：一次把最終字數回報出去，讓 runner 的接線也被測到。
-            onCharactersGenerated?.Invoke(response!.Length);
+            // 模擬串流：拆成兩段回報，這樣 runner 的「自己累加長度」才真的被測到
+            // ——一次全給的話，累加寫錯也看不出來。
+            var midpoint = response!.Length / 2;
+            onDelta?.Invoke(response[..midpoint]);
+            onDelta?.Invoke(response[midpoint..]);
 
-            return Task.FromResult(response!);
+            return Task.FromResult(response);
         }
     }
 

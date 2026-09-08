@@ -15,19 +15,24 @@ public interface ITextGenerationProvider
     /// <summary>
     /// 產生文字。
     /// </summary>
-    /// <param name="onCharactersGenerated">
-    /// 生成過程中回報「目前累計已產生的字元數」，供進度畫面使用；不需要進度時傳 null。
+    /// <param name="onDelta">
+    /// 串流過程中逐段回報**新增的**文字（不是累積後的全文）；不需要即時內容時傳 null。
     ///
     /// <para>
-    /// 刻意用 <see cref="Action{T}"/> 而不是 <c>IProgress&lt;int&gt;</c>：
+    /// 傳增量而非累積字串，是因為累積會讓每個片段都配置一次完整長度的字串；
+    /// 而且兩種呼叫端要的東西不同——會議紀錄生成只要「長度」（自己累加即可），
+    /// AI 問答要的是「文字」以便邊生成邊顯示。傳增量兩者都拿得到。
+    /// </para>
+    ///
+    /// <para>
+    /// 刻意用 <see cref="Action{T}"/> 而不是 <c>IProgress&lt;T&gt;</c>：
     /// <c>Progress&lt;T&gt;</c> 會捕捉 SynchronizationContext 改用非同步派送，
-    /// 但這裡的呼叫端在背景執行緒、接收端（通知器）本身就是 thread-safe，
-    /// 同步呼叫即可，不必多繞一層。
+    /// 但這裡的呼叫端在背景執行緒、接收端本身就是 thread-safe，同步呼叫即可。
     /// </para>
     /// </param>
     Task<string> GenerateAsync(
         string systemPrompt,
         string userPrompt,
-        Action<int>? onCharactersGenerated,
+        Action<string>? onDelta,
         CancellationToken cancellationToken);
 }

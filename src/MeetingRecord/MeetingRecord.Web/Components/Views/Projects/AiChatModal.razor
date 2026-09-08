@@ -1,0 +1,95 @@
+@* 專案層級與單一會議共用同一個問答視窗，差別只在 Scope 與 TargetId。 *@
+<Modal Title="@Title"
+       Width="820"
+       Visible="@Visible"
+       Keyboard="true"
+       MaskClosable="false"
+       Footer="null"
+       OnCancel="OnCancelAsync">
+    <div class="ai-chat">
+        @if (!string.IsNullOrWhiteSpace(sourceNotice))
+        {
+            <div class="ai-chat-notice">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+                <span>@sourceNotice</span>
+            </div>
+        }
+
+        <div class="ai-chat-log">
+            @if (messages.Count == 0 && !isAsking)
+            {
+                <div class="ai-chat-empty">
+                    還沒有任何問答。試著問問看「這個會議做了哪些決議？」或「合約的付款條件是什麼？」
+                </div>
+            }
+
+            @foreach (var message in messages)
+            {
+                <div class="ai-chat-row @(message.IsUser ? "ai-chat-row-user" : "ai-chat-row-assistant")">
+                    <div class="ai-chat-meta">
+                        @(message.IsUser ? (message.AskedBy ?? "使用者") : "AI 助理")
+                        <span class="ai-chat-time">@message.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                    </div>
+                    <div class="ai-chat-bubble">@message.Content</div>
+                </div>
+            }
+
+            @if (isAsking)
+            {
+                <div class="ai-chat-row ai-chat-row-assistant">
+                    <div class="ai-chat-meta">AI 助理</div>
+                    <div class="ai-chat-bubble">
+                        @if (streamingAnswer.Length == 0)
+                        {
+                            <span class="ai-chat-thinking">正在讀取資料…</span>
+                        }
+                        else
+                        {
+                            @streamingAnswer
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="ai-chat-error" role="alert">@errorMessage</div>
+        }
+
+        <div class="ai-chat-input">
+            @* Enter 送出、Shift+Enter 換行，是聊天介面的通用預期。
+
+               BindOnInput 必須開：AntDesign 的 Input 預設只在 change（失焦）才把值寫回，
+               打字期間 question 會一直是空字串，送出鈕就一直停用、要點到輸入框外面才亮。
+
+               DebounceMilliseconds 必須是 0（0.4.52 曾用預設的 250ms，是錯的）：
+               打完字立刻按 Enter 時，debounce 計時器還沒觸發，OnAskAsync 讀到的
+               question 會是舊值甚至空字串——送出的問題會被截斷，或整個不送出，
+               然後計時器才把文字寫回輸入框。代價是逐鍵一次伺服器往返，但正確性優先。 *@
+            <TextArea @bind-Value="question"
+                      BindOnInput="true"
+                      DebounceMilliseconds="0"
+                      Placeholder="輸入問題後按 Enter 送出（Shift+Enter 換行）"
+                      Rows="2"
+                      Disabled="@isAsking"
+                      OnkeyDown="OnKeyDownAsync" />
+            <Button Type="ButtonType.Primary"
+                    Loading="@isAsking"
+                    Disabled="@(isAsking || string.IsNullOrWhiteSpace(question))"
+                    OnClick="OnAskAsync">
+                <span class="ai-chat-send">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="send" />
+                    <span>送出</span>
+                </span>
+            </Button>
+        </div>
+
+        @if (messages.Count > 0)
+        {
+            <div class="ai-chat-actions">
+                <Button Type="ButtonType.Link" Disabled="@isAsking" OnClick="OnClearAsync">清空這段對話</Button>
+            </div>
+        }
+    </div>
+</Modal>

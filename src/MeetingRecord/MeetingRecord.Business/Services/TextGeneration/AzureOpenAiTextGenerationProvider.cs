@@ -56,7 +56,7 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
     public async Task<string> GenerateAsync(
         string systemPrompt,
         string userPrompt,
-        Action<int>? onCharactersGenerated,
+        Action<string>? onDelta,
         CancellationToken cancellationToken)
     {
         var settings = llmSettings.Value;
@@ -147,7 +147,7 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
             }
 
             builder.Append(delta);
-            onCharactersGenerated?.Invoke(builder.Length);
+            onDelta?.Invoke(delta);
         }
 
         if (builder.Length == 0)

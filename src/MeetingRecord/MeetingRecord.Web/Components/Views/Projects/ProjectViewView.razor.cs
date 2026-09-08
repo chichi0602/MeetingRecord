@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
+using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
@@ -75,6 +76,11 @@ public partial class ProjectViewView : IDisposable
 
     /// <summary>正在下載的附件 Id；用來顯示 loading 並擋重複點擊。</summary>
     private int? downloadingFileId;
+
+    private bool aiChatVisible;
+    private AiChatScope aiChatScope = AiChatScope.Project;
+    private int aiChatTargetId;
+    private string aiChatTitle = "AI 問答";
 
     /// <summary>完成百分比滑桿的刻度標記，對齊常用的四分位。</summary>
     private static readonly SliderMark[] CompletionMarks =
@@ -758,6 +764,29 @@ public partial class ProjectViewView : IDisposable
         DraftStatus.Failed => "project-view-status-failed",
         _ => "project-view-status-none",
     };
+
+    /// <summary>就整個專案提問：讀本專案的所有會議紀錄與附件。</summary>
+    private void OpenProjectChat()
+    {
+        if (SelectedProject is null)
+        {
+            return;
+        }
+
+        aiChatScope = AiChatScope.Project;
+        aiChatTargetId = SelectedProject.Id;
+        aiChatTitle = $"AI 問答 - {SelectedProject.Title}";
+        aiChatVisible = true;
+    }
+
+    /// <summary>就單一會議提問：讀該會議的會議紀錄與逐字稿。</summary>
+    private void OpenMeetingChat(MeetingAdapterModel meeting)
+    {
+        aiChatScope = AiChatScope.Meeting;
+        aiChatTargetId = meeting.Id;
+        aiChatTitle = $"AI 問答 - {meeting.Title}";
+        aiChatVisible = true;
+    }
 
     private void OpenAttachmentModal() => attachmentModalVisible = true;
 

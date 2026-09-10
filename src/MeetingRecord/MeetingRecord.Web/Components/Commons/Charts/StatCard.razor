@@ -1,0 +1,21 @@
+@using MeetingRecord.Business.Services.Dashboard
+
+<div class="stat-card">
+    <div class="stat-card-title">@Item.Title</div>
+    <div class="stat-card-value">@Item.Value</div>
+    <div class="stat-card-caption @CaptionCssClass">@Item.Caption</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public StatCardItem Item { get; set; } = default!;
+
+    /// <summary>副標的語意色。逾期之類的異常要一眼看得出來，不能與一般說明同色。</summary>
+    private string CaptionCssClass => Item.Tone switch
+    {
+        ChartTone.Danger => "stat-card-caption-danger",
+        ChartTone.Warning => "stat-card-caption-warning",
+        ChartTone.Success => "stat-card-caption-success",
+        _ => string.Empty,
+    };
+}

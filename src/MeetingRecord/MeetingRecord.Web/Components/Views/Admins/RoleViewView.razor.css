@@ -25,14 +25,6 @@
     width: 120px;
 }
 
-.role-view-icon-button {
-    width: 36px;
-    padding: 0;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-}
-
 .role-permission-group {
     display: flex;
     flex-direction: column;

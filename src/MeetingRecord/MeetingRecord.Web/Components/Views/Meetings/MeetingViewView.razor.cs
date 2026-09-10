@@ -52,6 +52,11 @@ public partial class MeetingViewView : IDisposable
     private string transcriptModalTitle = "逐字稿";
     private string transcriptContent = string.Empty;
 
+    /// <summary>目前開著的逐字稿屬於哪一筆會議；儲存時要用。</summary>
+    private int editingTranscriptMeetingId;
+    private bool canEditTranscript;
+    private bool isSavingTranscript;
+
     [Inject]
     public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
 
@@ -533,13 +538,52 @@ public partial class MeetingViewView : IDisposable
 
         transcriptModalTitle = $"逐字稿 - {meetingAdapterModel.Title}";
         transcriptContent = content;
+
+        // 只有轉錄完成的才給編修：正在重新轉錄時存回去，只會被即將產生的新逐字稿覆蓋。
+        editingTranscriptMeetingId = meetingAdapterModel.Id;
+        canEditTranscript = meetingAdapterModel.TranscriptionStatus == TranscriptionStatus.Completed;
+
         transcriptModalVisible = true;
+    }
+
+    private async Task OnSaveTranscriptAsync()
+    {
+        if (!canEditTranscript || isSavingTranscript || editingTranscriptMeetingId <= 0)
+        {
+            return;
+        }
+
+        isSavingTranscript = true;
+
+        try
+        {
+            var result = await meetingService.UpdateTranscriptAsync(editingTranscriptMeetingId, transcriptContent);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                return;
+            }
+
+            await messageService.SuccessAsync("逐字稿已儲存");
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Saving transcript failed. MeetingId={MeetingId}", editingTranscriptMeetingId);
+            NotifyError($"儲存逐字稿失敗：{ex.Message}");
+        }
+        finally
+        {
+            isSavingTranscript = false;
+        }
     }
 
     private Task OnTranscriptModalCancelHandleAsync(MouseEventArgs args)
     {
         transcriptModalVisible = false;
         transcriptContent = string.Empty;
+        editingTranscriptMeetingId = 0;
+        canEditTranscript = false;
         return Task.CompletedTask;
     }
 
@@ -576,6 +620,8 @@ public partial class MeetingViewView : IDisposable
         TranscriptionStatus.Processing => "meeting-status-processing",
         TranscriptionStatus.Completed => "meeting-status-completed",
         TranscriptionStatus.Failed => "meeting-status-failed",
+        // 取消是中性結果，沿用 none 的灰色；明寫出來以免日後有人把它當成遺漏而改成紅色。
+        TranscriptionStatus.Cancelled => "meeting-status-none",
         _ => "meeting-status-none",
     };
 

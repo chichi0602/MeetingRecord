@@ -17,14 +17,6 @@
     width: 260px;
 }
 
-.prompt-template-view-icon-button {
-    width: 36px;
-    padding: 0;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-}
-
 .prompt-template-view-variable-hint {
     margin-top: 4px;
     font-size: 12px;

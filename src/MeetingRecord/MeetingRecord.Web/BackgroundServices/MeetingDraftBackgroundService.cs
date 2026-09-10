@@ -1,3 +1,7 @@
+using Microsoft.EntityFrameworkCore;
+using MeetingRecord.AccessDatas;
+using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Business.Services.TextGeneration;
 
 namespace MeetingRecord.Web.BackgroundServices;
@@ -18,17 +22,50 @@ namespace MeetingRecord.Web.BackgroundServices;
 public sealed class MeetingDraftBackgroundService : BackgroundService
 {
     private readonly IMeetingDraftQueue queue;
+    private readonly IJobCancellationRegistry cancellationRegistry;
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ILogger<MeetingDraftBackgroundService> logger;
 
     public MeetingDraftBackgroundService(
         IMeetingDraftQueue queue,
+        IJobCancellationRegistry cancellationRegistry,
         IServiceScopeFactory scopeFactory,
         ILogger<MeetingDraftBackgroundService> logger)
     {
         this.queue = queue;
+        this.cancellationRegistry = cancellationRegistry;
         this.scopeFactory = scopeFactory;
         this.logger = logger;
+    }
+
+    /// <summary>
+    /// 排隊中就被取消的工作：runner 根本不會跑，狀態得由這裡收尾，
+    /// 否則會永遠卡在「待處理」等一個不會來的 worker。
+    /// </summary>
+    private async Task MarkQueuedJobCancelledAsync(IServiceProvider services, int meetingId)
+    {
+        try
+        {
+            var context = services.GetRequiredService<BackendDBContext>();
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId);
+            if (meeting is null)
+            {
+                return;
+            }
+
+            meeting.DraftStatus = DraftStatus.Cancelled;
+            meeting.DraftError = null;
+            meeting.DraftCompletedAt = DateTime.Now;
+            meeting.UpdatedAt = DateTime.Now;
+            await context.SaveChangesAsync();
+
+            services.GetRequiredService<IMeetingDraftProgressNotifier>()
+                .ReportFailed(meetingId, "已由使用者取消。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist queued draft cancellation. MeetingId={MeetingId}", meetingId);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,8 +87,19 @@ public sealed class MeetingDraftBackgroundService : BackgroundService
             try
             {
                 using var scope = scopeFactory.CreateScope();
+
+                // 還在排隊時就被取消：直接跳過，不要浪費一次 API 呼叫。
+                if (cancellationRegistry.TryConsumePendingCancel(BackgroundJobKind.MeetingDraft, meetingId))
+                {
+                    logger.LogInformation("Draft generation skipped because it was cancelled while queued. MeetingId={MeetingId}", meetingId);
+                    await MarkQueuedJobCancelledAsync(scope.ServiceProvider, meetingId);
+                    continue;
+                }
+
+                using var handle = cancellationRegistry.BeginJob(BackgroundJobKind.MeetingDraft, meetingId, stoppingToken);
                 var runner = scope.ServiceProvider.GetRequiredService<MeetingDraftJobRunner>();
-                await runner.RunAsync(meetingId, stoppingToken);
+
+                await runner.RunAsync(meetingId, handle.Token, () => handle.IsCancelledByUser);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

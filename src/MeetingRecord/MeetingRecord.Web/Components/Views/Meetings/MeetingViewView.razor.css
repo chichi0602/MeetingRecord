@@ -17,14 +17,6 @@
     width: 260px;
 }
 
-.meeting-view-icon-button {
-    width: 36px;
-    padding: 0;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-}
-
 .meeting-view-upload-hint {
     margin-top: 4px;
     font-size: 12px;
@@ -132,4 +124,19 @@
     color: #6b7a8d;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+}
+
+/* 逐字稿編修列：提示文字靠左、儲存鈕靠右。 */
+.meeting-transcript-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.meeting-transcript-hint {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
 }

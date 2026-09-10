@@ -19,41 +19,6 @@ namespace MeetingRecord.AccessDatas.Migrations
                 .UseCollation("Chinese_Taiwan_Stroke_CI_AS")
                 .HasAnnotation("ProductVersion", "10.0.5");
 
-            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AiChatMessage", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AskedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("MeetingId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("ProjectId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MeetingId", "Id");
-
-                    b.HasIndex("ProjectId", "Id");
-
-                    b.ToTable("AiChatMessage");
-                });
-
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AuditLog", b =>
                 {
                     b.Property<int>("Id")
@@ -587,23 +552,6 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .IsUnique();
 
                     b.ToTable("UserTeam");
-                });
-
-            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AiChatMessage", b =>
-                {
-                    b.HasOne("MeetingRecord.AccessDatas.Models.Meeting", "Meeting")
-                        .WithMany()
-                        .HasForeignKey("MeetingId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("MeetingRecord.AccessDatas.Models.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("Meeting");
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Meeting", b =>

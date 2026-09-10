@@ -1,0 +1,80 @@
+@using System.Globalization
+@using MeetingRecord.Business.Services.Dashboard
+
+<div class="line-chart">
+    <div class="line-chart-head">
+        <span class="line-chart-title">@Title</span>
+        <span class="line-chart-legend">
+            <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-created"></i>新增會議</span>
+            <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-completed"></i>完成紀錄</span>
+        </span>
+    </div>
+
+    @if (Points.Count == 0)
+    {
+        <div class="line-chart-empty">尚無資料</div>
+    }
+    else
+    {
+        <svg class="line-chart-svg" viewBox="0 0 @ViewWidth @ViewHeight" role="img" aria-label="@Title" preserveAspectRatio="none">
+            @* 基線。全部為 0 時兩條線會疊在這條上，仍然看得出「有畫、只是沒有資料」。 *@
+            <line x1="0" y1="@PlotBottom" x2="@ViewWidth" y2="@PlotBottom" class="line-chart-axis" />
+
+            <polyline points="@BuildPoints(p => p.Created)" class="line-chart-line line-chart-line-created" />
+            <polyline points="@BuildPoints(p => p.Completed)" class="line-chart-line line-chart-line-completed" />
+
+            @for (var index = 0; index < Points.Count; index++)
+            {
+                var point = Points[index];
+                <circle cx="@X(index)" cy="@Y(point.Created)" r="2.5" class="line-chart-dot-created">
+                    <title>@point.Label 新增 @point.Created</title>
+                </circle>
+                <circle cx="@X(index)" cy="@Y(point.Completed)" r="2.5" class="line-chart-dot-completed">
+                    <title>@point.Label 完成 @point.Completed</title>
+                </circle>
+            }
+        </svg>
+
+        <div class="line-chart-axis-labels">
+            @foreach (var point in Points)
+            {
+                <span class="line-chart-axis-label">@point.Label</span>
+            }
+        </div>
+
+        @if (MaxValue == 0)
+        {
+            <div class="line-chart-note">這 @Points.Count 個月都還沒有資料。</div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TrendPoint> Points { get; set; } = [];
+
+    private const double ViewWidth = 320;
+    private const double ViewHeight = 120;
+    private const double PlotTop = 10;
+    private const double PlotBottom = 108;
+
+    private int MaxValue => Points.Count == 0 ? 0 : Points.Max(p => Math.Max(p.Created, p.Completed));
+
+    /// <summary>單一資料點時分母會是 0，直接置中；否則平均分佈。</summary>
+    private double X(int index)
+        => Points.Count <= 1 ? ViewWidth / 2 : index * ViewWidth / (Points.Count - 1);
+
+    /// <summary>最大值為 0 時全部畫在基線上——不能拿 0 當分母。</summary>
+    private double Y(int value)
+        => MaxValue <= 0 ? PlotBottom : PlotBottom - ((PlotBottom - PlotTop) * value / MaxValue);
+
+    private string BuildPoints(Func<TrendPoint, int> selector)
+        => string.Join(' ', Points.Select((point, index) =>
+            $"{Format(X(index))},{Format(Y(selector(point)))}"));
+
+    /// <summary>SVG 的座標一律用不變文化格式——以逗號當小數點的地區會產生無效的 points。</summary>
+    private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

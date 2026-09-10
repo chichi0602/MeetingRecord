@@ -101,6 +101,22 @@ dotnet build
 dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ```
 
+### 之後每次啟動
+
+上面那串只有第一次需要打。日常啟動用倉庫根目錄的 **`run.cmd`**，
+它會自己切到正確的目錄，不必先 `cd`：
+
+```powershell
+.\run          # http  → http://localhost:5189（預設，會自動開瀏覽器）
+.\run https    # https → https://localhost:7044
+```
+
+也可以在檔案總管按兩下 `run.cmd`。用 Visual Studio 的話直接按 F5，不需要這個腳本。
+
+> **完整流程見 [docs/operations/啟動與停止系統.md](docs/operations/啟動與停止系統.md)**
+> ——包含如何安全停掉正在跑的實例（**不要用映像名稱砍行程**，會連帶砍掉
+> Visual Studio）、`run.cmd` 與 VS 為什麼不能同時用，以及哪些檔案改了不必重新編譯。
+
 預設帳號 / 密碼由 `appsettings.json` 之 `BootstrapSettings`（`SupportAccount` / `SupportPassword`）定義，首次啟動會自動建立 `support` 管理員帳號；`MagicObjectHelper.開發者帳號` 則用於後續識別並保護該開發者帳號。
 
 外部目錄與資料庫檔位置由 `appsettings.json` 之 `SystemSettings.ExternalFileSystem` 控制，預設位於 `C:\temp\MeetingRecord\…`，啟動時若不存在會自動建立。
@@ -114,6 +130,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ```
 .
 ├── readme.md                       ← 本檔（系統入口說明）
+├── run.cmd                         ← 一鍵啟動（.\run 或按兩下；等同 dotnet run --launch-profile http）
 ├── AGENTS.md / CLAUDE.md           ← LLM 協作行為準則與專案速查入口
 ├── docs/                           ← 系統設計與規範文件（依特性分類，見第 9 節）
 │   ├── README.md                   ← 文件目錄索引與分類規則

@@ -15,16 +15,16 @@ else
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Create))
                 {
                     <Tooltip Title="新增">
-                        <Button Type="ButtonType.Default" Class="meeting-view-icon-button"
+                        <Button Type="ButtonType.Default"
                                 OnClick="@(async () => await OnAddAsync())">
-                            ➕
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
                     </Tooltip>
                 }
                 <Tooltip Title="重新整理">
-                    <Button Type="ButtonType.Default" Class="meeting-view-icon-button"
+                    <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
-                        🔄
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
                 </Tooltip>
             </div>
@@ -33,14 +33,14 @@ else
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <Tooltip Title="清空搜尋">
-                        <Button Type="ButtonType.Default" Class="meeting-view-icon-button" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
-                            ❌
+                        <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
                     </Tooltip>
                 }
                 <Tooltip Title="搜尋">
-                    <Button Type="ButtonType.Default" Class="meeting-view-icon-button" OnClick="@(async () => await OnSearchAsync())">
-                        🔍
+                    <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
                 </Tooltip>
             </div>
@@ -199,13 +199,35 @@ else
            Keyboard="true"
            Footer="null"
            OnCancel="OnTranscriptModalCancelHandleAsync">
-        @if (string.IsNullOrWhiteSpace(transcriptContent))
+        @if (string.IsNullOrWhiteSpace(transcriptContent) && !canEditTranscript)
         {
             <div class="meeting-transcript-empty">目前沒有可顯示的逐字稿內容。</div>
         }
         else
         {
-            <pre class="meeting-transcript-content">@transcriptContent</pre>
+            @* 可編修：STT 聽錯人名或專有名詞時，這是整條流程唯一的人工介入點——
+               不修的話錯誤會被帶進 AI 會議紀錄，再帶進匯出的 PDF。 *@
+            <TextArea @bind-Value="transcriptContent"
+                      BindOnInput="true"
+                      Rows="18"
+                      Disabled="@(!canEditTranscript || isSavingTranscript)"
+                      Placeholder="逐字稿內容" />
+
+            <div class="meeting-transcript-actions">
+                @if (canEditTranscript)
+                {
+                    <span class="meeting-transcript-hint">修正錯字後儲存，之後產生的會議紀錄就會用修正後的內容。</span>
+                    <Button Type="ButtonType.Primary"
+                            Loading="@isSavingTranscript"
+                            OnClick="@(async () => await OnSaveTranscriptAsync())">
+                        儲存逐字稿
+                    </Button>
+                }
+                else
+                {
+                    <span class="meeting-transcript-hint">目前的轉錄狀態無法編修，完成後才能修改。</span>
+                }
+            </div>
         }
     </Modal>
 }

@@ -30,6 +30,14 @@ public class ExternalFileSystem
 
     /// <summary>會議逐字稿（.txt）存放根目錄</summary>
     public string MeetingTranscriptPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// AI 問答對話（.jsonl）存放根目錄。
+    ///
+    /// 對話文字不需要被查詢或索引，只會整段讀出來顯示，放資料庫只會讓它無謂膨脹，
+    /// 所以 0.4.60 起移到檔案系統。底下再分 <c>project/</c> 與 <c>meeting/</c> 兩個子目錄。
+    /// </summary>
+    public string AiChatPath { get; set; } = string.Empty;
 }
 
 public class BootstrapSettings

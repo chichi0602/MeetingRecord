@@ -1,0 +1,74 @@
+@using MeetingRecord.Business.Services.Dashboard
+
+<div class="pie-chart">
+    <div class="pie-chart-title">@Title</div>
+
+    @if (Total == 0)
+    {
+        <div class="pie-chart-empty">尚無資料</div>
+    }
+    else
+    {
+        <div class="pie-chart-body">
+            @* viewBox 固定 100×100，實際尺寸交給 CSS，這樣不同容器寬度都不會變形。 *@
+            <svg class="pie-chart-svg" viewBox="0 0 100 100" role="img" aria-label="@Title">
+                @{
+                    var startAngle = 0d;
+                    var neutralIndex = 0;
+                }
+                @foreach (var slice in Slices)
+                {
+                    var sweep = slice.Value * 360d / Total;
+                    var color = ChartPalette.Resolve(slice.Tone, neutralIndex);
+                    var path = DashboardMetrics.BuildArcPath(50, 50, 45, startAngle, sweep);
+
+                    <path d="@path" fill="@color">
+                        <title>@slice.Label：@slice.Value</title>
+                    </path>
+
+                    startAngle += sweep;
+                    if (slice.Tone == ChartTone.Neutral)
+                    {
+                        neutralIndex++;
+                    }
+                }
+                @* 中央挖空成甜甜圈，順便放總數。 *@
+                <circle cx="50" cy="50" r="26" class="pie-chart-hole" />
+                <text x="50" y="47" class="pie-chart-total">@Total</text>
+                <text x="50" y="58" class="pie-chart-total-label">總計</text>
+            </svg>
+
+            <ul class="pie-chart-legend">
+                @{
+                    var legendNeutralIndex = 0;
+                }
+                @foreach (var slice in Slices)
+                {
+                    var color = ChartPalette.Resolve(slice.Tone, legendNeutralIndex);
+                    if (slice.Tone == ChartTone.Neutral)
+                    {
+                        legendNeutralIndex++;
+                    }
+
+                    <li class="pie-chart-legend-item">
+                        <span class="pie-chart-swatch" style="background: @color"></span>
+                        <span class="pie-chart-legend-label" title="@slice.Label">@slice.Label</span>
+                        <span class="pie-chart-legend-value">@slice.Value（@FormatPercent(slice.Value)）</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ChartSlice> Slices { get; set; } = [];
+
+    private int Total => Slices.Sum(x => x.Value);
+
+    private string FormatPercent(int value) => $"{value * 100d / Total:0.#}%";
+}

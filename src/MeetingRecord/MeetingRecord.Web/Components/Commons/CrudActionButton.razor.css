@@ -1,61 +1,65 @@
-.crud-action-button {
-    width: 28px;
+/* 清單「操作」欄的按鈕。0.4.57 起圖示旁一律顯示文字，
+   所以不再是 28px 方形，改為依內容撐開的膠囊。
+
+   所有選擇器都從 .crud-action-button-host 用 ::deep 選進去：
+   Tooltip 與 Button 都是子元件，scope 屬性不會傳進去，直接寫
+   `.crud-action-button {}` 會被編成 `.crud-action-button[b-xxx]` 而選不到。 */
+.crud-action-button-host {
+    display: inline-flex;
+}
+
+.crud-action-button-host ::deep .crud-action-button {
     height: 28px;
-    min-width: 28px;
-    padding: 0;
+    padding: 0 8px;
     border-color: transparent;
     border-radius: 4px;
-    color: #4b5563;
+    color: var(--oat-ink-mid);
     background: transparent;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 5px;
     line-height: 1;
+    white-space: nowrap;
     text-decoration: none;
     box-shadow: none;
 }
 
-.crud-action-button:hover,
-.crud-action-button:focus {
-    color: #1677ff;
-    border-color: #d6e4ff;
-    background: #eef5ff;
+.crud-action-button-host ::deep .crud-action-button:hover,
+.crud-action-button-host ::deep .crud-action-button:focus {
+    color: var(--oat-ink);
+    border-color: var(--oat-300);
+    background: var(--oat-50);
     text-decoration: none;
 }
 
-.crud-action-button-danger {
-    color: #b42318;
+.crud-action-button-host ::deep .crud-action-button-danger {
+    color: var(--oat-err);
 }
 
-.crud-action-button-danger:hover,
-.crud-action-button-danger:focus {
+.crud-action-button-host ::deep .crud-action-button-danger:hover,
+.crud-action-button-host ::deep .crud-action-button-danger:focus {
     color: var(--oat-err);
-    border-color: #ffccc7;
+    border-color: var(--oat-err);
     background: var(--oat-err-bg);
 }
 
-.crud-action-button[disabled],
-.crud-action-button.ant-btn[disabled] {
-    color: #9ca3af;
+.crud-action-button-host ::deep .crud-action-button[disabled],
+.crud-action-button-host ::deep .crud-action-button.ant-btn[disabled] {
+    color: var(--oat-400);
     border-color: transparent;
     background: transparent;
     cursor: not-allowed;
 }
 
-.crud-action-button ::deep .material-icons,
-.crud-action-button ::deep .material-icons-outlined {
-    font-size: 18px;
+.crud-action-button-host ::deep .material-icons,
+.crud-action-button-host ::deep .material-icons-outlined {
+    font-size: 16px;
     line-height: 1;
 }
 
-.crud-action-button-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+/* 0.4.57 之前這裡是 clip: rect(0,0,0,0) 的無障礙隱藏標籤，
+   按鈕在畫面上只看得到圖示。現在是正常可見的文字。 */
+.crud-action-button-host ::deep .crud-action-button-label {
+    font-size: 0.82rem;
 }

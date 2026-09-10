@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
-using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
@@ -63,6 +62,7 @@ public class AiChatService
     private readonly BackendDBContext context;
     private readonly IEnumerable<ITextGenerationProvider> textGenerationProviders;
     private readonly MeetingFileStore fileStore;
+    private readonly AiChatStore chatStore;
     private readonly AttachmentTextExtractor attachmentTextExtractor;
     private readonly CurrentUserService currentUserService;
     private readonly IOptions<LlmSettings> llmSettings;
@@ -72,6 +72,7 @@ public class AiChatService
         BackendDBContext context,
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         MeetingFileStore fileStore,
+        AiChatStore chatStore,
         AttachmentTextExtractor attachmentTextExtractor,
         CurrentUserService currentUserService,
         IOptions<LlmSettings> llmSettings,
@@ -80,6 +81,7 @@ public class AiChatService
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
         this.fileStore = fileStore;
+        this.chatStore = chatStore;
         this.attachmentTextExtractor = attachmentTextExtractor;
         this.currentUserService = currentUserService;
         this.llmSettings = llmSettings;
@@ -87,45 +89,24 @@ public class AiChatService
     }
 
     /// <summary>取出這段對話的完整歷史（依時間由舊到新）。</summary>
-    public async Task<List<AiChatMessageItem>> GetHistoryAsync(
+    public Task<List<AiChatMessageItem>> GetHistoryAsync(
+        AiChatScope scope,
+        int targetId,
+        CancellationToken cancellationToken = default)
+        => chatStore.ReadHistoryAsync(scope, targetId, cancellationToken);
+
+    /// <summary>清空這段對話（直接刪掉那個對話檔）。</summary>
+    public Task ClearHistoryAsync(
         AiChatScope scope,
         int targetId,
         CancellationToken cancellationToken = default)
     {
-        var items = await BuildScopeQuery(scope, targetId)
-            .OrderBy(x => x.Id)
-            .Select(x => new AiChatMessageItem(x.Role, x.Content, x.AskedBy, x.CreatedAt))
-            .ToListAsync(cancellationToken);
-
-        return items;
-    }
-
-    /// <summary>清空這段對話。</summary>
-    public async Task ClearHistoryAsync(
-        AiChatScope scope,
-        int targetId,
-        CancellationToken cancellationToken = default)
-    {
-        CleanTrackingHelper.Clean<AiChatMessage>(context);
-
-        var messages = await BuildScopeQuery(scope, targetId).ToListAsync(cancellationToken);
-        if (messages.Count == 0)
-        {
-            return;
-        }
-
-        context.AiChatMessage.RemoveRange(messages);
-        await context.SaveChangesAsync(cancellationToken);
-
-        logger.LogInformation(
-            "AI chat history cleared. Scope={Scope}, TargetId={TargetId}, Count={Count}",
-            scope,
-            targetId,
-            messages.Count);
+        chatStore.TryDelete(scope, targetId);
+        return Task.CompletedTask;
     }
 
     /// <summary>
-    /// 提問。回答會邊生成邊透過 <paramref name="onDelta"/> 回報，結束後連同提問一起落庫。
+    /// 提問。回答會邊生成邊透過 <paramref name="onDelta"/> 回報，結束後連同提問一起寫進對話檔。
     /// </summary>
     public async Task<AiChatAnswer> AskAsync(
         AiChatScope scope,
@@ -227,11 +208,6 @@ public class AiChatService
         return [.. history.Skip(history.Count - maxMessages)];
     }
 
-    private IQueryable<AiChatMessage> BuildScopeQuery(AiChatScope scope, int targetId)
-        => scope == AiChatScope.Project
-            ? context.AiChatMessage.AsNoTracking().Where(x => x.ProjectId == targetId)
-            : context.AiChatMessage.AsNoTracking().Where(x => x.MeetingId == targetId);
-
     /// <summary>專案層級的脈絡：先放各份會議紀錄（短且已整理過），再放附件全文。</summary>
     private async Task<ChatContextResult> BuildProjectContextAsync(int projectId, CancellationToken cancellationToken)
     {
@@ -285,40 +261,14 @@ public class AiChatService
         return ChatContextBuilder.Build(sources);
     }
 
-    private async Task SaveTurnAsync(
+    private Task SaveTurnAsync(
         AiChatScope scope,
         int targetId,
         string question,
         string answer,
         CancellationToken cancellationToken)
-    {
-        CleanTrackingHelper.Clean<AiChatMessage>(context);
-
-        var projectId = scope == AiChatScope.Project ? targetId : (int?)null;
-        var meetingId = scope == AiChatScope.Meeting ? targetId : (int?)null;
-        var now = DateTime.Now;
-
-        context.AiChatMessage.AddRange(
-            new AiChatMessage
-            {
-                ProjectId = projectId,
-                MeetingId = meetingId,
-                Role = UserRole,
-                Content = question.Trim(),
-                AskedBy = ResolveCurrentUserName(),
-                CreatedAt = now,
-            },
-            new AiChatMessage
-            {
-                ProjectId = projectId,
-                MeetingId = meetingId,
-                Role = AssistantRole,
-                Content = answer,
-                CreatedAt = now,
-            });
-
-        await context.SaveChangesAsync(cancellationToken);
-    }
+        => chatStore.AppendTurnAsync(
+            scope, targetId, question, ResolveCurrentUserName(), answer, cancellationToken);
 
     private string? ResolveCurrentUserName()
     {

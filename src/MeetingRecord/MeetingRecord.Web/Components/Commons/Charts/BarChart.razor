@@ -1,0 +1,63 @@
+@using MeetingRecord.Business.Services.Dashboard
+
+@* 橫向長條：中文標籤較長，直向柱狀圖的標籤會擠成一團或必須旋轉。 *@
+<div class="bar-chart">
+    <div class="bar-chart-title">@Title</div>
+
+    @if (Items.Count == 0)
+    {
+        <div class="bar-chart-empty">尚無資料</div>
+    }
+    else
+    {
+        <ul class="bar-chart-list">
+            @{
+                var neutralIndex = 0;
+            }
+            @foreach (var item in Items)
+            {
+                var color = ChartPalette.Resolve(item.Tone, neutralIndex);
+                if (item.Tone == ChartTone.Neutral)
+                {
+                    neutralIndex++;
+                }
+
+                <li class="bar-chart-row">
+                    <span class="bar-chart-label" title="@item.Label">@item.Label</span>
+                    <span class="bar-chart-track">
+                        @* 寬度以「最大值」為基準而非總和：這是排名圖，要比的是彼此的相對大小。 *@
+                        <span class="bar-chart-fill"
+                              style="width: @ToWidth(item.Value); background: @color"></span>
+                    </span>
+                    <span class="bar-chart-value">@item.Value</span>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ChartSlice> Items { get; set; } = [];
+
+    private int MaxValue => Items.Count == 0 ? 0 : Items.Max(x => x.Value);
+
+    /// <summary>
+    /// 最大值為 0（每項都是 0）時一律給 0%，不能拿 0 當分母。
+    /// 最小給 2% 是為了讓「有值但很小」的項目仍看得見一條，不會與 0 混淆。
+    /// </summary>
+    private string ToWidth(int value)
+    {
+        if (MaxValue <= 0 || value <= 0)
+        {
+            return "0%";
+        }
+
+        var percent = Math.Max(value * 100d / MaxValue, 2d);
+
+        return $"{percent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+    }
+}

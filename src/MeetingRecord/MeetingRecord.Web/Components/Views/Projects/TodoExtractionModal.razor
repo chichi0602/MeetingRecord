@@ -1,0 +1,121 @@
+@* AI 從會議紀錄抽出待辦的確認視窗。抽出來的東西一律要人看過、可改，才會寫入。 *@
+<Modal Title="@($"從會議紀錄抽出待辦 — {MeetingTitle}")"
+       Width="860"
+       Visible="@Visible"
+       Keyboard="true"
+       MaskClosable="false"
+       Footer="null"
+       OnCancel="OnCancelAsync">
+    <div class="todo-extract">
+
+        @if (!string.IsNullOrWhiteSpace(existingNotice))
+        {
+            <div class="todo-extract-notice">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+                <span>@existingNotice</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="todo-extract-error">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error" />
+                <span>@errorMessage</span>
+            </div>
+        }
+
+        @if (isExtracting)
+        {
+            <div class="todo-extract-loading">
+                <Spin />
+                <span>AI 正在讀這份會議紀錄，找出裡面的行動項目…</span>
+            </div>
+        }
+        else if (candidates.Count == 0 && string.IsNullOrWhiteSpace(errorMessage))
+        {
+            @* 抽不到東西是正常結果，不是錯誤——用中性的提示，不要紅字。 *@
+            <div class="todo-extract-empty">
+                這份會議紀錄看不出明確的待辦事項。<br />
+                純粹的討論與背景說明不會被抽成待辦；若確實有行動項目，可以到待辦事項頁手動新增。
+            </div>
+        }
+        else if (candidates.Count > 0)
+        {
+            <div class="todo-extract-head">
+                <Checkbox Checked="@AllSelected" CheckedChange="@((bool value) => ToggleAll(value))">
+                    全選
+                </Checkbox>
+                <span class="todo-extract-count">已選 @SelectedCount / @candidates.Count 條</span>
+            </div>
+
+            <div class="todo-extract-list">
+                @foreach (var candidate in candidates)
+                {
+                    <div class="todo-extract-row @(candidate.Selected ? "todo-extract-row-on" : string.Empty)">
+                        <div class="todo-extract-check">
+                            <Checkbox @bind-Checked="candidate.Selected" />
+                        </div>
+
+                        <div class="todo-extract-fields">
+                            <Input @bind-Value="candidate.Title"
+                                   BindOnInput="true"
+                                   Placeholder="待辦標題（必填）"
+                                   MaxLength="200" />
+
+                            @if (!string.IsNullOrWhiteSpace(candidate.Description))
+                            {
+                                @* 描述唯讀：AI 抽的描述通常是原文摘錄，真要改的人會進待辦頁改。 *@
+                                <div class="todo-extract-desc">@candidate.Description</div>
+                            }
+
+                            <div class="todo-extract-meta">
+                                <span class="todo-extract-label">負責人</span>
+                                <Input @bind-Value="candidate.Owner"
+                                       BindOnInput="true"
+                                       Placeholder="未指定"
+                                       MaxLength="50"
+                                       Style="width: 140px;" />
+
+                                <span class="todo-extract-label">截止日</span>
+                                <DatePicker TValue="DateTime?"
+                                            @bind-Value="candidate.DueDate"
+                                            AllowClear="true"
+                                            Style="width: 150px;" />
+
+                                <span class="todo-extract-label">優先度</span>
+                                <Select TItem="string"
+                                        TItemValue="string"
+                                        @bind-Value="candidate.Priority"
+                                        Style="width: 90px;">
+                                    @foreach (var priority in PriorityOptions)
+                                    {
+                                        <SelectOption Value="@priority">@priority</SelectOption>
+                                    }
+                                </Select>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="todo-extract-actions">
+                <span class="todo-extract-hint">加入後可以到「待辦事項」頁再修改或刪除。</span>
+                <div class="todo-extract-buttons">
+                    <Button Type="ButtonType.Default" Disabled="@isSaving" OnClick="OnCancelAsync">
+                        <span class="btn-icon-label">
+                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>取消</span>
+                        </span>
+                    </Button>
+                    <Button Type="ButtonType.Primary"
+                            Loading="@isSaving"
+                            Disabled="@(SelectedCount == 0 || isSaving)"
+                            OnClick="OnConfirmAsync">
+                        <span class="btn-icon-label">
+                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>加入 @SelectedCount 條待辦</span>
+                        </span>
+                    </Button>
+                </div>
+            </div>
+        }
+    </div>
+</Modal>

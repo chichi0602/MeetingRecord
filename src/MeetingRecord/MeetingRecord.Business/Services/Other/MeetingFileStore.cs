@@ -124,6 +124,29 @@ public class MeetingFileStore
     }
 
     /// <summary>
+    /// 就地覆寫既有的逐字稿檔案（人工編修用）。
+    ///
+    /// <para>
+    /// **不要改用 <see cref="SaveTranscriptAsync"/>**——那個方法每次都產生新的 GUID 檔名
+    /// 並回傳新路徑，是「重新轉錄」的語意；人工編修應該留在同一個檔案，
+    /// 否則每存一次就多留一個孤兒檔案，而且 <c>Meeting.TranscriptRelativePath</c> 也得跟著更新。
+    /// </para>
+    ///
+    /// 編碼與 <see cref="SaveTranscriptAsync"/> 一致（UTF-8 含 BOM）。
+    /// </summary>
+    public async Task OverwriteTranscriptAsync(string relativePath, string content, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+
+        var fullPath = GetTranscriptFullPath(relativePath);
+
+        EnsureParentDirectory(fullPath);
+        await File.WriteAllTextAsync(fullPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), cancellationToken);
+
+        logger.LogInformation("Overwrote meeting transcript file. RelativePath={RelativePath}", relativePath);
+    }
+
+    /// <summary>
     /// 讀取逐字稿內容；檔案不存在時回傳 null。
     ///
     /// <para>

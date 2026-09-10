@@ -1,0 +1,71 @@
+.bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.bar-chart-title {
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.bar-chart-empty {
+    padding: 36px 0;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    text-align: center;
+}
+
+.bar-chart-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bar-chart-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+}
+
+/* 標籤欄固定寬度，長條才會從同一條垂直線起跑、彼此長度可比。 */
+.bar-chart-label {
+    flex: 0 0 7.5rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--oat-ink);
+}
+
+.bar-chart-track {
+    flex: 1;
+    min-width: 0;
+    height: 14px;
+    border-radius: 99px;
+    background: var(--oat-100);
+    overflow: hidden;
+}
+
+.bar-chart-fill {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+
+.bar-chart-value {
+    flex: 0 0 2.5rem;
+    text-align: right;
+    color: var(--oat-ink-mid);
+    font-variant-numeric: tabular-nums;
+}

@@ -35,17 +35,17 @@ html, body {
 }
 
 a, .btn-link {
-    color: #006bb7;
+    color: var(--oat-ink-mid);
 }
 
 .btn-primary {
     color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    background-color: var(--oat-ink);
+    border-color: var(--oat-ink);
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem var(--oat-400);
 }
 
 .content {
@@ -89,4 +89,206 @@ h1:focus {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
+}
+
+/* ============================================================
+   AntDesign 強調色改為燕麥奶茶色系（0.4.56）
+
+   AntDesign 的 CSS 在 App.razor 是第 22 行載入，**比本檔（第 12 行）晚**，
+   所以同特異度的 `.ant-btn-primary` 會被它蓋回去。這裡一律以 `body` 前綴
+   把特異度墊高一級（0,0,1,1 對 0,0,1,0），才不必去動載入順序——
+   調動順序會連帶影響 bootstrap 與本檔既有的基礎規則，風險大得多。
+
+   色值直接寫死而不用 var(--oat-...)：這些變數定義在本檔的 :root，
+   用 var() 當然可行，但這一段刻意保持與 AntDesign 原始碼一樣的字面色值形式，
+   方便日後和上游 diff 對照。對應關係如下：
+     #43362C = --oat-ink（主色）    #55463A = hover    #362B23 = active
+     #C2A284 = --oat-500（次強調）  #E3D4C7 = --oat-100（淡底）
+   ============================================================ */
+
+/* ----- primary 按鈕 ----- */
+body .ant-btn-primary {
+    color: #FFFFFF;
+    background-color: #43362C;
+    border-color: #43362C;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+body .ant-btn-primary:hover,
+body .ant-btn-primary:focus {
+    color: #FFFFFF;
+    background-color: #55463A;
+    border-color: #55463A;
+}
+
+body .ant-btn-primary:active {
+    color: #FFFFFF;
+    background-color: #362B23;
+    border-color: #362B23;
+}
+
+/* 停用態：AntDesign 用 `.ant-btn-primary[disabled]`（0,0,2,0），故需 body 前綴壓過。
+   刻意不套主色——停用的按鈕看起來就該是停用的。 */
+body .ant-btn-primary[disabled],
+body .ant-btn-primary[disabled]:hover,
+body .ant-btn-primary[disabled]:active {
+    color: rgba(67, 54, 44, 0.4);
+    background-color: #EEE5DE;
+    border-color: #D4BDA8;
+}
+
+/* 次要按鈕的 hover／focus 外框（AntDesign 預設會轉藍） */
+body .ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):hover,
+body .ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):focus {
+    color: #43362C;
+    border-color: #C2A284;
+}
+
+/* 文字／連結型按鈕 */
+body .ant-btn-link {
+    color: #7A6A5A;
+}
+
+body .ant-btn-link:hover,
+body .ant-btn-link:focus {
+    color: #43362C;
+}
+
+/* ----- 表單控制項的聚焦邊框 ----- */
+body .ant-input:hover,
+body .ant-input:focus,
+body .ant-input-focused,
+body .ant-input-affix-wrapper:hover,
+body .ant-input-affix-wrapper-focused,
+body .ant-picker:hover,
+body .ant-picker-focused,
+body .ant-select:not(.ant-select-disabled):hover .ant-select-selector,
+body .ant-select-focused:not(.ant-select-disabled) .ant-select-selector,
+body .ant-input-number:hover,
+body .ant-input-number-focused {
+    border-color: #C2A284;
+    box-shadow: none;
+}
+
+/* ----- 勾選類 ----- */
+body .ant-checkbox-checked .ant-checkbox-inner,
+body .ant-checkbox-indeterminate .ant-checkbox-inner::after {
+    background-color: #43362C;
+    border-color: #43362C;
+}
+
+body .ant-checkbox-wrapper:hover .ant-checkbox-inner,
+body .ant-checkbox:hover .ant-checkbox-inner,
+body .ant-checkbox-input:focus + .ant-checkbox-inner {
+    border-color: #C2A284;
+}
+
+body .ant-radio-checked .ant-radio-inner,
+body .ant-radio-wrapper:hover .ant-radio-inner {
+    border-color: #43362C;
+}
+
+body .ant-radio-inner::after {
+    background-color: #43362C;
+}
+
+body .ant-switch-checked {
+    background-color: #43362C;
+}
+
+/* ----- 滑桿（專案完成度用，0.4.42 加的） ----- */
+body .ant-slider-track,
+body .ant-slider:hover .ant-slider-track {
+    background-color: #43362C;
+}
+
+body .ant-slider-handle,
+body .ant-slider-handle:focus,
+body .ant-slider:hover .ant-slider-handle:not(.ant-tooltip-open) {
+    border-color: #43362C;
+    box-shadow: none;
+}
+
+body .ant-slider-dot-active {
+    border-color: #43362C;
+}
+
+/* ----- 進度列（上傳與轉錄用） ----- */
+body .ant-progress-bg,
+body .ant-progress-success-bg {
+    background-color: #43362C;
+}
+
+/* ant-progress 的成功態原本是綠色，這裡沿用色票裡的 --oat-ok，
+   不然完成瞬間會從棕色跳成一個不在色票內的綠。 */
+body .ant-progress-status-success .ant-progress-bg {
+    background-color: #6B7A4A;
+}
+
+/* ----- 分頁（Table 內建） ----- */
+body .ant-pagination-item-active,
+body .ant-pagination-item:hover {
+    border-color: #C2A284;
+}
+
+body .ant-pagination-item-active a,
+body .ant-pagination-item:hover a,
+body .ant-pagination-prev:hover .ant-pagination-item-link,
+body .ant-pagination-next:hover .ant-pagination-item-link {
+    color: #43362C;
+}
+
+body .ant-pagination-prev:hover .ant-pagination-item-link,
+body .ant-pagination-next:hover .ant-pagination-item-link {
+    border-color: #C2A284;
+}
+
+/* ----- 下拉選單的選中項 ----- */
+body .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+    color: #43362C;
+    background-color: #E3D4C7;
+}
+
+body .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+    background-color: #EEE5DE;
+}
+
+/* ----- 載入指示器 ----- */
+body .ant-spin-dot-item {
+    background-color: #43362C;
+}
+
+/* ============================================================
+   按鈕內的「圖示＋文字」排版（0.4.57）
+
+   全站按鈕一律要有可見文字，不能只靠圖示與 Tooltip 表達用途——
+   Tooltip 在觸控裝置上根本叫不出來，純圖示等於沒有標籤。
+
+   放全域而不是各元件的 scoped CSS：這條規則有 8 個以上的元件要用，
+   抄 8 份的話日後改一處必定會漏。全域樣式也不受 scope 屬性限制，
+   選得到 MaterialIcon 渲染出來的 span（scoped CSS 得多寫 ::deep）。
+   ============================================================ */
+.btn-icon-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* Material Icon 預設 24px，不指定會比 14px 的按鈕文字大一截，也把基線帶歪。 */
+.btn-icon-label .material-icons,
+.btn-icon-label .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* 清單「操作」欄的按鈕從 0.4.57 起帶文字，專案頁一列最多 5 顆（檢視／編修／匯出／
+   逐字稿／問答）。AntDesign 的 .ant-space 沒有 flex-wrap，不限寬的話這個
+   Fixed="Right" 的欄位會撐到 500px 以上，把表格推出畫面。
+   限寬 + 換行讓它排成兩行——列高變高，但比整張表橫向捲動好。 */
+.ant-table-cell .ant-space:not(.ant-space-vertical) {
+    flex-wrap: wrap;
+    max-width: 22rem;
 }

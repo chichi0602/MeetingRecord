@@ -22,6 +22,9 @@ public enum DraftStatus
 
     /// <summary>生成失敗，失敗原因記錄於 DraftError</summary>
     Failed = 4,
+
+    /// <summary>使用者主動取消（排隊中或執行中皆可）。刻意與 Failed 分開——把主動取消顯示成紅色的「失敗」是說謊。</summary>
+    Cancelled = 5,
 }
 
 /// <summary>草稿狀態的顯示文字（UI 與日誌共用，避免各處各自翻譯）。</summary>
@@ -34,6 +37,7 @@ public static class DraftStatusText
         DraftStatus.Processing => "生成中",
         DraftStatus.Completed => "已完成",
         DraftStatus.Failed => "失敗",
+        DraftStatus.Cancelled => "已取消",
         _ => "未知",
     };
 }

@@ -1,28 +1,39 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
 
-<Tooltip Title="@Title">
-    @if (!string.IsNullOrWhiteSpace(Href))
-    {
-        <a class="@CssClass"
-           href="@Href"
-           target="@Target"
-           title="@Title"
-           aria-label="@Title">
-            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@Icon" />
-        </a>
-    }
-    else
-    {
-        <Button Type="ButtonType.Default"
-                Class="@CssClass"
-                Disabled="@Disabled"
-                OnClick="HandleClickAsync">
-            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@Icon" />
-            <span class="crud-action-button-label">@Title</span>
-        </Button>
-    }
-</Tooltip>
+@* 0.4.57：文字改為「可見」。原本 .crud-action-button-label 是 clip 隱藏的無障礙標籤，
+   按鈕在畫面上只剩一個圖示，用途全靠 Tooltip 表達——而 Tooltip 在觸控裝置上
+   根本叫不出來。Tooltip 保留，它現在是補充而不是唯一的說明。
+
+   外層這個 span 不是裝飾，是為了讓 scoped CSS 有東西可選：Tooltip 與 Button 都是
+   子元件，scope 屬性不會傳進去，`.crud-action-button {}` 會被編成
+   `.crud-action-button[b-xxx]` 而永遠選不到（<a> 那一支是自己寫的所以本來有效，
+   <Button> 那一支則整段是死的）。從這個 span 用 ::deep 選進去，兩支都涵蓋。 *@
+<span class="crud-action-button-host">
+    <Tooltip Title="@Title">
+        @if (!string.IsNullOrWhiteSpace(Href))
+        {
+            <a class="@CssClass"
+               href="@Href"
+               target="@Target"
+               title="@Title"
+               aria-label="@Title">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@Icon" />
+                <span class="crud-action-button-label">@Title</span>
+            </a>
+        }
+        else
+        {
+            <Button Type="ButtonType.Default"
+                    Class="@CssClass"
+                    Disabled="@Disabled"
+                    OnClick="HandleClickAsync">
+                <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@Icon" />
+                <span class="crud-action-button-label">@Title</span>
+            </Button>
+        }
+    </Tooltip>
+</span>
 
 @code {
     [Parameter]

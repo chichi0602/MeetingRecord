@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
@@ -416,6 +417,110 @@ public sealed class MeetingServiceTests
 
     #endregion
 
+    #region 逐字稿人工編修
+
+    [Fact]
+    public async Task UpdateTranscriptAsync_ShouldOverwriteFileInPlace()
+    {
+        // 就地覆寫是這個功能的核心：路徑必須不變，否則 Meeting.TranscriptRelativePath 會指向舊檔。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var relativePath = fixture.WriteTranscriptFile("2026/09/transcript.txt", "王小名說明進度");
+
+        var existing = await fixture.AddMeetingAsync("週會");
+        existing.TranscriptRelativePath = relativePath;
+        existing.TranscriptionStatus = TranscriptionStatus.Completed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var result = await service.UpdateTranscriptAsync(existing.Id, "王小明說明進度");
+
+        Assert.True(result.Success);
+        Assert.Equal("王小明說明進度", await service.ReadTranscriptAsync(existing.Id));
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Equal(relativePath, saved.TranscriptRelativePath);
+    }
+
+    [Fact]
+    public async Task UpdateTranscriptAsync_ShouldTouchUpdatedAt()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var relativePath = fixture.WriteTranscriptFile("2026/09/transcript.txt", "原始內容");
+
+        var existing = await fixture.AddMeetingAsync("週會");
+        existing.TranscriptRelativePath = relativePath;
+        existing.TranscriptionStatus = TranscriptionStatus.Completed;
+        existing.UpdatedAt = new DateTime(2026, 1, 1);
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        await service.UpdateTranscriptAsync(existing.Id, "修正後內容");
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.True(saved.UpdatedAt > new DateTime(2026, 1, 1));
+    }
+
+    [Theory]
+    [InlineData(TranscriptionStatus.Processing)]
+    [InlineData(TranscriptionStatus.Pending)]
+    [InlineData(TranscriptionStatus.Failed)]
+    public async Task UpdateTranscriptAsync_ShouldRejectWhenTranscriptionIsNotCompleted(TranscriptionStatus status)
+    {
+        // 重新轉錄中存檔會被即將寫入的新逐字稿蓋掉，等於使用者白改一場；要當場擋下並說清楚。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var relativePath = fixture.WriteTranscriptFile("2026/09/transcript.txt", "原始內容");
+
+        var existing = await fixture.AddMeetingAsync("週會");
+        existing.TranscriptRelativePath = relativePath;
+        existing.TranscriptionStatus = status;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var result = await service.UpdateTranscriptAsync(existing.Id, "修改內容");
+
+        Assert.False(result.Success);
+        Assert.Equal("原始內容", await File.ReadAllTextAsync(fixture.TranscriptFullPath(relativePath)));
+    }
+
+    [Fact]
+    public async Task UpdateTranscriptAsync_NonAdmin_ShouldDenyRecordOutsideTeamScope()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var relativePath = fixture.WriteTranscriptFile("2026/09/transcript.txt", "機密逐字稿");
+
+        var existing = await fixture.AddMeetingAsync("團隊B的會議", teams: ["團隊B"]);
+        existing.TranscriptRelativePath = relativePath;
+        existing.TranscriptionStatus = TranscriptionStatus.Completed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var result = await service.UpdateTranscriptAsync(existing.Id, "竄改內容");
+
+        Assert.False(result.Success);
+        Assert.Equal("機密逐字稿", await File.ReadAllTextAsync(fixture.TranscriptFullPath(relativePath)));
+    }
+
+    [Fact]
+    public async Task UpdateTranscriptAsync_MissingMeeting_ShouldFailWithoutThrowing()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        var result = await service.UpdateTranscriptAsync(999, "內容");
+
+        Assert.False(result.Success);
+    }
+
+    #endregion
+
     #region AI 會議紀錄草稿
 
     [Fact]
@@ -723,6 +828,7 @@ public sealed class MeetingServiceTests
         private readonly ILoggerFactory loggerFactory;
         private readonly string rootPath;
         private readonly MeetingFileStore fileStore;
+        private readonly AiChatStore chatStore;
 
         private MeetingServiceFixture(SqliteConnection connection, BackendDBContext context, string rootPath)
         {
@@ -739,10 +845,15 @@ public sealed class MeetingServiceTests
             var systemSettings = new SystemSettings();
             systemSettings.ExternalFileSystem.MeetingMediaPath = MediaRoot;
             systemSettings.ExternalFileSystem.MeetingTranscriptPath = TranscriptRoot;
+            systemSettings.ExternalFileSystem.AiChatPath = AiChatRoot;
 
             fileStore = new MeetingFileStore(
                 Options.Create(systemSettings),
                 loggerFactory.CreateLogger<MeetingFileStore>());
+
+            chatStore = new AiChatStore(
+                Options.Create(systemSettings),
+                loggerFactory.CreateLogger<AiChatStore>());
         }
 
         public BackendDBContext Context { get; }
@@ -759,6 +870,8 @@ public sealed class MeetingServiceTests
         public string MediaRoot => Path.Combine(rootPath, "media");
 
         public string TranscriptRoot => Path.Combine(rootPath, "transcript");
+
+        public string AiChatRoot => Path.Combine(rootPath, "aichat");
 
         public static async Task<MeetingServiceFixture> CreateAsync()
         {
@@ -786,6 +899,7 @@ public sealed class MeetingServiceTests
                 loggerFactory.CreateLogger<MeetingService>(),
                 new FakeScopeProvider(isAdmin, teams),
                 fileStore,
+                chatStore,
                 Queue,
                 ProgressNotifier,
                 DraftQueue,

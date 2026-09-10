@@ -1,3 +1,7 @@
+using Microsoft.EntityFrameworkCore;
+using MeetingRecord.AccessDatas;
+using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Business.Services.Transcription;
 
 namespace MeetingRecord.Web.BackgroundServices;
@@ -17,17 +21,50 @@ namespace MeetingRecord.Web.BackgroundServices;
 public sealed class TranscriptionBackgroundService : BackgroundService
 {
     private readonly ITranscriptionQueue queue;
+    private readonly IJobCancellationRegistry cancellationRegistry;
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ILogger<TranscriptionBackgroundService> logger;
 
     public TranscriptionBackgroundService(
         ITranscriptionQueue queue,
+        IJobCancellationRegistry cancellationRegistry,
         IServiceScopeFactory scopeFactory,
         ILogger<TranscriptionBackgroundService> logger)
     {
         this.queue = queue;
+        this.cancellationRegistry = cancellationRegistry;
         this.scopeFactory = scopeFactory;
         this.logger = logger;
+    }
+
+    /// <summary>
+    /// 排隊中就被取消的工作：runner 根本不會跑，狀態得由這裡收尾，
+    /// 否則會永遠卡在「待處理」等一個不會來的 worker。
+    /// </summary>
+    private async Task MarkQueuedJobCancelledAsync(IServiceProvider services, int meetingId)
+    {
+        try
+        {
+            var context = services.GetRequiredService<BackendDBContext>();
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId);
+            if (meeting is null)
+            {
+                return;
+            }
+
+            meeting.TranscriptionStatus = TranscriptionStatus.Cancelled;
+            meeting.TranscriptionError = null;
+            meeting.TranscriptionCompletedAt = DateTime.Now;
+            meeting.UpdatedAt = DateTime.Now;
+            await context.SaveChangesAsync();
+
+            services.GetRequiredService<ITranscriptionProgressNotifier>()
+                .ReportFailed(meetingId, "已由使用者取消。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist queued transcription cancellation. MeetingId={MeetingId}", meetingId);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,8 +86,19 @@ public sealed class TranscriptionBackgroundService : BackgroundService
             try
             {
                 using var scope = scopeFactory.CreateScope();
+
+                // 還在排隊時就被取消：直接跳過，不要浪費一次 API 呼叫。
+                if (cancellationRegistry.TryConsumePendingCancel(BackgroundJobKind.Transcription, meetingId))
+                {
+                    logger.LogInformation("Transcription skipped because it was cancelled while queued. MeetingId={MeetingId}", meetingId);
+                    await MarkQueuedJobCancelledAsync(scope.ServiceProvider, meetingId);
+                    continue;
+                }
+
+                using var handle = cancellationRegistry.BeginJob(BackgroundJobKind.Transcription, meetingId, stoppingToken);
                 var runner = scope.ServiceProvider.GetRequiredService<TranscriptionJobRunner>();
-                await runner.RunAsync(meetingId, stoppingToken);
+
+                await runner.RunAsync(meetingId, handle.Token, () => handle.IsCancelledByUser);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

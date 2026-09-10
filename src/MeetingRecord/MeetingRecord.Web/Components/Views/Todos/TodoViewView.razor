@@ -13,17 +13,17 @@ else
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
                 {
                     <Tooltip Title="新增">
-                        <Button Type="ButtonType.Default" Class="todo-view-icon-button"
+                        <Button Type="ButtonType.Default"
                                 Disabled="@(availableProjects.Count == 0)"
                                 OnClick="@(async () => await OnAddAsync())">
-                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" />
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
                     </Tooltip>
                 }
                 <Tooltip Title="重新整理">
-                    <Button Type="ButtonType.Default" Class="todo-view-icon-button"
+                    <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
-                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" />
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
                 </Tooltip>
             </div>
@@ -68,16 +68,16 @@ else
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <Tooltip Title="清空搜尋">
-                        <Button Type="ButtonType.Default" Class="todo-view-icon-button"
+                        <Button Type="ButtonType.Default"
                                 OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
-                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" />
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
                     </Tooltip>
                 }
                 <Tooltip Title="搜尋">
-                    <Button Type="ButtonType.Default" Class="todo-view-icon-button"
+                    <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnSearchAsync())">
-                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" />
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
                 </Tooltip>
             </div>

@@ -51,7 +51,14 @@ public class MeetingDraftJobRunner
         this.logger = logger;
     }
 
-    public async Task RunAsync(int meetingId, CancellationToken cancellationToken)
+    /// <param name="isCancelledByUser">
+    /// 回報這次中斷是不是使用者主動要求的。應用程式關機同樣會拋 OperationCanceledException，
+    /// 沒有這個判斷就會把關機時中斷的工作全部誤標成「已取消」。
+    /// </param>
+    public async Task RunAsync(
+        int meetingId,
+        CancellationToken cancellationToken,
+        Func<bool>? isCancelledByUser = null)
     {
         var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null)
@@ -125,6 +132,12 @@ public class MeetingDraftJobRunner
                 "Draft generation completed. MeetingId={MeetingId}, Length={Length}",
                 meetingId,
                 draft.Length);
+        }
+        catch (OperationCanceledException) when (isCancelledByUser?.Invoke() == true)
+        {
+            // 只有「使用者按了取消」才標成已取消；關機造成的中斷留給啟動復原標成失敗。
+            logger.LogInformation("Draft generation cancelled by user. MeetingId={MeetingId}", meetingId);
+            await MarkCancelledAsync(meeting);
         }
         catch (Exception ex)
         {
@@ -252,6 +265,30 @@ public class MeetingDraftJobRunner
         }
 
         return template.Content;
+    }
+
+    /// <summary>
+    /// 標記為使用者取消。與 <see cref="MarkFailedAsync"/> 分開——取消不是失敗，
+    /// 不該在畫面上顯示成紅色的錯誤狀態。
+    /// </summary>
+    private async Task MarkCancelledAsync(AccessDatas.Models.Meeting meeting)
+    {
+        progressNotifier.ReportFailed(meeting.Id, "已由使用者取消。");
+
+        try
+        {
+            meeting.DraftStatus = DraftStatus.Cancelled;
+            meeting.DraftError = null;
+            meeting.DraftCompletedAt = DateTime.Now;
+            meeting.UpdatedAt = DateTime.Now;
+
+            // 權杖已經被取消了，這裡必須用 None，否則狀態寫不進去。
+            await context.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist draft cancelled state. MeetingId={MeetingId}", meeting.Id);
+        }
     }
 
     private async Task MarkFailedAsync(AccessDatas.Models.Meeting meeting, string message)

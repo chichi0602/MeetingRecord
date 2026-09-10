@@ -1,0 +1,117 @@
+.line-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 20px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.line-chart-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.line-chart-title {
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.line-chart-legend {
+    display: flex;
+    gap: 14px;
+    font-size: 0.76rem;
+    color: var(--oat-ink-mid);
+}
+
+.line-chart-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.line-chart-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.line-chart-empty {
+    padding: 36px 0;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    text-align: center;
+}
+
+/* preserveAspectRatio="none" 讓圖橫向撐滿容器；高度固定，避免寬螢幕下線條被拉得太扁。 */
+.line-chart-svg {
+    width: 100%;
+    height: 150px;
+}
+
+.line-chart-axis {
+    stroke: var(--oat-300);
+    stroke-width: 1;
+}
+
+.line-chart-line {
+    fill: none;
+    stroke-width: 2;
+    /* 不隨 viewBox 拉伸而變形：沒有這行，preserveAspectRatio="none" 會把線寬橫向拉粗。 */
+    vector-effect: non-scaling-stroke;
+}
+
+.line-chart-line-created,
+.line-chart-dot-created {
+    stroke: var(--oat-ink);
+}
+
+.line-chart-line-completed,
+.line-chart-dot-completed {
+    stroke: var(--oat-ok);
+}
+
+.line-chart-dot-created {
+    fill: var(--oat-ink);
+}
+
+.line-chart-dot-completed {
+    fill: var(--oat-ok);
+}
+
+/* 圖例的小圓點是 HTML 不是 SVG，吃的是 background 而非 fill。 */
+.line-chart-key .line-chart-dot-created {
+    background: var(--oat-ink);
+}
+
+.line-chart-key .line-chart-dot-completed {
+    background: var(--oat-ok);
+}
+
+.line-chart-axis-labels {
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+}
+
+.line-chart-axis-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--oat-ink-mid);
+    font-size: 0.66rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.line-chart-note {
+    color: var(--oat-ink-mid);
+    font-size: 0.76rem;
+    text-align: center;
+}

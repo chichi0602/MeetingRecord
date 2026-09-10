@@ -29,7 +29,6 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<UserRole> UserRole { get; set; }
     public virtual DbSet<UserTeam> UserTeam { get; set; }
 
-    public virtual DbSet<AiChatMessage> AiChatMessage { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -78,22 +77,6 @@ public partial class BackendDBContext : DbContext
                 .WithOne(x => x.Meeting)
                 .HasForeignKey(x => x.MeetingId)
                 .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<AiChatMessage>(entity =>
-        {
-            // 對話依附於它問的那個對象，對象沒了對話也就沒有意義，兩邊都是 Cascade。
-            entity.HasOne(x => x.Project).WithMany()
-                .HasForeignKey(x => x.ProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(x => x.Meeting).WithMany()
-                .HasForeignKey(x => x.MeetingId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // 讀取一定是「某個對象的整段對話依時間排序」，兩個索引各服務一種範圍。
-            entity.HasIndex(x => new { x.ProjectId, x.Id });
-            entity.HasIndex(x => new { x.MeetingId, x.Id });
         });
 
         #region RBAC 關聯（多對多）與唯一鍵

@@ -20,6 +20,9 @@ public enum TranscriptionStatus
 
     /// <summary>轉錄失敗，失敗原因記錄於 TranscriptionError</summary>
     Failed = 4,
+
+    /// <summary>使用者主動取消（排隊中或執行中皆可）。刻意與 Failed 分開——把主動取消顯示成紅色的「失敗」是說謊。</summary>
+    Cancelled = 5,
 }
 
 /// <summary>轉錄狀態的顯示文字（UI 與日誌共用，避免各處各自翻譯）。</summary>
@@ -32,6 +35,7 @@ public static class TranscriptionStatusText
         TranscriptionStatus.Processing => "處理中",
         TranscriptionStatus.Completed => "已完成",
         TranscriptionStatus.Failed => "失敗",
+        TranscriptionStatus.Cancelled => "已取消",
         _ => "未知",
     };
 }

@@ -29,8 +29,10 @@ main {
 }
 
 /* ===== 側邊欄收合鈕（0.4.44 起改掛在側邊欄外緣中間）=====
-   手機優先：直向堆疊時 --sidebar-width 是 100%，貼右邊界會跑出畫面，
-   所以預設沿用舊位置（側邊欄標題列的左上角），桌機斷點才改成外緣浮動。 */
+   手機優先：直向堆疊時 --sidebar-width 是 100%，貼「外緣」會跑出畫面，
+   所以在標題列內浮動，桌機斷點才改成掛在側邊欄外緣。
+   0.4.56：手機版改靠右。原本 left: 1rem 會直接壓在左側的品牌標誌上
+   ——那是 0.4.44 把按鈕移出來時留下的缺陷。 */
 .sidebar-toggle-edge {
     align-items: center;
     background: var(--oat-ink);
@@ -42,7 +44,7 @@ main {
     display: inline-flex;
     height: 2rem;
     justify-content: center;
-    left: 1rem;
+    right: 1rem;
     padding: 0;
     position: absolute;
     top: 1.15rem;
@@ -123,7 +125,7 @@ main {
 }
 
 .user-menu-trigger:focus-visible {
-    outline: 2px solid rgba(37, 99, 235, 0.45);
+    outline: 2px solid rgba(194, 162, 132, 0.75);
     outline-offset: 2px;
 }
 
@@ -320,6 +322,7 @@ main {
        left 取 .page 上的 --sidebar-width，收合／展開時按鈕會跟著滑動。 */
     .sidebar-toggle-edge {
         left: var(--sidebar-width);
+        right: auto;
         position: fixed;
         top: 50%;
         transform: translate(-50%, -50%);

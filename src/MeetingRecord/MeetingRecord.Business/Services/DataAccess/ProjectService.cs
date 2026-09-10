@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
@@ -18,6 +19,7 @@ public class ProjectService
 
     private readonly BackendDBContext context;
     private readonly string projectFileRootPath;
+    private readonly AiChatStore chatStore;
 
     public IMapper Mapper { get; }
     public ILogger<ProjectService> Logger { get; }
@@ -26,12 +28,14 @@ public class ProjectService
         BackendDBContext context,
         IMapper mapper,
         ILogger<ProjectService> logger,
-        IOptions<SystemSettings> systemSettings)
+        IOptions<SystemSettings> systemSettings,
+        AiChatStore chatStore)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
         projectFileRootPath = systemSettings.Value.ExternalFileSystem.ProjectFilePath;
+        this.chatStore = chatStore;
     }
 
     public async Task<DataRequestResult<ProjectAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -262,6 +266,9 @@ public class ProjectService
             context.Project.Remove(item);
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Project>(context);
+
+            // 0.4.60 起對話存在檔案系統，資料表已移除，Cascade 不會再幫我們清掉它。
+            chatStore.TryDelete(AiChatScope.Project, id);
 
             Logger.LogInformation("Project deleted successfully. ProjectId={ProjectId}, Title={Title}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);

@@ -9,6 +9,7 @@ public class RolePermissionService
     {
         return
         [
+            [MagicObjectHelper.角色_儀表板],
             [
                 MagicObjectHelper.角色_專案管理,
                 MagicObjectHelper.角色_專案項目,

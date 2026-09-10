@@ -5,16 +5,16 @@
             <span class="job-progress-panel-title">@HeaderText</span>
             <div class="job-progress-panel-header-actions">
                 <button type="button"
-                        class="job-progress-panel-icon-button"
-                        aria-label="@(isCollapsed ? "展開" : "收合")"
+                        class="job-progress-panel-text-button"
                         @onclick="ToggleCollapsed">
                     <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@(isCollapsed ? "expand_less" : "expand_more")" />
+                    <span>@(isCollapsed ? "展開" : "收合")</span>
                 </button>
                 <button type="button"
-                        class="job-progress-panel-icon-button"
-                        aria-label="全部關閉"
+                        class="job-progress-panel-text-button"
                         @onclick="DismissAll">
                     <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="close" />
+                    <span>全部關閉</span>
                 </button>
             </div>
         </div>
@@ -48,11 +48,23 @@
                             {
                                 <span class="job-progress-panel-percent">@job.Percent%</span>
                             }
+                            @if (job.IsRunning)
+                            {
+                                @* 「關閉」只是移除通知、工作照跑，所以真正的取消得是另一顆按鈕。 *@
+                                <button type="button"
+                                        class="job-progress-panel-text-button job-progress-panel-row-cancel"
+                                        title="取消這項工作"
+                                        @onclick="@(() => CancelJob(job))">
+                                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="cancel" />
+                                    <span>取消</span>
+                                </button>
+                            }
                             <button type="button"
-                                    class="job-progress-panel-icon-button job-progress-panel-row-close"
-                                    aria-label="關閉這一筆"
+                                    class="job-progress-panel-text-button job-progress-panel-row-close"
+                                    title="@CloseButtonLabel(job)"
                                     @onclick="@(() => Dismiss(job))">
                                 <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="close" />
+                                <span>關閉</span>
                             </button>
                         </div>
 

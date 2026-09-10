@@ -1,5 +1,12 @@
 [
   {
+    "id": 11,
+    "name": "儀表板",
+    "icon": "space_dashboard",
+    "url": "/dashboard",
+    "section": "核心功能"
+  },
+  {
     "id": 61,
     "name": "會議紀錄",
     "icon": "mic",

@@ -25,6 +25,7 @@ public class MagicObjectHelper
     #endregion
 
     #region 角色
+    public const string 角色_儀表板 = "儀表板";
     public const string 角色_專案管理 = "專案管理功能";
     public const string 角色_專案項目 = "專案項目";
     public const string 角色_待辦事項 = "待辦事項";

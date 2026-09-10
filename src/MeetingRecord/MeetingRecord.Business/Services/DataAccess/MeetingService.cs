@@ -5,6 +5,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
@@ -23,6 +24,7 @@ public class MeetingService
     private readonly BackendDBContext context;
     private readonly IRecordAccessScopeProvider accessScope;
     private readonly MeetingFileStore fileStore;
+    private readonly AiChatStore chatStore;
     private readonly ITranscriptionQueue transcriptionQueue;
     private readonly ITranscriptionProgressNotifier progressNotifier;
     private readonly IMeetingDraftQueue draftQueue;
@@ -37,6 +39,7 @@ public class MeetingService
         ILogger<MeetingService> logger,
         IRecordAccessScopeProvider accessScope,
         MeetingFileStore fileStore,
+        AiChatStore chatStore,
         ITranscriptionQueue transcriptionQueue,
         ITranscriptionProgressNotifier progressNotifier,
         IMeetingDraftQueue draftQueue,
@@ -47,6 +50,7 @@ public class MeetingService
         Logger = logger;
         this.accessScope = accessScope;
         this.fileStore = fileStore;
+        this.chatStore = chatStore;
         this.transcriptionQueue = transcriptionQueue;
         this.progressNotifier = progressNotifier;
         this.draftQueue = draftQueue;
@@ -307,6 +311,9 @@ public class MeetingService
             fileStore.TryDeleteMedia(mediaRelativePath);
             fileStore.TryDeleteTranscript(transcriptRelativePath);
 
+            // 0.4.60 起對話存在檔案系統，資料表已移除，Cascade 不會再幫我們清掉它。
+            chatStore.TryDelete(AiChatScope.Meeting, id);
+
             Logger.LogInformation("Meeting deleted successfully. MeetingId={MeetingId}, Title={Title}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -523,6 +530,65 @@ public class MeetingService
         }
 
         return await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken);
+    }
+
+    /// <summary>
+    /// 人工編修逐字稿。
+    ///
+    /// <para>
+    /// STT 聽錯人名或專有名詞時，這是整條流程裡唯一的人工介入點——沒有它，
+    /// 錯誤會原封不動被帶進 AI 會議紀錄，再帶進匯出的 PDF。
+    /// </para>
+    ///
+    /// <para>
+    /// **只允許在轉錄已完成時儲存**：若期間有人按了「重新轉錄」，狀態會是 Pending／Processing，
+    /// 此時存回去只會被即將產生的新逐字稿覆蓋，等於使用者白改一場。
+    /// </para>
+    /// </summary>
+    public async Task<VerifyRecordResult> UpdateTranscriptAsync(
+        int meetingId,
+        string content,
+        CancellationToken cancellationToken = default)
+    {
+        CleanTrackingHelper.Clean<Meeting>(context);
+
+        var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+        if (meeting is null)
+        {
+            return VerifyRecordResultFactory.Build(false, "找不到這筆會議紀錄，可能已被刪除。");
+        }
+
+        var scope = await accessScope.GetAsync();
+        if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+        {
+            Logger.LogWarning("Transcript update denied by team scope. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "沒有權限編修這筆逐字稿。");
+        }
+
+        if (meeting.TranscriptionStatus != TranscriptionStatus.Completed
+            || string.IsNullOrWhiteSpace(meeting.TranscriptRelativePath))
+        {
+            Logger.LogWarning(
+                "Transcript update rejected because transcription is not completed. MeetingId={MeetingId}, Status={Status}",
+                meetingId,
+                meeting.TranscriptionStatus);
+
+            return VerifyRecordResultFactory.Build(
+                false,
+                "目前的轉錄狀態無法編修逐字稿。若正在重新轉錄，請等它完成後再修改，否則您的修改會被新的逐字稿覆蓋。");
+        }
+
+        await fileStore.OverwriteTranscriptAsync(meeting.TranscriptRelativePath, content, cancellationToken);
+
+        meeting.UpdatedAt = DateTime.Now;
+        await context.SaveChangesAsync(cancellationToken);
+
+        Logger.LogInformation(
+            "Transcript updated manually. MeetingId={MeetingId}, Length={Length}",
+            meetingId,
+            content.Length);
+
+        return VerifyRecordResultFactory.Build(true);
     }
 
     #endregion

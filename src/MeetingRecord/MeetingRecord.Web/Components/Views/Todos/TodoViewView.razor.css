@@ -19,14 +19,6 @@
     width: 220px;
 }
 
-.todo-view-icon-button {
-    width: 36px;
-    padding: 0;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-}
-
 .todo-view-empty {
     padding: 24px 16px;
     margin-bottom: 12px;

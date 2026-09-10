@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.AiChat;
+using MeetingRecord.Business.Services.TodoExtraction;
 using MeetingRecord.Business.Repositories;
+using MeetingRecord.Business.Services.Dashboard;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
@@ -88,6 +90,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();
+        services.AddScoped<DashboardService>();
         services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();
@@ -103,6 +106,10 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddTranscriptionServices(this IServiceCollection services)
     {
+        // 取消登記處必須是 Singleton：發出取消的是 Blazor circuit（Scoped），
+        // 執行工作的是背景服務（Singleton），兩者要透過同一個實例才碰得到面。
+        services.AddSingleton<IJobCancellationRegistry, JobCancellationRegistry>();
+
         services.AddSingleton<ITranscriptionQueue, TranscriptionQueue>();
 
         // 進度只存在記憶體：跨 circuit 共用、隨行程重啟消失（重啟時殘留的「處理中」本來就會被標記為失敗）。
@@ -142,7 +149,10 @@ public static class ServiceCollectionExtensions
         // AI 問答（0.4.51）：複用上面那個 ITextGenerationProvider，不另接一條到 Azure OpenAI。
         // 沒有佇列與背景 worker——問答是使用者等在畫面前的同步互動，不是背景工作。
         services.AddScoped<AttachmentTextExtractor>();
+        // Singleton：沒有 DbContext 相依，而且要持有依對話檔的寫入鎖（同一段對話可能有兩人同時提問）。
+        services.AddSingleton<AiChatStore>();
         services.AddScoped<AiChatService>();
+        services.AddScoped<TodoExtractionService>();
 
         // 長逐字稿的生成可能耗時數分鐘，預設的 100 秒逾時不夠。
         services.AddHttpClient(AzureOpenAiTextGenerationProvider.HttpClientName, client =>

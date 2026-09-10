@@ -27,6 +27,12 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
     [Inject]
     public IRecordAccessScopeProvider AccessScope { get; set; } = default!;
 
+    [Inject]
+    public IJobCancellationRegistry CancellationRegistry { get; set; } = default!;
+
+    [Inject]
+    public ILogger<BackgroundJobProgressPanel> Logger { get; set; } = default!;
+
     private List<JobRow> visibleJobs = [];
     private bool isCollapsed;
 
@@ -86,6 +92,30 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
     }
 
     private void ToggleCollapsed() => isCollapsed = !isCollapsed;
+
+    /// <summary>
+    /// 關閉鈕的說明。進行中時必須講清楚**工作會繼續跑**——
+    /// 這顆按鈕在 0.4.55 之前只寫「關閉這一筆」，很容易被當成取消。
+    /// </summary>
+    private static string CloseButtonLabel(JobRow job)
+        => job.IsRunning ? "關閉通知（工作會繼續執行）" : "關閉這一筆";
+
+    /// <summary>
+    /// 真正取消工作。排隊中的會在 worker 取出時被跳過，執行中的會直接中斷。
+    /// </summary>
+    private void CancelJob(JobRow job)
+    {
+        var kind = job.Kind == JobKind.Transcription
+            ? BackgroundJobKind.Transcription
+            : BackgroundJobKind.MeetingDraft;
+
+        CancellationRegistry.RequestCancel(kind, job.MeetingId);
+
+        Logger.LogInformation(
+            "Background job cancellation requested. Kind={Kind}, MeetingId={MeetingId}",
+            kind,
+            job.MeetingId);
+    }
 
     private void Dismiss(JobRow job)
     {

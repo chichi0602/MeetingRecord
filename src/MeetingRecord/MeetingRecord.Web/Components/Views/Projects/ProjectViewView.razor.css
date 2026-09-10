@@ -6,7 +6,14 @@
     margin-bottom: 16px;
 }
 
-.project-view-project-select {
+/* 這兩條掛在 AntDesign 元件的 Class 上。Blazor CSS 隔離的 scope 屬性
+   **不會傳進子元件**，所以 `.project-view-project-select {}` 會被編成
+   `.project-view-project-select[b-xxxxx]` 而永遠選不到——0.4.56 之前整段是死的。
+   Class 本身確實有被 AntDesign 套到渲染出的元素上，缺的只是 scope 屬性，
+   所以從自己寫的 `.project-view-picker` 容器用 `::deep` 選進去即可，不必改標記。
+   （0.4.56 修好的第三條 `.project-view-icon-button`——36px 方形——已於 0.4.57 移除：
+   按鈕加上文字之後，方形圖示鈕這個形狀本來就不該存在了。） */
+.project-view-picker ::deep .project-view-project-select {
     min-width: 260px;
 }
 
@@ -16,15 +23,7 @@
     font-weight: 600;
 }
 
-.project-view-icon-button {
-    width: 36px;
-    padding: 0;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.project-view-icon-button-danger:hover {
+.project-view-picker ::deep .project-view-icon-button-danger:hover {
     color: var(--oat-err);
     border-color: #ffccc7;
     background: var(--oat-err-bg);
@@ -330,4 +329,19 @@
 .project-view-attachment-meta {
     color: var(--oat-ink-mid);
     font-size: 0.76rem;
+}
+
+/* 逐字稿編修列：提示文字靠左、儲存鈕靠右。 */
+.project-view-transcript-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.project-view-transcript-hint {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
 }

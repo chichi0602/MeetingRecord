@@ -1,0 +1,46 @@
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 18px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.stat-card-title {
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.stat-card-value {
+    color: var(--oat-ink);
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1.1;
+    /* 數字等寬，卡片並排時位數不會互相錯開。 */
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.stat-card-caption {
+    color: var(--oat-ink-mid);
+    font-size: 0.76rem;
+}
+
+.stat-card-caption-danger {
+    color: var(--oat-err);
+    font-weight: 600;
+}
+
+.stat-card-caption-warning {
+    color: var(--oat-warn);
+    font-weight: 600;
+}
+
+.stat-card-caption-success {
+    color: var(--oat-ok);
+    font-weight: 600;
+}

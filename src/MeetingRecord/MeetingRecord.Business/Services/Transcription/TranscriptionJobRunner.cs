@@ -46,7 +46,14 @@ public class TranscriptionJobRunner
         this.logger = logger;
     }
 
-    public async Task RunAsync(int meetingId, CancellationToken cancellationToken)
+    /// <param name="isCancelledByUser">
+    /// 回報這次中斷是不是使用者主動要求的。應用程式關機同樣會拋 OperationCanceledException，
+    /// 沒有這個判斷就會把關機時中斷的工作全部誤標成「已取消」。
+    /// </param>
+    public async Task RunAsync(
+        int meetingId,
+        CancellationToken cancellationToken,
+        Func<bool>? isCancelledByUser = null)
     {
         var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null)
@@ -149,6 +156,13 @@ public class TranscriptionJobRunner
                 segments.SegmentFullPaths.Count,
                 transcript.Length);
         }
+        catch (OperationCanceledException) when (isCancelledByUser?.Invoke() == true)
+        {
+            // 只有「使用者按了取消」才標成已取消。應用程式關機時同樣會拋這個例外，
+            // 但那些工作是被中斷、不是被放棄，得留給啟動時的復原邏輯標成失敗。
+            logger.LogInformation("Transcription cancelled by user. MeetingId={MeetingId}", meetingId);
+            await MarkCancelledAsync(meeting);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Transcription failed. MeetingId={MeetingId}", meetingId);
@@ -180,6 +194,30 @@ public class TranscriptionJobRunner
         }
 
         return provider;
+    }
+
+    /// <summary>
+    /// 標記為使用者取消。沿用失敗的通知管道（畫面上都是「這筆結束了」），
+    /// 但狀態與錯誤訊息分開——取消不是失敗，不該顯示成紅色的錯誤。
+    /// </summary>
+    private async Task MarkCancelledAsync(AccessDatas.Models.Meeting meeting)
+    {
+        progressNotifier.ReportFailed(meeting.Id, "已由使用者取消。");
+
+        try
+        {
+            meeting.TranscriptionStatus = TranscriptionStatus.Cancelled;
+            meeting.TranscriptionError = null;
+            meeting.TranscriptionCompletedAt = DateTime.Now;
+            meeting.UpdatedAt = DateTime.Now;
+
+            // 權杖已經被取消了，這裡必須用 None，否則狀態寫不進去。
+            await context.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist transcription cancelled state. MeetingId={MeetingId}", meeting.Id);
+        }
     }
 
     private async Task MarkFailedAsync(AccessDatas.Models.Meeting meeting, string message)

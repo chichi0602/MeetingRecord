@@ -1,0 +1,127 @@
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.dashboard-denied,
+.dashboard-loading {
+    padding: 40px 16px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px dashed var(--oat-300);
+    border-radius: 12px;
+}
+
+.dashboard-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dashboard-heading {
+    margin: 0;
+    color: var(--oat-ink);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+/* Material Icon 預設 24px，不指定會比按鈕文字大一截。
+   包一層自己寫的 span 才選得到——scope 屬性不會傳進 AntDesign 的 Button。 */
+.dashboard-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+}
+
+.dashboard-refresh ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* auto-fit + minmax：卡片數量固定為 6，但視窗寬度決定一列排幾張，不必寫斷點。 */
+.dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 14px;
+}
+
+.dashboard-grid-wide {
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
+.dashboard-performance {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.dashboard-performance-title {
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.dashboard-performance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+}
+
+.dashboard-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dashboard-metric-label {
+    color: var(--oat-ink-mid);
+    font-size: 0.74rem;
+}
+
+.dashboard-metric-value {
+    color: var(--oat-ink);
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-metric-danger {
+    color: var(--oat-err);
+}
+
+.dashboard-metric-warning {
+    color: var(--oat-warn);
+}
+
+.dashboard-performance-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 10px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+    font-size: 0.78rem;
+    line-height: 1.7;
+}
+
+.dashboard-performance-hint ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.7;
+}

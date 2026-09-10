@@ -251,6 +251,7 @@ namespace MeetingRecord.Web
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.ProjectFilePath, "project file");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingMediaPath, "meeting media");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingTranscriptPath, "meeting transcript");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.AiChatPath, "ai chat");
                 #endregion
 
                 #region EF Core 宣告

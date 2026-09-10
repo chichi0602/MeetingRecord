@@ -25,36 +25,36 @@ else
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Create))
             {
                 <Tooltip Title="新增專案">
-                    <Button Type="ButtonType.Default" Class="project-view-icon-button"
+                    <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnAddAsync(true))">
-                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" />
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增專案</span></span>
                     </Button>
                 </Tooltip>
             }
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
             {
                 <Tooltip Title="編輯專案">
-                    <Button Type="ButtonType.Default" Class="project-view-icon-button"
+                    <Button Type="ButtonType.Default"
                             Disabled="@(SelectedProject is null)"
                             OnClick="@(async () => await OnEditSelectedAsync())">
-                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="edit" />
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="edit" /><span>編輯專案</span></span>
                     </Button>
                 </Tooltip>
             }
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
             {
                 <Tooltip Title="刪除專案">
-                    <Button Type="ButtonType.Default" Class="project-view-icon-button project-view-icon-button-danger"
+                    <Button Type="ButtonType.Default" Class="project-view-icon-button-danger"
                             Disabled="@(SelectedProject is null)"
                             OnClick="@(async () => await OnDeleteSelectedAsync())">
-                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete" />
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete" /><span>刪除專案</span></span>
                     </Button>
                 </Tooltip>
             }
             <Tooltip Title="重新整理">
-                <Button Type="ButtonType.Default" Class="project-view-icon-button"
+                <Button Type="ButtonType.Default"
                         OnClick="@(async () => await OnRefreshAsync())">
-                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" />
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                 </Button>
             </Tooltip>
 
@@ -262,6 +262,16 @@ else
                                                       OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
                                 </SpaceItem>
                             }
+                            @* 這顆鈕真正做的事是「新增待辦」，所以權限鍵是待辦事項而不是專案項目。
+                               HasDraft 與同列的「檢視會議紀錄」一致——沒有草稿就沒有東西可抽。 *@
+                            @if (context.HasDraft
+                                 && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="抽出待辦" Icon="playlist_add"
+                                                      OnClick="@(() => OpenTodoExtraction(context))" />
+                                </SpaceItem>
+                            }
                             @* 不加動作權限檢查，與同列的「檢視會議紀錄」一致（只有編修要 Edit、匯出要 Export）。 *@
                             <SpaceItem>
                                 <CrudActionButton Title="AI 問答" Icon="forum"
@@ -416,7 +426,7 @@ else
                             Loading="@(downloadingFileId == file.Id)"
                             Disabled="@(downloadingFileId is not null && downloadingFileId != file.Id)"
                             OnClick="@(async () => await OnDownloadProjectFileAsync(file))">
-                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" />
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" /><span>下載</span></span>
                     </Button>
                 </li>
             }
@@ -428,6 +438,11 @@ else
                  TargetId="@aiChatTargetId"
                  Title="@aiChatTitle" />
 
+    <TodoExtractionModal @bind-Visible="todoExtractVisible"
+                         MeetingId="@todoExtractMeetingId"
+                         ProjectId="@(SelectedProject?.Id ?? 0)"
+                         MeetingTitle="@todoExtractMeetingTitle" />
+
     <Modal Title="@transcriptModalTitle"
            Class="project-view-transcript-modal"
            Width="800"
@@ -435,7 +450,29 @@ else
            Keyboard="true"
            Footer="null"
            OnCancel="OnTranscriptModalCancelAsync">
-        <pre class="project-view-draft-content">@transcriptContent</pre>
+        @* 這裡也能編修：「正要產生會議紀錄時發現錯字」才是最該修的時機，
+           逼使用者跳到會議紀錄頁是沒有必要的摩擦。 *@
+        <TextArea @bind-Value="transcriptContent"
+                  BindOnInput="true"
+                  Rows="18"
+                  Disabled="@(!canEditTranscript || isSavingTranscript)"
+                  Placeholder="逐字稿內容" />
+
+        <div class="project-view-transcript-actions">
+            @if (canEditTranscript)
+            {
+                <span class="project-view-transcript-hint">修正錯字後儲存，之後產生的會議紀錄就會用修正後的內容。</span>
+                <Button Type="ButtonType.Primary"
+                        Loading="@isSavingTranscript"
+                        OnClick="@(async () => await OnSaveTranscriptAsync())">
+                    儲存逐字稿
+                </Button>
+            }
+            else
+            {
+                <span class="project-view-transcript-hint">目前的轉錄狀態無法編修，完成後才能修改。</span>
+            }
+        </div>
     </Modal>
 }
 

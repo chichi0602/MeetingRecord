@@ -13,16 +13,16 @@ else
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Create))
                 {
                     <Tooltip Title="新增">
-                        <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button"
+                        <Button Type="ButtonType.Default"
                                 OnClick="@(async () => await OnAddAsync())">
-                            ➕
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
                     </Tooltip>
                 }
                 <Tooltip Title="重新整理">
-                    <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button"
+                    <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
-                        🔄
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
                 </Tooltip>
             </div>
@@ -47,14 +47,14 @@ else
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <Tooltip Title="清空搜尋">
-                        <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
-                            ❌
+                        <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
                     </Tooltip>
                 }
                 <Tooltip Title="搜尋">
-                    <Button Type="ButtonType.Default" Class="prompt-template-view-icon-button" OnClick="@(async () => await OnSearchAsync())">
-                        🔍
+                    <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
                 </Tooltip>
             </div>

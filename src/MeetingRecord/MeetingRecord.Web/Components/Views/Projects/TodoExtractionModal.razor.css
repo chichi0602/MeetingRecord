@@ -1,0 +1,154 @@
+.todo-extract {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.todo-extract-notice,
+.todo-extract-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.todo-extract-notice {
+    color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    border: 1px solid var(--oat-warn);
+}
+
+.todo-extract-error {
+    color: var(--oat-err);
+    background: var(--oat-err-bg);
+    border: 1px solid var(--oat-err);
+}
+
+.todo-extract-notice ::deep .material-icons-outlined,
+.todo-extract-error ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.todo-extract-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 16px;
+    color: var(--oat-ink-mid);
+    font-size: 0.88rem;
+}
+
+.todo-extract-empty {
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
+    border: 1px dashed var(--oat-300);
+    border-radius: 12px;
+    font-size: 0.85rem;
+    line-height: 1.9;
+}
+
+.todo-extract-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--oat-100);
+}
+
+.todo-extract-count {
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 抽出十幾條時視窗不該長到看不見底部的按鈕，所以清單自己捲。 */
+.todo-extract-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.todo-extract-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    background: var(--oat-50);
+    border: 1px solid var(--oat-100);
+    border-radius: 10px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* 沒勾的列刻意淡掉，一眼看得出哪些不會被加進去。 */
+.todo-extract-row:not(.todo-extract-row-on) {
+    opacity: 0.55;
+}
+
+.todo-extract-row-on {
+    background: var(--oat-surface);
+    border-color: var(--oat-300);
+}
+
+.todo-extract-check {
+    padding-top: 5px;
+}
+
+.todo-extract-fields {
+    flex: 1;
+    /* flex item 預設 min-width:auto，長標題會把整列撐開而不是縮排。 */
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.todo-extract-desc {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.todo-extract-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.todo-extract-label {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+}
+
+.todo-extract-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--oat-100);
+}
+
+.todo-extract-hint {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+}
+
+.todo-extract-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}

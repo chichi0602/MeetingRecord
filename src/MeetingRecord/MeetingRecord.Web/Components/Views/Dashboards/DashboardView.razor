@@ -1,0 +1,84 @@
+@if (!string.IsNullOrWhiteSpace(RoleMessage))
+{
+    <div class="dashboard-denied">@RoleMessage</div>
+}
+else
+{
+    <div class="dashboard">
+        <div class="dashboard-toolbar">
+            <h2 class="dashboard-heading">營運概況</h2>
+            <Tooltip Title="重新整理">
+                <Button Type="ButtonType.Default" Loading="@isLoading" OnClick="@(async () => await ReloadAsync())">
+                    <span class="dashboard-refresh">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" />
+                        <span>重新整理</span>
+                    </span>
+                </Button>
+            </Tooltip>
+        </div>
+
+        @if (summary is null)
+        {
+            <div class="dashboard-loading">載入中…</div>
+        }
+        else
+        {
+            <div class="dashboard-cards">
+                @foreach (var card in summary.Cards)
+                {
+                    <StatCard Item="card" />
+                }
+            </div>
+
+            <div class="dashboard-grid">
+                <PieChart Title="專案狀態分布" Slices="summary.ProjectStatus" />
+                <PieChart Title="逐字稿轉錄狀態" Slices="summary.TranscriptionStatus" />
+                <PieChart Title="會議紀錄生成狀態" Slices="summary.DraftStatus" />
+            </div>
+
+            <div class="dashboard-grid dashboard-grid-wide">
+                <BarChart Title="各專案的會議紀錄份數（前 8 名）" Items="summary.MeetingsPerProject" />
+                <BarChart Title="提示詞範本使用次數" Items="summary.PromptTemplateUsage" />
+            </div>
+
+            <LineChart Title="近 12 個月趨勢" Points="summary.MonthlyTrend" />
+
+            <div class="dashboard-performance">
+                <div class="dashboard-performance-title">處理效能</div>
+                <div class="dashboard-performance-grid">
+                    <div class="dashboard-metric">
+                        <span class="dashboard-metric-label">平均轉錄耗時</span>
+                        <span class="dashboard-metric-value">@summary.Performance.AverageTranscriptionDuration</span>
+                    </div>
+                    <div class="dashboard-metric">
+                        <span class="dashboard-metric-label">平均生成耗時</span>
+                        <span class="dashboard-metric-value">@summary.Performance.AverageDraftDuration</span>
+                    </div>
+                    <div class="dashboard-metric">
+                        <span class="dashboard-metric-label">轉錄失敗率</span>
+                        <span class="dashboard-metric-value @(IsFailureRateHigh ? "dashboard-metric-danger" : string.Empty)">
+                            @FormatFailureRate()
+                        </span>
+                    </div>
+                    <div class="dashboard-metric">
+                        <span class="dashboard-metric-label">未歸屬逐字稿</span>
+                        <span class="dashboard-metric-value @(summary.Performance.UnassignedTranscriptCount > 0 ? "dashboard-metric-warning" : string.Empty)">
+                            @summary.Performance.UnassignedTranscriptCount 份
+                        </span>
+                    </div>
+                </div>
+
+                @if (summary.Performance.UnassignedTranscriptCount > 0)
+                {
+                    <div class="dashboard-performance-hint">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+                        <span>
+                            有 @summary.Performance.UnassignedTranscriptCount 份逐字稿已轉錄完成但尚未歸屬專案，
+                            可到「專案項目」選取後產生會議紀錄。
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}

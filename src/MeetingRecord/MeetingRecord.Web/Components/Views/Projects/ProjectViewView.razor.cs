@@ -70,6 +70,11 @@ public partial class ProjectViewView : IDisposable
     private string transcriptModalTitle = "逐字稿預覽";
     private string? transcriptContent;
 
+    /// <summary>目前開著的逐字稿屬於哪一筆會議；儲存時要用。</summary>
+    private int editingTranscriptMeetingId;
+    private bool canEditTranscript;
+    private bool isSavingTranscript;
+
     /// <summary>目前選取專案的附件。由 <see cref="ReloadProjectContextAsync"/> 載入。</summary>
     private List<ProjectFileAdapterModel> projectFiles = [];
     private bool attachmentModalVisible;
@@ -81,6 +86,10 @@ public partial class ProjectViewView : IDisposable
     private AiChatScope aiChatScope = AiChatScope.Project;
     private int aiChatTargetId;
     private string aiChatTitle = "AI 問答";
+
+    private bool todoExtractVisible;
+    private int todoExtractMeetingId;
+    private string todoExtractMeetingTitle = string.Empty;
 
     /// <summary>完成百分比滑桿的刻度標記，對齊常用的四分位。</summary>
     private static readonly SliderMark[] CompletionMarks =
@@ -435,12 +444,14 @@ public partial class ProjectViewView : IDisposable
     private Task OnTranscriptModalCancelAsync(MouseEventArgs args)
     {
         transcriptModalVisible = false;
+        editingTranscriptMeetingId = 0;
+        canEditTranscript = false;
         return Task.CompletedTask;
     }
 
     private async Task OnPreviewTranscriptAsync(MeetingAdapterModel meeting)
     {
-        transcriptModalTitle = $"逐字稿預覽 - {meeting.Title}";
+        transcriptModalTitle = $"逐字稿 - {meeting.Title}";
         transcriptContent = await meetingService.ReadTranscriptAsync(meeting.Id);
 
         if (string.IsNullOrWhiteSpace(transcriptContent))
@@ -449,7 +460,42 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
+        // 只有轉錄完成的才給編修：正在重新轉錄時存回去，只會被即將產生的新逐字稿覆蓋。
+        editingTranscriptMeetingId = meeting.Id;
+        canEditTranscript = meeting.TranscriptionStatus == TranscriptionStatus.Completed;
+
         transcriptModalVisible = true;
+    }
+
+    private async Task OnSaveTranscriptAsync()
+    {
+        if (!canEditTranscript || isSavingTranscript || editingTranscriptMeetingId <= 0)
+        {
+            return;
+        }
+
+        isSavingTranscript = true;
+
+        try
+        {
+            var result = await meetingService.UpdateTranscriptAsync(editingTranscriptMeetingId, transcriptContent ?? string.Empty);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                return;
+            }
+
+            await messageService.SuccessAsync("逐字稿已儲存");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Saving transcript failed. MeetingId={MeetingId}", editingTranscriptMeetingId);
+            NotifyError($"儲存逐字稿失敗：{ex.Message}");
+        }
+        finally
+        {
+            isSavingTranscript = false;
+        }
     }
 
     #endregion
@@ -762,6 +808,8 @@ public partial class ProjectViewView : IDisposable
         DraftStatus.Processing => "project-view-status-processing",
         DraftStatus.Pending => "project-view-status-pending",
         DraftStatus.Failed => "project-view-status-failed",
+        // 取消是中性結果，沿用 none 的灰色；明寫出來以免日後有人把它當成遺漏而改成紅色。
+        DraftStatus.Cancelled => "project-view-status-none",
         _ => "project-view-status-none",
     };
 
@@ -788,6 +836,19 @@ public partial class ProjectViewView : IDisposable
         aiChatVisible = true;
     }
 
+
+    /// <summary>
+    /// 從這場會議的會議紀錄抽出待辦。
+    ///
+    /// 抽出來的東西一律進確認視窗讓使用者挑與改，不直接落庫——
+    /// 模型會把人名聽錯、把討論當成行動項目，直接寫進去反而更難收拾。
+    /// </summary>
+    private void OpenTodoExtraction(MeetingAdapterModel meeting)
+    {
+        todoExtractMeetingId = meeting.Id;
+        todoExtractMeetingTitle = meeting.Title;
+        todoExtractVisible = true;
+    }
     private void OpenAttachmentModal() => attachmentModalVisible = true;
 
     private void OnAttachmentModalCancel() => attachmentModalVisible = false;
@@ -847,20 +908,11 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private static string FormatFileSize(long fileSize)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double size = fileSize;
-        var unitIndex = 0;
-
-        while (size >= 1024 && unitIndex < units.Length - 1)
-        {
-            size /= 1024;
-            unitIndex++;
-        }
-
-        return $"{size:0.##} {units[unitIndex]}";
-    }
+    /// <summary>
+    /// 檔案大小格式化。實作已於 0.4.54 抽到 <see cref="FileSizeFormatter"/>——
+    /// 儀表板的「音檔總容量」要用同一套規則，兩邊各留一份遲早會不一致。
+    /// </summary>
+    private static string FormatFileSize(long fileSize) => FileSizeFormatter.Describe(fileSize);
 
     private void NotifySuccess(string description)
     {

@@ -4,7 +4,7 @@
     right: 24px;
     bottom: 24px;
     z-index: 1000;
-    width: 320px;
+    width: 380px;
     background: #ffffff;
     border-radius: 10px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
@@ -37,23 +37,34 @@
     gap: 2px;
 }
 
-.job-progress-panel-icon-button {
+/* 0.4.57：面板上的四顆鈕（收合／全部關閉／取消／關閉）原本都是 26px 方形的純圖示，
+   用途只寫在 aria-label 與 title 裡——滑鼠停留才看得到，觸控裝置上完全看不到。
+   現在一律圖示＋文字，寬度依內容撐開。 */
+.job-progress-panel-text-button {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    padding: 0;
+    gap: 4px;
+    height: 24px;
+    padding: 0 6px;
     border: none;
     border-radius: 4px;
     background: transparent;
     color: #6b7a8d;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
     cursor: pointer;
 }
 
-.job-progress-panel-icon-button:hover {
+.job-progress-panel-text-button:hover {
     background: rgba(0, 0, 0, 0.06);
     color: #1f2d3d;
+}
+
+.job-progress-panel-text-button ::deep .material-icons-outlined {
+    font-size: 15px;
+    line-height: 1;
+}
 }
 
 /* 面板高度刻意設上限：同時排隊多筆時不該把整個畫面吃掉。 */
@@ -101,11 +112,6 @@
     color: #d93026;
 }
 
-.job-progress-panel-row-close {
-    width: 22px;
-    height: 22px;
-}
-
 .job-progress-panel-phase {
     margin-top: 4px;
     color: #8a97a8;
@@ -135,4 +141,9 @@
     display: inline-flex;
     flex: none;
     color: #8a97a8;
+}
+
+/* 取消鈕與關閉鈕視覺上要分得出來——它們的後果完全不同。 */
+.job-progress-panel-row-cancel:hover {
+    color: var(--oat-err);
 }

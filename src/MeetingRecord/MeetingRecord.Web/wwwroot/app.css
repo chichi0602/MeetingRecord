@@ -262,8 +262,9 @@ body .ant-spin-dot-item {
 /* ============================================================
    按鈕內的「圖示＋文字」排版（0.4.57）
 
-   全站按鈕一律要有可見文字，不能只靠圖示與 Tooltip 表達用途——
-   Tooltip 在觸控裝置上根本叫不出來，純圖示等於沒有標籤。
+   有外框的按鈕（工具列、對話框）一律要有可見文字，不能只靠圖示與 Tooltip 表達——
+   Tooltip 在觸控裝置上根本叫不出來。清單「操作」欄的無外框按鈕是 0.4.62 起的例外，
+   只留圖示（見 Components/Commons/CrudActionButton.razor.css）。
 
    放全域而不是各元件的 scoped CSS：這條規則有 8 個以上的元件要用，
    抄 8 份的話日後改一處必定會漏。全域樣式也不受 scope 屬性限制，
@@ -282,13 +283,4 @@ body .ant-spin-dot-item {
 .btn-icon-label .material-icons-outlined {
     font-size: 1rem;
     line-height: 1;
-}
-
-/* 清單「操作」欄的按鈕從 0.4.57 起帶文字，專案頁一列最多 5 顆（檢視／編修／匯出／
-   逐字稿／問答）。AntDesign 的 .ant-space 沒有 flex-wrap，不限寬的話這個
-   Fixed="Right" 的欄位會撐到 500px 以上，把表格推出畫面。
-   限寬 + 換行讓它排成兩行——列高變高，但比整張表橫向捲動好。 */
-.ant-table-cell .ant-space:not(.ant-space-vertical) {
-    flex-wrap: wrap;
-    max-width: 22rem;
 }

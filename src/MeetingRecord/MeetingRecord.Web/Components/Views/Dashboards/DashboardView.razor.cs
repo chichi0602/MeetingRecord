@@ -30,7 +30,11 @@ public partial class DashboardView : ComponentBase
     [Inject]
     public NavigationManager NavigationManager { get; set; } = default!;
 
+    /// <summary>趨勢圖可選的天數。刻意不放 3 個月以上的選項——資料點太少看不出趨勢。</summary>
+    private static readonly int[] TrendDayOptions = [7, 14, 30, 90];
+
     private DashboardSummary? summary;
+    private int trendDays = 30;
     private bool isLoading;
     private string RoleMessage = string.Empty;
 
@@ -70,7 +74,7 @@ public partial class DashboardView : ComponentBase
 
         try
         {
-            summary = await DashboardService.GetSummaryAsync();
+            summary = await DashboardService.GetSummaryAsync(trendDays);
         }
         catch (Exception ex)
         {
@@ -81,6 +85,17 @@ public partial class DashboardView : ComponentBase
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// 切換趨勢圖的時間範圍。整份 summary 重新載入而不是只重算趨勢——
+    /// 少一條查詢路徑，代價是連 AI 問答語料也會被重掃一遍（見 AiChatStore.CountQuestions）。
+    /// 對話量成長後要改成獨立的趨勢查詢。
+    /// </summary>
+    private async Task OnTrendDaysChangedAsync(int value)
+    {
+        trendDays = value;
+        await ReloadAsync();
     }
 
     /// <summary>

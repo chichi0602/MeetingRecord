@@ -22,6 +22,10 @@
     font-weight: 700;
 }
 
+.line-chart-head-extra {
+    margin-left: auto;
+}
+
 .line-chart-legend {
     display: flex;
     gap: 14px;
@@ -67,6 +71,15 @@
     vector-effect: non-scaling-stroke;
 }
 
+/* 資料點。用零長度線段＋round 線帽而不是 <circle>：preserveAspectRatio="none" 把
+   viewBox 橫向放大約 3.4 倍，circle 的半徑會一起被拉開而變成扁橢圓。線帽配
+   non-scaling-stroke 是在螢幕座標系畫出來的，所以不管容器多寬都是正圓。
+   （SVG 1.1 明訂零長度子路徑在 linecap 為 round 或 square 時仍會被描邊。） */
+.line-chart-marker {
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
 .line-chart-line-created,
 .line-chart-dot-created {
     stroke: var(--oat-ink);
@@ -75,14 +88,6 @@
 .line-chart-line-completed,
 .line-chart-dot-completed {
     stroke: var(--oat-ok);
-}
-
-.line-chart-dot-created {
-    fill: var(--oat-ink);
-}
-
-.line-chart-dot-completed {
-    fill: var(--oat-ok);
 }
 
 /* 圖例的小圓點是 HTML 不是 SVG，吃的是 background 而非 fill。 */
@@ -97,7 +102,8 @@
 .line-chart-axis-labels {
     display: flex;
     justify-content: space-between;
-    gap: 2px;
+    /* 刻意是 0：90 天時有 89 個間隙，2px 就吃掉 178px 的軸寬。 */
+    gap: 0;
 }
 
 .line-chart-axis-label {
@@ -108,6 +114,12 @@
     font-size: 0.66rem;
     text-align: center;
     white-space: nowrap;
+}
+
+/* 只有稀疏化後留下文字的槽位才允許溢出，借用左右空槽位的寬度。
+   全域改成 overflow:visible 會讓標籤在算錯時疊成一團，所以不動 .line-chart-axis-label。 */
+.line-chart-axis-label-shown {
+    overflow: visible;
 }
 
 .line-chart-note {

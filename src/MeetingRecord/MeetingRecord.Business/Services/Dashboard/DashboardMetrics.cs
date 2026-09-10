@@ -3,37 +3,105 @@ using System.Globalization;
 namespace MeetingRecord.Business.Services.Dashboard;
 
 /// <summary>
-/// 儀表板用到的純計算：月份分桶、圓餅幾何、百分比與耗時描述。
+/// 儀表板用到的純計算：日期分桶、軸標籤稀疏化、圓餅幾何、百分比與耗時描述。
 ///
 /// 抽成純函式以便單元測試——與 <c>TranscriptChunker</c>、<c>ChatContextBuilder</c>、
 /// <c>TranscriptionNoiseFilter</c> 同一個慣例，不碰 IO、不碰資料庫。
 /// </summary>
 public static class DashboardMetrics
 {
+    /// <summary>軸線上最多顯示幾個日期標籤。</summary>
+    private const int MaxVisibleLabels = 7;
+
     /// <summary>
-    /// 產生「最近 N 個月」的月份桶，由舊到新。
+    /// 產生「最近 N 天」的日期桶，由舊到新，**含今天**（所以起點是 today − (N-1)）。
     ///
     /// <para>
-    /// **沒有資料的月份也一定會在**——趨勢圖若只畫有資料的月份，
-    /// 時間軸會被壓縮成不等距，兩個相隔半年的點看起來會像連續兩個月。
+    /// **沒有資料的日子也一定會在**——趨勢圖若只畫有資料的日子，
+    /// 時間軸會被壓縮成不等距，相隔兩週的兩個點看起來會像連續兩天。
     /// </para>
     /// </summary>
-    public static IReadOnlyList<DateOnly> BuildMonthBuckets(DateOnly today, int months)
+    public static IReadOnlyList<DateOnly> BuildDayBuckets(DateOnly today, int days)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(months);
-
-        var firstOfThisMonth = new DateOnly(today.Year, today.Month, 1);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(days);
 
         return [.. Enumerable
-            .Range(0, months)
-            .Select(offset => firstOfThisMonth.AddMonths(offset - (months - 1)))];
+            .Range(0, days)
+            .Select(offset => today.AddDays(offset - (days - 1)))];
     }
 
-    /// <summary>月份桶的顯示標籤。跨年時帶出年份，否則只顯示月份，避免軸線過擠。</summary>
-    public static string DescribeMonth(DateOnly month, bool includeYear)
-        => includeYear
-            ? month.ToString("yyyy/MM", CultureInfo.InvariantCulture)
-            : month.ToString("MM", CultureInfo.InvariantCulture) + "月";
+    /// <summary>
+    /// 日期桶的顯示標籤。
+    ///
+    /// <para>
+    /// 刻意不做「跨年才帶年份」那套：範圍最長 90 天，不可能出現重複的 MM/dd，
+    /// 跨年時「10/18 … 01/15」的先後一望即知，帶上年份只會讓軸線更擠。
+    /// </para>
+    /// </summary>
+    public static string DescribeDay(DateOnly day)
+        => day.ToString("MM/dd", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 日期桶的軸標籤，與 <paramref name="days"/> **等長**，沒被選到的位置是空字串。
+    ///
+    /// <para>
+    /// 90 個 MM/dd 全畫會疊成一團，所以每 step 天才標一個。**空字串仍要佔一個位置**：
+    /// 畫面把標籤排成等寬的 flex 槽位，少一個槽位，其後所有可見標籤都會與資料點錯位。
+    /// </para>
+    /// <para>
+    /// 由後往前數（<c>count - 1 - index</c>），所以**最後一天永遠有標籤**——
+    /// 那是讀者定位用的錨點。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> BuildDayLabels(IReadOnlyList<DateOnly> days)
+    {
+        ArgumentNullException.ThrowIfNull(days);
+
+        // Math.Max(1, …) 不是防禦性冗贅：天數少於 MaxVisibleLabels 時
+        // 整數除法會得到 0，接下來的 % step 就是除以零。
+        var step = Math.Max(1, (int)Math.Ceiling(days.Count / (double)MaxVisibleLabels));
+
+        return [.. days.Select((day, index) => (days.Count - 1 - index) % step == 0
+            ? DescribeDay(day)
+            : string.Empty)];
+    }
+
+    /// <summary>
+    /// 「最近 N 天」的雙線趨勢：每天新增幾場會議、完成幾份會議紀錄。
+    /// </summary>
+    public static IReadOnlyList<TrendPoint> BuildDailyTrend(
+        IEnumerable<(DateTime Created, DateTime? DraftCompleted)> meetings,
+        DateOnly today,
+        int days)
+    {
+        ArgumentNullException.ThrowIfNull(meetings);
+
+        var buckets = BuildDayBuckets(today, days);
+        var labels = BuildDayLabels(buckets);
+
+        // 先分組成字典再逐桶查表；逐桶 Count 等於把同一份清單掃 2N 遍。
+        //
+        // 時間戳一律當本地時間直接取日期部分——這些欄位都是 DateTime.Now 寫入的，
+        // 從 SQLite 讀回來 Kind 是 Unspecified，套 ToLocalTime() 會被當成 UTC
+        // 而整批位移 8 小時，把下午建立的會議算到隔天。
+        var items = meetings.ToList();
+
+        var created = items
+            .GroupBy(x => DateOnly.FromDateTime(x.Created))
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        var completed = items
+            .Where(x => x.DraftCompleted is not null)
+            .GroupBy(x => DateOnly.FromDateTime(x.DraftCompleted!.Value))
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        // 迭代 buckets 而不是迭代 groups：稠密性（沒資料的日子也要在）與
+        // 「窗外的舊資料不被堆到第 0 桶」兩件事，都由這個方向自動成立。
+        return [.. buckets.Select((day, index) => new TrendPoint(
+            labels[index],
+            created.GetValueOrDefault(day),
+            completed.GetValueOrDefault(day)))];
+    }
 
     /// <summary>
     /// 換算各項佔比（0～100）。總和為 0 時全部回 0——**不能除以零**，

@@ -41,7 +41,23 @@ else
                 <BarChart Title="提示詞範本使用次數" Items="summary.PromptTemplateUsage" />
             </div>
 
-            <LineChart Title="近 12 個月趨勢" Points="summary.MonthlyTrend" />
+            <LineChart Title="@($"近 {summary.Trend.Count} 天趨勢")" Points="summary.Trend">
+                <HeaderExtra>
+                    @* Disabled 不可省：ReloadAsync 開頭是 if (isLoading) return;，首次載入還沒
+                       回來時切換範圍會被靜默吞掉，選單與圖表就永久不同步。
+                       也刻意不加 AllowClear——清成 0 會讓 BuildDayBuckets 直接拋例外。 *@
+                    <Select TItem="int" TItemValue="int"
+                            Value="@trendDays"
+                            ValueChanged="OnTrendDaysChangedAsync"
+                            Disabled="@isLoading"
+                            Style="min-width: 120px;">
+                        @foreach (var days in TrendDayOptions)
+                        {
+                            <SelectOption TItem="int" TItemValue="int" Value="@days">@($"最近 {days} 天")</SelectOption>
+                        }
+                    </Select>
+                </HeaderExtra>
+            </LineChart>
 
             <div class="dashboard-performance">
                 <div class="dashboard-performance-title">處理效能</div>

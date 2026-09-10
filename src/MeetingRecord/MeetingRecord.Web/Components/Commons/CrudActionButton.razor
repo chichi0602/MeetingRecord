@@ -1,9 +1,12 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
 
-@* 0.4.57：文字改為「可見」。原本 .crud-action-button-label 是 clip 隱藏的無障礙標籤，
-   按鈕在畫面上只剩一個圖示，用途全靠 Tooltip 表達——而 Tooltip 在觸控裝置上
-   根本叫不出來。Tooltip 保留，它現在是補充而不是唯一的說明。
+@* 清單「操作」欄的按鈕：畫面上只有圖示，用途靠 Tooltip 表達（0.4.62）。
+   .crud-action-button-label 是 clip 隱藏的無障礙標籤——看不見，但螢幕閱讀器
+   讀得到，也是 <Button> 那一支唯一的可及名稱。不要因為「反正看不見」就刪掉它。
+
+   有外框的按鈕（工具列、對話框）規則相反，一律要有可見文字；
+   兩類的分界寫在 docs/architecture/開發慣例與限制速查.md 的 UI 慣例。
 
    外層這個 span 不是裝飾，是為了讓 scoped CSS 有東西可選：Tooltip 與 Button 都是
    子元件，scope 屬性不會傳進去，`.crud-action-button {}` 會被編成

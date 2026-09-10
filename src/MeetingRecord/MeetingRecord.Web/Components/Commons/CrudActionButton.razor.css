@@ -1,5 +1,5 @@
-/* 清單「操作」欄的按鈕。0.4.57 起圖示旁一律顯示文字，
-   所以不再是 28px 方形，改為依內容撐開的膠囊。
+/* 清單「操作」欄的按鈕。0.4.62 起畫面上只有圖示（文字是 clip 隱藏的無障礙標籤），
+   所以是 28px 方形而不是依內容撐開的膠囊。
 
    所有選擇器都從 .crud-action-button-host 用 ::deep 選進去：
    Tooltip 與 Button 都是子元件，scope 屬性不會傳進去，直接寫
@@ -9,8 +9,9 @@
 }
 
 .crud-action-button-host ::deep .crud-action-button {
+    width: 28px;
     height: 28px;
-    padding: 0 8px;
+    padding: 0;
     border-color: transparent;
     border-radius: 4px;
     color: var(--oat-ink-mid);
@@ -18,7 +19,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
     line-height: 1;
     white-space: nowrap;
     text-decoration: none;
@@ -58,8 +58,13 @@
     line-height: 1;
 }
 
-/* 0.4.57 之前這裡是 clip: rect(0,0,0,0) 的無障礙隱藏標籤，
-   按鈕在畫面上只看得到圖示。現在是正常可見的文字。 */
+/* 無障礙隱藏：畫面上看不到，但螢幕閱讀器讀得到，也是 <Button> 那一支的可及名稱。
+   用 clip 而不是 display:none——後者會讓輔助技術也一起讀不到。 */
 .crud-action-button-host ::deep .crud-action-button-label {
-    font-size: 0.82rem;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
 }

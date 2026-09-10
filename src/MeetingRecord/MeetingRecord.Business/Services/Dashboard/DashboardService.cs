@@ -26,8 +26,8 @@ namespace MeetingRecord.Business.Services.Dashboard;
 /// </summary>
 public class DashboardService
 {
-    /// <summary>趨勢圖顯示的月份數。</summary>
-    private const int TrendMonths = 12;
+    /// <summary>趨勢圖預設顯示的天數；畫面可切換 7／14／30／90。</summary>
+    private const int DefaultTrendDays = 30;
 
     /// <summary>長條圖最多列出幾個專案，超過的併不進來——排名圖列太多就失去重點。</summary>
     private const int TopProjectCount = 8;
@@ -51,7 +51,7 @@ public class DashboardService
         this.logger = logger;
     }
 
-    public async Task<DashboardSummary> GetSummaryAsync(CancellationToken cancellationToken = default)
+    public async Task<DashboardSummary> GetSummaryAsync(int trendDays = DefaultTrendDays, CancellationToken cancellationToken = default)
     {
         var scope = await accessScope.GetAsync();
         var today = DateTime.Today;
@@ -103,7 +103,10 @@ public class DashboardService
             BuildDraftStatus(meetingFacts),
             BuildMeetingsPerProject(meetingFacts),
             BuildPromptTemplateUsage(meetingFacts),
-            BuildMonthlyTrend(meetingFacts, DateOnly.FromDateTime(today)),
+            DashboardMetrics.BuildDailyTrend(
+                meetingFacts.Select(x => (x.CreatedAt, x.DraftCompletedAt)),
+                DateOnly.FromDateTime(today),
+                trendDays),
             BuildPerformance(meetingFacts));
     }
 
@@ -229,26 +232,6 @@ public class DashboardService
             .Select(group => new ChartSlice(group.Key, group.Count()))
             .OrderByDescending(slice => slice.Value)
             .ThenBy(slice => slice.Label, StringComparer.Ordinal)];
-
-    #endregion
-
-    #region 趨勢圖
-
-    private static IReadOnlyList<TrendPoint> BuildMonthlyTrend(IReadOnlyList<MeetingFact> meetings, DateOnly today)
-    {
-        var buckets = DashboardMetrics.BuildMonthBuckets(today, TrendMonths);
-
-        // 只有跨年時才在標籤帶年份，否則 12 個「2026/01」擠在一起看不清楚。
-        var spansYears = buckets[0].Year != buckets[^1].Year;
-
-        return [.. buckets.Select(month => new TrendPoint(
-            DashboardMetrics.DescribeMonth(month, spansYears && month.Month == 1),
-            meetings.Count(x => IsSameMonth(x.CreatedAt, month)),
-            meetings.Count(x => x.DraftCompletedAt is not null && IsSameMonth(x.DraftCompletedAt.Value, month))))];
-    }
-
-    private static bool IsSameMonth(DateTime value, DateOnly month)
-        => value.Year == month.Year && value.Month == month.Month;
 
     #endregion
 

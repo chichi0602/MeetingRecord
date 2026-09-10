@@ -4,6 +4,12 @@
 <div class="line-chart">
     <div class="line-chart-head">
         <span class="line-chart-title">@Title</span>
+        @if (HeaderExtra is not null)
+        {
+            @* 靠 .line-chart-head-extra 的 margin-left:auto 貼到右側；head 是
+               space-between，不推的話三個子元素會把這一塊擺到正中間。 *@
+            <span class="line-chart-head-extra">@HeaderExtra</span>
+        }
         <span class="line-chart-legend">
             <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-created"></i>新增會議</span>
             <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-completed"></i>完成紀錄</span>
@@ -26,25 +32,29 @@
             @for (var index = 0; index < Points.Count; index++)
             {
                 var point = Points[index];
-                <circle cx="@X(index)" cy="@Y(point.Created)" r="2.5" class="line-chart-dot-created">
+                <line x1="@X(index)" y1="@Y(point.Created)" x2="@X(index)" y2="@Y(point.Created)"
+                      class="line-chart-marker line-chart-dot-created" stroke-width="@Format(DotDiameter)">
                     <title>@point.Label 新增 @point.Created</title>
-                </circle>
-                <circle cx="@X(index)" cy="@Y(point.Completed)" r="2.5" class="line-chart-dot-completed">
+                </line>
+                <line x1="@X(index)" y1="@Y(point.Completed)" x2="@X(index)" y2="@Y(point.Completed)"
+                      class="line-chart-marker line-chart-dot-completed" stroke-width="@Format(DotDiameter)">
                     <title>@point.Label 完成 @point.Completed</title>
-                </circle>
+                </line>
             }
         </svg>
 
         <div class="line-chart-axis-labels">
             @foreach (var point in Points)
             {
-                <span class="line-chart-axis-label">@point.Label</span>
+                @* 標籤稀疏化過，空字串的槽位仍要畫出來——少一個槽位，其後所有可見標籤
+                   都會與資料點錯位。只讓有字的槽位溢出，見 .line-chart-axis-label-shown。 *@
+                <span class="line-chart-axis-label @(string.IsNullOrEmpty(point.Label) ? string.Empty : "line-chart-axis-label-shown")">@point.Label</span>
             }
         </div>
 
         @if (MaxValue == 0)
         {
-            <div class="line-chart-note">這 @Points.Count 個月都還沒有資料。</div>
+            <div class="line-chart-note">這段期間都還沒有資料。</div>
         }
     }
 </div>
@@ -56,10 +66,24 @@
     [Parameter, EditorRequired]
     public IReadOnlyList<TrendPoint> Points { get; set; } = [];
 
+    /// <summary>標題右側的附加控制項（例如時間範圍下拉）。</summary>
+    [Parameter]
+    public RenderFragment? HeaderExtra { get; set; }
+
     private const double ViewWidth = 320;
     private const double ViewHeight = 120;
     private const double PlotTop = 10;
     private const double PlotBottom = 108;
+
+    /// <summary>
+    /// 資料點的直徑，單位是**螢幕 px**——marker 用 non-scaling-stroke，線寬不隨 viewBox 縮放。
+    ///
+    /// <para>
+    /// 點多時縮小：90 天的點距只有約 12px，6px 的點會連成一條珠鏈。不改成「點多就不畫」，
+    /// 因為 marker 裡的 title 是這張圖唯一的數值讀取方式，而日視角的重點正是「哪一天爆量」。
+    /// </para>
+    /// </summary>
+    private double DotDiameter => Points.Count > 30 ? 3 : 6;
 
     private int MaxValue => Points.Count == 0 ? 0 : Points.Max(p => Math.Max(p.Created, p.Completed));
 

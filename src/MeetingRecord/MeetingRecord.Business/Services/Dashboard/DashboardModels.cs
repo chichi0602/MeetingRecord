@@ -22,10 +22,10 @@ public enum ChartTone
     Danger = 3,
 }
 
-/// <summary>折線圖上的一個月。</summary>
+/// <summary>折線圖上的一天。</summary>
 /// <param name="Label">X 軸標籤。</param>
-/// <param name="Created">當月新增的會議數。</param>
-/// <param name="Completed">當月完成會議紀錄的數量。</param>
+/// <param name="Created">當天新增的會議數。</param>
+/// <param name="Completed">當天完成會議紀錄的數量。</param>
 public sealed record TrendPoint(string Label, int Created, int Completed);
 
 /// <summary>一張數字卡。</summary>
@@ -54,5 +54,5 @@ public sealed record DashboardSummary(
     IReadOnlyList<ChartSlice> DraftStatus,
     IReadOnlyList<ChartSlice> MeetingsPerProject,
     IReadOnlyList<ChartSlice> PromptTemplateUsage,
-    IReadOnlyList<TrendPoint> MonthlyTrend,
+    IReadOnlyList<TrendPoint> Trend,
     PerformanceSummary Performance);

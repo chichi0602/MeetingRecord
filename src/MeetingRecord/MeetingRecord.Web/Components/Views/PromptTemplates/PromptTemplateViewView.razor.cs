@@ -26,8 +26,8 @@ public partial class PromptTemplateViewView
 
     private List<string> availableCategories = [];
     private List<string> availableTeams = [];
-    private List<string> selectedCategoryFilters = [];
-    private List<string> selectedTeamFilters = [];
+    private string selectedPresetName = string.Empty;
+    private bool isSeedingPresets;
     private int _pageIndex = 1;
     private int _pageSize = MagicObjectHelper.PageSize;
     private int _total;
@@ -114,28 +114,167 @@ public partial class PromptTemplateViewView
             CurrentPage = _pageIndex,
             PageSize = _pageSize,
             Take = 0,
-            CategoryFilters = selectedCategoryFilters.ToList(),
-            TeamFilters = selectedTeamFilters.ToList(),
         });
 
         promptTemplateAdapterModels = dataRequestResult.Result.ToList();
         _total = dataRequestResult.Count;
+
+        // 分頁修好之後（0.4.64）頁碼有可能落在最後一頁之後——例如停在第 2 頁時把該頁
+        // 唯一一筆刪掉，Skip 就會跳過全部資料而顯示空白表格。夾回最後一頁重載一次。
+        if (promptTemplateAdapterModels.Count == 0 && _total > 0 && _pageIndex > 1)
+        {
+            _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);
+            logger.LogDebug("Prompt template page index clamped to the last page. PageIndex={PageIndex}", _pageIndex);
+            await ReloadAsync();
+            return;
+        }
+
         logger.LogInformation("Prompt template list reloaded successfully. Count={Count}", _total);
         StateHasChanged();
     }
 
-    private async Task OnCategoryFilterChanged(IEnumerable<string> values)
+    /// <summary>
+    /// 一次建立全部內建範本。冪等（已存在同名者略過），所以可以重複按。
+    /// </summary>
+    private async Task OnAddAllPresetsAsync()
     {
-        selectedCategoryFilters = values?.ToList() ?? [];
-        _pageIndex = 1;
+        if (isSeedingPresets)
+        {
+            return;
+        }
+
+        isSeedingPresets = true;
+        StateHasChanged();
+
+        try
+        {
+            logger.LogInformation("Applying prompt template presets from view.");
+            var result = await promptTemplateService.AddPresetsAsync();
+
+            if (result.Success)
+            {
+                NotifySuccess(result.Message);
+            }
+            else
+            {
+                NotifyError(result.Message);
+            }
+
+            await ReloadAsync();
+        }
+        finally
+        {
+            isSeedingPresets = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// 只新增下拉選取的那一個內建範本。走與 Modal 送出相同的 BeforeAddCheck ＋ Add 路徑。
+    /// </summary>
+    private async Task OnAddSelectedPresetAsync()
+    {
+        var preset = PromptTemplatePresets.All.FirstOrDefault(x => x.Name == selectedPresetName);
+        if (preset is null)
+        {
+            return;
+        }
+
+        var model = new PromptTemplateAdapterModel
+        {
+            Name = preset.Name,
+            Content = preset.Content,
+            Description = preset.Description,
+            IsEnabled = true,
+        };
+
+        var checkResult = await promptTemplateService.BeforeAddCheckAsync(model);
+        if (!checkResult.Success)
+        {
+            // 名稱唯一性是全域的、可見性卻是團隊範圍，所以撞名的那一筆有可能根本
+            // 不在這位使用者的清單上。訊息要講清楚，不然會被當成系統壞了。
+            logger.LogInformation("Prompt template preset skipped because the name already exists. Name={Name}", preset.Name);
+            NotifyError($"「{preset.Name}」已存在，未新增。（同名提示詞可能屬於其他團隊而未顯示在清單上）");
+            return;
+        }
+
+        var result = await promptTemplateService.AddAsync(model);
+        if (!result.Success)
+        {
+            NotifyError(result.Message);
+            return;
+        }
+
+        logger.LogInformation("Prompt template preset added. Name={Name}", preset.Name);
+        NotifySuccess($"已新增「{preset.Name}」。");
         await ReloadAsync();
     }
 
-    private async Task OnTeamFilterChanged(IEnumerable<string> values)
+    /// <summary>
+    /// 清單上直接切換啟用狀態。啟用不是破壞性動作，所以只有停用套紅色確認鈕。
+    /// </summary>
+    private async Task OnToggleEnabledAsync(PromptTemplateAdapterModel promptTemplateAdapterModel)
     {
-        selectedTeamFilters = values?.ToList() ?? [];
-        _pageIndex = 1;
+        var willEnable = !promptTemplateAdapterModel.IsEnabled;
+        logger.LogInformation(
+            "Toggle prompt template enabled state requested. PromptTemplateId={PromptTemplateId}, WillEnable={WillEnable}",
+            promptTemplateAdapterModel.Id, willEnable);
+
+        var confirmOptions = new ConfirmOptions
+        {
+            Title = willEnable ? "確認啟用" : "確認停用",
+            Content = willEnable
+                ? $"確定要啟用「{promptTemplateAdapterModel.Name}」嗎？啟用後會出現在產生會議紀錄時的提示詞選單中。"
+                : $"確定要停用「{promptTemplateAdapterModel.Name}」嗎？停用後不會出現在產生會議紀錄時的提示詞選單中，已產生的會議紀錄不受影響。",
+            OkText = willEnable ? "啟用" : "停用",
+            CancelText = "取消",
+            MaskClosable = false
+        };
+
+        if (!willEnable)
+        {
+            confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+        }
+
+        var ok = await modalService.ConfirmAsync(confirmOptions);
+        if (!ok)
+        {
+            logger.LogDebug("Prompt template enabled state toggle cancelled by user. PromptTemplateId={PromptTemplateId}", promptTemplateAdapterModel.Id);
+            return;
+        }
+
+        var result = await promptTemplateService.SetEnabledAsync(promptTemplateAdapterModel.Id, willEnable);
+        if (!result.Success)
+        {
+            NotifyError(result.Message);
+            return;
+        }
+
+        NotifySuccess(willEnable ? $"已啟用「{promptTemplateAdapterModel.Name}」。" : $"已停用「{promptTemplateAdapterModel.Name}」。");
         await ReloadAsync();
+    }
+
+    private void NotifySuccess(string description)
+    {
+        _ = notificationService.Open(new NotificationConfig()
+        {
+            Message = "系統訊息",
+            Description = description,
+            NotificationType = NotificationType.Warning,
+            Placement = NotificationPlacement.BottomRight
+        });
+    }
+
+    private void NotifyError(string description)
+    {
+        _ = notificationService.Open(new NotificationConfig()
+        {
+            Message = "系統訊息",
+            Description = description,
+            NotificationType = NotificationType.Error,
+            Placement = NotificationPlacement.BottomRight,
+            Duration = 5
+        });
     }
 
     private void OnRecordCategoriesChanged(IEnumerable<string> values)

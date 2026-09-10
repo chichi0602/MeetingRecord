@@ -1,3 +1,4 @@
+@using MeetingRecord.Business.Helpers
 @using MeetingRecord.Share.Helpers
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
@@ -18,6 +19,35 @@ else
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
                     </Tooltip>
+
+                    @* 提示詞是「AI 轉會議紀錄」的必要輸入，空清單等於核心功能不能用，
+                       所以給新使用者一顆一次建好整組範本的鈕。已存在同名者會略過，可重複按。 *@
+                    <Tooltip Title="一次建立全部內建範本，已存在的會略過">
+                        <Button Type="ButtonType.Default"
+                                Loading="@isSeedingPresets"
+                                OnClick="@(async () => await OnAddAllPresetsAsync())">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>建立內建範本</span></span>
+                        </Button>
+                    </Tooltip>
+
+                    @* 刻意做成「選單＋按鈕」兩步式：選單一改就直接寫入資料的話，
+                       誤觸就多一筆而且沒有取消機會（AllowClear 也會把 null 送進 handler）。 *@
+                    <Select TItem="string" TItemValue="string"
+                            @bind-Value="selectedPresetName"
+                            Placeholder="選擇內建範本"
+                            AllowClear EnableSearch Style="min-width: 180px;">
+                        @foreach (var preset in PromptTemplatePresets.All)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value="@preset.Name">@preset.Name</SelectOption>
+                        }
+                    </Select>
+                    <Tooltip Title="只新增選取的那一個內建範本">
+                        <Button Type="ButtonType.Default"
+                                Disabled="@(string.IsNullOrWhiteSpace(selectedPresetName))"
+                                OnClick="@(async () => await OnAddSelectedPresetAsync())">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增此範本</span></span>
+                        </Button>
+                    </Tooltip>
                 }
                 <Tooltip Title="重新整理">
                     <Button Type="ButtonType.Default"
@@ -27,22 +57,6 @@ else
                 </Tooltip>
             </div>
             <div class="prompt-template-view-toolbar-right">
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
-                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
-                    @foreach (var c in availableCategories)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                    }
-                </Select>
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
-                        Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 160px;">
-                    @foreach (var t in availableTeams)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                    }
-                </Select>
                 <Input class="prompt-template-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
@@ -72,16 +86,26 @@ else
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Name)" Title="名稱" Sortable />
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.ContentPreview)" Title="內容預覽" />
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Description)" Title="描述" />
-                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.CategoriesText)" Title="分類" />
-                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.TeamsText)" Title="團隊" />
                 <Column TData="bool" DataIndex="@nameof(PromptTemplateAdapterModel.IsEnabled)" Title="啟用狀態" Sortable>
-                    @if (context.IsEnabled)
+                    @* 有 Edit 權限才做成可點的按鈕；沒權限就退回純文字，不要用 disabled 按鈕
+                       ——disabled 的按鈕不可 focus，掛在上面的 aria-label 狀態說明就讀不到了。
+                       可見文字講「狀態」、aria-label 與 title 講「動作」：把「啟用」直接當按鈕的
+                       可及名稱會被讀成命令，語意與實際相反。 *@
+                    @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))
                     {
-                        <span class="prompt-template-status prompt-template-status-enabled">啟用</span>
+                        <button type="button"
+                                class="prompt-template-status @(context.IsEnabled ? "prompt-template-status-enabled" : "prompt-template-status-disabled")"
+                                title="@($"點擊改為{(context.IsEnabled ? "停用" : "啟用")}")"
+                                aria-label="@($"{context.Name} 目前為{(context.IsEnabled ? "啟用" : "停用")}，點擊改為{(context.IsEnabled ? "停用" : "啟用")}")"
+                                @onclick="@(async () => await OnToggleEnabledAsync(context))">
+                            @(context.IsEnabled ? "啟用" : "停用")
+                        </button>
                     }
                     else
                     {
-                        <span class="prompt-template-status prompt-template-status-disabled">停用</span>
+                        <span class="prompt-template-status @(context.IsEnabled ? "prompt-template-status-enabled" : "prompt-template-status-disabled")">
+                            @(context.IsEnabled ? "啟用" : "停用")
+                        </span>
                     }
                 </Column>
                 <Column TData="DateTime" DataIndex="@nameof(PromptTemplateAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />

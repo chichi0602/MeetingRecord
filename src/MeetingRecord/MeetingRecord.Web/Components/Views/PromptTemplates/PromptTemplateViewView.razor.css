@@ -41,3 +41,23 @@
     background: var(--oat-50);
     border: 1px solid var(--oat-300);
 }
+
+/* 有 Edit 權限時「啟用狀態」是一顆按鈕，點下去切換（0.4.64）。沿用上面同一組膠囊
+   樣式，只補按鈕化需要的重設——原生 button 不繼承字型，不設就會掉回瀏覽器預設。
+   這裡不需要 ::deep：button 是本元件自己寫的元素，scope 屬性選得到。 */
+button.prompt-template-status {
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0;
+    cursor: pointer;
+}
+
+button.prompt-template-status:hover {
+    filter: brightness(0.96);
+}
+
+button.prompt-template-status:focus-visible {
+    outline: 2px solid var(--oat-ink-mid);
+    outline-offset: 1px;
+}

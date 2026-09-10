@@ -112,11 +112,14 @@ public class PromptTemplateService
         }
 
         result.Count = await dataSource.CountAsync();
-        dataSource = dataSource.Skip((dataRequest.CurrentPage - 1) * dataRequest.PageSize);
-        if (dataRequest.Take != 0)
-        {
-            dataSource = dataSource.Take(dataRequest.PageSize);
-        }
+
+        // Take 刻意不再看 dataRequest.Take：呼叫端（清單頁）一律傳 0，原本的
+        // `if (dataRequest.Take != 0)` 等於從來沒有分頁——第 N 頁會回「第 N 頁以後的全部資料」。
+        // Count 是在 Skip/Take 之前算的，所以分頁器的總數本來就對，修好之後才第一次真的對上。
+        // 註：其餘 7 支 *Service.GetAsync(DataRequest) 仍是舊寫法，見「開發慣例與限制速查」。
+        dataSource = dataSource
+            .Skip((dataRequest.CurrentPage - 1) * dataRequest.PageSize)
+            .Take(dataRequest.PageSize);
 
         List<PromptTemplate> records = await dataSource.ToListAsync();
         result.Result = Mapper.Map<List<PromptTemplateAdapterModel>>(records);
@@ -238,6 +241,122 @@ public class PromptTemplateService
         {
             Logger.LogError(ex, "Failed to delete prompt template. PromptTemplateId={PromptTemplateId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除提示詞失敗。", ex);
+        }
+    }
+
+    /// <summary>
+    /// 清單上直接切換啟用狀態，比照 <c>TodoService.SetCompletedAsync</c>。
+    ///
+    /// <para>
+    /// 停用後這筆提示詞不會再出現在 <see cref="GetEnabledSelectableAsync"/>（產生會議紀錄
+    /// 時的下拉），但已經產生的會議紀錄不受影響（會議上存的是名稱快照）。
+    /// </para>
+    /// </summary>
+    public async Task<VerifyRecordResult> SetEnabledAsync(int id, bool isEnabled)
+    {
+        Logger.LogInformation("Setting prompt template enabled state. PromptTemplateId={PromptTemplateId}, IsEnabled={IsEnabled}", id, isEnabled);
+
+        try
+        {
+            CleanTrackingHelper.Clean<PromptTemplate>(context);
+
+            // 刻意不加 AsNoTracking：這裡要靠變更追蹤把欄位寫回去。
+            // 本類其他讀取一律 AsNoTracking，順手加上去的話 SaveChangesAsync
+            // 會什麼都沒寫、卻仍然回傳成功。
+            PromptTemplate? item = await context.PromptTemplate.FirstOrDefaultAsync(x => x.Id == id);
+
+            if (item == null)
+            {
+                Logger.LogWarning("Prompt template enabled state update rejected because record was not found. PromptTemplateId={PromptTemplateId}", id);
+                return VerifyRecordResultFactory.Build(false, "找不到要更新的提示詞資料。");
+            }
+
+            var scope = await accessScope.GetAsync();
+            if (!TagStringHelper.IsTeamAccessible(item.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Prompt template enabled state update denied by team scope. PromptTemplateId={PromptTemplateId}", id);
+                return VerifyRecordResultFactory.Build(false, "沒有權限更新這筆提示詞。");
+            }
+
+            item.IsEnabled = isEnabled;
+            item.UpdatedAt = DateTime.Now;
+
+            await context.SaveChangesAsync();
+            CleanTrackingHelper.Clean<PromptTemplate>(context);
+
+            Logger.LogInformation("Prompt template enabled state updated. PromptTemplateId={PromptTemplateId}, IsEnabled={IsEnabled}", id, isEnabled);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to set prompt template enabled state. PromptTemplateId={PromptTemplateId}", id);
+            return VerifyRecordResultFactory.Build(false, "更新啟用狀態失敗。", ex);
+        }
+    }
+
+    /// <summary>
+    /// 一次把 <see cref="PromptTemplatePresets.All"/> 全部建進資料庫，已有同名者跳過（冪等，可重複按）。
+    ///
+    /// <para>
+    /// 建出來的範本一律啟用、不掛分類也不掛團隊——不掛團隊等於公開，所有人都看得到。
+    /// </para>
+    ///
+    /// <para>
+    /// 訊息文字要提到「同名範本可能屬於其他團隊」：名稱唯一性是全域的、可見性卻是團隊範圍，
+    /// 所以非管理員有可能拿到「全部略過」但清單仍是空的，只寫「名稱已存在」會讓人以為壞了。
+    /// </para>
+    /// </summary>
+    public async Task<VerifyRecordResult> AddPresetsAsync(CancellationToken cancellationToken = default)
+    {
+        Logger.LogInformation("Applying prompt template presets. PresetCount={PresetCount}", PromptTemplatePresets.All.Count);
+
+        try
+        {
+            CleanTrackingHelper.Clean<PromptTemplate>(context);
+
+            // 在記憶體比對而不是用 SQL 的 lower()：與 BeforeAddCheckAsync 的名稱唯一
+            // 語意一致，也不必在意 SQLite 的定序差異。
+            var existingNames = await context.PromptTemplate
+                .AsNoTracking()
+                .Select(x => x.Name)
+                .ToListAsync(cancellationToken);
+            var existing = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+
+            var now = DateTime.Now;
+            List<PromptTemplate> toAdd = [.. PromptTemplatePresets.All
+                .Where(preset => !existing.Contains(preset.Name.Trim()))
+                .Select(preset => new PromptTemplate
+                {
+                    Name = preset.Name,
+                    Content = preset.Content,
+                    Description = preset.Description,
+                    IsEnabled = true,
+                    Categories = null,
+                    Teams = null,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                })];
+
+            if (toAdd.Count > 0)
+            {
+                await context.PromptTemplate.AddRangeAsync(toAdd, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            CleanTrackingHelper.Clean<PromptTemplate>(context);
+
+            var skipped = PromptTemplatePresets.All.Count - toAdd.Count;
+            var message = skipped == 0
+                ? $"已新增 {toAdd.Count} 筆內建範本。"
+                : $"已新增 {toAdd.Count} 筆內建範本，略過 {skipped} 筆（已有同名提示詞；同名範本可能屬於其他團隊而未顯示在清單上）。";
+
+            Logger.LogInformation("Prompt template presets applied. Added={Added}, Skipped={Skipped}", toAdd.Count, skipped);
+            return VerifyRecordResultFactory.Build(true, message);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to apply prompt template presets.");
+            return VerifyRecordResultFactory.Build(false, "建立內建範本失敗。", ex);
         }
     }
 

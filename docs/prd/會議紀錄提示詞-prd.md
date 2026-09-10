@@ -1,10 +1,10 @@
 ﻿# 會議紀錄提示詞 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.26
+- 現行系統版本：0.4.64
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/08/19
+- 最後核對日期：2026/09/10
 
 ## 一、目標與範圍
 
@@ -16,7 +16,7 @@
 
 非範圍：
 - 不做提示詞的版本歷程、草稿、比較或還原（更新即覆寫）。
-- 不做匯入／匯出、批次操作、軟刪除（刪除為實體刪除）。
+- 不做匯入／匯出、軟刪除（刪除為實體刪除）。0.4.64 起有「建立內建範本」的批次新增，但僅限內建目錄，不做任意資料的批次匯入。
 - 不做提示詞的實際執行與產出預覽（不呼叫 LLM）。
 - 不做與其他實體的外鍵關聯或參照完整性檢查（`BeforeDeleteCheckAsync` 直接回成功）。
 - 不做音檔上傳、語音轉錄、會議紀錄產出。前兩者已於 0.4.27 由 [會議紀錄 PRD](會議紀錄-prd.md) 提供，最後一項仍為規劃中，見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)。
@@ -40,10 +40,10 @@
 單頁清單 + Modal 表單（`PromptTemplateViewView`）：
 
 - 搜尋：關鍵字比對 `Name`、`Content` 或 `Description`（`Contains`）。清空搜尋鈕在有輸入時出現。
-- 工具列：新增、重新整理、分類過濾（多選）、團隊過濾（多選）、關鍵字、清空搜尋、搜尋。
+- 工具列：新增、建立內建範本、選擇內建範本＋新增此範本、重新整理、關鍵字、清空搜尋、搜尋。（分類過濾與團隊過濾已於 0.4.64 移除）
 - 排序：可排序欄位 `Name`、`IsEnabled`、`CreatedAt`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。`Content` 為長文字，刻意**不開放排序**。
-- 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。
-- 清單欄位：名稱、內容預覽、描述、分類、團隊、啟用狀態（啟用／停用）、更新時間、操作（修改／刪除）。
+- 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。0.4.64 修正了 `Take` 只在 `dataRequest.Take != 0` 時才套用的缺陷（呼叫端一律傳 0，等於從來沒分頁）；頁碼越界時畫面端會夾回最後一頁。
+- 清單欄位：名稱、內容預覽、描述、啟用狀態（啟用／停用，可點擊切換）、更新時間、操作（修改／刪除）。（分類與團隊兩欄已於 0.4.64 移除，兩個欄位仍在編輯表單中）
   - 內容預覽 `ContentPreview` 為唯讀計算屬性：將 `Content` 單行化後截斷 60 字並加上刪節號。
 - 新增／編輯表單欄位：
   - 名稱 `Name`（必填，最長 100）
@@ -55,6 +55,39 @@
 - 按鈕級權限：新增／修改／刪除按鈕分別以 `CheckAccessAction(角色_提示詞清單, PermissionActions.Create/Edit/Delete)` 控制顯示（與 `ProjectViewView` 一致，較 `CategoryViewView` 多此一層）。
 - 鍵盤行為：Esc 關閉 Modal。**與其他清單頁不同，本頁 Enter 不送出表單**——`Content` 是多行輸入，Enter 必須留給換行。
 - 刪除：`ConfirmAsync` 二次確認，提示不可復原。
+
+### 內建範本（0.4.64）
+
+新使用者拿到的清單是空的，而提示詞是「AI 轉會議紀錄」的必要輸入（沒有提示詞 `RequestDraftAsync` 直接拒絕），所以空清單等於核心功能不能用。目錄定義在 `PromptTemplatePresets.All`（`MeetingRecord.Business/Helpers/`），**純靜態內容，不進資料庫、entity 也沒有 IsBuiltIn 之類的欄位**——建進去之後就是一般的提示詞資料，可自由修改或刪除。
+
+| 名稱 | 用途 |
+| --- | --- |
+| 標準會議紀錄 | 會議資訊、摘要、討論事項、決議、待辦表格、待釐清事項 |
+| 逐字稿重點條列 | 只做重點摘要，不拆解決議與待辦 |
+| 決議與待辦事項 | 只抽決議與待辦（含負責人／期限／優先序） |
+| 客戶訪談紀要 | 訪談對象、現況、痛點、需求與期待、顧慮、後續行動 |
+| 一頁摘要 | 500 字以內，供沒參加會議的主管快速掌握 |
+
+兩個入口都需要 `PermissionActions.Create`：
+
+- **建立內建範本**：`PromptTemplateService.AddPresetsAsync()` 一次建立全部，**已存在同名者略過（冪等，可重複按）**，一次 `AddRange` ＋ 一次 `SaveChanges`。
+- **選擇內建範本 ＋ 新增此範本**：只建選取的那一個，走與 Modal 送出相同的 `BeforeAddCheckAsync` ＋ `AddAsync`。刻意做成兩步式而不是「選單一改就新增」——後者誤觸就多一筆且沒有取消機會，`AllowClear` 也會把 `null` 送進 handler。
+
+建出來的範本一律 `IsEnabled = true`、`Categories = null`、`Teams = null`（**不掛團隊等於公開**，否則新使用者按了按鈕仍是空清單）。
+
+範本內容的硬性約束（`PromptTemplatePresetsTests` 守著）：**必須含 `{{transcript}}`**（`MeetingDraftJobRunner` 只做 `Render`，漏了它模型完全拿不到逐字稿**而且不會報錯**）、只能用已知變數、長度符合 `PromptTemplateAdapterModel` 的驗證上限。另外範本**不交代輸出語言**（共用 system prompt 已強制繁體中文台灣用語），且 `{{meetingDate}}` 可能被代入空字串，所以範本要附一句空值時該怎麼寫的指示。
+
+「略過」的訊息刻意提到「同名範本可能屬於其他團隊而未顯示在清單上」：**名稱唯一性是全域、可見性卻是團隊範圍**，非管理員有可能拿到「全部略過」但清單仍是空的。
+
+### 清單直接切換啟用狀態（0.4.64）
+
+「啟用狀態」欄的膠囊在有 `PermissionActions.Edit` 時是一顆按鈕，點下去經 `ConfirmAsync` 二次確認後呼叫 `PromptTemplateService.SetEnabledAsync(id, isEnabled)`（套團隊權控）。
+
+- **啟用不套 `Danger`、停用才套**——啟用不是破壞性動作（比照 `ProjectViewView` 的「確認重新產生」）。
+- 沒有 Edit 權限時**渲染回純 `<span>`**，不是 `<button disabled>`：disabled 的按鈕不可 focus，掛在上面的 `aria-label` 狀態說明就讀不到了。
+- 可見文字講**狀態**（啟用／停用）、`aria-label` 與 `title` 講**動作**（「{名稱} 目前為啟用，點擊改為停用」）。把「啟用」直接當按鈕的可及名稱會被讀成命令，語意與實際相反。
+- `SetEnabledAsync` 刻意**不用 `AsNoTracking()`**（本類其他讀取一律用），因為要靠變更追蹤把欄位寫回去；加上去會變成「沒寫入卻回傳成功」。
+- **已知副作用**：使用者若正以「啟用狀態」欄排序，切換後重載會讓那一列跳到別頁而從眼前消失。這是排序與資料變更的必然結果，不是缺陷。
 
 ### 提示詞變數
 

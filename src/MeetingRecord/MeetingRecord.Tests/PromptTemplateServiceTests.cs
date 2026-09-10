@@ -280,6 +280,233 @@ public sealed class PromptTemplateServiceTests
 
     #endregion
 
+    #region 啟用狀態切換
+
+    [Fact]
+    public async Task SetEnabledAsync_WithEnabledRecord_ShouldDisableAndTouchUpdatedAt()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+        var prompt = await fixture.AddPromptAsync("標準會議紀錄");
+        var originalUpdatedAt = prompt.UpdatedAt;
+
+        var result = await service.SetEnabledAsync(prompt.Id, false);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == prompt.Id);
+        Assert.False(saved.IsEnabled);
+        // UpdatedAt 要被動到：清單預設按它遞減排序，不動的話剛切換過的那筆不會浮上來。
+        Assert.True(saved.UpdatedAt >= originalUpdatedAt);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_WithDisabledRecord_ShouldEnable()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+        var prompt = await fixture.AddPromptAsync("停用中的範本", isEnabled: false);
+
+        var result = await service.SetEnabledAsync(prompt.Id, true);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == prompt.Id);
+        Assert.True(saved.IsEnabled);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_WithMissingId_ShouldFail()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        var result = await service.SetEnabledAsync(9999, false);
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_NonAdminOutsideTeamScope_ShouldDenyAndKeepOriginalValue()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var prompt = await fixture.AddPromptAsync("團隊B提示詞", teams: ["團隊B"]);
+        var service = fixture.CreateService(isAdmin: false, "團隊A");
+
+        var result = await service.SetEnabledAsync(prompt.Id, false);
+
+        Assert.False(result.Success);
+        // 一定要斷言資料庫的值沒變，不能只看 Success：若不小心加了 AsNoTracking，
+        // 這裡會變成「回傳成功但沒寫入」，只驗 Success 的測試抓不到。
+        var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == prompt.Id);
+        Assert.True(saved.IsEnabled);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_NonAdminWithPublicRecord_ShouldSucceed()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var prompt = await fixture.AddPromptAsync("公開提示詞");
+        var service = fixture.CreateService(isAdmin: false, "團隊A");
+
+        var result = await service.SetEnabledAsync(prompt.Id, false);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == prompt.Id);
+        Assert.False(saved.IsEnabled);
+    }
+
+    #endregion
+
+    #region 內建範本
+
+    [Fact]
+    public async Task AddPresetsAsync_OnEmptyDatabase_ShouldCreateAllPresets()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        var result = await service.AddPresetsAsync();
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.PromptTemplate.AsNoTracking().Select(x => x.Name).ToListAsync();
+        Assert.Equal(
+            PromptTemplatePresets.All.Select(x => x.Name).Order(StringComparer.Ordinal),
+            saved.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task AddPresetsAsync_ShouldCreateEnabledPublicRecords()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        await service.AddPresetsAsync();
+
+        var saved = await fixture.Context.PromptTemplate.AsNoTracking().ToListAsync();
+        Assert.All(saved, item =>
+        {
+            Assert.True(item.IsEnabled);
+            // 不掛團隊等於公開：一鍵建立出來的範本必須所有人都看得到，
+            // 否則新使用者按了按鈕卻還是空清單。
+            Assert.Null(item.Teams);
+            Assert.Null(item.Categories);
+            Assert.Contains("{{transcript}}", item.Content);
+        });
+    }
+
+    [Fact]
+    public async Task AddPresetsAsync_RunTwice_ShouldNotCreateDuplicates()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        await service.AddPresetsAsync();
+        var second = await service.AddPresetsAsync();
+
+        Assert.True(second.Success);
+        Assert.Equal(PromptTemplatePresets.All.Count, await fixture.Context.PromptTemplate.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddPresetsAsync_WithExistingPresetName_ShouldSkipOnlyThatPreset()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        var existingName = PromptTemplatePresets.All[0].Name;
+        await fixture.AddPromptAsync(existingName, content: "使用者自己改過的內容");
+        var service = fixture.CreateService();
+
+        await service.AddPresetsAsync();
+
+        Assert.Equal(PromptTemplatePresets.All.Count, await fixture.Context.PromptTemplate.CountAsync());
+        // 已存在那筆不能被覆寫——使用者可能已經改過內容。
+        var kept = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Name == existingName);
+        Assert.Equal("使用者自己改過的內容", kept.Content);
+    }
+
+    [Fact]
+    public async Task AddPresetsAsync_WithExistingNameDifferentCase_ShouldSkipThatPreset()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        // 名稱唯一性不分大小寫，所以冪等判斷也必須不分大小寫，否則會建出一筆撞名的資料，
+        // 讓後續的名稱檢查行為變得不一致。這裡用英文名稱才驗得到大小寫。
+        var presetName = PromptTemplatePresets.All[0].Name;
+        await fixture.AddPromptAsync(presetName.ToUpperInvariant());
+        var service = fixture.CreateService();
+
+        await service.AddPresetsAsync();
+
+        Assert.Equal(PromptTemplatePresets.All.Count, await fixture.Context.PromptTemplate.CountAsync());
+    }
+
+    #endregion
+
+    #region 分頁
+
+    [Fact]
+    public async Task GetAsync_WithFirstPage_ShouldNotReturnAllRecords()
+    {
+        // 回歸測試：Take 原本綁 dataRequest.Take != 0，而呼叫端一律傳 0，
+        // 等於從來沒有分頁——第 1 頁會把全部資料一次吐出來。
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        for (var index = 0; index < 10; index++)
+        {
+            await fixture.AddPromptAsync($"範本{index:00}");
+        }
+
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 4;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Equal(4, result.Result.Count());
+        Assert.Equal(10, result.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithSecondPage_ShouldReturnOnlyPageSizeRecords()
+    {
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        for (var index = 0; index < 10; index++)
+        {
+            await fixture.AddPromptAsync($"範本{index:00}");
+        }
+
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 4;
+        request.CurrentPage = 2;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Equal(4, result.Result.Count());
+        // Count 是在 Skip/Take 之前算的，所以它一律是過濾後的總數而不是本頁筆數。
+        Assert.Equal(10, result.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithPageBeyondLastPage_ShouldReturnEmptyResultWithFullCount()
+    {
+        // 頁碼越界會回空集合但 Count 仍是總數——畫面端要靠這個組合把頁碼夾回最後一頁，
+        // 否則刪掉最後一頁唯一一筆之後會停在空白表格。
+        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
+        for (var index = 0; index < 5; index++)
+        {
+            await fixture.AddPromptAsync($"範本{index:00}");
+        }
+
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 4;
+        request.CurrentPage = 3;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Empty(result.Result);
+        Assert.Equal(5, result.Count);
+    }
+
+    #endregion
+
     private static PromptTemplateAdapterModel NewModel(string name) => new()
     {
         Name = name,

@@ -46,6 +46,17 @@ public partial class MeetingViewView : IDisposable
 
     private IBrowserFile? pendingMediaFile;
     private bool isUploading;
+
+    /// <summary>正在重新排入轉錄的會議 Id。CrudActionButton 沒有 Loading 參數，只能靠 Disabled 擋重複點擊。</summary>
+    private int? requeueingMeetingId;
+
+    /// <summary>
+    /// 轉錄費用說明。刻意不講「幾次 API 呼叫」：段數要等 FFmpeg 切完才知道，畫面上只有檔案大小，
+    /// 而位元率在語音備忘錄與含影軌的 MP4 之間差十倍以上，換算出來的數字是假精確。
+    /// 分鐘數從 SegmentSeconds 算，不要寫死，否則改常數時文案會偷偷過期。
+    /// </summary>
+    private static readonly string TranscriptionCostNotice =
+        $"轉錄會呼叫 Azure OpenAI 語音服務並產生費用：音檔每 {FfmpegMediaConverter.SegmentSeconds / 60} 分鐘切成一段、逐段送出，音檔越長費用越高。";
     private int uploadPercent;
 
     private bool transcriptModalVisible;
@@ -330,6 +341,42 @@ public partial class MeetingViewView : IDisposable
             return;
         }
 
+
+        // 費用確認必須在主資料存檔「之前」：這顆確定鈕同時做存檔與上傳，
+        // 放在存檔之後按取消，會留下一筆存好卻沒有音檔的紀錄，而且「修改成功」已經跳過了。
+        // 也不能放在驗證之前——不該為了一張即將驗證失敗的表單問使用者要不要花錢。
+        if (pendingMediaFile is not null)
+        {
+            var replacingMedia = CurrentRecord.HasMedia;
+            var fileDescription = $"「{pendingMediaFile.Name}」（{MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)}）";
+
+            var uploadConfirmOptions = new ConfirmOptions
+            {
+                Title = "確認上傳並開始轉錄（會產生費用）",
+                Content = replacingMedia
+                    ? $"{fileDescription}會取代現有的「{CurrentRecord.MediaOriginalFileName}」，"
+                      + $"現有音檔與逐字稿會被刪除且無法復原。儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}確定要繼續嗎？"
+                    : $"{fileDescription}儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}確定要繼續嗎？",
+                OkText = replacingMedia ? "取代並開始轉錄" : "儲存並開始轉錄",
+                CancelText = "取消",
+                MaskClosable = false
+            };
+
+            if (replacingMedia)
+            {
+                uploadConfirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+            }
+
+            var uploadConfirmed = await modalService.ConfirmAsync(uploadConfirmOptions);
+            if (!uploadConfirmed)
+            {
+                logger.LogDebug("Media upload cancelled by user at cost confirmation. MeetingId={MeetingId}", CurrentRecord.Id);
+                // 這是 Modal 的 OnOk，AntDesign 會自己把視窗關掉；不重新開啟的話
+                // 使用者填的整張表單會消失（與驗證失敗分支同一個處理）。
+                modalVisible = true;
+                return;
+            }
+        }
         if (isNewRecordMode)
         {
             var beforeAddCheckResult = await meetingService.BeforeAddCheckAsync(CurrentRecord);
@@ -512,17 +559,66 @@ public partial class MeetingViewView : IDisposable
 
     private async Task OnRetryTranscriptionAsync(MeetingAdapterModel meetingAdapterModel)
     {
-        logger.LogInformation("Retry transcription requested. MeetingId={MeetingId}", meetingAdapterModel.Id);
-
-        var result = await meetingService.RequeueTranscriptionAsync(meetingAdapterModel.Id);
-        if (!result.Success)
+        if (requeueingMeetingId is not null)
         {
-            NotifyError(result.Message);
             return;
         }
 
-        NotifySuccess("已重新排入轉錄佇列，請稍後重新整理查看結果。");
-        await ReloadAsync();
+        logger.LogInformation("Retry transcription requested. MeetingId={MeetingId}", meetingAdapterModel.Id);
+
+        // Danger 跟「覆蓋」走、不跟「花錢」走（見 開發慣例與限制速查 的 UI 慣例）：
+        // 只有已完成的那一支會刪掉現有逐字稿，才算破壞性動作。
+        var willOverwrite = meetingAdapterModel.TranscriptionStatus == TranscriptionStatus.Completed;
+
+        var situation = meetingAdapterModel.TranscriptionStatus switch
+        {
+            TranscriptionStatus.Completed
+                => $"「{meetingAdapterModel.Title}」已經有逐字稿了，重新轉錄會覆蓋現有逐字稿，舊檔案會被刪除且無法復原。",
+            TranscriptionStatus.Failed
+                => $"「{meetingAdapterModel.Title}」上次轉錄失敗，這會重新跑一次完整的轉錄。",
+            TranscriptionStatus.Cancelled
+                => $"「{meetingAdapterModel.Title}」上次轉錄已取消，這會從頭重跑，不會接續上次的進度。",
+            _ => $"這會為「{meetingAdapterModel.Title}」執行一次完整的轉錄。",
+        };
+
+        var confirmOptions = new ConfirmOptions
+        {
+            Title = willOverwrite ? "確認重新轉錄（會產生費用）" : "確認執行轉錄（會產生費用）",
+            Content = $"{situation}{TranscriptionCostNotice}確定要繼續嗎？",
+            OkText = willOverwrite ? "覆蓋並重新轉錄" : "開始轉錄",
+            CancelText = "取消",
+            MaskClosable = false
+        };
+
+        if (willOverwrite)
+        {
+            confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+        }
+
+        var ok = await modalService.ConfirmAsync(confirmOptions);
+        if (!ok)
+        {
+            logger.LogDebug("Retry transcription cancelled by user. MeetingId={MeetingId}", meetingAdapterModel.Id);
+            return;
+        }
+
+        requeueingMeetingId = meetingAdapterModel.Id;
+        try
+        {
+            var result = await meetingService.RequeueTranscriptionAsync(meetingAdapterModel.Id);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                return;
+            }
+
+            NotifySuccess("已重新排入轉錄佇列，可在右下角的進度面板看到進度。");
+            await ReloadAsync();
+        }
+        finally
+        {
+            requeueingMeetingId = null;
+        }
     }
 
     private async Task OnPreviewTranscriptAsync(MeetingAdapterModel meetingAdapterModel)

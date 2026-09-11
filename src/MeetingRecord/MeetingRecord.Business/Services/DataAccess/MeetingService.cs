@@ -457,7 +457,8 @@ public class MeetingService
 
     /// <summary>
     /// 重新把會議排入轉錄佇列（供「重新轉錄」按鈕使用）。
-    /// 佇列不持久化，應用程式重啟後停留在「待處理」的紀錄也靠這個方法重跑。
+    /// 已排入（待處理）或正在轉錄中的紀錄一律拒絕，否則會重複入列、跑兩趟並重複計費。
+    /// 佇列不持久化，重啟殘留的「待處理」由 Program.cs 的啟動修復改判為「失敗」後才能從這裡重跑。
     /// </summary>
     public async Task<VerifyRecordResult> RequeueTranscriptionAsync(int meetingId, CancellationToken cancellationToken = default)
     {
@@ -484,9 +485,12 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "這筆會議紀錄尚未上傳影音檔。");
             }
 
-            if (meeting.TranscriptionStatus == TranscriptionStatus.Processing)
+            // Pending 也要擋：第一次點完狀態就變 Pending，只擋 Processing 會讓同一筆入列兩次、
+            // 被單一 worker 依序跑兩趟完整轉錄。進度面板以 Kind-MeetingId 為 key 又把兩筆收成
+            // 一列，使用者看不出跑了兩趟——帳單才看得出來。
+            if (meeting.TranscriptionStatus is TranscriptionStatus.Processing or TranscriptionStatus.Pending)
             {
-                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄正在轉錄中，請稍候。");
+                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄已排入轉錄，請稍候。");
             }
 
             meeting.TranscriptionStatus = TranscriptionStatus.Pending;
@@ -635,9 +639,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "這筆逐字稿尚未轉錄完成，無法產生會議紀錄。");
             }
 
-            if (meeting.DraftStatus == DraftStatus.Processing)
+            // 同轉錄：Pending 也要擋，否則同一筆逐字稿會入列兩次、生成兩趟並重複計費。
+            if (meeting.DraftStatus is DraftStatus.Processing or DraftStatus.Pending)
             {
-                return VerifyRecordResultFactory.Build(false, "這筆逐字稿正在產生會議紀錄中，請稍候。");
+                return VerifyRecordResultFactory.Build(false, "這筆逐字稿已排入產生會議紀錄，請稍候。");
             }
 
             if (meeting.ProjectId is not null && meeting.ProjectId != projectId)

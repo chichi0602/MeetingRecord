@@ -60,10 +60,25 @@ public class MeetingAdapterModel : ICloneable
         TranscriptionStatus == TranscriptionStatus.Completed
         && !string.IsNullOrWhiteSpace(TranscriptRelativePath);
 
-    /// <summary>可重新送出轉錄（有影音檔，且目前不在處理中）</summary>
+    /// <summary>
+    /// 可重新送出轉錄。用「排除」而不是「列舉」，與 <see cref="CanGenerateDraft"/> 對稱：
+    ///
+    /// <para>
+    /// <see cref="TranscriptionStatus.Pending"/> 代表已入列但還沒開工，再按一次會重複入列、
+    /// 被單一 worker 依序跑兩趟並**重複計費**（進度面板以 Kind-MeetingId 為 key，兩筆會收成
+    /// 一列，畫面上看不出來）。重啟殘留的 Pending 由 Program.cs 的啟動修復改成 Failed，
+    /// 不靠這裡放行。
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="TranscriptionStatus.Cancelled"/> 必須放行——取消後沒有進度可接續，只能整個
+    /// 重跑。0.4.65 之前這裡是列舉式且漏了 Cancelled，取消過的紀錄根本不會出現重新轉錄鈕
+    /// （服務層其實允許），唯一的出路是重新上傳檔案。
+    /// </para>
+    /// </summary>
     public bool CanRetryTranscription =>
         HasMedia
-        && TranscriptionStatus is TranscriptionStatus.Pending or TranscriptionStatus.Failed or TranscriptionStatus.Completed;
+        && TranscriptionStatus is not (TranscriptionStatus.Pending or TranscriptionStatus.Processing);
 
     #endregion
 

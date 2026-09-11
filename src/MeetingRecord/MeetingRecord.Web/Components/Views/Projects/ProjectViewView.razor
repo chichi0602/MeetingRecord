@@ -173,7 +173,7 @@ else
                             <span class="project-view-field-label" aria-hidden="true">&nbsp;</span>
                             <Button Type="ButtonType.Primary"
                                     Loading="@isGenerating"
-                                    Disabled="@(selectedTranscriptId <= 0 || selectedPromptTemplateId <= 0)"
+                                    Disabled="@(!CanSubmitDraft)"
                                     OnClick="@(async () => await OnGenerateDraftAsync())">
                                 @* 內容包一層自己的 span：CSS isolation 的 scope 屬性只會加在本檔寫的
                                    HTML 元素上，掛在 <Button> 元件的 Class 是選不到的。 *@
@@ -269,7 +269,7 @@ else
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="抽出待辦" Icon="playlist_add"
-                                                      OnClick="@(() => OpenTodoExtraction(context))" />
+                                                      OnClick="@(async () => await OpenTodoExtractionAsync(context))" />
                                 </SpaceItem>
                             }
                             @* 不加動作權限檢查，與同列的「檢視會議紀錄」一致（只有編修要 Edit、匯出要 Export）。 *@

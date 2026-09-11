@@ -202,7 +202,7 @@ public class TranscriptionJobRunner
     /// </summary>
     private async Task MarkCancelledAsync(AccessDatas.Models.Meeting meeting)
     {
-        progressNotifier.ReportFailed(meeting.Id, "已由使用者取消。");
+        progressNotifier.ReportFailed(meeting.Id, "已由使用者取消，可從清單重新轉錄。");
 
         try
         {

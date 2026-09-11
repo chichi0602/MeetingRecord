@@ -415,6 +415,71 @@ public sealed class MeetingServiceTests
         Assert.Null(content);
     }
 
+
+    [Fact]
+    public async Task RequeueTranscriptionAsync_ShouldFail_WhenAlreadyPending()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("已排入轉錄的會議");
+        existing.MediaRelativePath = "2026/08/media.mp3";
+        existing.TranscriptionStatus = TranscriptionStatus.Pending;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var result = await service.RequeueTranscriptionAsync(existing.Id);
+
+        // 只擋 Processing 不夠：Pending 代表已入列但還沒開工，放行就會入列第二次。
+        Assert.False(result.Success);
+        Assert.Empty(fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequeueTranscriptionAsync_ShouldEnqueueOnce_WhenRequestedTwiceInARow()
+    {
+        // 這是重複計費缺陷的迴歸測試。單測 Pending 狀態不足以證明這個序列——
+        // 缺陷的形狀是「第一次成功後狀態變 Pending，第二次仍被放行」，
+        // 兩筆入列會被單一 worker 依序跑兩趟完整轉錄，帳單收兩份。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("被連按兩下的會議");
+        existing.MediaRelativePath = "2026/08/media.mp3";
+        existing.TranscriptionStatus = TranscriptionStatus.Failed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var first = await service.RequeueTranscriptionAsync(existing.Id);
+        var second = await service.RequeueTranscriptionAsync(existing.Id);
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Equal([existing.Id], fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequeueTranscriptionAsync_ShouldResetStatusAndEnqueue_WhenPreviousRunWasCancelled()
+    {
+        // 取消之後必須能重跑：取消不保留進度，只能整個重來。
+        // 0.4.65 之前 CanRetryTranscription 是列舉式且漏了 Cancelled，
+        // 服務層允許但畫面不給按，取消等於死路。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("被取消的會議");
+        existing.MediaRelativePath = "2026/08/media.mp3";
+        existing.TranscriptionStatus = TranscriptionStatus.Cancelled;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var result = await service.RequeueTranscriptionAsync(existing.Id);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Equal(TranscriptionStatus.Pending, saved.TranscriptionStatus);
+        Assert.Equal([existing.Id], fixture.Queue.Enqueued);
+    }
     #endregion
 
     #region 逐字稿人工編修
@@ -669,6 +734,62 @@ public sealed class MeetingServiceTests
         Assert.Equal(DraftStatus.Completed, saved.DraftStatus);
     }
 
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldReject_WhenDraftIsAlreadyPending()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync(
+            "需求確認會議",
+            projectId: project.Id,
+            draftStatus: DraftStatus.Pending);
+
+        var service = fixture.CreateService();
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldEnqueueOnce_WhenRequestedTwiceInARow()
+    {
+        // 同轉錄的迴歸測試：第一次成功後 DraftStatus 變 Pending，只擋 Processing 會讓
+        // 第二次也被放行，同一份逐字稿就生成兩趟、重複計費。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: project.Id);
+
+        var service = fixture.CreateService();
+        var first = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+        var second = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Equal([meeting.Id], fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldEnqueue_WhenPreviousRunWasCancelled()
+    {
+        // 取消之後必須能重跑（與轉錄同一個立場）。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync(
+            "被取消的會議",
+            projectId: project.Id,
+            draftStatus: DraftStatus.Cancelled);
+
+        var service = fixture.CreateService();
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.True(result.Success);
+        Assert.Single(fixture.DraftQueue.Enqueued);
+    }
     #endregion
 
     #region 團隊可見性

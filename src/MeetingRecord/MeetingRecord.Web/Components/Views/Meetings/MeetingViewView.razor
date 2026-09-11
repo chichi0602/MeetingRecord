@@ -104,6 +104,7 @@ else
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="重新轉錄" Icon="autorenew"
+                                              Disabled="@(requeueingMeetingId is not null)"
                                                       OnClick="@(async () => await OnRetryTranscriptionAsync(context))" />
                                 </SpaceItem>
                             }

@@ -50,6 +50,24 @@ public partial class ProjectViewView : IDisposable
     private int selectedPromptTemplateId;
     private bool isGenerating;
 
+    /// <summary>
+    /// 產生會議紀錄的費用說明。刻意不講「幾次 API 呼叫」：逐字稿在磁碟上不在 adapter model，
+    /// 每次點按都讀一次檔只為了算數字，而 TranscriptChunker 優先在段落邊界斷句，
+    /// ceil(字數/上限) 只是下界——講錯數字比不講更糟。
+    /// </summary>
+    private const string DraftCostNotice =
+        "產生會議紀錄會呼叫 Azure OpenAI 文字生成服務並產生費用：逐字稿較長時會先分段摘要再合併，段數越多費用越高。";
+
+    /// <summary>目前選到的逐字稿。</summary>
+    private MeetingAdapterModel? SelectedTranscript
+        => selectableTranscripts.FirstOrDefault(x => x.Id == selectedTranscriptId);
+
+    /// <summary>選到的逐字稿目前可否送出生成（已入列或生成中就不行，避免重複計費）。</summary>
+    private bool CanSubmitDraft
+        => selectedTranscriptId > 0
+        && selectedPromptTemplateId > 0
+        && SelectedTranscript?.CanGenerateDraft == true;
+
     private readonly List<PendingUploadFileItem> pendingUploadFiles = [];
     private readonly HashSet<int> removedFileIds = [];
 
@@ -302,28 +320,52 @@ public partial class ProjectViewView : IDisposable
 
     private async Task OnGenerateDraftAsync()
     {
+        // isGenerating 在 enqueue 回來後的 finally 立刻歸零，Loading 只覆蓋毫秒，
+        // 所以真正的防連點是這個早退。
+        if (isGenerating)
+        {
+            return;
+        }
+
         if (selectedProjectId <= 0 || selectedTranscriptId <= 0 || selectedPromptTemplateId <= 0)
         {
             return;
         }
 
-        var transcript = selectableTranscripts.FirstOrDefault(x => x.Id == selectedTranscriptId);
-        if (transcript is not null && transcript.HasDraft)
-        {
-            var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
-            {
-                Title = "確認重新產生",
-                Content = "這份逐字稿已經產生過會議紀錄，重新產生會覆蓋既有內容（包含人工編修過的部分）。確定要繼續嗎？",
-                OkText = "重新產生",
-                CancelText = "取消",
-                MaskClosable = false
-            });
+        var transcript = SelectedTranscript;
 
-            if (!confirmed)
+        // 首次生成也要確認：確認的理由是「會花錢」。覆蓋只是讓它「同時」變成破壞性動作，
+        // 所以 Danger 掛在 willOverwrite 上，而不是掛在「有費用」上。
+        var willOverwrite = transcript?.HasDraft == true;
+
+        var situation = willOverwrite
+            ? "這份逐字稿已經產生過會議紀錄，重新產生會覆蓋既有內容（包含人工編修過的部分），且無法復原。"
+            : transcript?.DraftStatus switch
             {
-                logger.LogDebug("Draft regeneration cancelled by user. MeetingId={MeetingId}", selectedTranscriptId);
-                return;
-            }
+                DraftStatus.Failed => "上次產生失敗，這會重新跑一次完整的生成。",
+                DraftStatus.Cancelled => "上次產生已取消，這會從頭重跑，不會接續上次的進度。",
+                _ => "將以選定的提示詞為這份逐字稿產生會議紀錄。",
+            };
+
+        var confirmOptions = new ConfirmOptions
+        {
+            Title = willOverwrite ? "確認重新產生（會產生費用）" : "確認產生會議紀錄（會產生費用）",
+            Content = $"{situation}{DraftCostNotice}確定要繼續嗎？",
+            OkText = willOverwrite ? "覆蓋並重新產生" : "開始產生",
+            CancelText = "取消",
+            MaskClosable = false
+        };
+
+        if (willOverwrite)
+        {
+            confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+        }
+
+        var confirmed = await modalService.ConfirmAsync(confirmOptions);
+        if (!confirmed)
+        {
+            logger.LogDebug("Draft generation cancelled by user. MeetingId={MeetingId}", selectedTranscriptId);
+            return;
         }
 
         isGenerating = true;
@@ -843,12 +885,46 @@ public partial class ProjectViewView : IDisposable
     /// 抽出來的東西一律進確認視窗讓使用者挑與改，不直接落庫——
     /// 模型會把人名聽錯、把討論當成行動項目，直接寫進去反而更難收拾。
     /// </summary>
-    private void OpenTodoExtraction(MeetingAdapterModel meeting)
+    /// <summary>
+    /// 開啟抽出待辦視窗。
+    ///
+    /// <para>
+    /// 確認必須放在這顆按鈕、不能放進 <c>TodoExtractionModal</c>：那支的
+    /// <c>OnParametersSetAsync</c> 一開啟就直接呼叫 <c>ExtractAsync</c>，
+    /// Modal 顯示出來的那一刻 API 已經打出去了。
+    /// </para>
+    ///
+    /// <para>
+    /// 這個方法一定要是 <c>async Task</c>：原本是 <c>void</c>，在 void 裡 await 確認
+    /// 等於 fire-and-forget，Modal 會照開照計費。
+    /// </para>
+    /// </summary>
+    private async Task OpenTodoExtractionAsync(MeetingAdapterModel meeting)
     {
+        // 不套 Danger：抽出來的只是候選項目，勾選並儲存後才真的建立待辦，
+        // 沒有任何東西會被覆蓋或刪除。
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認抽出待辦（會產生費用）",
+            Content = $"將把「{meeting.Title}」的會議紀錄全文送給 AI 分析待辦事項，"
+                    + "這會呼叫 Azure OpenAI 文字生成服務並產生費用（每次抽取固定一次呼叫）。"
+                    + "抽出的項目要勾選並儲存才會真的建立待辦；關閉視窗後再開啟會重新抽一次、再計費一次。確定要繼續嗎？",
+            OkText = "開始抽取",
+            CancelText = "取消",
+            MaskClosable = false
+        });
+
+        if (!confirmed)
+        {
+            logger.LogDebug("Todo extraction cancelled by user. MeetingId={MeetingId}", meeting.Id);
+            return;
+        }
+
         todoExtractMeetingId = meeting.Id;
         todoExtractMeetingTitle = meeting.Title;
         todoExtractVisible = true;
     }
+
     private void OpenAttachmentModal() => attachmentModalVisible = true;
 
     private void OnAttachmentModalCancel() => attachmentModalVisible = false;

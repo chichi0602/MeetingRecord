@@ -59,7 +59,7 @@ public sealed class TranscriptionBackgroundService : BackgroundService
             await context.SaveChangesAsync();
 
             services.GetRequiredService<ITranscriptionProgressNotifier>()
-                .ReportFailed(meetingId, "已由使用者取消。");
+                .ReportFailed(meetingId, "已由使用者取消，可從清單重新轉錄。");
         }
         catch (Exception ex)
         {

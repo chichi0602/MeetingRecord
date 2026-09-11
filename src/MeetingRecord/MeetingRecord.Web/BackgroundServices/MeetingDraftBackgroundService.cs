@@ -60,7 +60,7 @@ public sealed class MeetingDraftBackgroundService : BackgroundService
             await context.SaveChangesAsync();
 
             services.GetRequiredService<IMeetingDraftProgressNotifier>()
-                .ReportFailed(meetingId, "已由使用者取消。");
+                .ReportFailed(meetingId, "已由使用者取消，可重新產生會議紀錄。");
         }
         catch (Exception ex)
         {

@@ -131,3 +131,20 @@
     display: flex;
     justify-content: flex-end;
 }
+
+/* 送出前的常駐費用提示（0.4.65）。問答不做二次確認，所以要有一個一直看得到的說明。
+   這個 div 是本檔自己寫的元素，scope 屬性選得到，不需要 ::deep；
+   但別想從這裡選 MaterialIcon 內部的元素，那是子元件。 */
+.ai-chat-cost-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+}
+
+.ai-chat-cost-hint ::deep .material-icons-outlined {
+    font-size: 14px;
+    line-height: 1;
+}

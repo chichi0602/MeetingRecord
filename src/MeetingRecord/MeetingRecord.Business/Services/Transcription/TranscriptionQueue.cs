@@ -8,7 +8,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 /// <para>
 /// 刻意不做持久化：本專案是單一實例假設（SQLite 檔案資料庫 + 本機磁碟儲存），
 /// 行程內 <see cref="Channel{T}"/> 已足夠。應用程式重啟後未完成的項目不會自動重跑，
-/// 改由使用者在畫面上按「重新轉錄」重新入列（啟動時會把殘留的「處理中」標記為失敗）。
+/// 改由使用者在畫面上按「重新轉錄」重新入列（啟動時會把殘留的「待處理」與「處理中」一律標記為失敗）。
 /// </para>
 /// </summary>
 public interface ITranscriptionQueue

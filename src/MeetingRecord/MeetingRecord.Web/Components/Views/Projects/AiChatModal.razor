@@ -57,6 +57,12 @@
             <div class="ai-chat-error" role="alert">@errorMessage</div>
         }
 
+        @* 問答刻意不做二次確認：一次一個問題、防連點已完整（isAsking ＋ Loading ＋ Disabled），
+           每句都跳確認會讓功能不能用。改成常駐提示，放在輸入框旁邊——錢是在這裡花的。 *@
+        <div class="ai-chat-cost-hint">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+            <span>每次送出都會呼叫 Azure OpenAI 並產生費用（一次提問一次呼叫）。</span>
+        </div>
         <div class="ai-chat-input">
             @* Enter 送出、Shift+Enter 換行，是聊天介面的通用預期。
 

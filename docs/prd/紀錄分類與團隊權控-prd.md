@@ -48,7 +48,7 @@
 
 設計理由（使用者決定）：**角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**。專案的存取改為純粹的功能級 RBAC——具備「專案項目」頁面權限即可看到所有專案，動作另以 `[HasPermission]` 控管。
 
-因此本文件的團隊可見性規則**不再適用於 `Project`**，僅適用於 `Meeting`、`PromptTemplate` 與 `Todo`。細節見 [專案項目 PRD](專案項目-prd.md)。
+因此本文件的團隊可見性規則**不再適用於 `Project`**，僅適用於 `Meeting` 與 `PromptTemplate`（`Todo` 的兩個欄位也已於 0.4.66 移除，migration `RemoveTodoCategoriesTeams`）。細節見 [專案項目 PRD](專案項目-prd.md)。
 
 ## 三、畫面與欄位
 

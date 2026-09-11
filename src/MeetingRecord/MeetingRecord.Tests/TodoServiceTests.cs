@@ -4,9 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
-using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 
@@ -14,10 +12,10 @@ namespace MeetingRecord.Tests;
 
 public sealed class TodoServiceTests
 {
-    #region 資料往返與標籤字串轉換
+    #region 資料往返
 
     [Fact]
-    public async Task AddAsync_ShouldPersistFieldsAndTagStrings()
+    public async Task AddAsync_ShouldPersistFields()
     {
         await using var fixture = await TodoServiceFixture.CreateAsync();
         var project = await fixture.AddProjectAsync("Q3 產品改版專案");
@@ -32,8 +30,6 @@ public sealed class TodoServiceTests
             DueDate = new DateTime(2026, 9, 10),
             Priority = "高",
             Status = "待辦",
-            Categories = ["工程"],
-            Teams = ["團隊A"],
         });
 
         Assert.True(result.Success);
@@ -43,23 +39,19 @@ public sealed class TodoServiceTests
         Assert.Equal(project.Id, saved.ProjectId);
         Assert.Null(saved.MeetingId);
         Assert.Equal("高", saved.Priority);
-        // 標籤在資料庫是換行包夾的分隔字串
-        Assert.Equal(TagStringHelper.ToStored(["工程"]), saved.Categories);
-        Assert.Equal(TagStringHelper.ToStored(["團隊A"]), saved.Teams);
     }
 
     [Fact]
-    public async Task GetAsync_ShouldMapTagsBackToListsAndFillRelatedTitles()
+    public async Task GetAsync_ShouldFillRelatedTitles()
     {
         await using var fixture = await TodoServiceFixture.CreateAsync();
         var project = await fixture.AddProjectAsync("Q3 產品改版專案");
         var meeting = await fixture.AddMeetingAsync("需求確認會議");
-        var todo = await fixture.AddTodoAsync("整理客戶回饋", project.Id, meetingId: meeting.Id, categories: ["工程", "客戶"]);
+        var todo = await fixture.AddTodoAsync("整理客戶回饋", project.Id, meetingId: meeting.Id);
         var service = fixture.CreateService();
 
         var loaded = await service.GetAsync(todo.Id);
 
-        Assert.Equal(["工程", "客戶"], loaded.Categories);
         Assert.Equal("Q3 產品改版專案", loaded.ProjectTitle);
         Assert.Equal("需求確認會議", loaded.MeetingTitle);
         Assert.Equal("需求確認會議", loaded.SourceText);
@@ -135,21 +127,6 @@ public sealed class TodoServiceTests
         Assert.Equal("進行中", saved.Status);
     }
 
-    [Fact]
-    public async Task SetCompletedAsync_ShouldReject_WhenOutOfTeamScope()
-    {
-        await using var fixture = await TodoServiceFixture.CreateAsync();
-        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
-        var todo = await fixture.AddTodoAsync("團隊B的待辦", project.Id, teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
-
-        var result = await service.SetCompletedAsync(todo.Id, true);
-
-        Assert.False(result.Success);
-        var saved = await fixture.Context.Todo.AsNoTracking().FirstAsync(x => x.Id == todo.Id);
-        Assert.NotEqual("已完成", saved.Status);
-    }
-
     #endregion
 
     #region 逾期判斷
@@ -184,22 +161,18 @@ public sealed class TodoServiceTests
     }
 
     [Fact]
-    public void Clone_ShouldDeepCopyTagLists()
+    public void CompletionPercent_ShouldBeZero_WhenNoTodos()
     {
-        // 淺複製會讓編輯中的修改回寫到清單資料列（MyTask 當年就是這個 bug）。
-        var todo = new TodoAdapterModel { Categories = ["工程"], Teams = ["團隊A"] };
+        // 守除零：正常路徑撈不出空群組，但這個 record 是 public 的，
+        // 直接 new 一個 Total = 0 不該炸。
+        var summary = new TodoOwnerSummary("甲", 0, 0, 0, 0, 0);
 
-        var cloned = todo.Clone();
-        cloned.Categories.Add("客戶");
-
-        Assert.Single(todo.Categories);
-        Assert.Equal(2, cloned.Categories.Count);
-        Assert.NotSame(todo.Teams, cloned.Teams);
+        Assert.Equal(0, summary.CompletionPercent);
     }
 
     #endregion
 
-    #region 過濾與團隊可見性
+    #region 過濾
 
     [Fact]
     public async Task GetAsync_ShouldFilterByProject()
@@ -232,48 +205,133 @@ public sealed class TodoServiceTests
         Assert.Equal("已完成的", result.Result.Single().Title);
     }
 
+    #endregion
+
+
+    #region 負責人工作量
+
     [Fact]
-    public async Task GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords()
+    public async Task GetOwnerSummariesAsync_ShouldGroupByOwner()
     {
         await using var fixture = await TodoServiceFixture.CreateAsync();
         var project = await fixture.AddProjectAsync("專案A");
-        await fixture.AddTodoAsync("公開待辦", project.Id);
-        await fixture.AddTodoAsync("團隊A待辦", project.Id, teams: ["團隊A"]);
-        await fixture.AddTodoAsync("團隊B待辦", project.Id, teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
-
-        var result = await service.GetAsync(NewRequest());
-
-        Assert.Equal(2, result.Count);
-        Assert.DoesNotContain(result.Result, x => x.Title == "團隊B待辦");
-    }
-
-    [Fact]
-    public async Task GetAsync_Admin_ShouldSeeAllRecords()
-    {
-        await using var fixture = await TodoServiceFixture.CreateAsync();
-        var project = await fixture.AddProjectAsync("專案A");
-        await fixture.AddTodoAsync("公開待辦", project.Id);
-        await fixture.AddTodoAsync("團隊A待辦", project.Id, teams: ["團隊A"]);
-        await fixture.AddTodoAsync("團隊B待辦", project.Id, teams: ["團隊B"]);
+        await fixture.AddTodoAsync("甲的待辦一", project.Id, owner: "陳大文", status: "已完成");
+        await fixture.AddTodoAsync("甲的待辦二", project.Id, owner: "陳大文", status: "待辦");
+        await fixture.AddTodoAsync("乙的待辦", project.Id, owner: "王小明", status: "進行中");
         var service = fixture.CreateService();
 
-        var result = await service.GetAsync(NewRequest());
+        var summaries = await service.GetOwnerSummariesAsync(null);
 
-        Assert.Equal(3, result.Count);
+        Assert.Equal(2, summaries.Count);
+        var chen = summaries.Single(x => x.Owner == "陳大文");
+        Assert.Equal(2, chen.Total);
+        Assert.Equal(1, chen.Completed);
+        Assert.Equal(1, chen.Pending);
+        Assert.Equal(50, chen.CompletionPercent);
+
+        var wang = summaries.Single(x => x.Owner == "王小明");
+        Assert.Equal(1, wang.InProgress);
+        Assert.Equal(0, wang.CompletionPercent);
     }
 
     [Fact]
-    public async Task GetAsync_ById_ShouldReturnEmptyModel_WhenOutOfTeamScope()
+    public async Task GetOwnerSummariesAsync_ShouldGroupNullAndBlankOwnerIntoUnassigned()
+    {
+        // null、空字串、全空白三種都要落進同一組，否則面板上會出現三個看起來一樣的「未指定」。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        await fixture.AddTodoAsync("沒有負責人", project.Id, owner: null);
+        await fixture.AddTodoAsync("空字串負責人", project.Id, owner: string.Empty);
+        await fixture.AddTodoAsync("全空白負責人", project.Id, owner: "   ");
+        var service = fixture.CreateService();
+
+        var summaries = await service.GetOwnerSummariesAsync(null);
+
+        var unassigned = Assert.Single(summaries);
+        Assert.Equal(TodoService.UnassignedOwner, unassigned.Owner);
+        Assert.Equal(3, unassigned.Total);
+    }
+
+    [Fact]
+    public async Task GetOwnerSummariesAsync_ShouldTrimOwnerWhenGrouping()
+    {
+        // Owner 是自由文字、沒有任何正規化，這是最可能出事的地方：
+        // 交給 SQLite 的 GROUP BY 會把「陳大文」與「陳大文 」算成兩個人。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        await fixture.AddTodoAsync("待辦一", project.Id, owner: "陳大文");
+        await fixture.AddTodoAsync("待辦二", project.Id, owner: "陳大文 ");
+        await fixture.AddTodoAsync("待辦三", project.Id, owner: " 陳大文");
+        var service = fixture.CreateService();
+
+        var summaries = await service.GetOwnerSummariesAsync(null);
+
+        var chen = Assert.Single(summaries);
+        Assert.Equal("陳大文", chen.Owner);
+        Assert.Equal(3, chen.Total);
+    }
+
+    [Fact]
+    public async Task GetOwnerSummariesAsync_ShouldFilterByProject()
+    {
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var projectA = await fixture.AddProjectAsync("專案A");
+        var projectB = await fixture.AddProjectAsync("專案B");
+        await fixture.AddTodoAsync("A 的待辦", projectA.Id, owner: "陳大文");
+        await fixture.AddTodoAsync("B 的待辦", projectB.Id, owner: "王小明");
+        var service = fixture.CreateService();
+
+        var summaries = await service.GetOwnerSummariesAsync(projectA.Id);
+
+        var only = Assert.Single(summaries);
+        Assert.Equal("陳大文", only.Owner);
+    }
+
+    [Fact]
+    public async Task GetOwnerSummariesAsync_ShouldCountOverdueOnlyForUnfinished()
+    {
+        // 與 TodoAdapterModel.IsOverdue 同語意：已完成的即使過了期限也不算逾期。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var pastDue = DateTime.Today.AddDays(-3);
+        await fixture.AddTodoAsync("過期未完成", project.Id, owner: "陳大文", status: "待辦", dueDate: pastDue);
+        await fixture.AddTodoAsync("過期但已完成", project.Id, owner: "陳大文", status: "已完成", dueDate: pastDue);
+        await fixture.AddTodoAsync("未到期", project.Id, owner: "陳大文", status: "待辦", dueDate: DateTime.Today.AddDays(3));
+        var service = fixture.CreateService();
+
+        var summaries = await service.GetOwnerSummariesAsync(null);
+
+        Assert.Equal(1, Assert.Single(summaries).Overdue);
+    }
+
+    [Fact]
+    public async Task GetByOwnerAsync_ShouldReturnUnassignedTodos_WhenOwnerIsUnassignedKey()
     {
         await using var fixture = await TodoServiceFixture.CreateAsync();
         var project = await fixture.AddProjectAsync("專案A");
-        var todo = await fixture.AddTodoAsync("團隊B待辦", project.Id, teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        await fixture.AddTodoAsync("沒有負責人", project.Id, owner: null);
+        await fixture.AddTodoAsync("全空白負責人", project.Id, owner: "   ");
+        await fixture.AddTodoAsync("有負責人", project.Id, owner: "陳大文");
+        var service = fixture.CreateService();
 
-        var loaded = await service.GetAsync(todo.Id);
+        var items = await service.GetByOwnerAsync(TodoService.UnassignedOwner, null);
 
-        Assert.Equal(0, loaded.Id);
+        Assert.Equal(2, items.Count);
+        Assert.All(items, item => Assert.True(string.IsNullOrWhiteSpace(item.Owner)));
+    }
+
+    [Fact]
+    public async Task GetByOwnerAsync_ShouldMatchTrimmedOwner()
+    {
+        // 與分組鍵同一個規則：面板下拉給的是 Trim 過的名字，撈清單時要撈得到尾端有空白的資料。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        await fixture.AddTodoAsync("待辦一", project.Id, owner: "陳大文 ");
+        var service = fixture.CreateService();
+
+        var items = await service.GetByOwnerAsync("陳大文", null);
+
+        Assert.Equal("待辦一", Assert.Single(items).Title);
     }
 
     #endregion
@@ -304,11 +362,6 @@ public sealed class TodoServiceTests
         ProjectFilter = projectFilter,
         StatusFilter = statusFilter,
     };
-
-    private sealed class FakeScopeProvider(bool isAdmin, IReadOnlyList<string> teams) : IRecordAccessScopeProvider
-    {
-        public Task<RecordAccessScope> GetAsync() => Task.FromResult(new RecordAccessScope(isAdmin, teams));
-    }
 
     private sealed class TodoServiceFixture : IAsyncDisposable
     {
@@ -345,13 +398,12 @@ public sealed class TodoServiceTests
             return new TodoServiceFixture(connection, context);
         }
 
-        public TodoService CreateService(bool isAdmin = true, params string[] teams)
+        public TodoService CreateService()
         {
             return new TodoService(
                 Context,
                 mapper,
-                loggerFactory.CreateLogger<TodoService>(),
-                new FakeScopeProvider(isAdmin, teams));
+                loggerFactory.CreateLogger<TodoService>());
         }
 
         public async Task<Project> AddProjectAsync(string title)
@@ -383,8 +435,8 @@ public sealed class TodoServiceTests
             int projectId,
             int? meetingId = null,
             string status = "待辦",
-            IEnumerable<string>? categories = null,
-            IEnumerable<string>? teams = null)
+            string? owner = null,
+            DateTime? dueDate = null)
         {
             var todo = new Todo
             {
@@ -392,8 +444,8 @@ public sealed class TodoServiceTests
                 ProjectId = projectId,
                 MeetingId = meetingId,
                 Status = status,
-                Categories = TagStringHelper.ToStored(categories),
-                Teams = TagStringHelper.ToStored(teams),
+                Owner = owner,
+                DueDate = dueDate,
             };
 
             Context.Todo.Add(todo);

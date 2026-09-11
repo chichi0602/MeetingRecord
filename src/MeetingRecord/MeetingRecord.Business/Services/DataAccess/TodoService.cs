@@ -5,19 +5,20 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
-using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
 /// <summary>
-/// 待辦事項的 Blazor 服務層。CRUD 骨架與團隊列級權控比照 <see cref="PromptTemplateService"/>。
+/// 待辦事項的 Blazor 服務層。CRUD 骨架比照 <see cref="PromptTemplateService"/>。
+///
+/// 0.4.66 起**沒有列級權控**：分類與團隊欄位已徹底移除，所有待辦對所有使用者可見。
+/// 待辦必定隸屬於專案，而專案自 0.4.39 起也已退出團隊控管，兩者一致。
 /// </summary>
 public class TodoService
 {
     private readonly BackendDBContext context;
-    private readonly IRecordAccessScopeProvider accessScope;
 
     public IMapper Mapper { get; }
     public ILogger<TodoService> Logger { get; }
@@ -25,13 +26,11 @@ public class TodoService
     public TodoService(
         BackendDBContext context,
         IMapper mapper,
-        ILogger<TodoService> logger,
-        IRecordAccessScopeProvider accessScope)
+        ILogger<TodoService> logger)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
-        this.accessScope = accessScope;
     }
 
     #region 查詢
@@ -72,22 +71,6 @@ public class TodoService
         if (!string.IsNullOrWhiteSpace(dataRequest.StatusFilter))
         {
             dataSource = dataSource.Where(x => x.Status == dataRequest.StatusFilter);
-        }
-
-        if (dataRequest.CategoryFilters.Count > 0)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<Todo>(x => x.Categories, dataRequest.CategoryFilters));
-        }
-
-        if (dataRequest.TeamFilters.Count > 0)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<Todo>(x => x.Teams, dataRequest.TeamFilters));
-        }
-
-        var scope = await accessScope.GetAsync();
-        if (!scope.IsAdmin)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Todo>(x => x.Teams, scope.Teams));
         }
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
@@ -195,13 +178,6 @@ public class TodoService
             return new TodoAdapterModel();
         }
 
-        var scope = await accessScope.GetAsync();
-        if (!TagStringHelper.IsTeamAccessible(item.Teams, scope.Teams, scope.IsAdmin))
-        {
-            Logger.LogWarning("Todo access denied by team scope. TodoId={TodoId}", id);
-            return new TodoAdapterModel();
-        }
-
         return Mapper.Map<TodoAdapterModel>(item);
     }
 
@@ -286,13 +262,6 @@ public class TodoService
             if (item == null)
             {
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項。");
-            }
-
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(item.Teams, scope.Teams, scope.IsAdmin))
-            {
-                Logger.LogWarning("Todo completion denied by team scope. TodoId={TodoId}", id);
-                return VerifyRecordResultFactory.Build(false, "沒有權限更新這筆待辦事項。");
             }
 
             // 取消完成時退回「進行中」而非「待辦」——已經動過的事情退回未開始並不合理。
@@ -380,13 +349,6 @@ public class TodoService
             return VerifyRecordResultFactory.Build(false, "要修改的待辦事項不存在。");
         }
 
-        var scope = await accessScope.GetAsync();
-        if (!TagStringHelper.IsTeamAccessible(searchItem.Teams, scope.Teams, scope.IsAdmin))
-        {
-            Logger.LogWarning("Pre-update validation denied by team scope. TodoId={TodoId}", paraObject.Id);
-            return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆待辦事項。");
-        }
-
         return await BeforeAddCheckAsync(paraObject);
     }
 
@@ -397,4 +359,129 @@ public class TodoService
     }
 
     #endregion
+
+    #region 負責人工作量
+
+    /// <summary>未填負責人的待辦歸在這個假名下。與清單「負責人」欄的顯示文字一致。</summary>
+    public const string UnassignedOwner = "未指定";
+
+    /// <summary>
+    /// 各負責人的工作量統計，供待辦事項頁右側面板使用。
+    ///
+    /// <para>
+    /// <b>分組鍵一律 Trim 後在記憶體正規化</b>：<c>Owner</c> 是自由文字、沒有任何正規化，
+    /// 交給 SQLite 的 GROUP BY 會把「陳大文」與「陳大文 」算成兩個人，
+    /// null 與空字串也會變成兩組。
+    /// </para>
+    ///
+    /// <para>
+    /// 只投影三個純量欄位，不撈實體也不映射 AdapterModel——面板只需要數字，
+    /// 撈全表實體再映射會比左邊的清單本身更貴。選中某人之後才用
+    /// <see cref="GetByOwnerAsync"/> 撈他那一份。
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="projectFilter"/> 刻意只接專案過濾，不接狀態與關鍵字：
+    /// 這個面板顯示的就是狀態分布，再被狀態過濾一次會得到「每個人都 100%」
+    /// 或「每個人都 0%」——那不是空資料，是看起來合理的錯誤數字。
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<TodoOwnerSummary>> GetOwnerSummariesAsync(
+        int? projectFilter,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<Todo> query = context.Todo.AsNoTracking();
+        if (projectFilter is > 0)
+        {
+            query = query.Where(x => x.ProjectId == projectFilter);
+        }
+
+        var rows = await query
+            .Select(x => new { x.Owner, x.Status, x.DueDate })
+            .ToListAsync(cancellationToken);
+
+        var today = DateTime.Today;
+        var completed = TodoAdapterModel.CompletedStatus;
+        var inProgress = TodoAdapterModel.StatusOptions[1];
+        var pending = TodoAdapterModel.StatusOptions[0];
+
+        var summaries = rows
+            .GroupBy(x => string.IsNullOrWhiteSpace(x.Owner) ? UnassignedOwner : x.Owner.Trim())
+            .Select(group => new TodoOwnerSummary(
+                group.Key,
+                group.Count(),
+                group.Count(x => x.Status == completed),
+                group.Count(x => x.Status == inProgress),
+                group.Count(x => x.Status == pending),
+                // 逾期只算未完成的，與 TodoAdapterModel.IsOverdue 的語意一致。
+                group.Count(x => x.Status != completed
+                              && x.DueDate.HasValue
+                              && x.DueDate.Value.Date < today)))
+            .OrderByDescending(x => x.Total)
+            .ThenBy(x => x.Owner, StringComparer.Ordinal)
+            .ToList();
+
+        Logger.LogDebug(
+            "Loaded todo owner summaries. ProjectFilter={ProjectFilter}, OwnerCount={OwnerCount}",
+            projectFilter, summaries.Count);
+
+        return summaries;
+    }
+
+    /// <summary>
+    /// 某一位負責人的待辦清單。刻意不分頁——單一個人的待辦量級不需要。
+    /// 排序與清單頁預設一致（有截止日的在前、近的在前）。
+    /// </summary>
+    public async Task<IReadOnlyList<TodoAdapterModel>> GetByOwnerAsync(
+        string owner,
+        int? projectFilter,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(owner))
+        {
+            return [];
+        }
+
+        IQueryable<Todo> query = context.Todo.AsNoTracking().Include(x => x.Project);
+        if (projectFilter is > 0)
+        {
+            query = query.Where(x => x.ProjectId == projectFilter);
+        }
+
+        // 比對前先 Trim，與 GetOwnerSummariesAsync 的分組鍵用同一個規則。
+        query = owner == UnassignedOwner
+            ? query.Where(x => x.Owner == null || x.Owner.Trim() == string.Empty)
+            : query.Where(x => x.Owner != null && x.Owner.Trim() == owner);
+
+        var records = await query
+            .OrderBy(x => x.DueDate == null)
+            .ThenBy(x => x.DueDate)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<TodoAdapterModel>>(records);
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// 右側負責人面板的一列統計。
+/// 清單刻意不放在這裡——選中某人之後才用 <see cref="TodoService.GetByOwnerAsync"/> 另外撈。
+/// </summary>
+public sealed record TodoOwnerSummary(
+    string Owner,
+    int Total,
+    int Completed,
+    int InProgress,
+    int Pending,
+    int Overdue)
+{
+    /// <summary>
+    /// 完成度（0～100）。
+    ///
+    /// 刻意用整數截斷而不是四捨五入：199/200 四捨五入會顯示 100%，
+    /// 看起來像全做完了，是假資訊。
+    /// </summary>
+    public int CompletionPercent => Total == 0 ? 0 : Completed * 100 / Total;
 }

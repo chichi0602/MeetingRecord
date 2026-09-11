@@ -15,10 +15,6 @@
     flex-wrap: wrap;
 }
 
-.todo-view-search-input {
-    width: 220px;
-}
-
 .todo-view-empty {
     padding: 24px 16px;
     margin-bottom: 12px;
@@ -30,7 +26,21 @@
 }
 
 /* ===== 清單內容 ===== */
+/* ellipsis 要生效，文字必須是有寬度約束的 flex 子項。
+   flex item 預設 min-width:auto，長標題會把整欄撐開而不是省略。 */
+.todo-view-title-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
 .todo-view-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--oat-ink);
     font-weight: 600;
 }
@@ -40,11 +50,17 @@
     text-decoration: line-through;
 }
 
-.todo-view-subtitle {
-    display: block;
-    margin-top: 2px;
-    color: #94a3b8;
-    font-size: 0.76rem;
+/* 詳細內容的唯讀視窗。描述保留換行，所以用 pre 並允許自動換行。 */
+.todo-view-detail-content {
+    margin: 0;
+    max-height: 60vh;
+    overflow: auto;
+    color: var(--oat-ink);
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .todo-view-muted {
@@ -118,4 +134,185 @@
     color: var(--oat-ink-mid);
     background: var(--oat-50);
     border: 1px solid var(--oat-300);
+}
+
+/* ===== 雙欄版面：左清單、右負責人面板（0.4.66）=====
+   斷點刻意用 1400px 而不是 1200px：側邊欄收合是 .page 上的 runtime class
+   （--sidebar-width 300px→64px），媒體查詢量的是視窗寬、看不到這 236px 的差，
+   所以同一個視窗寬度下無法區分展開與收合。取保守值，配合表格的 ScrollX，
+   誤判成單欄也只是要橫向捲動，不會壞版。 */
+.todo-view-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 16px;
+    align-items: start;
+}
+
+@media (max-width: 1400px) {
+    .todo-view-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.todo-view-owner-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 15px 18px;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 14px;
+}
+
+.todo-view-owner-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.todo-view-owner-title {
+    margin: 0;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.todo-view-owner-scope {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+}
+
+.todo-view-owner-empty {
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+}
+
+.todo-view-owner-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.todo-view-owner-progress-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.todo-view-owner-progress-label {
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.todo-view-owner-progress-value {
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.todo-view-owner-progress-caption {
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+}
+
+.todo-view-owner-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.todo-view-owner-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    max-height: 420px;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.todo-view-owner-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.todo-view-owner-item:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.todo-view-owner-item-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--oat-ink);
+    font-size: 0.84rem;
+}
+
+.todo-view-owner-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.74rem;
+}
+
+/* 收合後外層退回單欄，面板只剩標題列（0.4.67）。 */
+.todo-view-body-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* 收合時把面板移到表格上方：單欄之下它原本會落在表格後面，
+   長表格會把展開鈕推到要捲很久才看得到的地方。 */
+.todo-view-body-collapsed .todo-view-owner-panel {
+    order: -1;
+}
+
+.todo-view-owner-panel-collapsed {
+    gap: 8px;
+}
+
+.todo-view-owner-collapsed {
+    color: var(--oat-ink-mid);
+    font-size: 0.76rem;
+}
+
+/* ===== 欄位一行呈現（0.4.67）=====
+   各窄欄位（負責人、優先度、狀態、來源、專案）都不該因為字數而換行撐高列高。
+   ScrollX 已開，table-layout 是 fixed，所以 Width 會被尊重、超出就橫向捲動。
+
+   選擇器從 .todo-view-table-wrap 進去而不是 .todo-view-table：後者是傳給 AntDesign
+   Table 的 Class 參數，渲染出來的元素不會帶 scoped CSS 的 scope 屬性，選不到。 */
+.todo-view-table-wrap ::deep .ant-table-tbody > tr > td {
+    white-space: nowrap;
+}
+
+/* 標題欄是唯一要吃剩餘寬度並自己省略的，不能被上面那條的 nowrap 影響排版。 */
+.todo-view-table-wrap ::deep .ant-table-tbody > tr > td .todo-view-title-cell {
+    white-space: normal;
+}
+
+/* 截止日：日期一塊、逾期天數一塊，各自不斷行。
+   欄寬放得下時就是一行；放不下時整塊「逾期 N 天」掉到第二行，而不是斷在「逾期 1」與「天」之間。 */
+.todo-view-due {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px;
+    white-space: normal;
+}
+
+.todo-view-due > span {
+    white-space: nowrap;
 }

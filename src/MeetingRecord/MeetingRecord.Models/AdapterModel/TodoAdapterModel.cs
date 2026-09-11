@@ -43,15 +43,6 @@ public class TodoAdapterModel : ICloneable
 
     [Required(ErrorMessage = "狀態 不可為空白")]
     public string Status { get; set; } = StatusOptions[0];
-
-    public List<string> Categories { get; set; } = [];
-
-    public List<string> Teams { get; set; } = [];
-
-    public string CategoriesText => string.Join("、", Categories);
-
-    public string TeamsText => string.Join("、", Teams);
-
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
@@ -70,7 +61,10 @@ public class TodoAdapterModel : ICloneable
     /// <summary>逾期天數（未逾期時為 0）</summary>
     public int OverdueDays => IsOverdue ? (DateTime.Today - DueDate!.Value.Date).Days : 0;
 
-    /// <summary>截止日顯示文字，逾期時附上天數</summary>
+    /// <summary>只有截止日本身的顯示文字（不含逾期天數）。清單的截止日欄用它，逾期另外拆成一個標記，避免長字串斷在半路。</summary>
+    public string DueDateOnlyText => DueDate.HasValue ? DueDate.Value.ToString("yyyy/MM/dd") : "未指定";
+
+    /// <summary>截止日顯示文字，逾期時附上天數。窄版面（右側面板）用這個單一字串。</summary>
     public string DueDateText
     {
         get
@@ -81,7 +75,8 @@ public class TodoAdapterModel : ICloneable
             }
 
             var text = DueDate.Value.ToString("yyyy/MM/dd");
-            return IsOverdue ? $"{text}（逾期 {OverdueDays} 天）" : text;
+            // 刻意不用全形括號：那兩個字元很寬，在窄欄位裡會把字串推到換行。
+            return IsOverdue ? $"{text} 逾期 {OverdueDays} 天" : text;
         }
     }
 
@@ -90,13 +85,14 @@ public class TodoAdapterModel : ICloneable
 
     #endregion
 
+    /// <summary>
+    /// 供檢視轉編輯時複製一份，避免編輯中的修改即時回寫清單資料列（見開發慣例的 EF 追蹤與編輯隔離）。
+    ///
+    /// 0.4.66 移除 Categories／Teams 之後，型別內已無可變參考型別成員，MemberwiseClone 就夠了。
+    /// </summary>
     public TodoAdapterModel Clone()
     {
-        var cloned = (TodoAdapterModel)((ICloneable)this).Clone();
-        // MemberwiseClone 為淺複製，標籤清單需另建新實例，避免編輯中的修改回寫到清單資料列。
-        cloned.Categories = [.. Categories];
-        cloned.Teams = [.. Teams];
-        return cloned;
+        return (TodoAdapterModel)((ICloneable)this).Clone();
     }
 
     object ICloneable.Clone()

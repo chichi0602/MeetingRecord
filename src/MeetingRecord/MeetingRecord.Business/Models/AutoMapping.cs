@@ -56,13 +56,9 @@ public class AutoMapping : Profile
 
         #region Todo
         CreateMap<Todo, TodoAdapterModel>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToList(s.Teams)))
             .ForMember(d => d.ProjectTitle, o => o.MapFrom(s => s.Project != null ? s.Project.Title : null))
             .ForMember(d => d.MeetingTitle, o => o.MapFrom(s => s.Meeting != null ? s.Meeting.Title : null));
         CreateMap<TodoAdapterModel, Todo>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToStored(s.Teams)))
             .ForMember(d => d.Project, o => o.Ignore())
             .ForMember(d => d.Meeting, o => o.Ignore());
         CreateMap<Todo, TodoDto>()

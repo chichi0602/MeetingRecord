@@ -28,6 +28,32 @@
     --oat-warn-bg: #FAF0DF;
     --oat-err: #A6483C;
     --oat-err-bg: #F7E8E5;
+
+    /* ============================================================
+       堆疊層級（0.4.68）。全站外框（頁首、側邊欄）的 z-index 一律用這三個變數，
+       不要自己挑數字——挑錯會出現「表格蓋住頁首」「下拉選單被表頭切一半」這種 bug。
+
+       AntDesign 1.6.0 實際用到的值（從 ant-design-blazor.css 查出，不是憑印象）：
+
+         .ant-table-cell-fix-left / -right / .ant-table-summary     2
+         th.ant-table-selection-column.ant-table-cell-fix-left      3
+         .ant-affix                                                10
+         .ant-table-resizable .ant-table-resizing                  99
+         .ant-modal-mask / .ant-modal-wrap                       1000
+         .ant-message / .ant-notification                        1010
+         .ant-dropdown / .ant-select-dropdown / .ant-picker-dropdown 1050
+
+       所以外框要 **> 99**（壓過所有表格內部圖層）且 **< 1000**（對話框、通知、
+       下拉選單仍要蓋在外框之上）。
+
+       ⚠️ 最容易踩的坑：**父層的 z-index 會困住子層**。頁首原本是 z-index: 1，
+       裡面的使用者選單即使寫 z-index: 20 也逃不出那個堆疊脈絡，所以表格的固定欄
+       （z-index: 2）會蓋過整個選單。子層寫再大都沒用，要改的是建立堆疊脈絡的父層。
+       ============================================================ */
+    --z-app-header: 100;
+    --z-app-sidebar: 101;
+    --z-app-sidebar-toggle: 102;   /* 必須高於側邊欄：收合鈕騎在側邊欄的右邊界上（translate -50%），
+                                      比側邊欄低的話會被蓋掉左半邊。原本的 3 < 4 就是這個關係。 */
 }
 
 html, body {

@@ -8,8 +8,8 @@ namespace MeetingRecord.Business.Repositories;
 /// <summary>
 /// 待辦事項的 Web API 資料存取。
 ///
-/// 與其他 repository 一致，API 路徑不做團隊行級過濾；
-/// 團隊可見性只在 Blazor 的 <c>TodoService</c> 生效。
+/// 0.4.66 起待辦事項完全沒有列級權控（Categories／Teams 欄位已移除），
+/// 所以這裡與 Blazor 的 <c>TodoService</c> 看到的資料範圍是一樣的。
 /// </summary>
 public class TodoRepository
 {

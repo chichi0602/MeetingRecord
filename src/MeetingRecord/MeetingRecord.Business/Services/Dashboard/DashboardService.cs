@@ -58,7 +58,7 @@ public class DashboardService
         var monthStart = new DateTime(today.Year, today.Month, 1);
 
         var meetings = BuildMeetingQuery(scope);
-        var todos = BuildTodoQuery(scope);
+        var todos = BuildTodoQuery();
 
         // 一次把需要的欄位取回來再於記憶體分組：資料量在這個系統的量級很小，
         // 而分成十幾條 GroupBy 查詢反而更慢，也更難讀。
@@ -121,13 +121,13 @@ public class DashboardService
             : query.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
     }
 
-    private IQueryable<Todo> BuildTodoQuery(RecordAccessScope scope)
+    /// <summary>
+    /// 待辦查詢。0.4.66 起不做團隊過濾——Todo 的 Teams 欄位已徹底移除，
+    /// 所有待辦對所有使用者可見（會議那支仍有列級權控，兩者刻意不同）。
+    /// </summary>
+    private IQueryable<Todo> BuildTodoQuery()
     {
-        IQueryable<Todo> query = context.Todo.AsNoTracking();
-
-        return scope.IsAdmin
-            ? query
-            : query.Where(TagStringHelper.BuildTeamAccessPredicate<Todo>(x => x.Teams, scope.Teams));
+        return context.Todo.AsNoTracking();
     }
 
     #endregion

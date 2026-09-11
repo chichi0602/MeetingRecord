@@ -17,17 +17,11 @@ public partial class TodoViewView
     private readonly ILogger<TodoViewView> logger;
     private readonly TodoService todoService;
     private readonly ProjectService projectService;
-    private readonly CategoryService categoryService;
-    private readonly TeamService teamService;
     private readonly ModalService modalService;
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
     private ITable? table;
 
-    private List<string> availableCategories = [];
-    private List<string> availableTeams = [];
-    private List<string> selectedCategoryFilters = [];
-    private List<string> selectedTeamFilters = [];
     private List<ProjectAdapterModel> availableProjects = [];
 
     private int selectedProjectFilter;
@@ -49,6 +43,24 @@ public partial class TodoViewView
     private bool isNewRecordMode;
     private string RoleMessage = string.Empty;
 
+    private IReadOnlyList<TodoOwnerSummary> ownerSummaries = [];
+    private IReadOnlyList<TodoAdapterModel> ownerTodos = [];
+    private string selectedOwner = string.Empty;
+    private bool ownerPanelCollapsed;
+
+    private string detailTitle = string.Empty;
+    private string detailContent = string.Empty;
+    private bool detailVisible;
+
+    private TodoOwnerSummary? SelectedOwnerSummary
+        => ownerSummaries.FirstOrDefault(x => x.Owner == selectedOwner);
+
+    /// <summary>面板標題旁的範圍說明。面板只跟專案過濾連動，所以要讓使用者看得出目前算的是哪個範圍。</summary>
+    private string OwnerPanelScopeText
+        => selectedProjectFilter > 0
+            ? availableProjects.FirstOrDefault(x => x.Id == selectedProjectFilter)?.Title ?? "全部專案"
+            : "全部專案";
+
     private static IReadOnlyList<string> StatusOptions => TodoAdapterModel.StatusOptions;
     private static IReadOnlyList<string> PriorityOptions => TodoAdapterModel.PriorityOptions;
 
@@ -65,8 +77,6 @@ public partial class TodoViewView
         ILogger<TodoViewView> logger,
         TodoService todoService,
         ProjectService projectService,
-        CategoryService categoryService,
-        TeamService teamService,
         ModalService modalService,
         MessageService messageService,
         NotificationService notificationService)
@@ -74,8 +84,6 @@ public partial class TodoViewView
         this.logger = logger;
         this.todoService = todoService;
         this.projectService = projectService;
-        this.categoryService = categoryService;
-        this.teamService = teamService;
         this.modalService = modalService;
         this.messageService = messageService;
         this.notificationService = notificationService;
@@ -98,8 +106,6 @@ public partial class TodoViewView
             return;
         }
 
-        availableCategories = await categoryService.GetAllEnabledNamesAsync();
-        availableTeams = await teamService.GetAllEnabledNamesAsync();
         availableProjects = await projectService.GetSelectableAsync();
 
         await ReloadAsync();
@@ -123,14 +129,17 @@ public partial class TodoViewView
             CurrentPage = _pageIndex,
             PageSize = _pageSize,
             Take = 0,
-            CategoryFilters = selectedCategoryFilters.ToList(),
-            TeamFilters = selectedTeamFilters.ToList(),
             ProjectFilter = selectedProjectFilter > 0 ? selectedProjectFilter : null,
             StatusFilter = string.IsNullOrWhiteSpace(selectedStatusFilter) ? null : selectedStatusFilter,
         });
 
         todoAdapterModels = dataRequestResult.Result.ToList();
         _total = dataRequestResult.Count;
+
+        // 面板與清單一律同進同出。所有變更資料的路徑（勾完成、刪除、Modal 送出）都只呼叫
+        // ReloadAsync，掛在這裡才不會出現「左邊變了、右邊完成度不動」。
+        await ReloadOwnerPanelAsync();
+
         logger.LogInformation("Todo list reloaded successfully. Count={Count}", _total);
         StateHasChanged();
     }
@@ -151,28 +160,58 @@ public partial class TodoViewView
         await ReloadAsync();
     }
 
-    private async Task OnCategoryFilterChanged(IEnumerable<string> values)
+    /// <summary>
+    /// 重載右側負責人面板。刻意只帶專案過濾——不帶狀態與關鍵字，理由見 GetOwnerSummariesAsync 的註解。
+    /// </summary>
+    private async Task ReloadOwnerPanelAsync()
     {
-        selectedCategoryFilters = values?.ToList() ?? [];
-        _pageIndex = 1;
-        await ReloadAsync();
+        var projectFilter = selectedProjectFilter > 0 ? selectedProjectFilter : (int?)null;
+        ownerSummaries = await todoService.GetOwnerSummariesAsync(projectFilter);
+
+        // 換專案後原本選中的人可能在新範圍裡沒有任何待辦，退回第一位而不是留一個空面板。
+        if (ownerSummaries.All(x => x.Owner != selectedOwner))
+        {
+            selectedOwner = ownerSummaries.FirstOrDefault()?.Owner ?? string.Empty;
+        }
+
+        ownerTodos = string.IsNullOrEmpty(selectedOwner)
+            ? []
+            : await todoService.GetByOwnerAsync(selectedOwner, projectFilter);
     }
 
-    private async Task OnTeamFilterChanged(IEnumerable<string> values)
+    /// <summary>
+    /// 收合／展開右側面板。收合時外層 grid 退回單欄，表格拿回整個寬度。
+    /// 刻意不記在 localStorage——這是檢視偏好，重新整理回到展開是可預期的。
+    /// </summary>
+    private void ToggleOwnerPanel()
     {
-        selectedTeamFilters = values?.ToList() ?? [];
-        _pageIndex = 1;
-        await ReloadAsync();
+        ownerPanelCollapsed = !ownerPanelCollapsed;
+        logger.LogDebug("Todo owner panel toggled. Collapsed={Collapsed}", ownerPanelCollapsed);
     }
 
-    private void OnRecordCategoriesChanged(IEnumerable<string> values)
+    private async Task OnOwnerChangedAsync(string owner)
     {
-        CurrentRecord.Categories = values?.ToList() ?? [];
+        selectedOwner = owner ?? string.Empty;
+        logger.LogDebug("Todo owner panel switched. Owner={Owner}", selectedOwner);
+
+        var projectFilter = selectedProjectFilter > 0 ? selectedProjectFilter : (int?)null;
+        ownerTodos = string.IsNullOrEmpty(selectedOwner)
+            ? []
+            : await todoService.GetByOwnerAsync(selectedOwner, projectFilter);
     }
 
-    private void OnRecordTeamsChanged(IEnumerable<string> values)
+    /// <summary>開啟待辦內容的唯讀檢視。清單只顯示大綱，完整描述在這裡看。</summary>
+    private void OpenDetail(TodoAdapterModel todoAdapterModel)
     {
-        CurrentRecord.Teams = values?.ToList() ?? [];
+        detailTitle = todoAdapterModel.Title;
+        detailContent = todoAdapterModel.Description ?? string.Empty;
+        detailVisible = true;
+        logger.LogDebug("Opened todo detail view. TodoId={TodoId}", todoAdapterModel.Id);
+    }
+
+    private void OnDetailCancel(MouseEventArgs args)
+    {
+        detailVisible = false;
     }
 
     private async Task OnTableChange(QueryModel<TodoAdapterModel> args)

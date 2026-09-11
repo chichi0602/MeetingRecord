@@ -8,8 +8,50 @@
 else
 {
     <div>
+        @* 一列排完：左邊是過濾與搜尋，右邊是新增與重新整理。
+           欄寬刻意壓窄（專案 150／狀態 110／搜尋 160）讓整列在雙欄版面下仍塞得進去。 *@
         <div class="todo-view-toolbar">
             <div class="todo-view-toolbar-left">
+                <Select TItem="ProjectAdapterModel"
+                        TItemValue="int"
+                        Value="@selectedProjectFilter"
+                        ValueChanged="OnProjectFilterChanged"
+                        DataSource="@availableProjects"
+                        LabelName="@nameof(ProjectAdapterModel.Title)"
+                        ValueName="@nameof(ProjectAdapterModel.Id)"
+                        Placeholder="專案過濾"
+                        AllowClear
+                        EnableSearch
+                        Style="width: 150px;" />
+                <Select TItem="string" TItemValue="string"
+                        Value="@selectedStatusFilter"
+                        ValueChanged="OnStatusFilterChanged"
+                        Placeholder="狀態過濾" AllowClear Style="width: 110px;">
+                    @foreach (var status in StatusOptions)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@status">@status</SelectOption>
+                    }
+                </Select>
+                @* 寬度用 Style 而不是 class：class 傳給 AntDesign 元件時不會帶 scoped CSS 的 scope 屬性，
+                   .todo-view-search-input 那種寫法會被編成 [b-xxx] 而永遠選不到（原本的 220px 從來沒生效）。 *@
+                <Input @bind-Value="searchText" Placeholder="搜尋關鍵字" Style="width: 160px;" />
+                <Tooltip Title="搜尋">
+                    <Button Type="ButtonType.Default"
+                            OnClick="@(async () => await OnSearchAsync())">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
+                    </Button>
+                </Tooltip>
+                @if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    <Tooltip Title="清空搜尋">
+                        <Button Type="ButtonType.Default"
+                                OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
+                        </Button>
+                    </Tooltip>
+                }
+            </div>
+            <div class="todo-view-toolbar-right">
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
                 {
                     <Tooltip Title="新增">
@@ -27,60 +69,6 @@ else
                     </Button>
                 </Tooltip>
             </div>
-            <div class="todo-view-toolbar-right">
-                <Select TItem="ProjectAdapterModel"
-                        TItemValue="int"
-                        Value="@selectedProjectFilter"
-                        ValueChanged="OnProjectFilterChanged"
-                        DataSource="@availableProjects"
-                        LabelName="@nameof(ProjectAdapterModel.Title)"
-                        ValueName="@nameof(ProjectAdapterModel.Id)"
-                        Placeholder="專案過濾"
-                        AllowClear
-                        EnableSearch
-                        Style="min-width: 180px;" />
-                <Select TItem="string" TItemValue="string"
-                        Value="@selectedStatusFilter"
-                        ValueChanged="OnStatusFilterChanged"
-                        Placeholder="狀態過濾" AllowClear Style="min-width: 130px;">
-                    @foreach (var status in StatusOptions)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@status">@status</SelectOption>
-                    }
-                </Select>
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
-                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 150px;">
-                    @foreach (var c in availableCategories)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                    }
-                </Select>
-                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                        Values="selectedTeamFilters" OnSelectedItemsChanged="OnTeamFilterChanged"
-                        Placeholder="團隊過濾" AllowClear EnableSearch Style="min-width: 150px;">
-                    @foreach (var t in availableTeams)
-                    {
-                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                    }
-                </Select>
-                <Input class="todo-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
-                @if (!string.IsNullOrWhiteSpace(searchText))
-                {
-                    <Tooltip Title="清空搜尋">
-                        <Button Type="ButtonType.Default"
-                                OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
-                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
-                        </Button>
-                    </Tooltip>
-                }
-                <Tooltip Title="搜尋">
-                    <Button Type="ButtonType.Default"
-                            OnClick="@(async () => await OnSearchAsync())">
-                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
-                    </Button>
-                </Tooltip>
-            </div>
         </div>
 
         @if (availableProjects.Count == 0)
@@ -90,10 +78,15 @@ else
             </div>
         }
 
-        <div class="todo-view-table-wrap">
+        @* 左邊清單、右邊負責人面板。面板刻意只跟「專案過濾」連動，不跟狀態與關鍵字——
+           它顯示的就是狀態分布，再被狀態過濾一次會得到「每個人都 100%」這種看似合理的錯誤數字。
+           標題上會顯示目前範圍，免得使用者以為數字沒跟著過濾器動是 bug。 *@
+        <div class="todo-view-body @(ownerPanelCollapsed ? "todo-view-body-collapsed" : string.Empty)">
+            <div class="todo-view-table-wrap">
             <Table @ref="table"
                    TItem="TodoAdapterModel"
                    Class="todo-view-table"
+                   ScrollX="1020px"
                    RemoteDataSource="true"
                    DataSource="@todoAdapterModels"
                    OnChange="OnTableChange"
@@ -106,14 +99,21 @@ else
                               CheckedChanged="@(EventCallback.Factory.Create<bool>(this, value => OnCompletedChangedAsync(context, value)))" />
                 </Column>
                 <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Title)" Title="待辦事項" Sortable>
-                    <span class="todo-view-title @(context.IsCompleted ? "todo-view-title-done" : string.Empty)">@context.Title</span>
-                    @if (!string.IsNullOrWhiteSpace(context.Description))
-                    {
-                        <span class="todo-view-subtitle">@context.Description</span>
-                    }
+                    @* 只顯示大綱（單行省略），完整內容靠右邊那顆 icon 開唯讀視窗。
+                       ellipsis 要生效，文字必須是有寬度約束的 flex 子項——純 inline span 上的
+                       text-overflow 不會有任何作用，所以外面這層 flex 容器是必要的。 *@
+                    <div class="todo-view-title-cell">
+                        <span class="todo-view-title @(context.IsCompleted ? "todo-view-title-done" : string.Empty)"
+                              title="@context.Title">@context.Title</span>
+                        @if (!string.IsNullOrWhiteSpace(context.Description))
+                        {
+                            <CrudActionButton Title="檢視完整內容" Icon="info"
+                                              OnClick="@(() => OpenDetail(context))" />
+                        }
+                    </div>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable />
-                <Column TData="string" Title="來源會議紀錄">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable Width="140" />
+                <Column TData="string" Title="來源會議紀錄" Width="135">
                     @if (string.IsNullOrWhiteSpace(context.MeetingTitle))
                     {
                         <span class="todo-view-muted">— 手動新增</span>
@@ -126,21 +126,26 @@ else
                         </span>
                     }
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable>
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable Width="95">
                     @(string.IsNullOrWhiteSpace(context.Owner) ? "未指定" : context.Owner)
                 </Column>
-                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable>
-                    <span class="@(context.IsOverdue ? "todo-view-overdue" : string.Empty)">@context.DueDateText</span>
+                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable Width="165">
+                    @* 日期與逾期天數各自 nowrap：整塊「逾期 N 天」最差只會掉到第二行，不會斷在「逾期 1」「天」中間。 *@
+                    <span class="todo-view-due">
+                        <span class="@(context.IsOverdue ? "todo-view-overdue" : string.Empty)">@context.DueDateOnlyText</span>
+                        @if (context.IsOverdue)
+                        {
+                            <span class="todo-view-overdue todo-view-due-overdue">逾期 @context.OverdueDays 天</span>
+                        }
+                    </span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable>
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable Width="85">
                     <span class="todo-view-pill @PriorityCssClass(context.Priority)">@context.Priority</span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable>
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable Width="95">
                     <span class="todo-view-pill @StatusCssClass(context.Status)">@context.Status</span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.CategoriesText)" Title="分類" />
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.TeamsText)" Title="團隊" />
-                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="90">
                     <Space>
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))
                         {
@@ -159,6 +164,87 @@ else
                     </Space>
                 </ActionColumn>
             </Table>
+            </div>
+
+            <aside class="todo-view-owner-panel @(ownerPanelCollapsed ? "todo-view-owner-panel-collapsed" : string.Empty)">
+                <div class="todo-view-owner-head">
+                    <h3 class="todo-view-owner-title">負責人工作量</h3>
+                    @if (!ownerPanelCollapsed)
+                    {
+                        <span class="todo-view-owner-scope">@OwnerPanelScopeText</span>
+                    }
+                    <CrudActionButton Title="@(ownerPanelCollapsed ? "展開負責人工作量" : "收合負責人工作量")"
+                                      Icon="@(ownerPanelCollapsed ? "expand_more" : "expand_less")"
+                                      OnClick="ToggleOwnerPanel" />
+                </div>
+
+                @if (ownerPanelCollapsed)
+                {
+                    @* 收合時仍留一行摘要，否則使用者不知道展開會看到什麼。 *@
+                    <div class="todo-view-owner-collapsed">
+                        @OwnerPanelScopeText · @ownerSummaries.Count 位負責人
+                    </div>
+                }
+                else if (ownerSummaries.Count == 0)
+                {
+                    <div class="todo-view-owner-empty">這個範圍內還沒有待辦事項。</div>
+                }
+                else
+                {
+                    <Select TItem="string" TItemValue="string"
+                            Value="@selectedOwner"
+                            ValueChanged="OnOwnerChangedAsync"
+                            Placeholder="選擇負責人"
+                            EnableSearch
+                            Style="width: 100%;">
+                        @foreach (var summary in ownerSummaries)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value="@summary.Owner">
+                                @($"{summary.Owner}（{summary.Total}）")
+                            </SelectOption>
+                        }
+                    </Select>
+
+                    @if (SelectedOwnerSummary is { } current)
+                    {
+                        <div class="todo-view-owner-progress">
+                            <div class="todo-view-owner-progress-head">
+                                <span class="todo-view-owner-progress-label">完成度</span>
+                                <span class="todo-view-owner-progress-value">@current.CompletionPercent%</span>
+                            </div>
+                            <Progress Type="ProgressType.Line" Size="ProgressSize.Small"
+                                      Percent="current.CompletionPercent" ShowInfo="false" />
+                            <div class="todo-view-owner-progress-caption">
+                                已完成 @current.Completed / 共 @current.Total
+                            </div>
+                        </div>
+
+                        <div class="todo-view-owner-stats">
+                            <span class="todo-view-pill todo-view-status-pending">待辦 @current.Pending</span>
+                            <span class="todo-view-pill todo-view-status-processing">進行中 @current.InProgress</span>
+                            <span class="todo-view-pill todo-view-status-completed">已完成 @current.Completed</span>
+                            @if (current.Overdue > 0)
+                            {
+                                <span class="todo-view-pill todo-view-overdue">逾期 @current.Overdue</span>
+                            }
+                        </div>
+                    }
+
+                    <ul class="todo-view-owner-list">
+                        @foreach (var item in ownerTodos)
+                        {
+                            <li class="todo-view-owner-item" @key="item.Id">
+                                <span class="todo-view-owner-item-title @(item.IsCompleted ? "todo-view-title-done" : string.Empty)"
+                                      title="@item.Title">@item.Title</span>
+                                <span class="todo-view-owner-item-meta">
+                                    <span class="todo-view-pill @StatusCssClass(item.Status)">@item.Status</span>
+                                    <span class="@(item.IsOverdue ? "todo-view-overdue" : "todo-view-muted")">@item.DueDateText</span>
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </aside>
         </div>
     </div>
 
@@ -234,32 +320,22 @@ else
                         </Select>
                         <ValidationMessage For="() => CurrentRecord.Status" />
                     </FormItem>
-
-                    <FormItem Label="分類">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var c in availableCategories)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
-
-                    <FormItem Label="團隊">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
-                                Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var t in availableTeams)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
                 </AntDesign.Form>
             </EditForm>
         </div>
     </Modal>
 }
+
+@* 待辦內容的唯讀檢視。刻意放在元件根層而不是 <Column> 裡——放在欄位內會讓每一列都渲染一個視窗。
+   描述來自 TextArea，換行有意義，比照檢視會議紀錄用 <pre> 保留。 *@
+<Modal Title="@detailTitle"
+       Class="todo-view-detail-modal"
+       Width="800"
+       @bind-Visible="@detailVisible"
+       Keyboard="true"
+       Footer="null"
+       OnCancel="OnDetailCancel">
+    <pre class="todo-view-detail-content">@detailContent</pre>
+</Modal>
 
 <FormModalHelper />

@@ -285,7 +285,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="project-view-modal"
+           Class="project-view-modal form-modal-large"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -297,87 +297,89 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="ProjectAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <FormItem Label="標題" Required>
-                        <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入專案標題" />
-                        <ValidationMessage For="() => CurrentRecord.Title" />
-                    </FormItem>
-
-                    <FormItem Label="開始日期">
-                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.StartDate" AllowClear="true" Style="width: 100%;" />
-                        <ValidationMessage For="() => CurrentRecord.StartDate" />
-                    </FormItem>
-
-                    <FormItem Label="結束日期">
-                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.EndDate" AllowClear="true" Style="width: 100%;" />
-                        <ValidationMessage For="() => CurrentRecord.EndDate" />
-                    </FormItem>
-
-                    <FormItem Label="狀態" Required>
-                        <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
-                            @foreach (var status in StatusOptions)
-                            {
-                                <SelectOption Value="@status">@status</SelectOption>
-                            }
-                        </Select>
-                        <ValidationMessage For="() => CurrentRecord.Status" />
-                    </FormItem>
-
-                    <FormItem Label="完成百分比" Required>
-                        <div class="project-view-completion-slider">
-                            <Slider TValue="double" @bind-Value="CompletionPercentageValue"
-                                    Min="0" Max="100" Step="1" Marks="CompletionMarks" />
-                        </div>
-                        <ValidationMessage For="() => CurrentRecord.CompletionPercentage" />
-                    </FormItem>
-
-                    <FormItem Label="負責人" Required>
-                        <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人名稱" />
-                        <ValidationMessage For="() => CurrentRecord.Owner" />
-                    </FormItem>
-
-                    <FormItem Label="專案附件">
-                        <InputFile OnChange="OnProjectFilesSelectedAsync" multiple />
-                        <div class="mt-2 text-muted">可一次選擇多個檔案，每個檔案上限 1GB。</div>
-                    </FormItem>
-
-                    @if (pendingUploadFiles.Count > 0)
-                    {
-                        <FormItem Label="待上傳檔案">
-                            <ul class="list-group">
-                                @foreach (var file in pendingUploadFiles)
-                                {
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <span>@file.File.Name (@FormatFileSize(file.File.Size))</span>
-                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemovePendingFile(file.Id)">移除</button>
-                                    </li>
-                                }
-                            </ul>
+                    <div class="form-modal-grid">
+                        <FormItem Label="標題" Required>
+                            <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入專案標題" />
+                            <ValidationMessage For="() => CurrentRecord.Title" />
                         </FormItem>
-                    }
 
-                    @if (CurrentRecord.Files.Count > 0)
-                    {
-                        <FormItem Label="已上傳檔案">
-                            <ul class="list-group">
-                                @foreach (var file in CurrentRecord.Files)
-                                {
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        @* 不能用 <a href>：API 全是 JWT Bearer，瀏覽器導航帶 Cookie 一定 401，
-                                           而 0.4.43 之前指向的那個端點更是從來沒存在過。走 JS interop 下載。 *@
-                                        <button type="button" class="btn btn-link p-0 text-start"
-                                                disabled="@(downloadingFileId is not null)"
-                                                @onclick="() => OnDownloadProjectFileAsync(file)">
-                                            @file.OriginalFileName
-                                        </button>
-                                        <span>
-                                            @FormatFileSize(file.FileSize)
-                                            <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="() => RemoveExistingFile(file.Id)">移除</button>
-                                        </span>
-                                    </li>
-                                }
-                            </ul>
+                        <FormItem Label="負責人" Required>
+                            <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Owner" />
                         </FormItem>
-                    }
+
+                        <FormItem Label="開始日期">
+                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.StartDate" AllowClear="true" Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.StartDate" />
+                        </FormItem>
+
+                        <FormItem Label="結束日期">
+                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.EndDate" AllowClear="true" Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.EndDate" />
+                        </FormItem>
+
+                        <FormItem Label="狀態" Required>
+                            <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
+                                @foreach (var status in StatusOptions)
+                                {
+                                    <SelectOption Value="@status">@status</SelectOption>
+                                }
+                            </Select>
+                            <ValidationMessage For="() => CurrentRecord.Status" />
+                        </FormItem>
+
+                        <FormItem Label="完成百分比" Required>
+                            <div class="project-view-completion-slider">
+                                <Slider TValue="double" @bind-Value="CompletionPercentageValue"
+                                        Min="0" Max="100" Step="1" Marks="CompletionMarks" />
+                            </div>
+                            <ValidationMessage For="() => CurrentRecord.CompletionPercentage" />
+                        </FormItem>
+
+                        <FormItem Label="專案附件" Class="form-modal-full">
+                            <InputFile OnChange="OnProjectFilesSelectedAsync" multiple />
+                            <div class="mt-2 text-muted">可一次選擇多個檔案，每個檔案上限 1GB。</div>
+                        </FormItem>
+
+                        @if (pendingUploadFiles.Count > 0)
+                        {
+                            <FormItem Label="待上傳檔案" Class="form-modal-full">
+                                <ul class="list-group">
+                                    @foreach (var file in pendingUploadFiles)
+                                    {
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span>@file.File.Name (@FormatFileSize(file.File.Size))</span>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemovePendingFile(file.Id)">移除</button>
+                                        </li>
+                                    }
+                                </ul>
+                            </FormItem>
+                        }
+
+                        @if (CurrentRecord.Files.Count > 0)
+                        {
+                            <FormItem Label="已上傳檔案" Class="form-modal-full">
+                                <ul class="list-group">
+                                    @foreach (var file in CurrentRecord.Files)
+                                    {
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            @* 不能用 <a href>：API 全是 JWT Bearer，瀏覽器導航帶 Cookie 一定 401，
+                                               而 0.4.43 之前指向的那個端點更是從來沒存在過。走 JS interop 下載。 *@
+                                            <button type="button" class="btn btn-link p-0 text-start"
+                                                    disabled="@(downloadingFileId is not null)"
+                                                    @onclick="() => OnDownloadProjectFileAsync(file)">
+                                                @file.OriginalFileName
+                                            </button>
+                                            <span>
+                                                @FormatFileSize(file.FileSize)
+                                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="() => RemoveExistingFile(file.Id)">移除</button>
+                                            </span>
+                                        </li>
+                                    }
+                                </ul>
+                            </FormItem>
+                        }
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

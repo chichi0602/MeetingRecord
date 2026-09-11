@@ -249,7 +249,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="todo-view-modal"
+           Class="todo-view-modal form-modal-standard"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -261,65 +261,67 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="TodoAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <FormItem Label="待辦標題" Required>
-                        <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入待辦標題" />
-                        <ValidationMessage For="() => CurrentRecord.Title" />
-                    </FormItem>
-
-                    <FormItem Label="描述">
-                        <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入描述" />
-                        <ValidationMessage For="() => CurrentRecord.Description" />
-                    </FormItem>
-
-                    <FormItem Label="所屬專案" Required>
-                        <Select TItem="ProjectAdapterModel"
-                                TItemValue="int"
-                                @bind-Value="CurrentRecord.ProjectId"
-                                DataSource="@availableProjects"
-                                LabelName="@nameof(ProjectAdapterModel.Title)"
-                                ValueName="@nameof(ProjectAdapterModel.Id)"
-                                Placeholder="請選擇專案"
-                                EnableSearch
-                                Style="width: 100%;" />
-                        <ValidationMessage For="() => CurrentRecord.ProjectId" />
-                    </FormItem>
-
-                    @if (!string.IsNullOrWhiteSpace(CurrentRecord.MeetingTitle))
-                    {
-                        <FormItem Label="來源會議紀錄">
-                            <div class="todo-view-readonly">@CurrentRecord.MeetingTitle</div>
+                    <div class="form-modal-grid">
+                        <FormItem Label="待辦標題" Required>
+                            <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入待辦標題" />
+                            <ValidationMessage For="() => CurrentRecord.Title" />
                         </FormItem>
-                    }
 
-                    <FormItem Label="負責人">
-                        <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人" />
-                        <ValidationMessage For="() => CurrentRecord.Owner" />
-                    </FormItem>
+                        <FormItem Label="所屬專案" Required>
+                            <Select TItem="ProjectAdapterModel"
+                                    TItemValue="int"
+                                    @bind-Value="CurrentRecord.ProjectId"
+                                    DataSource="@availableProjects"
+                                    LabelName="@nameof(ProjectAdapterModel.Title)"
+                                    ValueName="@nameof(ProjectAdapterModel.Id)"
+                                    Placeholder="請選擇專案"
+                                    EnableSearch
+                                    Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.ProjectId" />
+                        </FormItem>
 
-                    <FormItem Label="截止日">
-                        <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.DueDate" AllowClear="true" Style="width: 100%;" />
-                        <ValidationMessage For="() => CurrentRecord.DueDate" />
-                    </FormItem>
+                        <FormItem Label="負責人">
+                            <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人" />
+                            <ValidationMessage For="() => CurrentRecord.Owner" />
+                        </FormItem>
 
-                    <FormItem Label="優先度" Required>
-                        <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Priority" Style="width: 100%;">
-                            @foreach (var priority in PriorityOptions)
-                            {
-                                <SelectOption Value="@priority">@priority</SelectOption>
-                            }
-                        </Select>
-                        <ValidationMessage For="() => CurrentRecord.Priority" />
-                    </FormItem>
+                        <FormItem Label="截止日">
+                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.DueDate" AllowClear="true" Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.DueDate" />
+                        </FormItem>
 
-                    <FormItem Label="狀態" Required>
-                        <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
-                            @foreach (var status in StatusOptions)
-                            {
-                                <SelectOption Value="@status">@status</SelectOption>
-                            }
-                        </Select>
-                        <ValidationMessage For="() => CurrentRecord.Status" />
-                    </FormItem>
+                        <FormItem Label="優先度" Required>
+                            <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Priority" Style="width: 100%;">
+                                @foreach (var priority in PriorityOptions)
+                                {
+                                    <SelectOption Value="@priority">@priority</SelectOption>
+                                }
+                            </Select>
+                            <ValidationMessage For="() => CurrentRecord.Priority" />
+                        </FormItem>
+
+                        <FormItem Label="狀態" Required>
+                            <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
+                                @foreach (var status in StatusOptions)
+                                {
+                                    <SelectOption Value="@status">@status</SelectOption>
+                                }
+                            </Select>
+                            <ValidationMessage For="() => CurrentRecord.Status" />
+                        </FormItem>
+
+                        @if (!string.IsNullOrWhiteSpace(CurrentRecord.MeetingTitle))
+                        {
+                            <FormItem Label="來源會議紀錄" Class="form-modal-full">
+                                <div class="todo-view-readonly">@CurrentRecord.MeetingTitle</div>
+                            </FormItem>
+                        }
+
+                        <FormItem Label="描述" Class="form-modal-full">
+                            <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入描述" />
+                            <ValidationMessage For="() => CurrentRecord.Description" />
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

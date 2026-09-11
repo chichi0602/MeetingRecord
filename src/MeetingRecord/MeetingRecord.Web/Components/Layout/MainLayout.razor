@@ -62,7 +62,7 @@
 </div>
 
 <Modal Title="變更密碼"
-       Class="change-password-modal"
+       Class="change-password-modal form-modal-compact"
        @bind-Visible="@changePasswordVisible"
        Keyboard="true"
        OnOk="OnChangePasswordOkAsync"
@@ -110,6 +110,10 @@
         }
     </dl>
 </Modal>
+
+@* 變更密碼與關於視窗都在這個 layout 裡，外框樣式同樣要靠 FormModalHelper 的全域 <style>。
+   ⚠️ 0.4.69 之前這裡沒有 render 它，所以 .change-password-modal 那條規則從來沒生效過。 *@
+<FormModalHelper />
 
 @* 常駐於所有頁面：轉錄與會議紀錄生成都是背景工作，離開來源頁面也要看得到進度。 *@
 <BackgroundJobProgressPanel />

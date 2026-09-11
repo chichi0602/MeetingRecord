@@ -79,7 +79,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="category-view-modal"
+           Class="category-view-modal form-modal-compact"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -91,19 +91,21 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="CategoryAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <FormItem Label="名稱" Required>
-                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入分類名稱" />
-                        <ValidationMessage For="() => CurrentRecord.Name" />
-                    </FormItem>
+                    <div class="form-modal-grid">
+                        <FormItem Label="名稱" Required>
+                            <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入分類名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Name" />
+                        </FormItem>
 
-                    <FormItem Label="描述">
-                        <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入分類描述" />
-                        <ValidationMessage For="() => CurrentRecord.Description" />
-                    </FormItem>
+                        <FormItem Label="啟用狀態">
+                            <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
+                        </FormItem>
 
-                    <FormItem Label="啟用狀態">
-                        <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
-                    </FormItem>
+                        <FormItem Label="描述" Class="form-modal-full">
+                            <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入分類描述" />
+                            <ValidationMessage For="() => CurrentRecord.Description" />
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

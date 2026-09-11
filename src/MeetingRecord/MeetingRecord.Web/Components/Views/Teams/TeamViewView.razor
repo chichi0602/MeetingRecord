@@ -80,7 +80,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="team-view-modal"
+           Class="team-view-modal form-modal-compact"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -92,24 +92,26 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="TeamAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <FormItem Label="名稱" Required>
-                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入團隊名稱" />
-                        <ValidationMessage For="() => CurrentRecord.Name" />
-                    </FormItem>
+                    <div class="form-modal-grid">
+                        <FormItem Label="名稱" Required>
+                            <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入團隊名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Name" />
+                        </FormItem>
 
-                    <FormItem Label="代號">
-                        <Input @bind-Value="CurrentRecord.Code" Placeholder="請輸入團隊代號（選填，有填則需唯一）" />
-                        <ValidationMessage For="() => CurrentRecord.Code" />
-                    </FormItem>
+                        <FormItem Label="代號">
+                            <Input @bind-Value="CurrentRecord.Code" Placeholder="請輸入團隊代號（選填，有填則需唯一）" />
+                            <ValidationMessage For="() => CurrentRecord.Code" />
+                        </FormItem>
 
-                    <FormItem Label="描述">
-                        <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入團隊描述" />
-                        <ValidationMessage For="() => CurrentRecord.Description" />
-                    </FormItem>
+                        <FormItem Label="啟用狀態">
+                            <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
+                        </FormItem>
 
-                    <FormItem Label="啟用狀態">
-                        <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
-                    </FormItem>
+                        <FormItem Label="描述" Class="form-modal-full">
+                            <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入團隊描述" />
+                            <ValidationMessage For="() => CurrentRecord.Description" />
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

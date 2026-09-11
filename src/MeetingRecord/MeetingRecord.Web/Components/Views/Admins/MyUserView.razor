@@ -75,7 +75,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="my-user-modal"
+           Class="my-user-modal form-modal-standard"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -87,80 +87,81 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="MyUserAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                    <div class="form-modal-grid">
+                        <FormItem Label="帳號" Required>
+                            <Input @bind-Value="CurrentRecord.Account" Placeholder="請輸入帳號" />
+                            <ValidationMessage For="() => CurrentRecord.Account" />
+                        </FormItem>
 
-                    <FormItem Label="帳號" Required>
-                        <Input @bind-Value="CurrentRecord.Account" Placeholder="請輸入帳號" />
-                        <ValidationMessage For="() => CurrentRecord.Account" />
-                    </FormItem>
-
-                    <FormItem Label="密碼" Required="@isNewRecordMode">
-                        <Input Password @bind-Value="CurrentRecord.Password" Placeholder="新增時請輸入密碼，編輯時留白表示不變更" />
-                        @if (!isNewRecordMode)
-                        {
-                            <div class="my-user-password-hint">編輯模式留白表示沿用既有密碼</div>
-                        }
-                        <ValidationMessage For="() => CurrentRecord.Password" />
-                    </FormItem>
-
-                    <FormItem Label="名稱" Required>
-                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
-                        <ValidationMessage For="() => CurrentRecord.Name" />
-                    </FormItem>
-
-                    <FormItem Label="Email">
-                        <Input @bind-Value="CurrentRecord.Email" Placeholder="請輸入 Email" />
-                        <ValidationMessage For="() => CurrentRecord.Email" />
-                    </FormItem>
-
-                    <FormItem Label="角色" Required>
-                        <Select TItem="RoleViewAdapterModel" TItemValue="int?"
-                                DataSource="@roleViewAdapterModels"
-                                @bind-Value="CurrentRecord.RoleViewId"
-                                LabelName="@nameof(RoleViewAdapterModel.Name)"
-                                ValueName="@nameof(RoleViewAdapterModel.Id)"
-                                Placeholder="請選擇角色"
-                                Style="width: 100%;" />
-                        <ValidationMessage For="() => CurrentRecord.RoleViewId" />
-                    </FormItem>
-
-                    <FormItem Label="額外角色（多角色，權限取聯集）">
-                        <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
-                                Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
-                                AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var r in roleViewAdapterModels)
+                        <FormItem Label="密碼" Required="@isNewRecordMode">
+                            <Input Password @bind-Value="CurrentRecord.Password" Placeholder="新增時請輸入密碼，編輯時留白表示不變更" />
+                            @if (!isNewRecordMode)
                             {
-                                <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
+                                <div class="my-user-password-hint">編輯模式留白表示沿用既有密碼</div>
                             }
-                        </Select>
-                    </FormItem>
+                            <ValidationMessage For="() => CurrentRecord.Password" />
+                        </FormItem>
 
-                    <FormItem Label="團隊（直接綁定此使用者）">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
-                                Placeholder="指派此使用者可存取的團隊（不設定則沿用其角色的預設團隊）"
-                                AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var t in availableTeams)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
+                        <FormItem Label="名稱" Required>
+                            <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Name" />
+                        </FormItem>
 
-                    <FormItem>
-                        <Checkbox Checked="@CurrentRecord.Status"
-                                  CheckedChanged="@(value => CurrentRecord.Status = value)">
-                            啟用
-                        </Checkbox>
-                    </FormItem>
+                        <FormItem Label="Email">
+                            <Input @bind-Value="CurrentRecord.Email" Placeholder="請輸入 Email" />
+                            <ValidationMessage For="() => CurrentRecord.Email" />
+                        </FormItem>
 
-                    <FormItem>
-                        <Checkbox Checked="@CurrentRecord.IsAdmin"
-                                  CheckedChanged="@(value => CurrentRecord.IsAdmin = value)">
-                            管理員
-                        </Checkbox>
-                    </FormItem>
+                        <FormItem Label="角色" Required>
+                            <Select TItem="RoleViewAdapterModel" TItemValue="int?"
+                                    DataSource="@roleViewAdapterModels"
+                                    @bind-Value="CurrentRecord.RoleViewId"
+                                    LabelName="@nameof(RoleViewAdapterModel.Name)"
+                                    ValueName="@nameof(RoleViewAdapterModel.Id)"
+                                    Placeholder="請選擇角色"
+                                    Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.RoleViewId" />
+                        </FormItem>
 
+                        <FormItem Label="額外角色（多角色，權限取聯集）">
+                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
+                                    Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var r in roleViewAdapterModels)
+                                {
+                                    <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
+
+                        @* 團隊跨整列：placeholder 很長，壓成半欄會被截掉看不出在說什麼。 *@
+                        <FormItem Label="團隊（直接綁定此使用者）" Class="form-modal-full">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
+                                    Placeholder="指派此使用者可存取的團隊（不設定則沿用其角色的預設團隊）"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var t in availableTeams)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
+
+                        <FormItem>
+                            <Checkbox Checked="@CurrentRecord.Status"
+                                      CheckedChanged="@(value => CurrentRecord.Status = value)">
+                                啟用
+                            </Checkbox>
+                        </FormItem>
+
+                        <FormItem>
+                            <Checkbox Checked="@CurrentRecord.IsAdmin"
+                                      CheckedChanged="@(value => CurrentRecord.IsAdmin = value)">
+                                管理員
+                            </Checkbox>
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

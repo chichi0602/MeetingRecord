@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：0.4.65
+- 現行系統版本：0.4.69
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/09/10
+- 最後核對日期：2026/09/11
 
 ## 一、目標與範圍
 
@@ -57,7 +57,7 @@
   - 描述 `Description`（選填，最長 2000，3 列 `TextArea`）
   - ~~分類 `Categories`／團隊 `Teams`~~ —— **0.4.35 已從表單移除**，改由專案項目頁負責歸屬與分類。資料庫欄位與服務層權限判斷都保留，詳見下方「0.4.35 的權限副作用」
   - 影音檔（`<InputFile>` 單檔，`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生）
-- **Modal 版面**（0.4.28）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid（`.meeting-view-form-grid`）排列：會議標題／會議日期一列，描述與影音檔以 `.meeting-view-form-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
+- **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。
 - 操作按鈕：
   - 預覽逐字稿（狀態為「已完成」且有逐字稿檔案時才出現）

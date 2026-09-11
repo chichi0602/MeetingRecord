@@ -132,7 +132,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="prompt-template-view-modal"
+           Class="prompt-template-view-modal form-modal-standard"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -144,49 +144,51 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="PromptTemplateAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <FormItem Label="名稱" Required>
-                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入提示詞名稱" />
-                        <ValidationMessage For="() => CurrentRecord.Name" />
-                    </FormItem>
+                    <div class="form-modal-grid">
+                        <FormItem Label="名稱" Required>
+                            <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入提示詞名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Name" />
+                        </FormItem>
 
-                    <FormItem Label="提示詞內容" Required>
-                        <TextArea @bind-Value="CurrentRecord.Content" Rows="14" Placeholder="請輸入產生會議紀錄時要送給模型的指令內容" />
-                        <div class="prompt-template-view-variable-hint">
-                            可使用的變數：@KnownVariableDescription（產生會議紀錄時會代入實際內容；其他變數會原樣輸出）
-                        </div>
-                        <ValidationMessage For="() => CurrentRecord.Content" />
-                    </FormItem>
+                        <FormItem Label="啟用狀態">
+                            <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
+                        </FormItem>
 
-                    <FormItem Label="描述">
-                        <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入提示詞用途說明" />
-                        <ValidationMessage For="() => CurrentRecord.Description" />
-                    </FormItem>
+                        <FormItem Label="分類">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                    Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var c in availableCategories)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
 
-                    <FormItem Label="分類">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var c in availableCategories)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
+                        <FormItem Label="團隊">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
+                                    Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var t in availableTeams)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
 
-                    <FormItem Label="團隊">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.Teams" OnSelectedItemsChanged="OnRecordTeamsChanged"
-                                Placeholder="選擇團隊（不設定表示公開）" AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var t in availableTeams)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
+                        <FormItem Label="描述" Class="form-modal-full">
+                            <TextArea @bind-Value="CurrentRecord.Description" Rows="2" Placeholder="請輸入提示詞用途說明" />
+                            <ValidationMessage For="() => CurrentRecord.Description" />
+                        </FormItem>
 
-                    <FormItem Label="啟用狀態">
-                        <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
-                    </FormItem>
+                        <FormItem Label="提示詞內容" Required Class="form-modal-full">
+                            <TextArea @bind-Value="CurrentRecord.Content" Rows="10" Placeholder="請輸入產生會議紀錄時要送給模型的指令內容" />
+                            <div class="prompt-template-view-variable-hint">
+                                可使用的變數：@KnownVariableDescription（產生會議紀錄時會代入實際內容；其他變數會原樣輸出）
+                            </div>
+                            <ValidationMessage For="() => CurrentRecord.Content" />
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

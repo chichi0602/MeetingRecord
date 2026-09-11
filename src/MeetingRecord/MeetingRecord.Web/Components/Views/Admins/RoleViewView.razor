@@ -70,7 +70,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-    Class="role-view-modal"
+    Class="role-view-modal form-modal-large"
     @bind-Visible="@modalVisible"
     Keyboard="true"
     OnOk="OnModalOKHandleAsync"
@@ -82,60 +82,62 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="RoleViewAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-
-                    <FormItem Label="名稱" Required>
-                        <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
-                        <ValidationMessage For="() => CurrentRecord.Name" />
-                    </FormItem>
-
-                    <FormItem Label="預設團隊">
-                        <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                Values="CurrentRecord.DefaultTeams" OnSelectedItemsChanged="OnRoleTeamsChanged"
-                                Placeholder="選擇此角色可瀏覽的團隊（不設定表示僅能看到無團隊的公開紀錄）"
-                                AllowClear EnableSearch Style="width: 100%;">
-                            @foreach (var t in availableTeams)
-                            {
-                                <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                            }
-                        </Select>
-                    </FormItem>
-
-                    <FormItem Label="角色項目">
-                        <FormItem>
-                            @foreach (var group in CurrentRecord.RolePermission.Groups)
-                            {
-                                <div class="role-permission-group">
-                                    <Checkbox Checked="@group.Enable" CheckedChanged="@(value => OnPermissionGroupChanged(group, value))">
-                                        @group.Name
-                                    </Checkbox>
-
-                                    @if (group.Permissions.Count > 0)
-                                    {
-                                        <div class="role-permission-children">
-                                            @foreach (var role in group.Permissions)
-                                            {
-                                                <div class="role-permission-node">
-                                                    <Checkbox Checked="@role.Enable" CheckedChanged="@(value => OnPermissionItemChanged(group, role, value))">
-                                                        @role.Name（全部）
-                                                    </Checkbox>
-                                                    <span class="role-permission-actions">
-                                                        @foreach (var action in PermissionActionItems)
-                                                        {
-                                                            <Checkbox Disabled="@role.Enable"
-                                                                      Checked="@GetActionChecked(role, action.Key)"
-                                                                      CheckedChanged="@(value => OnPermissionActionChanged(group, role, action.Key, value))">
-                                                                @action.Label
-                                                            </Checkbox>
-                                                        }
-                                                    </span>
-                                                </div>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            }
+                    <div class="form-modal-grid">
+                        <FormItem Label="名稱" Required>
+                            <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Name" />
                         </FormItem>
-                    </FormItem>
+
+                        <FormItem Label="預設團隊">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.DefaultTeams" OnSelectedItemsChanged="OnRoleTeamsChanged"
+                                    Placeholder="選擇此角色可瀏覽的團隊（不設定表示僅能看到無團隊的公開紀錄）"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var t in availableTeams)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
+
+                        @* 權限矩陣跨整列：54 個核取方塊壓成半欄會擠成一團。 *@
+                        <FormItem Label="角色項目" Class="form-modal-full">
+                            <FormItem>
+                                @foreach (var group in CurrentRecord.RolePermission.Groups)
+                                {
+                                    <div class="role-permission-group">
+                                        <Checkbox Checked="@group.Enable" CheckedChanged="@(value => OnPermissionGroupChanged(group, value))">
+                                            @group.Name
+                                        </Checkbox>
+
+                                        @if (group.Permissions.Count > 0)
+                                        {
+                                            <div class="role-permission-children">
+                                                @foreach (var role in group.Permissions)
+                                                {
+                                                    <div class="role-permission-node">
+                                                        <Checkbox Checked="@role.Enable" CheckedChanged="@(value => OnPermissionItemChanged(group, role, value))">
+                                                            @role.Name（全部）
+                                                        </Checkbox>
+                                                        <span class="role-permission-actions">
+                                                            @foreach (var action in PermissionActionItems)
+                                                            {
+                                                                <Checkbox Disabled="@role.Enable"
+                                                                          Checked="@GetActionChecked(role, action.Key)"
+                                                                          CheckedChanged="@(value => OnPermissionActionChanged(group, role, action.Key, value))">
+                                                                    @action.Label
+                                                                </Checkbox>
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </FormItem>
+                        </FormItem>
+                    </div>
                 </AntDesign.Form>
             </EditForm>
         </div>

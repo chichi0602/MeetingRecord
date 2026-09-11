@@ -141,7 +141,7 @@ else
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
                 <AntDesign.Form TModel="MeetingAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
-                    <div class="meeting-view-form-grid">
+                    <div class="form-modal-grid">
                         <FormItem Label="會議標題" Required>
                             <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入會議標題" />
                             <ValidationMessage For="() => CurrentRecord.Title" />
@@ -152,12 +152,12 @@ else
                             <ValidationMessage For="() => CurrentRecord.MeetingDate" />
                         </FormItem>
 
-                        <FormItem Label="描述" Class="meeting-view-form-full">
+                        <FormItem Label="描述" Class="form-modal-full">
                             <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入會議說明" />
                             <ValidationMessage For="() => CurrentRecord.Description" />
                         </FormItem>
 
-                        <FormItem Label="影音檔" Class="meeting-view-form-full">
+                        <FormItem Label="影音檔" Class="form-modal-full">
                             <InputFile OnChange="OnMediaFileSelectedAsync" accept="@MeetingMediaPolicy.AcceptAttribute" disabled="@isUploading" />
                             <div class="meeting-view-upload-hint">
                                 單檔上限 @MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)，支援格式：@MeetingMediaPolicy.AllowedExtensionsText。

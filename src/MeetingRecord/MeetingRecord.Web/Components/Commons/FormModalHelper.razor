@@ -1,9 +1,44 @@
-﻿<style>
-    
-    /* form modals: 90% viewport size with scrollable body */
-    .role-view-modal,
-    .my-user-modal,
-    .project-view-modal,
+@*
+    表單對話框的版面樣式（全站唯一的 inline <style>）。
+
+    為什麼不寫在 .razor.css：Blazor 的 CSS isolation 會替選擇器加上 [b-xxxxx]，
+    而 .ant-modal-* 是 Modal 元件自己渲染的 portal DOM，拿不到本元件的 scope 屬性，
+    寫在 scoped CSS 裡永遠選不到。所以外框樣式一律集中在這裡。
+
+    ⚠️ 這裡的規則是**全域**的，沒有任何 scope。新增規則時選擇器要夠獨特。
+
+    尺寸分四級（0.4.69 起）。刻意不是一律滿版——3 個欄位的表單撐成整個螢幕高，
+    中間會空一大片：
+
+      .form-modal-compact   680px，**高度自適應**（不設 height/overflow）  3～4 個欄位
+      .form-modal-standard  880px，max-height 88vh，超過才捲              5～8 個欄位
+      .form-modal-large     90vw / 90vh                                   欄位多或內含矩陣、檔案清單
+      .meeting-view-modal   96vw / 96vh                                   會議紀錄（含影音上傳）
+
+    短欄位一行兩欄：把 FormItem 包進 <div class="form-modal-grid">，
+    要跨整列的 FormItem 加 Class="form-modal-full"。
+*@
+<style>
+
+    /* ===== 尺寸 ===== */
+
+    .form-modal-compact {
+        width: 680px !important;
+        max-width: 92vw !important;
+        top: 10vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    .form-modal-standard {
+        width: 880px !important;
+        max-width: 92vw !important;
+        top: 6vh !important;
+        padding-bottom: 0 !important;
+        margin: 0 auto !important;
+    }
+
+    .form-modal-large,
     .meeting-view-modal {
         width: 90vw !important;
         max-width: 90vw !important;
@@ -12,81 +47,79 @@
         margin: 0 auto !important;
     }
 
-        .role-view-modal .ant-modal-content,
-        .my-user-modal .ant-modal-content,
-        .project-view-modal .ant-modal-content,
-        .meeting-view-modal .ant-modal-content {
-            height: 90vh !important;
-            max-height: 90vh !important;
-            display: flex !important;
-            flex-direction: column !important;
-            overflow: hidden !important;
-        }
-
-        .role-view-modal .ant-modal-header,
-        .my-user-modal .ant-modal-header,
-        .project-view-modal .ant-modal-header,
-        .meeting-view-modal .ant-modal-header {
-            flex-shrink: 0;
-        }
-
-        .role-view-modal .ant-modal-body,
-        .my-user-modal .ant-modal-body,
-        .project-view-modal .ant-modal-body,
-        .meeting-view-modal .ant-modal-body {
-            flex: 1 !important;
-            min-height: 0 !important;
-            overflow-y: auto !important;
-        }
-
-        .role-view-modal .ant-modal-footer,
-        .my-user-modal .ant-modal-footer,
-        .project-view-modal .ant-modal-footer,
-        .meeting-view-modal .ant-modal-footer {
-            flex-shrink: 0;
-        }
-
-    /* meeting record modal: near full screen, only a small margin on each side */
+    /* 會議紀錄再放大一級：表單內有影音上傳與進度列 */
     .meeting-view-modal {
         width: 96vw !important;
         max-width: 96vw !important;
         top: 2vh !important;
     }
 
-        .meeting-view-modal .ant-modal-content {
-            height: 96vh !important;
-            max-height: 96vh !important;
+    /* ===== 有高度上限者：標題與按鈕固定，只有內容區捲動 =====
+       compact 刻意不在這組裡——它要讓對話框跟著內容收縮。 */
+
+    .form-modal-standard .ant-modal-content,
+    .form-modal-large .ant-modal-content,
+    .meeting-view-modal .ant-modal-content {
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }
+
+    /* standard 用 max-height（內容不夠高就收縮），large 系列維持固定高度 */
+    .form-modal-standard .ant-modal-content {
+        max-height: 88vh !important;
+    }
+
+    .form-modal-large .ant-modal-content {
+        height: 90vh !important;
+        max-height: 90vh !important;
+    }
+
+    .meeting-view-modal .ant-modal-content {
+        height: 96vh !important;
+        max-height: 96vh !important;
+    }
+
+    .form-modal-standard .ant-modal-header,
+    .form-modal-large .ant-modal-header,
+    .meeting-view-modal .ant-modal-header,
+    .form-modal-standard .ant-modal-footer,
+    .form-modal-large .ant-modal-footer,
+    .meeting-view-modal .ant-modal-footer {
+        flex-shrink: 0;
+    }
+
+    .form-modal-standard .ant-modal-body,
+    .form-modal-large .ant-modal-body,
+    .meeting-view-modal .ant-modal-body {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
+    }
+
+    /* ===== 短欄位一行兩欄（全站共用） ===== */
+
+    .form-modal-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 24px;
+    }
+
+        .form-modal-grid > .ant-form-item {
+            margin-bottom: 16px;
         }
 
-        /* two fields per row for the short inputs */
-        .meeting-view-modal .meeting-view-form-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            column-gap: 24px;
+        .form-modal-grid > .form-modal-full {
+            grid-column: 1 / -1;
         }
-
-            .meeting-view-modal .meeting-view-form-grid > .ant-form-item {
-                margin-bottom: 16px;
-            }
-
-            .meeting-view-modal .meeting-view-form-grid > .meeting-view-form-full {
-                grid-column: 1 / -1;
-            }
 
     @@media (max-width: 768px) {
-        .meeting-view-modal .meeting-view-form-grid {
+        .form-modal-grid {
             grid-template-columns: minmax(0, 1fr);
         }
     }
 
-    /* change password modal: compact, auto height */
-    .change-password-modal {
-        width: 480px !important;
-        max-width: 90vw !important;
-        top: 20vh !important;
-        padding-bottom: 0 !important;
-        margin: 0 auto !important;
-    }
+    /* ===== 角色清單的表格斑馬紋（與 modal 無關，沿用原位置） ===== */
 
     .role-view-table-wrap .ant-table-tbody > tr.ant-table-row:hover > td {
         background-color: #e6f4ff !important;
@@ -98,11 +131,6 @@
 
     .role-view-table-wrap .ant-table-tbody > tr.ant-table-row:nth-child(even) > td {
         background-color: #f8fafc;
-    }
-
-    .role-view-table-wrap .ant-table-tbody > tr.ant-table-row:hover,
-    .role-view-table-wrap .ant-table-tbody > tr.ant-table-row:hover > td {
-        /*cursor: pointer;*/
     }
 
 </style>

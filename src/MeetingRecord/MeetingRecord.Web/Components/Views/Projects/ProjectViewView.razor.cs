@@ -50,6 +50,24 @@ public partial class ProjectViewView : IDisposable
     private int selectedPromptTemplateId;
     private bool isGenerating;
 
+    /// <summary>正在從專案移除的那一筆；不是 null 時整欄的移除鈕都停用，避免連點。</summary>
+    private int? detachingMeetingId;
+
+    /// <summary>「常用名詞」輸入框的暫存值，按下「新增」才進清單。</summary>
+    private string glossaryTermDraft = string.Empty;
+
+    /// <summary>「常用與會人員」輸入框的暫存值。</summary>
+    private string participantDraft = string.Empty;
+
+    /// <summary>本次生成勾選的實際與會者。每次換專案或換逐字稿都重來，不持久化。</summary>
+    private List<string> selectedAttendees = [];
+
+    /// <summary>目前專案的與會人員名冊。名冊是空的時候選擇器會停用但不隱藏。</summary>
+    private List<string> AvailableParticipants => SelectedProject?.Participants ?? [];
+
+    private string AttendeePlaceholder
+        => AvailableParticipants.Count == 0 ? "此專案尚未設定與會人員" : "勾選本次到場的人";
+
     /// <summary>
     /// 產生會議紀錄的費用說明。刻意不講「幾次 API 呼叫」：逐字稿在磁碟上不在 adapter model，
     /// 每次點按都讀一次檔只為了算數字，而 TranscriptChunker 優先在段落邊界斷句，
@@ -271,15 +289,60 @@ public partial class ProjectViewView : IDisposable
         {
             selectedPromptTemplateId = promptTemplates.FirstOrDefault()?.Id ?? 0;
         }
+
+        // 名冊可能被別人改過（或被自己在「修改專案」裡刪掉），把已不存在的勾選剔除，
+        // 否則會把名冊上沒有的名字餵給模型。
+        selectedAttendees = [.. selectedAttendees.Where(x => AvailableParticipants.Contains(x))];
     }
 
     private async Task OnProjectSelectedAsync(int projectId)
     {
         selectedProjectId = projectId;
         selectedTranscriptId = 0;
+
+        // 名冊是專案私有的，換專案一定要清掉——否則會把 A 專案的人名餵給 B 專案的會議。
+        selectedAttendees = [];
+
         logger.LogInformation("Project selection changed. ProjectId={ProjectId}", projectId);
         await ReloadProjectContextAsync();
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// 把輸入框的內容加進名單。
+    ///
+    /// ⚠️ 刻意用「輸入框 ＋ 按鈕」而不是 AntDesign 的 SelectMode.Tags：那個元件的搜尋輸入框
+    /// 在 Blazor Server ＋ 中文輸入法下會把組字中途的注音留在欄位裡（0.4.71 實測，症狀是
+    /// 「艾ㄑ－艾琪」這種殘留）。普通 Input 走 change 事件、不逐鍵回傳，量測確認正常。
+    /// </summary>
+    private void OnAddGlossaryTerm() => AddTo(CurrentRecord.GlossaryTerms, ref glossaryTermDraft);
+
+    private void OnAddParticipant() => AddTo(CurrentRecord.Participants, ref participantDraft);
+
+    private void OnRemoveGlossaryTerm(string term) => CurrentRecord.GlossaryTerms.Remove(term);
+
+    private void OnRemoveParticipant(string person) => CurrentRecord.Participants.Remove(person);
+
+    /// <summary>
+    /// 去頭尾空白後加進清單；空白與重複（忽略大小寫）一律略過。
+    /// 規則與 <c>TagStringHelper.ToStored</c> 一致，先在畫面上擋掉，使用者才看得到結果。
+    /// </summary>
+    private static void AddTo(List<string> target, ref string draft)
+    {
+        var value = (draft ?? string.Empty).Trim();
+        draft = string.Empty;
+
+        if (value.Length == 0 || target.Any(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        target.Add(value);
+    }
+
+    private void OnSelectedAttendeesChanged(IEnumerable<string> values)
+    {
+        selectedAttendees = values?.ToList() ?? [];
     }
 
     private async Task OnRefreshAsync()
@@ -383,7 +446,8 @@ public partial class ProjectViewView : IDisposable
             var result = await meetingService.RequestDraftAsync(
                 selectedTranscriptId,
                 selectedProjectId,
-                selectedPromptTemplateId);
+                selectedPromptTemplateId,
+                selectedAttendees);
 
             if (!result.Success)
             {
@@ -492,6 +556,62 @@ public partial class ProjectViewView : IDisposable
         editingTranscriptMeetingId = 0;
         canEditTranscript = false;
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 把這筆會議紀錄從專案移除（解除歸屬並清掉草稿），讓逐字稿可以重新指定到正確的專案。
+    ///
+    /// 會刪掉 AI 產生的草稿且無法復原，所以一定先跳確認；但**影音檔與逐字稿會保留**，
+    /// 這也是它與「會議紀錄」頁那個整筆刪除最大的差別，確認文案要講清楚。
+    /// </summary>
+    private async Task OnDetachMeetingAsync(MeetingAdapterModel meeting)
+    {
+        if (detachingMeetingId is not null || SelectedProject is null)
+        {
+            return;
+        }
+
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認從專案移除",
+            Content = $"將把「{meeting.Title}」從「{SelectedProject.Title}」移除，"
+                + "已產生的會議紀錄內容會一併刪除且無法復原。"
+                + "影音檔與逐字稿會保留，之後可以把這份逐字稿指定到其他專案重新產生。確定要移除嗎？",
+            OkText = "移除",
+            CancelText = "取消",
+            MaskClosable = false,
+            OkButtonProps = new ButtonProps { Danger = true },
+        });
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        detachingMeetingId = meeting.Id;
+
+        try
+        {
+            var result = await meetingService.DetachFromProjectAsync(meeting.Id, SelectedProject.Id);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                return;
+            }
+
+            await messageService.SuccessAsync("已從專案移除");
+            await ReloadProjectContextAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Detaching meeting from project failed. MeetingId={MeetingId}", meeting.Id);
+            NotifyError($"移除失敗：{ex.Message}");
+        }
+        finally
+        {
+            detachingMeetingId = null;
+            StateHasChanged();
+        }
     }
 
     private async Task OnPreviewTranscriptAsync(MeetingAdapterModel meeting)

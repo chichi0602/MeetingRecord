@@ -112,8 +112,10 @@
 }
 
 .project-view-ai-field-grow {
-    flex: 1 1 320px;
-    min-width: 280px;
+    /* 0.4.71 加了第四個欄位（與會人員），基準寬度從 320 收到 260，
+       否則在 1440 這種常見寬度下整列一定換行。 */
+    flex: 1 1 260px;
+    min-width: 240px;
 }
 
 .project-view-hint {
@@ -454,3 +456,65 @@
     color: var(--oat-ink-mid);
     font-size: 0.78rem;
 }
+
+/* 名單欄位：輸入框 ＋ 新增鈕，底下是可移除的標籤。
+   刻意不用 AntDesign 的 SelectMode.Tags——那個搜尋輸入框在中文輸入法下會殘留組字內容，
+   理由寫在 ProjectViewView.razor 對應欄位的註解裡。 */
+.project-view-tag-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.project-view-tag-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+    .project-view-tag-input ::deep .ant-input-affix-wrapper,
+    .project-view-tag-input ::deep input.ant-input {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+.project-view-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.project-view-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px 2px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 999px;
+    background: var(--oat-100);
+    color: var(--oat-ink);
+    font-size: 0.82rem;
+    line-height: 1.8;
+}
+
+    .project-view-tag button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--oat-ink-mid);
+        font-size: 0.95rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+        .project-view-tag button:hover,
+        .project-view-tag button:focus {
+            background: var(--oat-300);
+            color: var(--oat-ink);
+        }

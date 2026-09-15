@@ -155,6 +155,31 @@ else
                             </span>
                         </div>
 
+                        @* 本次實到者：從專案名冊挑，不是 Tags 模式——這裡只准選名冊裡有的人。
+                           ⚠️ @key 綁專案：切換專案時外部把選取清空，但 SelectBase 在「新專案沒有選項」
+                           的情況下會直接 return，舊的標籤會留在畫面上。 *@
+                        <div class="project-view-ai-field">
+                            <span class="project-view-field-label">與會人員</span>
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    @key="@($"attendees-{selectedProjectId}")"
+                                    Values="selectedAttendees"
+                                    OnSelectedItemsChanged="OnSelectedAttendeesChanged"
+                                    Disabled="@(AvailableParticipants.Count == 0)"
+                                    Placeholder="@AttendeePlaceholder"
+                                    MaxTagCount="2"
+                                    AllowClear EnableSearch
+                                    Style="min-width: 190px;">
+                                @foreach (var person in AvailableParticipants)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@person">@person</SelectOption>
+                                }
+                            </Select>
+                            @if (AvailableParticipants.Count == 0)
+                            {
+                                <span class="project-view-hint">可在「修改專案」中設定名冊。</span>
+                            }
+                        </div>
+
                         <div class="project-view-ai-field">
                             <span class="project-view-field-label">提示詞</span>
                             <Select TItem="PromptTemplateAdapterModel"
@@ -278,6 +303,17 @@ else
                                 <CrudActionButton Title="AI 問答" Icon="forum"
                                                   OnClick="@(() => OpenMeetingChat(context))" />
                             </SpaceItem>
+                            @* 生成錯專案的出口。刻意是「移除歸屬」而不是刪除：影音檔與逐字稿留著，
+                               那份逐字稿會回到可選清單，指定到正確的專案重跑即可——不必重新上傳、
+                               也不會再付一次轉錄費用。真正的整筆刪除仍然只在「會議紀錄」頁。 *@
+                            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="從專案移除" Icon="link_off" Danger="true"
+                                                      Disabled="@(detachingMeetingId is not null)"
+                                                      OnClick="@(async () => await OnDetachMeetingAsync(context))" />
+                                </SpaceItem>
+                            }
                         </Space>
                     </ActionColumn>
                 </Table>
@@ -335,6 +371,73 @@ else
                                         Min="0" Max="100" Step="1" Marks="CompletionMarks" />
                             </div>
                             <ValidationMessage For="() => CurrentRecord.CompletionPercentage" />
+                        </FormItem>
+
+                        @* 兩份名單都跨整列：輸入框加上標籤列橫向長，塞進兩欄格線會很擠。
+
+                           ⚠️ 這裡**刻意不用** AntDesign 的 SelectMode.Tags。0.4.71 實測過：
+                           那個元件的搜尋輸入框在 Blazor Server ＋ 中文輸入法下會把組字中途的注音
+                           留在欄位裡（症狀是「艾ㄑ－艾琪」這種殘留），元件內部雖然有 IsComposing
+                           處理但擋不住逐鍵回傳伺服器的時間差。普通 <Input> 則量測確認正常
+                           （用 CDP 的 Input.imeSetComposition 真實組字驗過）。
+
+                           所以改成「普通輸入框 ＋ 新增鈕」，標籤外觀自己畫。
+                           Enter 刻意不綁任何動作：中文輸入法用 Enter 確認候選字，綁了會誤觸。 *@
+                        <FormItem Label="常用名詞" Class="form-modal-full">
+                            @* ⚠️ 擋下 keydown 冒泡：外層 EditForm 的 @onkeydown 會把 Enter 當成
+                               「確定並關閉」，而使用者按 Enter 多半只是要確認輸入法的候選字。 *@
+                            <div class="project-view-tag-editor" @onkeydown:stopPropagation="true">
+                                <div class="project-view-tag-input">
+                                    <Input @bind-Value="glossaryTermDraft" Placeholder="輸入術語或產品名" />
+                                    @* ⚠️ 不要依輸入框內容停用這顆鈕。Input 是 change（失焦）才回寫，
+                                       按鈕會一直停用到失焦為止——而點一顆停用的按鈕不會觸發它的 click，
+                                       使用者得點兩次才加得進去。空值由 handler 自己擋掉就好。 *@
+                                    <Button OnClick="OnAddGlossaryTerm">新增</Button>
+                                </div>
+                                @if (CurrentRecord.GlossaryTerms.Count > 0)
+                                {
+                                    <div class="project-view-tag-list">
+                                        @foreach (var term in CurrentRecord.GlossaryTerms)
+                                        {
+                                            var current = term;
+                                            <span class="project-view-tag">
+                                                <span>@current</span>
+                                                <button type="button"
+                                                        title="@($"移除 {current}")"
+                                                        aria-label="@($"移除 {current}")"
+                                                        @onclick="@(() => OnRemoveGlossaryTerm(current))">×</button>
+                                            </span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="mt-2 text-muted">產生會議紀錄時會一併提供給 AI，用來把語音辨識聽錯的同音字改回正確寫法。</div>
+                        </FormItem>
+
+                        <FormItem Label="常用與會人員" Class="form-modal-full">
+                            <div class="project-view-tag-editor" @onkeydown:stopPropagation="true">
+                                <div class="project-view-tag-input">
+                                    <Input @bind-Value="participantDraft" Placeholder="輸入姓名" />
+                                    <Button OnClick="OnAddParticipant">新增</Button>
+                                </div>
+                                @if (CurrentRecord.Participants.Count > 0)
+                                {
+                                    <div class="project-view-tag-list">
+                                        @foreach (var person in CurrentRecord.Participants)
+                                        {
+                                            var current = person;
+                                            <span class="project-view-tag">
+                                                <span>@current</span>
+                                                <button type="button"
+                                                        title="@($"移除 {current}")"
+                                                        aria-label="@($"移除 {current}")"
+                                                        @onclick="@(() => OnRemoveParticipant(current))">×</button>
+                                            </span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="mt-2 text-muted">這是專案的長期名冊。每次產生會議紀錄時，再從這裡勾選該場實際到場的人。</div>
                         </FormItem>
 
                         <FormItem Label="專案附件" Class="form-modal-full">

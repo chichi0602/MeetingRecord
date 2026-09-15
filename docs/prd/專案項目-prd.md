@@ -1,8 +1,8 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：3.8
+- 文件版本：4.0
 - 文件狀態：已實作
-- 現行系統版本：0.4.70
+- 現行系統版本：0.4.72
 - 首次實作版本：既有腳手架核心功能（0.4.31 頁面全面改版）
 - 最後核對日期：2026/09/15
 
@@ -31,13 +31,13 @@
 
 - 專案選擇列：可搜尋的專案下拉（`ProjectService.GetSelectableAsync`，依標題排序、不分頁）＋ 新增／編輯／刪除／重新整理四顆 Material Icon 按鈕。
 - 專案摘要列：負責人、期程、狀態、完成度、本專案的會議紀錄份數、**附件份數（0.4.43 起，可點開檢視與下載）**。
-- AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生。**0.4.65 起一律先跳費用確認對話框**（首次生成也跳，理由是會產生 API 費用），已有草稿時額外套紅色確認鈕並說明會覆蓋人工編修過的內容；按鈕在該筆已排入或生成中時停用（`CanGenerateDraft`），避免重複入列而重複計費。
-- 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（檢視／編修草稿、**匯出 PDF**、預覽／編修逐字稿、**抽出待辦**、AI 問答）。不分頁。**0.4.55 起逐字稿改為可編修**——「正要產生會議紀錄時才發現 STT 把人名聽錯」是最該修的時機，逼使用者換到會議紀錄頁是沒必要的摩擦；兩頁呼叫同一個 `MeetingService.UpdateTranscriptAsync`，規則見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。
+- AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生。**0.4.65 起一律先跳費用確認對話框**（首次生成也跳，理由是會產生 API 費用），已有草稿時額外套紅色確認鈕並說明會覆蓋人工編修過的內容；按鈕在該筆已排入或生成中時停用（`CanGenerateDraft`），避免重複入列而重複計費。 **0.4.71 起提示詞下拉左邊多一個「與會人員」多選**，選項來自本專案的與會人員名冊（`Project.Participants`），用來勾選這場會議實際到場的人；名冊是空的時候欄位停用但不隱藏。勾選結果以快照存進 `Meeting.DraftAttendees`，連同專案的常用名詞一起餵給模型校正語音辨識聽錯的人名。與會人員是**選填**，不影響按鈕是否可按。
+- 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（檢視／編修草稿、**匯出 PDF**、預覽／編修逐字稿、**抽出待辦**、AI 問答）。不分頁。**0.4.55 起逐字稿改為可編修**——「正要產生會議紀錄時才發現 STT 把人名聽錯」是最該修的時機，逼使用者換到會議紀錄頁是沒必要的摩擦；兩頁呼叫同一個 `MeetingService.UpdateTranscriptAsync`，規則見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。 **0.4.72 起操作欄多一顆「從專案移除」**（`link_off`，受 `delete` 權限管控）：清掉歸屬與 AI 草稿，但**影音檔與逐字稿保留**，那份逐字稿會回到可選清單，可以改指到正確的專案重跑——這是「生成錯專案」唯一的出口（先前只能整筆刪除，等於要重新上傳並重新付一次轉錄費用）。生成中（`Pending`／`Processing`）不准移除，否則背景工作結束時會把草稿寫回已經移除的紀錄。
 - **匯出 PDF**（0.4.40，取代 0.4.34 的 Markdown 匯出）：把表頭（專案、會議、日期、使用提示詞、產生時間）加上會議紀錄內文組成 HTML（Markdown 經 Markdig 轉換，支援表格），再以**系統既有的 Edge／Chrome 無頭列印**產生 PDF，經 JS interop 直接推給瀏覽器下載，**檔案不落地、不新增 HTTP 檔案輸出面**。內容不含逐字稿。檔名為 `會議紀錄_{標題}_{產生日}.pdf`。
   - 中文字型由瀏覽器處理（實測 Edge 會把微軟正黑體以子集嵌入，含 `Identity-H` 與 `ToUnicode`，文字可複製可搜尋），**專案不需放任何字型檔**。
   - 產生期間按鈕顯示「匯出中…」並停用，避免重複點擊啟動多個瀏覽器程序。
 - Icon 一律使用 Material Icons Outlined，不使用 emoji。
-- 編輯表單欄位：標題（必填）、開始日期、結束日期、狀態（必填，`StatusOptions`）、完成百分比（0-100）、負責人（必填）、專案附件。
+- 編輯表單欄位：標題（必填）、開始日期、結束日期、狀態（必填，`StatusOptions`）、完成百分比（0-100）、負責人（必填）、專案附件。 **0.4.71 新增「常用名詞」與「常用與會人員」兩個標籤輸入**（`SelectMode.Tags`，都跨整列），以 `TagStringHelper` 的換行包夾字串存在 `Project.GlossaryTerms` / `Project.Participants`。兩者都只影響 AI 產生會議紀錄時的提示詞，不參與搜尋或排序。
   - **0.4.39 起，描述、優先級、分類、團隊四個欄位已從系統中完全移除**——不只是表單，實體、`ProjectAdapterModel`、DTO、服務層、API 搜尋與排序都已清除，並以 migration `RemoveProjectDescriptionPriorityCategoriesTeams` 刪除四個資料庫欄位。0.4.37 只移除表單，這一版才是徹底移除。
   - 完成百分比自 **0.4.42** 起改用滑桿（0／25／50／75／100 刻度），不再是數字輸入框。
 - 附件：`專案附件` 一次可多選，單檔上限 1GB；待上傳清單可移除，已上傳檔案可下載或標記移除。
@@ -50,7 +50,8 @@
 - 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectRepository`（與 UI 的 Service 為兩條路徑，皆回 `ApiResult`）。
 - 讀取：清單 `GetAsync(DataRequest)` 使用 `AsNoTracking`；單筆 `GetAsync(int)` 以 `Include(x => x.Files)` 帶附件。
 - 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單。
-- AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。
+- AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。 **0.4.71 起多一個選填的 `attendees` 參數**（插在 `promptTemplateId` 之後、`CancellationToken` 之前），清洗後以快照寫入 `Meeting.DraftAttendees`，上限 50 人。刻意**不檢查勾選的人是否真的在名冊內**——UI 只提供名冊選項，加檢查只會製造「別人改了名冊就整筆退回」的假失敗。實際的提示詞組裝見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)。
+- 從專案移除：`MeetingService.DetachFromProjectAsync(meetingId, projectId)` 檢查團隊權限、歸屬是否相符（擋畫面過期）與是否正在生成，通過後清空 `ProjectId` 與整組 `Draft*` 欄位。**不動**影音檔、逐字稿、該會議的 AI 問答對話與已抽出的待辦（待辦有自己的 `ProjectId`）。
 - 刪除專案：`OnDelete(DeleteBehavior.SetNull)` —— 底下的會議紀錄不會被刪除，只解除歸屬；確認對話框會明白告知這件事。
 - 寫入前清追蹤：`AddAsync`／`UpdateAsync`／`DeleteAsync` 進入時皆呼叫 `CleanTrackingHelper.Clean<Project>(context)`（`ProjectService.cs:201,233,286`）。
 - 附件 Adapter：UI 以 `ProjectUploadFileInput`（FileName/ContentType/FileSize/Content）傳入；Service 依主表 `CreatedAt` 年／月建立目錄，檔名以 GUID 產生，落地後寫入 `ProjectFile`；刪除主表時先刪實體檔再刪紀錄。

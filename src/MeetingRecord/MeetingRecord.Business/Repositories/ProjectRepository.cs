@@ -213,6 +213,15 @@ public class ProjectRepository
         project.UpdatedAt = DateTime.Now;
         project.CreatedAt = existingProject.CreatedAt; // 保留原建立時間
 
+        // ⚠️ SetValues 會覆寫所有純量欄位。呼叫端是 mapper.Map<Project>(dto) 產生的全新實體，
+        // 所以 DTO 沒帶到的欄位都會變成 null——不特別保留的話，一次不含名單的 PUT
+        // 就會把使用者建好的名詞表清光（CreatedAt 上面那行就是同一個坑的前例）。
+        //
+        // 規則與 CreatedAt 一致：傳 null 視為「沒有要改」。代價是 API 清不掉名單，
+        // 但畫面走的是 ProjectService.UpdateAsync 那條，清得掉。
+        project.GlossaryTerms ??= existingProject.GlossaryTerms;
+        project.Participants ??= existingProject.Participants;
+
         context.Entry(existingProject).CurrentValues.SetValues(project);
         await context.SaveChangesAsync();
 

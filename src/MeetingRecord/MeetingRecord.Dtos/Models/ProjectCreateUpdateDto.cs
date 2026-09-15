@@ -64,6 +64,18 @@ public class ProjectCreateUpdateDto
     public string? Owner { get; set; }
 
     /// <summary>
+    /// 常用名詞（術語、產品名）
+    /// </summary>
+    [JsonPropertyName("glossaryTerms")]
+    public List<string> GlossaryTerms { get; set; } = [];
+
+    /// <summary>
+    /// 常用與會人員名冊
+    /// </summary>
+    [JsonPropertyName("participants")]
+    public List<string> Participants { get; set; } = [];
+
+    /// <summary>
     /// 建立時間
     /// </summary>
     [JsonPropertyName("createdAt")]

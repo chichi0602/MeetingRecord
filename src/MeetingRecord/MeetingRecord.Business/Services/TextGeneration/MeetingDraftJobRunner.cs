@@ -96,14 +96,35 @@ public class MeetingDraftJobRunner
                 throw new InvalidOperationException("找不到逐字稿內容，或逐字稿為空白，無法產生會議紀錄。");
             }
 
-            var condensed = await CondenseAsync(provider, transcript, meetingId, cancellationToken);
+            // 專案的常用名詞刻意即時撈、不快照：名詞表更新後重跑就該生效。
+            // 與會者則是本次生成的快照（Meeting.DraftAttendees），語意本來就是「這一場」。
+            var glossaryTerms = meeting.ProjectId is null
+                ? null
+                : await context.Project.AsNoTracking()
+                    .Where(x => x.Id == meeting.ProjectId)
+                    .Select(x => x.GlossaryTerms)
+                    .FirstOrDefaultAsync(cancellationToken);
 
-            var userPrompt = PromptVariableHelper.Render(template, new Dictionary<string, string?>
+            var guidance = NameGuidancePromptHelper.Build(
+                TagStringHelper.ToList(glossaryTerms),
+                TagStringHelper.ToList(meeting.DraftAttendees));
+
+            var condensed = await CondenseAsync(provider, transcript, guidance, meetingId, cancellationToken);
+
+            // 名單放最前面：範本形狀不可控，多數把 {{transcript}} 擺在結尾，
+            // 附加在最後會緊貼逐字稿、容易被讀成逐字稿的一部分。
+            var userPrompt = guidance + PromptVariableHelper.Render(template, new Dictionary<string, string?>
             {
                 ["transcript"] = condensed,
                 ["meetingTitle"] = meeting.Title,
                 ["meetingDate"] = meeting.MeetingDate?.ToString("yyyy/MM/dd"),
             });
+
+            // 只有 reduce 這一次補尾部提醒，用來對沖長提示詞的中段注意力衰減。
+            if (guidance.Length > 0)
+            {
+                userPrompt += NameGuidancePromptHelper.ReduceReminder;
+            }
 
             cancellationToken.ThrowIfCancellationRequested();
             progressNotifier.ReportGenerating(meetingId);
@@ -155,6 +176,7 @@ public class MeetingDraftJobRunner
     private async Task<string> CondenseAsync(
         ITextGenerationProvider provider,
         string transcript,
+        string guidance,
         int meetingId,
         CancellationToken cancellationToken)
     {
@@ -183,7 +205,11 @@ public class MeetingDraftJobRunner
                 index + 1,
                 chunks.Count);
 
+            // ⚠️ 名單一定要注入這裡。這一段用的是硬寫的提示詞（不是使用者範本），
+            // 只改 reduce 的話，長逐字稿的人名在摘要階段就已經被壓縮掉了——
+            // 而長會議正是這個功能最有價值的場景。
             var chunkPrompt =
+                guidance +
                 $"以下是一場會議逐字稿的第 {index + 1}/{chunks.Count} 段。" +
                 "請摘要這一段的討論重點、決議與待辦，並保留人名、日期、數字與專有名詞等具體資訊。" +
                 "不要加上開場白或結語，直接輸出摘要內容。\n\n" +

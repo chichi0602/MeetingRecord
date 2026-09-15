@@ -18,6 +18,89 @@ namespace MeetingRecord.Tests;
 /// </summary>
 public sealed class MeetingDraftJobRunnerTests
 {
+    #region 名詞與與會人員名單
+
+    [Fact]
+    public async Task RunAsync_ShouldPrependNameGuidance_WhenProjectHasGlossary()
+    {
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync(
+            "週會", "內容", template,
+            glossaryTerms: "\n甲專案\n乙系統\n",
+            attendees: "\n王小明\n");
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var prompt = provider.Calls[0].UserPrompt;
+
+        // 名單要在最前面：範本多半把 {{transcript}} 擺結尾，附加在後面會緊貼逐字稿。
+        Assert.StartsWith("【本次會議的專有名詞與人名對照】", prompt);
+        Assert.Contains("常用名詞：甲專案、乙系統", prompt);
+        Assert.Contains("與會人員：王小明", prompt);
+        Assert.Contains("整理：內容", prompt);
+        Assert.EndsWith("（再次提醒：人名與專有名詞請依開頭名單的正確寫法。）", prompt);
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldUseLatestGlossary_NotASnapshot()
+    {
+        // 常用名詞刻意不快照在 Meeting 上——名詞表更新後重跑就該生效。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync(
+            "週會", "內容", template, glossaryTerms: "\n舊名詞\n");
+
+        var project = await fixture.Context.Project.FirstAsync();
+        project.GlossaryTerms = "\n新名詞\n";
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        Assert.Contains("新名詞", provider.Calls[0].UserPrompt);
+        Assert.DoesNotContain("舊名詞", provider.Calls[0].UserPrompt);
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldInjectNameGuidanceIntoEveryChunkCall()
+    {
+        // ⚠️ 這是最重要的一筆：map 階段用的是硬寫的提示詞（不是使用者範本）。
+        // 只注入 reduce 的話，長逐字稿的人名在摘要階段就被壓縮掉了——而長會議正是
+        // 這個功能最有價值的場景，也最容易只改一半沒發現。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var longTranscript = string.Join(
+            "\n\n",
+            Enumerable.Range(0, 6).Select(i => new string((char)('A' + i), 5000)));
+        var meeting = await fixture.AddCompletedMeetingAsync(
+            "長會議", longTranscript, template, attendees: "\n王小明\n");
+
+        var provider = new FakeTextGenerationProvider("摘要");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        Assert.True(provider.Calls.Count > 1, "逐字稿應該長到需要分段");
+        Assert.All(provider.Calls, call => Assert.Contains("與會人員：王小明", call.UserPrompt));
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldNotChangePromptAtAll_WhenNoListsConfigured()
+    {
+        // 沒設名單時提示詞必須與 0.4.70 之前逐字元相同。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "內容", template);
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        Assert.Equal("整理：內容", provider.Calls[0].UserPrompt);
+    }
+
+    #endregion
+
     #region 單段（不需分段摘要）
 
     [Fact]
@@ -295,16 +378,37 @@ public sealed class MeetingDraftJobRunnerTests
             return template;
         }
 
+        /// <summary>
+        /// 新增一筆轉錄完成、等待生成的會議。
+        /// 名單相關的兩個參數刻意做成可選，既有 12 處呼叫不用改。
+        /// </summary>
         public async Task<Meeting> AddCompletedMeetingAsync(
             string title,
             string transcript,
             PromptTemplate promptTemplate,
-            DateTime? meetingDate = null)
+            DateTime? meetingDate = null,
+            string? glossaryTerms = null,
+            string? attendees = null)
         {
             var relativePath = $"2026/08/{Guid.NewGuid():N}.txt";
             var fullPath = Path.Combine(TranscriptRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
             await File.WriteAllTextAsync(fullPath, transcript, new UTF8Encoding(true));
+
+            int? projectId = null;
+            if (glossaryTerms is not null)
+            {
+                var project = new Project
+                {
+                    Title = "測試專案",
+                    Status = "進行中",
+                    Owner = "測試人",
+                    GlossaryTerms = glossaryTerms,
+                };
+                Context.Project.Add(project);
+                await Context.SaveChangesAsync();
+                projectId = project.Id;
+            }
 
             var meeting = new Meeting
             {
@@ -312,8 +416,10 @@ public sealed class MeetingDraftJobRunnerTests
                 MeetingDate = meetingDate,
                 TranscriptionStatus = TranscriptionStatus.Completed,
                 TranscriptRelativePath = relativePath,
+                ProjectId = projectId,
                 DraftPromptTemplateId = promptTemplate.Id,
                 DraftPromptTemplateName = promptTemplate.Name,
+                DraftAttendees = attendees,
                 DraftStatus = DraftStatus.Pending,
             };
 

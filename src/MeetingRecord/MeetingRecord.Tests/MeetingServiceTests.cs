@@ -589,6 +589,174 @@ public sealed class MeetingServiceTests
     #region AI 會議紀錄草稿
 
     [Fact]
+    public async Task DetachFromProjectAsync_ShouldClearOwnershipAndDraft_ButKeepFiles()
+    {
+        // 「生成錯專案」的出口：解除歸屬並清掉草稿，但影音檔與逐字稿一定要留著——
+        // 整筆刪掉的話使用者得重新上傳並重新付一次轉錄費用。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("走錯的專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        await service.RequestDraftAsync(meeting.Id, project.Id, template.Id, ["王小明"]);
+
+        var queued = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        queued.DraftStatus = DraftStatus.Completed;
+        queued.DraftContent = "產生好的會議紀錄";
+        fixture.Context.Meeting.Update(queued);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await service.DetachFromProjectAsync(meeting.Id, project.Id);
+
+        Assert.True(result.Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+        Assert.Null(saved.DraftContent);
+        Assert.Equal(DraftStatus.NotGenerated, saved.DraftStatus);
+        Assert.Null(saved.DraftPromptTemplateId);
+        Assert.Null(saved.DraftPromptTemplateName);
+        Assert.Null(saved.DraftAttendees);
+
+        // 這兩個是重點：檔案路徑還在，逐字稿與影音沒有被動到。
+        Assert.Equal(TranscriptionStatus.Completed, saved.TranscriptionStatus);
+        Assert.False(string.IsNullOrWhiteSpace(saved.TranscriptRelativePath));
+    }
+
+    [Fact]
+    public async Task DetachFromProjectAsync_ThenRequestDraft_ShouldAllowAnotherProject()
+    {
+        // 移除的目的就是這個：讓同一份逐字稿可以改指到正確的專案。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var wrong = await fixture.AddProjectAsync("走錯的專案");
+        var right = await fixture.AddProjectAsync("正確的專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        await service.RequestDraftAsync(meeting.Id, wrong.Id, template.Id);
+
+        // 未移除前，指到別的專案會被擋。
+        var blocked = await service.RequestDraftAsync(meeting.Id, right.Id, template.Id);
+        Assert.False(blocked.Success);
+
+        await MarkDraftCompletedAsync(fixture, meeting.Id);
+        Assert.True((await service.DetachFromProjectAsync(meeting.Id, wrong.Id)).Success);
+
+        var retry = await service.RequestDraftAsync(meeting.Id, right.Id, template.Id);
+
+        Assert.True(retry.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(right.Id, saved.ProjectId);
+    }
+
+    [Fact]
+    public async Task DetachFromProjectAsync_ShouldRejectWhenBelongsToAnotherProject()
+    {
+        // 畫面過期：這筆其實已經被移到別的專案了。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var projectA = await fixture.AddProjectAsync("專案A");
+        var projectB = await fixture.AddProjectAsync("專案B");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        await service.RequestDraftAsync(meeting.Id, projectA.Id, template.Id);
+
+        var result = await service.DetachFromProjectAsync(meeting.Id, projectB.Id);
+
+        Assert.False(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(projectA.Id, saved.ProjectId);
+    }
+
+    [Theory]
+    [InlineData(DraftStatus.Pending)]
+    [InlineData(DraftStatus.Processing)]
+    public async Task DetachFromProjectAsync_ShouldRejectWhileGenerating(DraftStatus status)
+    {
+        // job runner 只吃 meetingId，結束時會把草稿寫回這筆紀錄——
+        // 生成途中解除歸屬會變成「已移除卻又冒出一份草稿」。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        var queued = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        queued.DraftStatus = status;
+        fixture.Context.Meeting.Update(queued);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await service.DetachFromProjectAsync(meeting.Id, project.Id);
+
+        Assert.False(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(project.Id, saved.ProjectId);
+    }
+
+    [Fact]
+    public async Task DetachFromProjectAsync_ShouldFailWhenMeetingIsMissing()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        Assert.False((await service.DetachFromProjectAsync(999999, 1)).Success);
+    }
+
+    private static async Task MarkDraftCompletedAsync(MeetingServiceFixture fixture, int meetingId)
+    {
+        // 被擋下來的 RequestDraftAsync 會提早 return、沒有清追蹤，直接 Update 會撞 identity conflict。
+        fixture.Context.ChangeTracker.Clear();
+
+        var meeting = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meetingId);
+        meeting.DraftStatus = DraftStatus.Completed;
+        fixture.Context.Meeting.Update(meeting);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldStoreAttendeesSnapshot()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(
+            meeting.Id, project.Id, template.Id, ["王小明", " 陳大文 ", "  ", "王小明"]);
+
+        Assert.True(result.Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        // ToStored 負責 trim、捨棄空項、忽略大小寫去重並保留原順序。
+        Assert.Equal("\n王小明\n陳大文\n", saved.DraftAttendees);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldLeaveAttendeesNull_WhenNoneSelected()
+    {
+        // 與會者是選填。沒勾選時欄位要是 null，讓 JobRunner 組出空字串、提示詞完全不變。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.DraftAttendees);
+    }
+
+    [Fact]
     public async Task RequestDraftAsync_ShouldEnqueueAndAssignProject_WhenTranscriptIsReady()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();

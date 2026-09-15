@@ -217,9 +217,11 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         using var client = factory.CreateClient();
         await AuthorizeAsync(client);
 
+        // Id 用 0 讓 EF 自動配號：controller 會把 DTO 的 Id 直接 map 進實體再 Add，
+        // 寫死 1 的話只要資料庫裡已經有第 1 筆就撞主鍵，測試順序一變就紅。
         var createDto = new ProjectCreateUpdateDto
         {
-            Id = 1,
+            Id = 0,
             Title = $"Integration Project {Guid.NewGuid():N}",
             StartDate = DateTime.Today,
             EndDate = DateTime.Today.AddDays(7),
@@ -243,6 +245,58 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.True(getResult.Success);
         Assert.Equal(createDto.Title, getResult.Data?.Title);
+    }
+
+    [Fact]
+    public async Task ProjectUpdate_WithoutGlossaryFields_ShouldNotWipeExistingLists()
+    {
+        // ⚠️ 迴歸測試。ProjectRepository.UpdateAsync 用 CurrentValues.SetValues 覆寫所有純量欄位，
+        // 而 controller 傳進去的是 mapper.Map<Project>(dto) 產生的全新實體——不特別保留的話，
+        // 一次不含名單的 PUT 就會把使用者建好的名詞表清光，而且完全不會報錯。
+        using var client = factory.CreateClient();
+        await AuthorizeAsync(client);
+
+        var title = $"Glossary Project {Guid.NewGuid():N}";
+        // ⚠️ Id 用 0 不是 1：controller 會把 DTO 的 Id 直接 map 進實體再 Add，
+        // 寫死 1 的話與其他建立專案的測試撞主鍵（同一個 in-memory DB 是共用的）。
+        var createResponse = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 0,
+            Title = title,
+            StartDate = DateTime.Today,
+            EndDate = DateTime.Today.AddDays(7),
+            Status = "進行中",
+            CompletionPercentage = 10,
+            Owner = "integration-test",
+            GlossaryTerms = ["甲專案", "乙系統"],
+            Participants = ["王小明"],
+        });
+
+        var created = await ReadApiResultAsync<ProjectDto>(createResponse);
+        Assert.True(created.Success);
+        var projectId = created.Data!.Id!.Value;
+
+        // 舊版客戶端：完全不知道這兩個欄位的存在。
+        var updateResponse = await client.PutAsJsonAsync($"/api/Project/{projectId}", new ProjectCreateUpdateDto
+        {
+            Id = projectId,
+            Title = title,
+            StartDate = DateTime.Today,
+            EndDate = DateTime.Today.AddDays(14),
+            Status = "已完成",
+            CompletionPercentage = 100,
+            Owner = "integration-test",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var getResult = await ReadApiResultAsync<ProjectDto>(
+            await client.GetAsync($"/api/Project/{projectId}"));
+
+        Assert.Equal(["甲專案", "乙系統"], getResult.Data!.GlossaryTerms);
+        Assert.Equal(["王小明"], getResult.Data.Participants);
+        // 有帶的欄位仍然照常更新。
+        Assert.Equal("已完成", getResult.Data.Status);
     }
 
     [Fact]

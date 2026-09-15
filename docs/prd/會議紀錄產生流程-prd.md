@@ -1,10 +1,10 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.2
+- 文件版本：3.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.65
+- 現行系統版本：0.4.71
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
-- 最後核對日期：2026/09/10
+- 最後核對日期：2026/09/15
 
 > 本文件描述**跨越多個版本的完整流程**。0.4.27 完成前半段（音檔上傳 → 轉錄 → 逐字稿），詳見 [會議紀錄 PRD](會議紀錄-prd.md)；0.4.31 完成後半段（套用提示詞 → LLM → 會議紀錄），入口在 [專案項目 PRD](專案項目-prd.md) 描述的 `/projects` 頁面。
 
@@ -98,7 +98,7 @@
 1. 使用者在 `/projects` 選定專案，從下拉挑一份轉錄完成的逐字稿與一組提示詞。已被**其他**專案取用的逐字稿在下拉中呈現為不可選並標示歸屬。
 2. `MeetingService.RequestDraftAsync` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入歸屬與提示詞快照、狀態轉 `Pending`，再排入 `IMeetingDraftQueue`。
 3. `MeetingDraftBackgroundService`（**與轉錄各自獨立的第二條佇列與 worker**）取件，在自己的 DI scope 內執行 `MeetingDraftJobRunner`。
-4. Job runner 讀逐字稿 → `TranscriptChunker.Split` → 多段時逐段摘要（map）→ `PromptVariableHelper.Render` 代入提示詞 → 呼叫 LLM（reduce）→ 寫入 `DraftContent`、狀態轉 `Completed`。
+4. Job runner 讀逐字稿 → `TranscriptChunker.Split` → 多段時逐段摘要（map）→ `PromptVariableHelper.Render` 代入提示詞 → 呼叫 LLM（reduce）→ 寫入 `DraftContent`、狀態轉 `Completed`。 **0.4.71 起**在最前面多一段「專有名詞與人名對照」：由 `NameGuidancePromptHelper.Build` 以專案的 `GlossaryTerms`（即時撈，不快照）與 `Meeting.DraftAttendees`（本次快照）組成，**map 與 reduce 兩階段都注入**——只注入 reduce 的話，長逐字稿的人名在分段摘要時就已經被壓縮掉了。兩份清單都空時回傳空字串，提示詞與 0.4.70 之前逐字元相同。
 5. 失敗一律轉 `Failed` 並寫入 `DraftError`（存失敗狀態時不帶已取消的 `CancellationToken`）。應用程式重啟會把殘留的「生成中」改判為「失敗」。
 
 佇列刻意與轉錄分開：轉錄一筆可能跑數十分鐘，共用單一 worker 會讓草稿生成被長音檔堵住。
@@ -112,5 +112,6 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/TranscriptChunker.cs:1`（分段純函式）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs:1`（轉錄端的對照組）
 - `src/MeetingRecord/MeetingRecord.Business/Helpers/PromptVariableHelper.cs:1`（變數偵測與代入）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/NameGuidancePromptHelper.cs:1`（名詞與人名對照區塊，純函式）
 - `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs:1`（provider-aware 設定）
 - 交叉連結：[會議紀錄 PRD](會議紀錄-prd.md)、[會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)、[專案項目 PRD](專案項目-prd.md)、[../features/檔案上傳機制.md](../features/檔案上傳機制.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

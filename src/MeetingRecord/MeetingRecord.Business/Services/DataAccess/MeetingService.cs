@@ -21,6 +21,12 @@ namespace MeetingRecord.Business.Services.DataAccess;
 /// </summary>
 public class MeetingService
 {
+    /// <summary>
+    /// 單次生成最多帶幾位與會者。純粹是為了界定提示詞大小，不是權限限制——
+    /// 一場會議列到 50 個名字已經遠超過模型能有效利用的範圍。
+    /// </summary>
+    private const int MaxDraftAttendees = 50;
+
     private readonly BackendDBContext context;
     private readonly IRecordAccessScopeProvider accessScope;
     private readonly MeetingFileStore fileStore;
@@ -600,15 +606,97 @@ public class MeetingService
     #region AI 會議紀錄草稿
 
     /// <summary>
+    /// 把一份逐字稿從專案移除：清掉歸屬與 AI 草稿，讓它回到「可選逐字稿」清單。
+    ///
+    /// <para>
+    /// 存在的理由是「生成錯專案」沒有出口——<see cref="RequestDraftAsync"/> 會擋掉已歸屬
+    /// 其他專案的逐字稿，而 <see cref="DeleteAsync"/> 連影音檔與逐字稿一起刪，等於要重新上傳
+    /// 並<b>重新付一次轉錄費用</b>。這支只解除歸屬，實體檔案一律保留。
+    /// </para>
+    ///
+    /// <para>
+    /// <b>不動的東西</b>：影音檔、逐字稿檔、這場會議的 AI 問答對話（它綁的是會議不是專案），
+    /// 以及已經抽出來的待辦（待辦有自己的 <c>ProjectId</c>，是獨立的工作項目）。
+    /// </para>
+    /// </summary>
+    /// <param name="projectId">預期的目前歸屬專案。傳進來是為了擋掉「畫面過期、實際上已經被移到別的專案」。</param>
+    public async Task<VerifyRecordResult> DetachFromProjectAsync(
+        int meetingId,
+        int projectId,
+        CancellationToken cancellationToken = default)
+    {
+        Logger.LogInformation(
+            "Detaching meeting from project. MeetingId={MeetingId}, ProjectId={ProjectId}", meetingId, projectId);
+
+        try
+        {
+            CleanTrackingHelper.Clean<Meeting>(context);
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+            if (meeting is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到要移除的會議紀錄。");
+            }
+
+            var scope = await accessScope.GetAsync();
+            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Detach denied by team scope. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, "沒有權限移除這筆會議紀錄。");
+            }
+
+            if (meeting.ProjectId != projectId)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄已經不屬於這個專案，請重新整理後再試。");
+            }
+
+            // 背景工作正在跑（或排隊中）時不能解除歸屬：job runner 只吃 meetingId，
+            // 它會在結束時把草稿寫回這筆紀錄，變成「已移除卻又冒出一份草稿」。
+            if (meeting.DraftStatus is DraftStatus.Processing or DraftStatus.Pending)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆逐字稿正在產生會議紀錄，請等結束後再移除。");
+            }
+
+            meeting.ProjectId = null;
+            meeting.DraftContent = null;
+            meeting.DraftStatus = DraftStatus.NotGenerated;
+            meeting.DraftError = null;
+            meeting.DraftPromptTemplateId = null;
+            meeting.DraftPromptTemplateName = null;
+            meeting.DraftAttendees = null;
+            meeting.DraftStartedAt = null;
+            meeting.DraftCompletedAt = null;
+            meeting.UpdatedAt = DateTime.Now;
+
+            await context.SaveChangesAsync(cancellationToken);
+            CleanTrackingHelper.Clean<Meeting>(context);
+
+            Logger.LogInformation(
+                "Meeting detached from project. MeetingId={MeetingId}, Title={Title}", meetingId, meeting.Title);
+
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to detach meeting from project. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "移除會議紀錄失敗。", ex);
+        }
+    }
+
+    /// <summary>
     /// 把會議排入草稿生成佇列，同時把它歸屬到指定專案。
     ///
     /// 一份逐字稿只能屬於一個專案：已被「其他」專案取用的會拒絕，
     /// 但屬於同一個專案的可以重跑（換提示詞重新生成，會覆蓋既有草稿）。
     /// </summary>
+    /// <param name="attendees">
+    /// 本次實際與會者（由畫面從專案名冊勾選）。刻意<b>不</b>驗證是否真的在名冊內——
+    /// 名單只是給模型的提示，加驗證只會引入「使用者開著頁面時別人改了名冊、送出被整筆退回」這種假失敗。
+    /// </param>
     public async Task<VerifyRecordResult> RequestDraftAsync(
         int meetingId,
         int projectId,
         int promptTemplateId,
+        IEnumerable<string>? attendees = null,
         CancellationToken cancellationToken = default)
     {
         Logger.LogInformation(
@@ -673,6 +761,10 @@ public class MeetingService
             meeting.ProjectId = projectId;
             meeting.DraftPromptTemplateId = template.Id;
             meeting.DraftPromptTemplateName = template.Name;
+
+            // ToStored 已負責 trim／去空／忽略大小寫去重／保順序／全空回 null。
+            // Take 的唯一理由是界定提示詞大小，不是權限。
+            meeting.DraftAttendees = TagStringHelper.ToStored((attendees ?? []).Take(MaxDraftAttendees));
             meeting.DraftStatus = DraftStatus.Pending;
             meeting.DraftError = null;
             meeting.DraftStartedAt = null;

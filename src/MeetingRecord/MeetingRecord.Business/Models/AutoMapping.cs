@@ -15,12 +15,26 @@ public class AutoMapping : Profile
         #region Blazor AdapterModel
 
         #region Project
-        CreateMap<Project, ProjectAdapterModel>();
-        CreateMap<ProjectAdapterModel, Project>();
-        CreateMap<Project, ProjectDto>();
-        CreateMap<ProjectDto, Project>();
-        CreateMap<Project, ProjectCreateUpdateDto>();
-        CreateMap<ProjectCreateUpdateDto, Project>();
+        // 多值欄位以 TagStringHelper 的換行包夾字串儲存，兩個方向都要轉。
+        // ⚠️ 只加這裡不夠：ProjectService.UpdateAsync 是手抄欄位、不走 Mapper。
+        CreateMap<Project, ProjectAdapterModel>()
+            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)));
+        CreateMap<ProjectAdapterModel, Project>()
+            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)));
+        CreateMap<Project, ProjectDto>()
+            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)));
+        CreateMap<ProjectDto, Project>()
+            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)));
+        CreateMap<Project, ProjectCreateUpdateDto>()
+            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)));
+        CreateMap<ProjectCreateUpdateDto, Project>()
+            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)));
         CreateMap<ProjectFile, ProjectFileAdapterModel>();
         CreateMap<ProjectFileAdapterModel, ProjectFile>();
         #endregion

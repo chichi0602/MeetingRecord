@@ -215,6 +215,12 @@ public class ProjectService
             currentItem.Status = paraObject.Status;
             currentItem.CompletionPercentage = paraObject.CompletionPercentage;
             currentItem.Owner = paraObject.Owner;
+
+            // ⚠️ 這個方法刻意手抄欄位、不走 Mapper（AddAsync 才走）。
+            // 新增欄位時只改 AutoMapping 會變成「新增存得進去、修改存不進去」，而且不會報錯。
+            currentItem.GlossaryTerms = TagStringHelper.ToStored(paraObject.GlossaryTerms);
+            currentItem.Participants = TagStringHelper.ToStored(paraObject.Participants);
+
             currentItem.UpdatedAt = paraObject.UpdatedAt;
 
             await context.SaveChangesAsync();

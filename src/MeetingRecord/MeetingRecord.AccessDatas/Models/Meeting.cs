@@ -92,6 +92,17 @@ public class Meeting
     /// <summary>生成當下的提示詞名稱快照。範本日後被改名或刪除時，仍看得出當初用了什麼。</summary>
     public string? DraftPromptTemplateName { get; set; }
 
+    /// <summary>
+    /// 本次生成勾選的實際與會者快照。從專案的 <c>Project.Participants</c> 名冊挑，
+    /// 會連同專案的常用名詞一起餵給模型校正聽錯的人名。
+    ///
+    /// 刻意只快照這一份、不快照常用名詞：與會者的語意本來就是「本次」，必須定格；
+    /// 常用名詞是專案級的長期資料，重跑時用最新版才符合直覺（名詞表更新後重跑就該生效）。
+    ///
+    /// ⚠️ 儲存格式是 <c>TagStringHelper</c> 的換行包夾字串。
+    /// </summary>
+    public string? DraftAttendees { get; set; }
+
     public DateTime? DraftStartedAt { get; set; }
 
     public DateTime? DraftCompletedAt { get; set; }

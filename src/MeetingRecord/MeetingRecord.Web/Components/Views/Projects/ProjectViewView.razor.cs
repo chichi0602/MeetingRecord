@@ -105,6 +105,9 @@ public partial class ProjectViewView : IDisposable
     private int aiChatTargetId;
     private string aiChatTitle = "AI 問答";
 
+    /// <summary>對象名稱（不含「AI 問答 - 」前綴），匯出 PDF 的表頭與檔名要用。</summary>
+    private string aiChatTargetName = string.Empty;
+
     private bool todoExtractVisible;
     private int todoExtractMeetingId;
     private string todoExtractMeetingTitle = string.Empty;
@@ -866,6 +869,7 @@ public partial class ProjectViewView : IDisposable
         aiChatScope = AiChatScope.Project;
         aiChatTargetId = SelectedProject.Id;
         aiChatTitle = $"AI 問答 - {SelectedProject.Title}";
+        aiChatTargetName = SelectedProject.Title;
         aiChatVisible = true;
     }
 
@@ -875,6 +879,7 @@ public partial class ProjectViewView : IDisposable
         aiChatScope = AiChatScope.Meeting;
         aiChatTargetId = meeting.Id;
         aiChatTitle = $"AI 問答 - {meeting.Title}";
+        aiChatTargetName = meeting.Title;
         aiChatVisible = true;
     }
 

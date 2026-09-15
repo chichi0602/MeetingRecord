@@ -9,6 +9,35 @@ using MeetingRecord.Models.Systems;
 namespace MeetingRecord.Business.Services.AiChat;
 
 /// <summary>
+/// 一筆就地修改。<see cref="Index"/> 是「第幾則有效訊息」（與
+/// <see cref="AiChatStore.ReadHistoryAsync"/> 回傳清單的索引一致），不是檔案行號。
+/// </summary>
+/// <param name="Index">要改的是第幾則訊息。</param>
+/// <param name="ExpectedRole">預期的角色，對不上就視為衝突——重新產生時的「提問的下一則」不保證真的是回答。</param>
+/// <param name="ExpectedContent">預期的原內容，對不上代表別人已經改過了。</param>
+/// <param name="NewContent">要寫進去的新內容。</param>
+/// <param name="NewAskedBy">要改寫的提問者；傳 null 表示維持原值。</param>
+public readonly record struct MessageEdit(
+    int Index,
+    string ExpectedRole,
+    string ExpectedContent,
+    string NewContent,
+    string? NewAskedBy = null);
+
+/// <summary>修改的結果。</summary>
+public enum UpdateOutcome
+{
+    /// <summary>已寫入。</summary>
+    Updated,
+
+    /// <summary>索引越界，或角色／內容與預期不符（多半是別人先改過或清空了）。</summary>
+    Conflict,
+
+    /// <summary>整段對話已經不存在。</summary>
+    NotFound,
+}
+
+/// <summary>
 /// AI 問答對話的實體檔案存取。
 ///
 /// <para>
@@ -162,7 +191,130 @@ public class AiChatStore
             logger.LogWarning(ex, "Failed to delete AI chat history file. FullPath={FullPath}", fullPath);
         }
 
-        writeLocks.TryRemove(fullPath, out _);
+        // ⚠️ 刻意不 TryRemove 這個路徑的鎖。移除之後，已經持鎖的寫入者與下一個
+        // GetOrAdd 拿到的會是兩把不同的號誌，互斥直接失效。多留一個 SemaphoreSlim
+        // 遠比那個競態便宜——對話檔的數量本來就是「有問過問題的專案＋會議」的量級。
+    }
+
+    /// <summary>
+    /// 就地改寫對話中的若干則訊息（編輯內容、重新產生答案）。
+    ///
+    /// <para>
+    /// 用「第幾則」定位而不是訊息 Id：本系統沒有單則刪除，append 只加在尾端、
+    /// 編輯也不改行數，所以索引是穩定的。額外的好處是 LLM 生成要跑好幾秒，
+    /// 期間別人 append 不會位移既有索引，「讀歷史 → 呼叫 API → 寫回索引 N」
+    /// 這條長流程天生安全。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 這是唯一會<b>整檔重寫</b>的路徑，所以一定要寫暫存檔再 <c>File.Move</c>。
+    /// 直接覆寫的話，沒有進鎖的 <see cref="ReadHistoryAsync"/> 會讀到被 truncate
+    /// 的檔案，整段對話會在別人畫面上憑空消失。
+    /// </para>
+    ///
+    /// <para>
+    /// 對話是同專案／會議底下所有人共用的，所以每筆修改都要帶
+    /// <see cref="MessageEdit.ExpectedRole"/> 與 <see cref="MessageEdit.ExpectedContent"/>
+    /// 當樂觀鎖。任一筆對不上就整批不動。
+    /// </para>
+    /// </summary>
+    public async Task<UpdateOutcome> UpdateMessagesAsync(
+        AiChatScope scope,
+        int targetId,
+        IReadOnlyList<MessageEdit> edits,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(edits);
+        if (edits.Count == 0)
+        {
+            return UpdateOutcome.Updated;
+        }
+
+        var fullPath = GetFullPath(scope, targetId);
+        var gate = writeLocks.GetOrAdd(fullPath, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            // 有人按了「清空這段對話」時檔案已經不在。這裡絕不能重建——
+            // 那會讓一則已經被刪掉的訊息憑空復活。
+            if (!File.Exists(fullPath))
+            {
+                return UpdateOutcome.NotFound;
+            }
+
+            var lines = await File.ReadAllLinesAsync(fullPath, cancellationToken);
+            var map = MapValidLineIndexes(lines);
+
+            // 先全部驗過再動手，確保「兩行同時改」不會出現只改到一半的中間態。
+            foreach (var edit in edits)
+            {
+                if (edit.Index < 0 || edit.Index >= map.Count)
+                {
+                    return UpdateOutcome.Conflict;
+                }
+
+                var current = TryParseStored(lines[map[edit.Index]], logMalformed: false);
+                if (current is null
+                    || !string.Equals(current.Role, edit.ExpectedRole, StringComparison.Ordinal)
+                    || !string.Equals(current.Content, edit.ExpectedContent, StringComparison.Ordinal))
+                {
+                    return UpdateOutcome.Conflict;
+                }
+            }
+
+            foreach (var edit in edits)
+            {
+                var physical = map[edit.Index];
+                var current = TryParseStored(lines[physical], logMalformed: false)!;
+                var updated = current with
+                {
+                    Content = edit.NewContent,
+                    AskedBy = edit.NewAskedBy ?? current.AskedBy,
+                };
+
+                lines[physical] = JsonSerializer.Serialize(updated, SerializerOptions);
+            }
+
+            // 結尾一定要留換行，否則下一次 AppendTurnAsync 會直接接在最後一行後面。
+            var content = string.Join(Environment.NewLine, lines) + Environment.NewLine;
+
+            var tempPath = fullPath + ".tmp";
+            await File.WriteAllTextAsync(tempPath, content, FileEncoding, cancellationToken);
+            File.Move(tempPath, fullPath, overwrite: true);
+
+            logger.LogInformation(
+                "AI chat messages updated. Scope={Scope}, TargetId={TargetId}, EditCount={EditCount}",
+                scope,
+                targetId,
+                edits.Count);
+
+            return UpdateOutcome.Updated;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 「第 n 則有效訊息」對應到「檔案第幾行」。
+    ///
+    /// ⚠️ 兩者不相等：壞掉的行與空行會被 <see cref="ReadHistoryAsync"/> 跳過，
+    /// 但重寫檔案時<b>必須原樣保留</b>，不能默默丟掉使用者的資料。
+    /// </summary>
+    private List<int> MapValidLineIndexes(string[] lines)
+    {
+        var map = new List<int>(lines.Length);
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (TryParseStored(lines[index], logMalformed: false) is not null)
+            {
+                map.Add(index);
+            }
+        }
+
+        return map;
     }
 
     /// <summary>
@@ -203,9 +355,26 @@ public class AiChatStore
     }
 
     /// <summary>
-    /// 解析一行。壞掉的行（手動編輯過、寫到一半斷電）跳過，不要讓整段歷史都讀不出來。
+    /// 解析一行成畫面用的 DTO。壞掉的行（手動編輯過、寫到一半斷電）跳過，
+    /// 不要讓整段歷史都讀不出來。
     /// </summary>
     private AiChatMessageItem? TryParseLine(string raw)
+    {
+        var stored = TryParseStored(raw, logMalformed: true);
+
+        return stored is null
+            ? null
+            : new AiChatMessageItem(stored.Role, stored.Content, stored.AskedBy, stored.CreatedAt);
+    }
+
+    /// <summary>
+    /// 解析一行成磁碟格式。重寫檔案時要保留 <c>askedBy</c> 與 <c>createdAt</c>，
+    /// 所以不能只拿畫面用的 DTO。
+    /// </summary>
+    /// <param name="logMalformed">
+    /// 掃描整檔做索引映射時會把每一行再解析一次，那時不該重複記一遍 Warning。
+    /// </param>
+    private StoredMessage? TryParseStored(string raw, bool logMalformed)
     {
         // 第一行帶著檔案的 BOM，不去掉的話反序列化會直接失敗。
         var line = raw.TrimStart('\uFEFF').Trim();
@@ -217,16 +386,16 @@ public class AiChatStore
         try
         {
             var stored = JsonSerializer.Deserialize<StoredMessage>(line, SerializerOptions);
-            if (stored is null || string.IsNullOrEmpty(stored.Role))
-            {
-                return null;
-            }
 
-            return new AiChatMessageItem(stored.Role, stored.Content, stored.AskedBy, stored.CreatedAt);
+            return stored is null || string.IsNullOrEmpty(stored.Role) ? null : stored;
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Skipped a malformed AI chat line.");
+            if (logMalformed)
+            {
+                logger.LogWarning(ex, "Skipped a malformed AI chat line.");
+            }
+
             return null;
         }
     }

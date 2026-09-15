@@ -143,4 +143,41 @@ public sealed class AiChatServiceTests
     }
 
     #endregion
+
+    #region 重新產生時的歷史切片
+
+    [Fact]
+    public void TakeHistoryBefore_ShouldReturnOnlyEarlierMessages()
+    {
+        // 重新產生第二輪的提問時，模型只該看到第一輪——把後面也帶進去等於拿未來解釋過去。
+        var history = BuildHistory(3);
+
+        var before = AiChatService.TakeHistoryBefore(history, index: 2);
+
+        Assert.Equal(2, before.Count);
+        Assert.Equal("問題1", before[0].Content);
+        Assert.Equal("回答1", before[1].Content);
+    }
+
+    [Fact]
+    public void TakeHistoryBefore_FirstMessage_ShouldReturnEmpty()
+    {
+        Assert.Empty(AiChatService.TakeHistoryBefore(BuildHistory(3), index: 0));
+    }
+
+    [Fact]
+    public void TakeHistoryBefore_NegativeIndex_ShouldReturnEmpty()
+    {
+        Assert.Empty(AiChatService.TakeHistoryBefore(BuildHistory(3), index: -1));
+    }
+
+    [Fact]
+    public void TakeHistoryBefore_IndexBeyondEnd_ShouldReturnEverything()
+    {
+        var history = BuildHistory(2);
+
+        Assert.Equal(history.Count, AiChatService.TakeHistoryBefore(history, index: 99).Count);
+    }
+
+    #endregion
 }

@@ -1,6 +1,9 @@
+using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using MeetingRecord.Business.Services.AiChat;
+using MeetingRecord.Business.Services.Export;
+using MeetingRecord.Web.Services;
 
 namespace MeetingRecord.Web.Components.Views.Projects;
 
@@ -9,8 +12,25 @@ namespace MeetingRecord.Web.Components.Views.Projects;
 /// </summary>
 public partial class AiChatModal : ComponentBase
 {
+    private const string PdfContentType = "application/pdf";
+
     [Inject]
     private AiChatService AiChatService { get; set; } = default!;
+
+    [Inject]
+    private IPdfRenderer PdfRenderer { get; set; } = default!;
+
+    [Inject]
+    private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
+
+    [Inject]
+    private ClipboardInterop ClipboardInterop { get; set; } = default!;
+
+    [Inject]
+    private ModalService ModalService { get; set; } = default!;
+
+    [Inject]
+    private MessageService MessageService { get; set; } = default!;
 
     [Inject]
     private ILogger<AiChatModal> Logger { get; set; } = default!;
@@ -30,6 +50,17 @@ public partial class AiChatModal : ComponentBase
     [Parameter]
     public string Title { get; set; } = "AI 問答";
 
+    /// <summary>對象名稱（專案或會議標題），用在匯出的檔名與 PDF 表頭。</summary>
+    [Parameter]
+    public string TargetName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 是否顯示匯出 PDF 的按鈕。沿用清單頁既有的「匯出」動作權限，
+    /// 免得同一個畫面上出現「不能匯出會議紀錄、卻能匯出 AI 答案」。
+    /// </summary>
+    [Parameter]
+    public bool CanExport { get; set; }
+
     private readonly List<AiChatMessageItem> messages = [];
 
     private string question = string.Empty;
@@ -38,8 +69,25 @@ public partial class AiChatModal : ComponentBase
     private string? errorMessage;
     private bool isAsking;
 
+    /// <summary>目前正在編輯第幾則；-1 表示沒有在編輯。</summary>
+    private int editingIndex = -1;
+    private string editingText = string.Empty;
+    private bool isSavingEdit;
+    private bool isRegenerating;
+
+    /// <summary>正在匯出第幾則；-1 表示沒有。用來擋連點——每按一次都會起一個無頭瀏覽器。</summary>
+    private int downloadingIndex = -1;
+    private bool isDownloadingConversation;
+
     /// <summary>上一次載入歷史用的對象，用來判斷是否需要重新載入。</summary>
     private (AiChatScope Scope, int TargetId)? loadedTarget;
+
+    /// <summary>
+    /// 任一個耗時或會改狀態的動作進行中。所有按鈕共用同一個閘門：
+    /// 匯出 PDF 要起無頭瀏覽器（數秒、上百 MB），連點會把伺服器打爛。
+    /// </summary>
+    private bool IsBusy =>
+        isAsking || isSavingEdit || isRegenerating || isDownloadingConversation || downloadingIndex >= 0;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -65,6 +113,10 @@ public partial class AiChatModal : ComponentBase
         sourceNotice = null;
         errorMessage = null;
 
+        // ⚠️ 編輯狀態一定要跟著重設。editingIndex 指的是清單裡的第幾則，
+        // 別人清空對話之後那個索引就不存在了，留著會讓編輯框停在空氣上。
+        CancelEditState();
+
         try
         {
             messages.AddRange(await AiChatService.GetHistoryAsync(Scope, TargetId));
@@ -89,7 +141,7 @@ public partial class AiChatModal : ComponentBase
 
     private async Task OnAskAsync()
     {
-        if (isAsking || string.IsNullOrWhiteSpace(question))
+        if (IsBusy || string.IsNullOrWhiteSpace(question))
         {
             return;
         }
@@ -163,8 +215,285 @@ public partial class AiChatModal : ComponentBase
         return string.Join("；", parts) + "。";
     }
 
+    #region 複製
+
+    private async Task OnCopyAsync(int index)
+    {
+        if (IsBusy || index < 0 || index >= messages.Count)
+        {
+            return;
+        }
+
+        errorMessage = null;
+
+        // 複製 Markdown 原文而不是渲染後的文字——貼到別的地方還留得住格式。
+        var copied = await ClipboardInterop.CopyTextAsync(messages[index].Content);
+
+        if (copied)
+        {
+            _ = MessageService.SuccessAsync("已複製到剪貼簿");
+        }
+        else
+        {
+            // 瀏覽器擋掉時要講清楚，不要假裝成功——Firefox 與非 https 的區網部署都會走到這裡。
+            errorMessage = "瀏覽器不允許這次複製（可能是安全性限制）。請直接選取訊息內容後按 Ctrl+C。";
+        }
+    }
+
+    #endregion
+
+    #region 編輯與重新產生
+
+    private void OnStartEdit(int index)
+    {
+        if (IsBusy || index < 0 || index >= messages.Count)
+        {
+            return;
+        }
+
+        errorMessage = null;
+        editingIndex = index;
+        editingText = messages[index].Content;
+    }
+
+    private void OnCancelEdit() => CancelEditState();
+
+    private void CancelEditState()
+    {
+        editingIndex = -1;
+        editingText = string.Empty;
+    }
+
+    /// <summary>只更正文字，不呼叫模型，所以不需要費用確認。</summary>
+    private async Task OnSaveEditAsync()
+    {
+        if (IsBusy || editingIndex < 0 || editingIndex >= messages.Count || string.IsNullOrWhiteSpace(editingText))
+        {
+            return;
+        }
+
+        var index = editingIndex;
+        var original = messages[index];
+        var newContent = editingText.Trim();
+
+        if (string.Equals(original.Content, newContent, StringComparison.Ordinal))
+        {
+            CancelEditState();
+            return;
+        }
+
+        isSavingEdit = true;
+        errorMessage = null;
+
+        try
+        {
+            var outcome = await AiChatService.UpdateMessageAsync(Scope, TargetId, index, original, newContent);
+            if (!HandleUpdateOutcome(outcome))
+            {
+                return;
+            }
+
+            await LoadHistoryAsync();
+            _ = MessageService.SuccessAsync("已更新這則訊息");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Updating AI chat message failed. Scope={Scope}, TargetId={TargetId}, Index={Index}",
+                Scope, TargetId, index);
+            errorMessage = $"更新失敗：{ex.Message}";
+        }
+        finally
+        {
+            isSavingEdit = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// 改寫提問並重新產生答案。<b>會呼叫模型、會產生費用</b>，所以一定先跳二次確認（§6.3）。
+    /// </summary>
+    private async Task OnRegenerateAsync()
+    {
+        if (IsBusy || editingIndex < 0 || editingIndex >= messages.Count || string.IsNullOrWhiteSpace(editingText))
+        {
+            return;
+        }
+
+        var index = editingIndex;
+        var original = messages[index];
+        if (!original.IsUser)
+        {
+            return;
+        }
+
+        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認重新產生答案（會產生費用）",
+            Content = "這會以改過的問題重新呼叫 Azure OpenAI，"
+                + "並以新答案覆蓋下方原本的回答（包含人工編修過的部分），且無法復原。確定要繼續嗎？",
+            OkText = "覆蓋並重新產生",
+            CancelText = "取消",
+            MaskClosable = false,
+            OkButtonProps = new ButtonProps { Danger = true },
+        });
+
+        if (!confirmed)
+        {
+            Logger.LogDebug(
+                "AI chat regeneration cancelled by user. Scope={Scope}, TargetId={TargetId}, Index={Index}",
+                Scope, TargetId, index);
+            return;
+        }
+
+        var newQuestion = editingText.Trim();
+
+        isRegenerating = true;
+        streamingAnswer = string.Empty;
+        errorMessage = null;
+        CancelEditState();
+        StateHasChanged();
+
+        try
+        {
+            var answer = await AiChatService.RegenerateAsync(
+                Scope, TargetId, index, original.Content, newQuestion, OnDelta);
+
+            await LoadHistoryAsync();
+            sourceNotice = DescribeSources(answer);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Regenerating AI chat answer failed. Scope={Scope}, TargetId={TargetId}, Index={Index}",
+                Scope, TargetId, index);
+            errorMessage = $"重新產生失敗：{ex.Message}";
+        }
+        finally
+        {
+            isRegenerating = false;
+            streamingAnswer = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>把 store 的結果翻成畫面訊息。回傳是否可以繼續。</summary>
+    private bool HandleUpdateOutcome(UpdateOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case UpdateOutcome.Updated:
+                return true;
+
+            case UpdateOutcome.NotFound:
+                errorMessage = "這段對話已經被清空，剛才的修改沒有寫入。";
+                return false;
+
+            default:
+                // 對話是同專案／會議底下所有人共用的，別人先改過就會走到這裡。
+                errorMessage = "這則訊息已被其他人更動，請重新開啟視窗後再試一次。";
+                return false;
+        }
+    }
+
+    #endregion
+
+    #region 匯出 PDF
+
+    private async Task OnDownloadMessageAsync(int index)
+    {
+        if (IsBusy || index < 0 || index >= messages.Count)
+        {
+            return;
+        }
+
+        downloadingIndex = index;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var exportedAt = DateTime.Now;
+            var html = AiChatDocumentExporter.BuildMessageHtml(TargetName, messages[index], index + 1, exportedAt);
+            var fileName = AiChatDocumentExporter.BuildMessageFileName(TargetName, index + 1, exportedAt);
+
+            await ExportAsync(html, fileName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Exporting AI chat message failed. Scope={Scope}, TargetId={TargetId}, Index={Index}",
+                Scope, TargetId, index);
+            errorMessage = $"匯出 PDF 失敗：{ex.Message}";
+        }
+        finally
+        {
+            downloadingIndex = -1;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnDownloadConversationAsync()
+    {
+        if (IsBusy || messages.Count == 0)
+        {
+            return;
+        }
+
+        isDownloadingConversation = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var exportedAt = DateTime.Now;
+            var html = AiChatDocumentExporter.BuildConversationHtml(TargetName, messages, exportedAt);
+            var fileName = AiChatDocumentExporter.BuildConversationFileName(TargetName, exportedAt);
+
+            await ExportAsync(html, fileName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Exporting AI chat conversation failed. Scope={Scope}, TargetId={TargetId}",
+                Scope, TargetId);
+            errorMessage = $"匯出 PDF 失敗：{ex.Message}";
+        }
+        finally
+        {
+            isDownloadingConversation = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportAsync(string html, string fileName)
+    {
+        var pdf = await PdfRenderer.RenderAsync(html);
+
+        await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
+    }
+
+    #endregion
+
     private async Task OnClearAsync()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        // 這會直接把對話檔刪掉，不可復原，而且對話是所有人共用的。
+        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認清空這段對話",
+            Content = $"將刪除這段對話的全部 {messages.Count} 則訊息，所有人都會看不到，且無法復原。確定要清空嗎？",
+            OkText = "清空",
+            CancelText = "取消",
+            MaskClosable = false,
+            OkButtonProps = new ButtonProps { Danger = true },
+        });
+
+        if (!confirmed)
+        {
+            return;
+        }
+
         try
         {
             await AiChatService.ClearHistoryAsync(Scope, TargetId);
@@ -181,6 +510,7 @@ public partial class AiChatModal : ComponentBase
     {
         // 讓下次開啟時重新載入（可能是另一個對象，或期間有人問了新問題）。
         loadedTarget = null;
+        CancelEditState();
         await VisibleChanged.InvokeAsync(false);
     }
 }

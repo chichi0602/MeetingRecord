@@ -1,5 +1,6 @@
 @using MeetingRecord.Share.Helpers
 @using MeetingRecord.Share.Enums
+@using MeetingRecord.Business.Helpers
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -392,7 +393,9 @@ else
            Keyboard="true"
            Footer="null"
            OnCancel="OnDraftViewModalCancelAsync">
-        <pre class="project-view-draft-content">@draftContent</pre>
+        @* 草稿是 LLM 產的 Markdown。0.4.70 之前整塊原文丟在 <pre> 裡，畫面上滿是 ## 與 **。
+           改用 <div>：<pre> 自帶等寬字型與 white-space: pre，渲染成 HTML 之後兩者都是錯的。 *@
+        <div class="project-view-draft-content">@((MarkupString)MarkdownRenderer.ToHtml(draftContent))</div>
     </Modal>
 
     <Modal Title="@draftModalTitle"
@@ -435,10 +438,14 @@ else
         </ul>
     </Modal>
 
+    @* CanExport 沿用清單頁「匯出 PDF」那一顆的權限，免得同一個畫面上出現
+       「不能匯出會議紀錄、卻能匯出 AI 答案」。 *@
     <AiChatModal @bind-Visible="aiChatVisible"
                  Scope="@aiChatScope"
                  TargetId="@aiChatTargetId"
-                 Title="@aiChatTitle" />
+                 Title="@aiChatTitle"
+                 TargetName="@aiChatTargetName"
+                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export)" />
 
     <TodoExtractionModal @bind-Visible="todoExtractVisible"
                          MeetingId="@todoExtractMeetingId"

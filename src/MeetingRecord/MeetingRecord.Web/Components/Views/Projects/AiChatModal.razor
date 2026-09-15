@@ -1,3 +1,5 @@
+@using MeetingRecord.Business.Helpers
+
 @* 專案層級與單一會議共用同一個問答視窗，差別只在 Scope 與 TargetId。 *@
 <Modal Title="@Title"
        Width="820"
@@ -23,22 +25,99 @@
                 </div>
             }
 
-            @foreach (var message in messages)
+            @* 用索引而不是 foreach：每一則的複製／編輯／下載都要知道自己是第幾則。
+               ⚠️ for 的迴圈變數不會逐次捕獲，閉包一定要先複製一份到區域變數。 *@
+            @for (var loopIndex = 0; loopIndex < messages.Count; loopIndex++)
             {
+                var index = loopIndex;
+                var message = messages[index];
+
                 <div class="ai-chat-row @(message.IsUser ? "ai-chat-row-user" : "ai-chat-row-assistant")">
                     <div class="ai-chat-meta">
                         @(message.IsUser ? (message.AskedBy ?? "使用者") : "AI 助理")
                         <span class="ai-chat-time">@message.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+
+                        @* 刻意不是「hover 才出現」：純 hover 的按鈕觸控裝置點不到、鍵盤也 tab 不進去。
+                           平時降低不透明度，滑過或取得焦點時才完全顯現。 *@
+                        <span class="ai-chat-tools">
+                            <CrudActionButton Title="複製內容"
+                                              Icon="content_copy"
+                                              Disabled="@IsBusy"
+                                              OnClick="@(() => OnCopyAsync(index))" />
+                            <CrudActionButton Title="編輯"
+                                              Icon="edit"
+                                              Disabled="@IsBusy"
+                                              OnClick="@(() => OnStartEdit(index))" />
+                            @if (CanExport)
+                            {
+                                <CrudActionButton Title="下載這則 PDF"
+                                                  Icon="picture_as_pdf"
+                                                  Disabled="@IsBusy"
+                                                  OnClick="@(() => OnDownloadMessageAsync(index))" />
+                            }
+                        </span>
                     </div>
-                    <div class="ai-chat-bubble">@message.Content</div>
+
+                    @if (editingIndex == index)
+                    {
+                        <div class="ai-chat-edit">
+                            <TextArea @bind-Value="editingText"
+                                      BindOnInput="true"
+                                      DebounceMilliseconds="0"
+                                      Rows="6"
+                                      Disabled="@IsBusy" />
+                            <div class="ai-chat-edit-actions">
+                                @* 儲存只改文字、不呼叫模型，所以不需要費用確認。 *@
+                                <Button Type="ButtonType.Primary"
+                                        Loading="@isSavingEdit"
+                                        Disabled="@(IsBusy || string.IsNullOrWhiteSpace(editingText))"
+                                        OnClick="OnSaveEditAsync">
+                                    儲存
+                                </Button>
+
+                                @if (message.IsUser)
+                                {
+                                    @* 重新產生會呼叫模型，OnRegenerateAsync 裡一定會先跳費用確認（§6.3）。 *@
+                                    <Button Loading="@isRegenerating"
+                                            Disabled="@(IsBusy || string.IsNullOrWhiteSpace(editingText))"
+                                            OnClick="OnRegenerateAsync">
+                                        重新產生答案
+                                    </Button>
+                                }
+
+                                <Button Type="ButtonType.Link" Disabled="@IsBusy" OnClick="OnCancelEdit">取消</Button>
+                            </div>
+                            @if (message.IsUser)
+                            {
+                                <div class="ai-chat-edit-hint">
+                                    「儲存」只更正文字，不會重跑 AI；「重新產生答案」會重新呼叫 Azure OpenAI 並覆蓋下方的回答。
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (message.IsUser)
+                    {
+                        @* 提問是使用者自己打的純文字，維持 pre-wrap 保留斷行。 *@
+                        <div class="ai-chat-bubble ai-chat-bubble-plain">@message.Content</div>
+                    }
+                    else
+                    {
+                        @* 回答是 Markdown，渲染成 HTML 才不會看到滿畫面的 ## 與 **。
+                           內容已由 MarkdownRenderer 擋掉原始 HTML 與危險的連結通訊協定。 *@
+                        <div class="ai-chat-bubble ai-chat-bubble-markdown">
+                            @((MarkupString)MarkdownRenderer.ToHtml(message.Content))
+                        </div>
+                    }
                 </div>
             }
 
-            @if (isAsking)
+            @if (isAsking || isRegenerating)
             {
                 <div class="ai-chat-row ai-chat-row-assistant">
                     <div class="ai-chat-meta">AI 助理</div>
-                    <div class="ai-chat-bubble">
+                    @* 串流中維持純文字：逐個 token 跑一次 Markdig 既浪費，
+                       半截的語法還會讓畫面一直閃。答完重載歷史時才換成渲染版。 *@
+                    <div class="ai-chat-bubble ai-chat-bubble-plain">
                         @if (streamingAnswer.Length == 0)
                         {
                             <span class="ai-chat-thinking">正在讀取資料…</span>
@@ -78,11 +157,11 @@
                       DebounceMilliseconds="0"
                       Placeholder="輸入問題後按 Enter 送出（Shift+Enter 換行）"
                       Rows="2"
-                      Disabled="@isAsking"
+                      Disabled="@IsBusy"
                       OnkeyDown="OnKeyDownAsync" />
             <Button Type="ButtonType.Primary"
                     Loading="@isAsking"
-                    Disabled="@(isAsking || string.IsNullOrWhiteSpace(question))"
+                    Disabled="@(IsBusy || string.IsNullOrWhiteSpace(question))"
                     OnClick="OnAskAsync">
                 <span class="ai-chat-send">
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="send" />
@@ -94,7 +173,16 @@
         @if (messages.Count > 0)
         {
             <div class="ai-chat-actions">
-                <Button Type="ButtonType.Link" Disabled="@isAsking" OnClick="OnClearAsync">清空這段對話</Button>
+                @if (CanExport)
+                {
+                    <Button Type="ButtonType.Link"
+                            Loading="@isDownloadingConversation"
+                            Disabled="@IsBusy"
+                            OnClick="OnDownloadConversationAsync">
+                        下載整段對話 PDF
+                    </Button>
+                }
+                <Button Type="ButtonType.Link" Disabled="@IsBusy" OnClick="OnClearAsync">清空這段對話</Button>
             </div>
         }
     </div>

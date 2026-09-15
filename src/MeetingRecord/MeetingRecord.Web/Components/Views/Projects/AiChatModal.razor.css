@@ -81,9 +81,168 @@
     color: var(--oat-ink);
     font-size: 0.88rem;
     line-height: 1.85;
-    /* 回答是 Markdown 純文字，換行與縮排要保留；長網址則必須斷行才不會撐破氣泡。 */
-    white-space: pre-wrap;
+    /* 長網址必須斷行才不會撐破氣泡。 */
     word-break: break-word;
+}
+
+/* 未經渲染的純文字：使用者的提問，以及串流中還沒寫進檔案的暫時回答。
+   這兩者的換行與縮排要原樣保留。 */
+.ai-chat-bubble-plain {
+    white-space: pre-wrap;
+}
+
+/* ⚠️ 渲染成 HTML 的氣泡**不能**有 white-space: pre-wrap。
+   Markdig 產出的標籤之間本來就有換行，pre-wrap 會把它們全部當成空白印出來，
+   每個 <p> 與 <li> 之間多一行，整個氣泡爆開。 */
+.ai-chat-bubble-markdown {
+    white-space: normal;
+}
+
+/* ⚠️ 必須用 ::deep。MarkupString 塞進來的子節點拿不到 [b-xxxxx] scope 屬性，
+   直接寫 `.ai-chat-bubble-markdown h2` 會被編成兩個都要有屬性而永遠選不到；
+   `::deep` 只把屬性加在前面那個我們自己寫的元素上，剛好匹配。 */
+.ai-chat-bubble-markdown ::deep > :first-child {
+    margin-top: 0;
+}
+
+.ai-chat-bubble-markdown ::deep > :last-child {
+    margin-bottom: 0;
+}
+
+.ai-chat-bubble-markdown ::deep h1,
+.ai-chat-bubble-markdown ::deep h2,
+.ai-chat-bubble-markdown ::deep h3,
+.ai-chat-bubble-markdown ::deep h4 {
+    margin: 14px 0 6px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.ai-chat-bubble-markdown ::deep h1 {
+    font-size: 1.15rem;
+}
+
+.ai-chat-bubble-markdown ::deep h2 {
+    font-size: 1.05rem;
+}
+
+.ai-chat-bubble-markdown ::deep h3,
+.ai-chat-bubble-markdown ::deep h4 {
+    font-size: 0.95rem;
+}
+
+.ai-chat-bubble-markdown ::deep p {
+    margin: 6px 0;
+}
+
+.ai-chat-bubble-markdown ::deep ul,
+.ai-chat-bubble-markdown ::deep ol {
+    margin: 6px 0;
+    padding-left: 1.5em;
+}
+
+.ai-chat-bubble-markdown ::deep li {
+    margin: 2px 0;
+}
+
+.ai-chat-bubble-markdown ::deep blockquote {
+    margin: 6px 0;
+    padding-left: 10px;
+    border-left: 3px solid var(--oat-300);
+    color: var(--oat-ink-mid);
+}
+
+.ai-chat-bubble-markdown ::deep code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    /* Bootstrap 的預設 code 是粉紅色（--bs-code-color），在這個配色裡很突兀。 */
+    color: inherit;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.85em;
+}
+
+.ai-chat-bubble-markdown ::deep pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--oat-200);
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.ai-chat-bubble-markdown ::deep pre code {
+    padding: 0;
+    background: none;
+}
+
+/* 表格可能比 820px 的視窗還寬，給它自己的水平捲軸而不是撐破氣泡。 */
+.ai-chat-bubble-markdown ::deep table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    margin: 8px 0;
+    border-collapse: collapse;
+    overflow-x: auto;
+    font-size: 0.85rem;
+}
+
+.ai-chat-bubble-markdown ::deep th,
+.ai-chat-bubble-markdown ::deep td {
+    padding: 4px 8px;
+    border: 1px solid var(--oat-300);
+    text-align: left;
+    vertical-align: top;
+}
+
+.ai-chat-bubble-markdown ::deep th {
+    background: var(--oat-200);
+    font-weight: 600;
+}
+
+.ai-chat-bubble-markdown ::deep hr {
+    margin: 10px 0;
+    border: none;
+    border-top: 1px solid var(--oat-300);
+}
+
+.ai-chat-bubble-markdown ::deep img {
+    max-width: 100%;
+}
+
+/* 每則訊息的操作（複製、編輯、下載）。
+   ⚠️ 刻意不是 opacity: 0——純 hover 才出現的按鈕在觸控裝置上根本點不到，
+   鍵盤使用者也 tab 不進去。平時淡一點，滑過或內部取得焦點時才完全顯現。 */
+.ai-chat-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+}
+
+.ai-chat-row:hover .ai-chat-tools,
+.ai-chat-tools:focus-within {
+    opacity: 1;
+}
+
+.ai-chat-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-chat-edit-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-chat-edit-hint {
+    color: var(--oat-ink-mid);
+    font-size: 0.75rem;
+    line-height: 1.7;
 }
 
 .ai-chat-row-user .ai-chat-bubble {

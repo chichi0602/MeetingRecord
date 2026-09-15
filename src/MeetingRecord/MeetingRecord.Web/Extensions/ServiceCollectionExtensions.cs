@@ -92,6 +92,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingFileStore>();
         services.AddScoped<DashboardService>();
         services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
+        services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();

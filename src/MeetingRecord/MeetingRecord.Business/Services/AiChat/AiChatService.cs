@@ -117,24 +117,9 @@ public class AiChatService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(question);
 
-        var provider = ResolveProvider();
-
-        var contextResult = scope == AiChatScope.Project
-            ? await BuildProjectContextAsync(targetId, cancellationToken)
-            : await BuildMeetingContextAsync(targetId, cancellationToken);
-
-        if (!contextResult.HasContent)
-        {
-            throw new InvalidOperationException(
-                scope == AiChatScope.Project
-                    ? "這個專案目前沒有可供查詢的資料：尚未產生任何會議紀錄，附件也沒有可擷取的文字。"
-                    : "這場會議目前沒有可供查詢的資料：尚未產生會議紀錄，也沒有逐字稿。");
-        }
-
         var history = await GetHistoryAsync(scope, targetId, cancellationToken);
-        var userPrompt = BuildUserPrompt(contextResult.Context, history, question);
-
-        var answer = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken);
+        var (answer, contextResult) = await GenerateAnswerAsync(
+            scope, targetId, question, history, onDelta, cancellationToken);
 
         await SaveTurnAsync(scope, targetId, question, answer, cancellationToken);
 
@@ -150,6 +135,179 @@ public class AiChatService
             contextResult.UsedLabels,
             contextResult.TruncatedLabels,
             contextResult.SkippedLabels);
+    }
+
+    /// <summary>
+    /// 就地更正一則訊息的文字。<b>不呼叫模型，不會產生費用</b>——這是「打錯字」「答案裡有個
+    /// 明顯錯誤」時用的，不是重新發問。
+    ///
+    /// 傳整個 <paramref name="original"/> 而不只傳內容：對話是同專案／會議底下所有人共用的，
+    /// 角色與原內容要一起當樂觀鎖，才擋得掉「兩個人同時編輯、後寫的默默蓋掉前者」。
+    /// </summary>
+    public Task<UpdateOutcome> UpdateMessageAsync(
+        AiChatScope scope,
+        int targetId,
+        int index,
+        AiChatMessageItem original,
+        string newContent,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+
+        return chatStore.UpdateMessagesAsync(
+            scope,
+            targetId,
+            [new MessageEdit(index, original.Role, original.Content, newContent)],
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 改寫某一則提問並重新產生它的回答，覆蓋原本那一則。
+    ///
+    /// ⚠️ <b>會呼叫模型、會產生費用</b>，呼叫端必須先跳二次確認（§6.3）。
+    ///
+    /// 餵給模型的歷史只取「這一輪之前」的訊息——把後面的輪次也帶進去，模型會看到
+    /// 自己還沒被改寫的舊答案，等於拿未來解釋過去。
+    /// </summary>
+    public async Task<AiChatAnswer> RegenerateAsync(
+        AiChatScope scope,
+        int targetId,
+        int questionIndex,
+        string expectedQuestion,
+        string newQuestion,
+        Action<string>? onDelta = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newQuestion);
+
+        var history = await GetHistoryAsync(scope, targetId, cancellationToken);
+
+        // 先擋掉對不上的情況再送 API——確認之後才花錢。
+        if (questionIndex < 0 || questionIndex >= history.Count || !history[questionIndex].IsUser)
+        {
+            throw new InvalidOperationException("這則提問已經不在對話裡了，請重新整理後再試。");
+        }
+
+        if (!string.Equals(history[questionIndex].Content, expectedQuestion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("這則提問已被其他人改過，請重新整理後再試。");
+        }
+
+        var answerIndex = questionIndex + 1;
+        if (answerIndex >= history.Count || history[answerIndex].IsUser)
+        {
+            throw new InvalidOperationException("找不到這則提問對應的回答，請重新整理後再試。");
+        }
+
+        var trimmed = newQuestion.Trim();
+        var (answer, contextResult) = await GenerateAnswerAsync(
+            scope,
+            targetId,
+            trimmed,
+            TakeHistoryBefore(history, questionIndex),
+            onDelta,
+            cancellationToken);
+
+        // 提問與回答必須一起換掉。只改到一半（問題改了、答案還是舊的）是最糟的中間態，
+        // 所以兩筆一次送進同一個原子重寫。
+        var outcome = await chatStore.UpdateMessagesAsync(
+            scope,
+            targetId,
+            [
+                new MessageEdit(
+                    questionIndex,
+                    UserRole,
+                    history[questionIndex].Content,
+                    trimmed,
+                    // 換成實際操作的人，否則「王小明問的」其實是李小華改的。
+                    ResolveCurrentUserName()),
+                new MessageEdit(
+                    answerIndex,
+                    AssistantRole,
+                    history[answerIndex].Content,
+                    answer),
+            ],
+            cancellationToken);
+
+        if (outcome != UpdateOutcome.Updated)
+        {
+            logger.LogWarning(
+                "Regenerated answer was discarded. Scope={Scope}, TargetId={TargetId}, Index={Index}, Outcome={Outcome}",
+                scope,
+                targetId,
+                questionIndex,
+                outcome);
+
+            throw new InvalidOperationException(
+                outcome == UpdateOutcome.NotFound
+                    ? "這段對話已經被清空，新的回答沒有寫入。"
+                    : "這段對話在產生期間被其他人更動，新的回答沒有寫入。請重新整理後再試。");
+        }
+
+        logger.LogInformation(
+            "AI chat answer regenerated. Scope={Scope}, TargetId={TargetId}, Index={Index}, AnswerLength={AnswerLength}",
+            scope,
+            targetId,
+            questionIndex,
+            answer.Length);
+
+        return new AiChatAnswer(
+            answer,
+            contextResult.UsedLabels,
+            contextResult.TruncatedLabels,
+            contextResult.SkippedLabels);
+    }
+
+    /// <summary>
+    /// 取出 <paramref name="index"/> 之前的訊息。重新產生時用來還原「當時的脈絡」。
+    ///
+    /// 抽成 internal static 純函式以便單元測試（本專案的既有慣例）。
+    /// 這裡不必限制輪數——<see cref="BuildUserPrompt"/> 已經會做 <see cref="TakeRecentHistory"/>。
+    /// </summary>
+    internal static IReadOnlyList<AiChatMessageItem> TakeHistoryBefore(
+        IReadOnlyList<AiChatMessageItem> history,
+        int index)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+
+        if (index <= 0)
+        {
+            return [];
+        }
+
+        return index >= history.Count ? history : [.. history.Take(index)];
+    }
+
+    /// <summary>
+    /// 建脈絡 → 組提示 → 呼叫模型。<see cref="AskAsync"/> 與 <see cref="RegenerateAsync"/>
+    /// 的差別只在餵進來的 <paramref name="history"/> 與事後怎麼落庫，中間這段完全一樣。
+    /// </summary>
+    private async Task<(string Answer, ChatContextResult Context)> GenerateAnswerAsync(
+        AiChatScope scope,
+        int targetId,
+        string question,
+        IReadOnlyList<AiChatMessageItem> history,
+        Action<string>? onDelta,
+        CancellationToken cancellationToken)
+    {
+        var provider = ResolveProvider();
+
+        var contextResult = scope == AiChatScope.Project
+            ? await BuildProjectContextAsync(targetId, cancellationToken)
+            : await BuildMeetingContextAsync(targetId, cancellationToken);
+
+        if (!contextResult.HasContent)
+        {
+            throw new InvalidOperationException(
+                scope == AiChatScope.Project
+                    ? "這個專案目前沒有可供查詢的資料：尚未產生任何會議紀錄，附件也沒有可擷取的文字。"
+                    : "這場會議目前沒有可供查詢的資料：尚未產生會議紀錄，也沒有逐字稿。");
+        }
+
+        var userPrompt = BuildUserPrompt(contextResult.Context, history, question);
+        var answer = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken);
+
+        return (answer, contextResult);
     }
 
     /// <summary>

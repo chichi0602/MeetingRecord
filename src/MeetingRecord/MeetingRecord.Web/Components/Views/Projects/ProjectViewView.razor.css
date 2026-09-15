@@ -256,8 +256,117 @@
     font-family: inherit;
     font-size: 0.85rem;
     line-height: 1.8;
-    white-space: pre-wrap;
+    /* ⚠️ 0.4.70 起內容是渲染過的 HTML，不能再有 white-space: pre-wrap——
+       Markdig 產出的標籤之間本來就有換行，保留下來每個區塊之間會多一行。 */
     word-break: break-word;
+}
+
+/* ⚠️ 必須用 ::deep：MarkupString 塞進來的子節點拿不到 [b-xxxxx] scope 屬性。 */
+.project-view-draft-content ::deep > :first-child {
+    margin-top: 0;
+}
+
+.project-view-draft-content ::deep > :last-child {
+    margin-bottom: 0;
+}
+
+.project-view-draft-content ::deep h1,
+.project-view-draft-content ::deep h2,
+.project-view-draft-content ::deep h3,
+.project-view-draft-content ::deep h4 {
+    margin: 14px 0 6px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.project-view-draft-content ::deep h1 {
+    font-size: 1.15rem;
+}
+
+.project-view-draft-content ::deep h2 {
+    font-size: 1.05rem;
+}
+
+.project-view-draft-content ::deep h3,
+.project-view-draft-content ::deep h4 {
+    font-size: 0.95rem;
+}
+
+.project-view-draft-content ::deep p {
+    margin: 6px 0;
+}
+
+.project-view-draft-content ::deep ul,
+.project-view-draft-content ::deep ol {
+    margin: 6px 0;
+    padding-left: 1.5em;
+}
+
+.project-view-draft-content ::deep li {
+    margin: 2px 0;
+}
+
+.project-view-draft-content ::deep blockquote {
+    margin: 6px 0;
+    padding-left: 10px;
+    border-left: 3px solid var(--oat-300);
+    color: var(--oat-ink-mid);
+}
+
+.project-view-draft-content ::deep code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    /* Bootstrap 的預設 code 是粉紅色（--bs-code-color），在這個配色裡很突兀。 */
+    color: inherit;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.85em;
+}
+
+.project-view-draft-content ::deep pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--oat-200);
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.project-view-draft-content ::deep pre code {
+    padding: 0;
+    background: none;
+}
+
+.project-view-draft-content ::deep table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    margin: 8px 0;
+    border-collapse: collapse;
+    overflow-x: auto;
+}
+
+.project-view-draft-content ::deep th,
+.project-view-draft-content ::deep td {
+    padding: 4px 8px;
+    border: 1px solid var(--oat-300);
+    text-align: left;
+    vertical-align: top;
+}
+
+.project-view-draft-content ::deep th {
+    background: var(--oat-200);
+    font-weight: 600;
+}
+
+.project-view-draft-content ::deep hr {
+    margin: 10px 0;
+    border: none;
+    border-top: 1px solid var(--oat-300);
+}
+
+.project-view-draft-content ::deep img {
+    max-width: 100%;
 }
 
 /* 生成進行中時，狀態徽章旁的即時百分比（資料來自 IMeetingDraftProgressNotifier）。 */

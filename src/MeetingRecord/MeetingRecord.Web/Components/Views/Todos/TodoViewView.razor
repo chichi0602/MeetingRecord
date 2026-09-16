@@ -11,7 +11,27 @@ else
         @* 一列排完：左邊是過濾與搜尋，右邊是新增與重新整理。
            欄寬刻意壓窄（專案 150／狀態 110／搜尋 160）讓整列在雙欄版面下仍塞得進去。 *@
         <div class="todo-view-toolbar">
+            @* 左邊放「新增／重新整理」、右邊放過濾與搜尋，與其他清單頁一致
+               （會議紀錄、提示詞範本、使用者、團隊都是這個排法，待辦原本是唯一相反的）。 *@
             <div class="todo-view-toolbar-left">
+                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                {
+                    <Tooltip Title="新增">
+                        <Button Type="ButtonType.Default"
+                                Disabled="@(availableProjects.Count == 0)"
+                                OnClick="@(async () => await OnAddAsync())">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
+                        </Button>
+                    </Tooltip>
+                }
+                <Tooltip Title="重新整理">
+                    <Button Type="ButtonType.Default"
+                            OnClick="@(async () => await OnRefreshAsync())">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+                    </Button>
+                </Tooltip>
+            </div>
+            <div class="todo-view-toolbar-right">
                 <Select TItem="ProjectAdapterModel"
                         TItemValue="int"
                         Value="@selectedProjectFilter"
@@ -50,24 +70,6 @@ else
                         </Button>
                     </Tooltip>
                 }
-            </div>
-            <div class="todo-view-toolbar-right">
-                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
-                {
-                    <Tooltip Title="新增">
-                        <Button Type="ButtonType.Default"
-                                Disabled="@(availableProjects.Count == 0)"
-                                OnClick="@(async () => await OnAddAsync())">
-                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
-                        </Button>
-                    </Tooltip>
-                }
-                <Tooltip Title="重新整理">
-                    <Button Type="ButtonType.Default"
-                            OnClick="@(async () => await OnRefreshAsync())">
-                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
-                    </Button>
-                </Tooltip>
             </div>
         </div>
 

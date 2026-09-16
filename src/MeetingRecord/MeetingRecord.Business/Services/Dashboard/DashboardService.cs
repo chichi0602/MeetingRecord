@@ -255,7 +255,12 @@ public class DashboardService
             DashboardMetrics.CalculateFailureRate(
                 meetings.Count(x => x.TranscriptionStatus == TranscriptionStatus.Completed),
                 meetings.Count(x => x.TranscriptionStatus == TranscriptionStatus.Failed)),
-            meetings.Count(x => x.TranscriptionStatus == TranscriptionStatus.Completed && x.ProjectId is null));
+            // 0.4.73 起「未歸屬但已產生會議紀錄」是正常終態（不必先建專案就能生成），
+            // 只數 ProjectId is null 的話這個黃色告警會一直亮著一個不存在的問題。
+            meetings.Count(x =>
+                x.TranscriptionStatus == TranscriptionStatus.Completed
+                && x.ProjectId is null
+                && x.DraftStatus != DraftStatus.Completed));
     }
 
     #endregion

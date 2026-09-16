@@ -1,8 +1,8 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.3
+- 文件版本：3.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.71
+- 現行系統版本：0.4.73
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
 - 最後核對日期：2026/09/15
 
@@ -13,7 +13,7 @@
 目標是讓使用者上傳會議語音檔後，套用一組事先維護好的提示詞，自動產出可編修的會議紀錄。
 
 ```
-音檔上傳 ─► 轉錄（STT）─► 逐字稿 ─► 歸屬專案 ─► 套用提示詞範本 ─► LLM ─► 會議紀錄 ─► 人工編修
+音檔上傳 ─► 轉錄（STT）─► 逐字稿 ─► [歸屬專案（選填）] ─► 套用提示詞範本 ─► LLM ─► 會議紀錄 ─► 人工編修
 └──────────── 0.4.27 ────────────┘└──────────────────── 0.4.31 ────────────────────┘
 ```
 
@@ -36,7 +36,7 @@
 | 影音前處理 | **已實作**（0.4.27）。FFmpeg 抽音軌、轉 16kHz 單聲道 mp3、固定切成 15 分鐘分段 |
 | 會議紀錄 Entity 與頁面 | **已實作**（0.4.27）。`Meeting` 實體 + `/meetings` 頁面 |
 | 非同步作業、進度回報、失敗重試 | **已實作**（0.4.27）。行程內 `Channel<int>` 佇列 + 單一 worker `BackgroundService` |
-| 逐字稿歸屬專案 | **已實作**（0.4.31）。`Meeting.ProjectId` 可空外鍵，一份逐字稿只屬一個專案 |
+| 逐字稿歸屬專案 | **已實作**（0.4.31）。`Meeting.ProjectId` 可空外鍵，一份逐字稿只屬一個專案。**0.4.73 起歸屬變成選填**——不歸屬也能產生會議紀錄，事後可用「歸屬到專案」補上 |
 | 變數代入與 LLM 呼叫 | **已實作**（0.4.31）。`PromptVariableHelper.Render` 為代入端；`ITextGenerationProvider` 呼叫 `chat/completions` |
 | 會議紀錄的產生與編修 | **已實作**（0.4.31）。`Meeting.DraftContent` 落庫，可於 `/projects` 檢視與編修 |
 
@@ -83,6 +83,27 @@
 
 該旗標從列舉式改排除式的同時修掉另一個既有缺陷：原本的 `Pending or Failed or Completed` **漏了 `Cancelled`**，取消過的紀錄根本不會出現「重新轉錄」鈕（服務層其實允許），唯一的出路是重新上傳檔案。這也是「取消不加確認」這個決定能成立的前提——取消必須是可回復的。
 
+### 歸屬的四種情形（0.4.73）
+
+`RequestDraftAsync` 的 `projectId` 改為 `int?`。**`null` 的語意是「不指定」，不是「解除歸屬」**——解除是破壞性動作，唯一出口是 `DetachFromProjectAsync`。
+
+| 會議目前歸屬 | 傳入 | 行為 | 寫入值 |
+| --- | --- | --- | --- |
+| 未歸屬 | null | 放行，維持未歸屬 | null |
+| 未歸屬 | 專案 A | 放行，歸屬到 A | A |
+| 已屬 A | null | **放行，保留原歸屬 A** | A |
+| 已屬 A | 專案 B | 拒絕 | 不變 |
+
+> ⚠️ 這裡有一個**會編譯成功但語意相反**的寫法。原本的檢查是 `meeting.ProjectId is not null && meeting.ProjectId != projectId`；改成 `int?` 之後，「已屬 A ＋ 傳 null」會因為 `A != null` 為 true 被判成衝突而拒絕，**編譯器不會有任何警告**。必須補上 `projectId is not null &&`。同理，專案存在性檢查一定要包在 `if (effectiveProjectId is not null)` 裡——`x.Id == projectId`（`int` vs `int?`）在 null 時是 lifted comparison、恆為 false。兩者都有測試釘住。
+
+### 事後補歸屬（0.4.73）
+
+`MeetingService.AttachToProjectAsync(meetingId, projectId, ct)`：只寫 `ProjectId`，**不重新生成、不呼叫任何付費 API**，草稿內容與所有快照原封不動。
+
+- 已在同一專案 → 拒絕（畫面過期，重新整理即可）；已屬其他專案 → 拒絕（要先從該專案移除）。兩者訊息分開，否則使用者不知道下一步。
+- 生成中（`Pending`／`Processing`）拒絕。⚠️ **理由與 `DetachFromProjectAsync` 不同**：技術上不必擋（job runner 全程沒碰 `ProjectId`，EF 只送有變更的欄位），擋的是品質語意——runner 在開始生成時就用當下的 `ProjectId` 決定要套哪一份常用名詞。
+- ⚠️ Attach 與 Detach **不是可逆的一對**：Detach 會連草稿一起刪。
+
 ### 推翻既有決議：產出物歸屬
 
 0.4.27 決議「產出物＝獨立實體，不掛在專案項目之下」。0.4.31 **推翻此決議**：
@@ -95,8 +116,10 @@
 
 ## 五、生成流程
 
-1. 使用者在 `/projects` 選定專案，從下拉挑一份轉錄完成的逐字稿與一組提示詞。已被**其他**專案取用的逐字稿在下拉中呈現為不可選並標示歸屬。
-2. `MeetingService.RequestDraftAsync` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入歸屬與提示詞快照、狀態轉 `Pending`，再排入 `IMeetingDraftQueue`。
+1. 入口有兩個，共用同一支服務：
+   - `/projects`：選定專案，從下拉挑一份轉錄完成的逐字稿與一組提示詞。已被**其他**專案取用的逐字稿呈現為不可選並標示歸屬。
+   - `/meetings`（**0.4.73 新增**）：直接對某一列按「AI 轉會議紀錄」，對話框裡的「所屬專案」是選填。不必先建立專案。
+2. `MeetingService.RequestDraftAsync` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入歸屬與提示詞快照、狀態轉 `Pending`，再排入 `IMeetingDraftQueue`。**0.4.73 起 `projectId` 是 `int?`**，語意見下節「歸屬的四種情形」。
 3. `MeetingDraftBackgroundService`（**與轉錄各自獨立的第二條佇列與 worker**）取件，在自己的 DI scope 內執行 `MeetingDraftJobRunner`。
 4. Job runner 讀逐字稿 → `TranscriptChunker.Split` → 多段時逐段摘要（map）→ `PromptVariableHelper.Render` 代入提示詞 → 呼叫 LLM（reduce）→ 寫入 `DraftContent`、狀態轉 `Completed`。 **0.4.71 起**在最前面多一段「專有名詞與人名對照」：由 `NameGuidancePromptHelper.Build` 以專案的 `GlossaryTerms`（即時撈，不快照）與 `Meeting.DraftAttendees`（本次快照）組成，**map 與 reduce 兩階段都注入**——只注入 reduce 的話，長逐字稿的人名在分段摘要時就已經被壓縮掉了。兩份清單都空時回傳空字串，提示詞與 0.4.70 之前逐字元相同。
 5. 失敗一律轉 `Failed` 並寫入 `DraftError`（存失敗狀態時不帶已取消的 `CancellationToken`）。應用程式重啟會把殘留的「生成中」改判為「失敗」。

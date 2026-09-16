@@ -373,7 +373,8 @@ public partial class ProjectViewView : IDisposable
     {
         if (transcript.ProjectId is null)
         {
-            return "未歸屬";
+            // 0.4.73 起未歸屬的逐字稿也可能已經有會議紀錄（從「會議紀錄」頁直接產生的）。
+            return transcript.HasDraft ? "未歸屬 · 重新產生將覆蓋既有會議紀錄" : "未歸屬";
         }
 
         if (transcript.ProjectId == selectedProjectId)

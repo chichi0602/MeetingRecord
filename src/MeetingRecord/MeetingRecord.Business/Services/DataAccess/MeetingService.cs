@@ -77,7 +77,10 @@ public class MeetingService
             dataRequest.Take);
 
         DataRequestResult<MeetingAdapterModel> result = new();
-        IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking();
+
+        // Include(Project) 是為了讓清單能顯示「所屬專案」。ProjectTitle 是跨物件欄位，
+        // AutoMapper 的同名慣例對應不到，少了這一段整欄會全部顯示「— 未歸屬」。
+        IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking().Include(x => x.Project);
 
         if (!string.IsNullOrWhiteSpace(dataRequest.Search))
         {
@@ -160,7 +163,7 @@ public class MeetingService
         }
 
         List<Meeting> records = await dataSource.ToListAsync();
-        result.Result = Mapper.Map<List<MeetingAdapterModel>>(records);
+        result.Result = MapWithProjectTitle(records);
         Logger.LogDebug("Loaded meetings successfully. Count={Count}", result.Count);
         return result;
     }
@@ -261,7 +264,6 @@ public class MeetingService
             itemData.TranscriptionCompletedAt = item.TranscriptionCompletedAt;
 
             // 草稿同樣由背景工作寫入，畫面上的舊複本不得覆寫。
-            // ProjectId 刻意不在此列——歸屬本來就要能從畫面改。
             itemData.DraftContent = item.DraftContent;
             itemData.DraftStatus = item.DraftStatus;
             itemData.DraftError = item.DraftError;
@@ -269,6 +271,15 @@ public class MeetingService
             itemData.DraftPromptTemplateName = item.DraftPromptTemplateName;
             itemData.DraftStartedAt = item.DraftStartedAt;
             itemData.DraftCompletedAt = item.DraftCompletedAt;
+
+            // DraftAttendees 在 AdapterModel 上根本沒有對應屬性，Mapper 一定產出 null；
+            // 不沿用的話，光是在畫面上改個標題就會把與會者快照清掉。
+            itemData.DraftAttendees = item.DraftAttendees;
+
+            // ProjectId 從 0.4.73 起也一併沿用。歸屬的權威路徑已經是
+            // AttachToProjectAsync／DetachFromProjectAsync 兩支方法，不再是這張表單；
+            // 讓畫面上的舊複本寫回去，只會在別處剛改過歸屬時把它靜默退回舊值。
+            itemData.ProjectId = item.ProjectId;
 
             CleanTrackingHelper.Clean<Meeting>(context);
             context.Entry(itemData).State = EntityState.Modified;
@@ -606,6 +617,97 @@ public class MeetingService
     #region AI 會議紀錄草稿
 
     /// <summary>
+    /// 把一份未歸屬的會議紀錄事後補歸屬到專案。
+    ///
+    /// <para>
+    /// 存在的理由是使用者可以不必先建專案就產生會議紀錄（從「會議紀錄」頁直接生成），
+    /// 事後才想歸檔。這支<b>只寫 <c>ProjectId</c></b>：草稿內容、提示詞快照、與會者快照、
+    /// 生成時間全部原封不動，<b>不重新生成、不呼叫任何付費 API</b>。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 它<b>不是</b> <see cref="DetachFromProjectAsync"/> 的可逆反向操作：移除會連草稿一起刪，
+    /// 歸屬回去救不回來。
+    /// </para>
+    /// </summary>
+    /// <param name="projectId">要歸屬的目標專案。已歸屬其他專案的會被拒絕，必須先從該專案移除。</param>
+    public async Task<VerifyRecordResult> AttachToProjectAsync(
+        int meetingId,
+        int projectId,
+        CancellationToken cancellationToken = default)
+    {
+        Logger.LogInformation(
+            "Attaching meeting to project. MeetingId={MeetingId}, ProjectId={ProjectId}", meetingId, projectId);
+
+        try
+        {
+            CleanTrackingHelper.Clean<Meeting>(context);
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+            if (meeting is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到要歸屬的會議紀錄。");
+            }
+
+            var scope = await accessScope.GetAsync();
+            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            {
+                Logger.LogWarning("Attach denied by team scope. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, "沒有權限變更這筆會議紀錄的歸屬。");
+            }
+
+            // 兩種「已歸屬」要分開講：前者重新整理就好，後者得先去那個專案移除。
+            // 併成一句的話，使用者不知道下一步該做什麼。
+            if (meeting.ProjectId == projectId)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄已經屬於這個專案，請重新整理後再試。");
+            }
+
+            if (meeting.ProjectId is not null)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄已歸屬其他專案，請先從該專案移除後再重新歸屬。");
+            }
+
+            // ⚠️ 這裡擋的理由和 DetachFromProjectAsync 不同，不是為了避免資料不一致。
+            // job runner 全程沒碰過 ProjectId，EF 對 tracked entity 只送有變更的欄位，
+            // 所以並行的歸屬不會被蓋掉。擋的是品質語意：runner 在「開始生成」時就用當下的
+            // ProjectId 決定要套哪一份常用名詞，生成途中歸屬過去的草稿其實沒套到該專案的
+            // 名詞校正，卻會躺在那個專案的歷史清單裡，看起來像套過了。
+            if (meeting.DraftStatus is DraftStatus.Processing or DraftStatus.Pending)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆逐字稿正在產生會議紀錄，請等結束後再歸屬。");
+            }
+
+            var project = await context.Project.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == projectId, cancellationToken);
+            if (project is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
+            }
+
+            // 只寫歸屬。草稿內容、提示詞快照、與會者快照、生成時間全部原封不動，
+            // 也不重新入列——這支的存在理由就是「不必重跑、不必再付一次 API 費用」。
+            meeting.ProjectId = projectId;
+            meeting.UpdatedAt = DateTime.Now;
+
+            await context.SaveChangesAsync(cancellationToken);
+            CleanTrackingHelper.Clean<Meeting>(context);
+
+            Logger.LogInformation(
+                "Meeting attached to project. MeetingId={MeetingId}, Title={Title}, ProjectId={ProjectId}",
+                meetingId,
+                meeting.Title,
+                projectId);
+
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to attach meeting to project. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "歸屬會議紀錄失敗。", ex);
+        }
+    }
+
+    /// <summary>
     /// 把一份逐字稿從專案移除：清掉歸屬與 AI 草稿，讓它回到「可選逐字稿」清單。
     ///
     /// <para>
@@ -617,6 +719,11 @@ public class MeetingService
     /// <para>
     /// <b>不動的東西</b>：影音檔、逐字稿檔、這場會議的 AI 問答對話（它綁的是會議不是專案），
     /// 以及已經抽出來的待辦（待辦有自己的 <c>ProjectId</c>，是獨立的工作項目）。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 這支<b>不是</b> <see cref="AttachToProjectAsync"/> 的可逆反向操作：它會連已產生的
+    /// 草稿一起刪掉，再歸屬回去也救不回來。
     /// </para>
     /// </summary>
     /// <param name="projectId">預期的目前歸屬專案。傳進來是為了擋掉「畫面過期、實際上已經被移到別的專案」。</param>
@@ -683,18 +790,29 @@ public class MeetingService
     }
 
     /// <summary>
-    /// 把會議排入草稿生成佇列，同時把它歸屬到指定專案。
+    /// 把會議排入草稿生成佇列，並視情況歸屬到指定專案。
     ///
     /// 一份逐字稿只能屬於一個專案：已被「其他」專案取用的會拒絕，
     /// 但屬於同一個專案的可以重跑（換提示詞重新生成，會覆蓋既有草稿）。
     /// </summary>
+    /// <param name="projectId">
+    /// 要歸屬的專案；<c>null</c> 代表「不指定」而<b>不是</b>「解除歸屬」。四種情形：
+    /// <list type="bullet">
+    /// <item>未歸屬 ＋ null → 放行，維持未歸屬（不必先建專案也能產生會議紀錄）</item>
+    /// <item>未歸屬 ＋ 專案 A → 放行，歸屬到 A</item>
+    /// <item>已屬 A ＋ null → 放行，<b>保留</b>原歸屬 A</item>
+    /// <item>已屬 A ＋ 專案 B → 拒絕</item>
+    /// </list>
+    /// 解除歸屬是破壞性動作，唯一的出口是 <see cref="DetachFromProjectAsync"/>；
+    /// 讓這支在沒指定專案時順手解除，等於同一個參數兩種語意，而且是靜默的。
+    /// </param>
     /// <param name="attendees">
     /// 本次實際與會者（由畫面從專案名冊勾選）。刻意<b>不</b>驗證是否真的在名冊內——
     /// 名單只是給模型的提示，加驗證只會引入「使用者開著頁面時別人改了名冊、送出被整筆退回」這種假失敗。
     /// </param>
     public async Task<VerifyRecordResult> RequestDraftAsync(
         int meetingId,
-        int projectId,
+        int? projectId,
         int promptTemplateId,
         IEnumerable<string>? attendees = null,
         CancellationToken cancellationToken = default)
@@ -733,16 +851,25 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "這筆逐字稿已排入產生會議紀錄，請稍候。");
             }
 
-            if (meeting.ProjectId is not null && meeting.ProjectId != projectId)
+            // ⚠️ projectId is not null 這個條件不能省：少了它，「已歸屬 A 但這次沒指定專案」
+            // 會被 A != null 判成衝突而拒絕。編譯器對這個錯誤不會有任何警告。
+            if (projectId is not null && meeting.ProjectId is not null && meeting.ProjectId != projectId)
             {
                 return VerifyRecordResultFactory.Build(false, "這份逐字稿已歸屬於其他專案，無法重複取用。");
             }
 
-            var project = await context.Project.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == projectId, cancellationToken);
-            if (project is null)
+            var effectiveProjectId = projectId ?? meeting.ProjectId;
+
+            // ⚠️ 這個 if 同樣不能省：x.Id == effectiveProjectId 在 null 時是 lifted comparison、
+            // 恆為 false，查不到任何列就會讓「不指定專案」一律回「找不到指定的專案項目」。
+            if (effectiveProjectId is not null)
             {
-                return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
+                var project = await context.Project.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id == effectiveProjectId, cancellationToken);
+                if (project is null)
+                {
+                    return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
+                }
             }
 
             var template = await context.PromptTemplate.AsNoTracking()
@@ -758,7 +885,7 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限使用指定的提示詞。");
             }
 
-            meeting.ProjectId = projectId;
+            meeting.ProjectId = effectiveProjectId;
             meeting.DraftPromptTemplateId = template.Id;
             meeting.DraftPromptTemplateName = template.Name;
 

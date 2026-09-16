@@ -1,6 +1,8 @@
 @using MeetingRecord.Share.Helpers
 @using MeetingRecord.Share.Enums
 @using MeetingRecord.Business.Helpers
+@using MeetingRecord.Business.Services.AiChat
+@using MeetingRecord.Web.Components.Views.Projects
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -55,7 +57,14 @@ else
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
-                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable />
+                @* 所屬專案併在標題底下當第二行，不另開一欄——操作欄最多會有 11 顆圖示，能省一欄是一欄。 *@
+                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable>
+                    <div class="meeting-title-cell">
+                        <span class="meeting-title-name">@context.Title</span>
+                        <span class="@(context.IsUnassigned ? "meeting-title-project meeting-title-project-unassigned" : "meeting-title-project")"
+                              title="@context.ProjectTitleText">@context.ProjectTitleText</span>
+                    </div>
+                </Column>
                 <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable />
                 <Column TData="string" Title="影音檔">
                     @if (context.HasMedia)
@@ -88,6 +97,23 @@ else
                         </Tooltip>
                     }
                 </Column>
+                @* Sortable="false"：服務層的排序白名單沒有 DraftStatus，掛上去只會得到一顆按了沒反應的箭頭。 *@
+                <Column TData="DraftStatus" DataIndex="@nameof(MeetingAdapterModel.DraftStatus)" Title="會議紀錄" Sortable="false">
+                    <span class="meeting-status @GetDraftStatusCssClass(context.DraftStatus)">@context.DraftStatusText</span>
+                    @{
+                        var draftProgress = GetLiveDraftProgress(context.Id);
+                    }
+                    @if (draftProgress is not null)
+                    {
+                        <span class="meeting-status-percent">@draftProgress.Percent%</span>
+                    }
+                    @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
+                    {
+                        <Tooltip Title="@context.DraftError">
+                            <span class="meeting-status-error-hint">⚠</span>
+                        </Tooltip>
+                    }
+                </Column>
                 <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
@@ -98,8 +124,68 @@ else
                                                   OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
                             </SpaceItem>
                         }
+                        @if (context.HasDraft)
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="檢視會議紀錄" Icon="visibility"
+                                                  OnClick="@(async () => await OnViewDraftAsync(context))" />
+                            </SpaceItem>
+                        }
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
                         {
+                            @if (context.CanGenerateDraft)
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="AI 轉會議紀錄" Icon="auto_awesome"
+                                                      OnClick="@(async () => await OnOpenDraftRequestAsync(context))" />
+                                </SpaceItem>
+                            }
+                            @if (context.HasDraft)
+                            {
+                                @* 用 edit_note 而不是 edit，免得跟底下那顆「修改」撞圖示。 *@
+                                <SpaceItem>
+                                    <CrudActionButton Title="編修會議紀錄" Icon="edit_note"
+                                                      OnClick="@(async () => await OnEditDraftAsync(context))" />
+                                </SpaceItem>
+                            }
+                        }
+                        @if (context.HasDraft
+                            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="匯出 PDF" Icon="download"
+                                                  Disabled="@(exportingMeetingId is not null)"
+                                                  OnClick="@(async () => await OnExportDraftAsync(context))" />
+                            </SpaceItem>
+                        }
+                        @* 問答的脈絡來自會議紀錄與逐字稿，兩者都沒有時開了也只會得到空脈絡。 *@
+                        @if (context.HasDraft || context.CanPreviewTranscript)
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="AI 問答" Icon="forum"
+                                                  OnClick="@(() => OpenMeetingChat(context))" />
+                            </SpaceItem>
+                        }
+                        @if (context.HasDraft
+                            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                        {
+                            @* 未歸屬時刻意不停用：停用的 button 不觸發滑鼠事件，Tooltip 永遠不會出現，
+                               改由 handler 跳訊息說明要先歸屬專案。 *@
+                            <SpaceItem>
+                                <CrudActionButton Title="抽出待辦" Icon="playlist_add"
+                                                  OnClick="@(async () => await OnExtractTodosAsync(context))" />
+                            </SpaceItem>
+                        }
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
+                        {
+                            @* 歸屬不是破壞性動作，不掛 Danger；紅色留給專案頁那顆「從專案移除」。 *@
+                            @if (context.IsUnassigned)
+                            {
+                                <SpaceItem>
+                                    <CrudActionButton Title="歸屬到專案" Icon="link"
+                                                      OnClick="@(async () => await OnOpenAttachAsync(context))" />
+                                </SpaceItem>
+                            }
                             @if (context.CanRetryTranscription)
                             {
                                 <SpaceItem>
@@ -231,6 +317,162 @@ else
             </div>
         }
     </Modal>
+
+    <Modal Title="AI 轉會議紀錄"
+           Class="meeting-draft-request-modal"
+           Width="560"
+           @bind-Visible="@draftRequestVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("開始產生")"
+           CancelText="@("取消")"
+           ConfirmLoading="@isGenerating"
+           OnOk="OnDraftRequestOkAsync"
+           OnCancel="OnDraftRequestCancelAsync">
+        @* 這裡不用 AntDesign.Form／FormItem：那組元件需要一個 TModel，而這個對話框沒有對應的
+           資料模型，硬造一個假的只為了排版並不划算。欄位全部整列，本來也用不到兩欄格線。 *@
+        <div class="meeting-draft-request-form">
+            <div class="meeting-draft-request-field">
+                <span class="meeting-draft-request-label">來源逐字稿</span>
+                <span class="meeting-draft-request-source">@draftRequestMeetingTitle</span>
+            </div>
+            <div class="meeting-draft-request-field">
+                <span class="meeting-draft-request-label">提示詞</span>
+                <Select TItem="PromptTemplateAdapterModel"
+                        TItemValue="int"
+                        @key="@($"prompt-{draftRequestOpenCount}")"
+                        DataSource="@promptTemplates"
+                        @bind-Value="draftRequestPromptTemplateId"
+                        LabelName="@nameof(PromptTemplateAdapterModel.Name)"
+                        ValueName="@nameof(PromptTemplateAdapterModel.Id)"
+                        EnableSearch
+                        Placeholder="選擇要套用的提示詞"
+                        Style="width: 100%;" />
+            </div>
+            <div class="meeting-draft-request-field">
+                <span class="meeting-draft-request-label">所屬專案（選填）</span>
+                <Select TItem="ProjectAdapterModel"
+                        TItemValue="int"
+                        @key="@($"project-{draftRequestOpenCount}")"
+                        DataSource="@projects"
+                        @bind-Value="draftRequestProjectId"
+                        @bind-Value:after="OnDraftRequestProjectChanged"
+                        LabelName="@nameof(ProjectAdapterModel.Title)"
+                        ValueName="@nameof(ProjectAdapterModel.Id)"
+                        EnableSearch
+                        AllowClear
+                        Disabled="@draftRequestLockedProject"
+                        Placeholder="不指定專案（之後可再歸屬）"
+                        Style="width: 100%;" />
+            </div>
+            <div class="meeting-draft-request-field">
+                <span class="meeting-draft-request-label">與會人員</span>
+                @* @key 同時綁開啟次數與專案 Id：前者讓「關掉再對另一筆開啟」重建元件
+                   （用資料 Id 當 key 沒有用，同一筆重開 Id 不變），後者處理對話框開著時換專案。 *@
+                <Select TItem="string"
+                        TItemValue="string"
+                        Mode="SelectMode.Multiple"
+                        @key="@($"attendees-{draftRequestOpenCount}-{draftRequestProjectId}")"
+                        Values="draftRequestAttendees"
+                        OnSelectedItemsChanged="OnDraftRequestAttendeesChanged"
+                        Disabled="@(draftRequestProjectId <= 0 || DraftRequestParticipants.Count == 0)"
+                        Placeholder="@DraftRequestAttendeePlaceholder"
+                        MaxTagCount="3"
+                        AllowClear EnableSearch
+                        Style="width: 100%;">
+                    @foreach (var person in DraftRequestParticipants)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@person">@person</SelectOption>
+                    }
+                </Select>
+            </div>
+        </div>
+        <p class="meeting-draft-request-note">
+            @if (draftRequestLockedProject)
+            {
+                <span>這份逐字稿已經歸屬專案，重新產生不會變更歸屬。</span>
+            }
+            else
+            {
+                <span>不指定專案也可以產生會議紀錄，但不會套用專案的常用名詞校正；之後可以用「歸屬到專案」補上。</span>
+            }
+        </p>
+    </Modal>
+
+    <Modal Title="歸屬到專案"
+           Class="meeting-attach-modal"
+           Width="480"
+           @bind-Visible="@attachVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("歸屬")"
+           CancelText="@("取消")"
+           ConfirmLoading="@isAttaching"
+           OnOk="OnAttachOkAsync"
+           OnCancel="OnAttachCancelAsync">
+        <div class="meeting-draft-request-form">
+            <div class="meeting-draft-request-field">
+                <span class="meeting-draft-request-label">會議紀錄</span>
+                <span class="meeting-draft-request-source">@attachMeetingTitle</span>
+            </div>
+            <div class="meeting-draft-request-field">
+                <span class="meeting-draft-request-label">歸屬到</span>
+                <Select TItem="ProjectAdapterModel"
+                        TItemValue="int"
+                        @key="@($"attach-{attachOpenCount}")"
+                        DataSource="@projects"
+                        @bind-Value="attachProjectId"
+                        LabelName="@nameof(ProjectAdapterModel.Title)"
+                        ValueName="@nameof(ProjectAdapterModel.Id)"
+                        EnableSearch
+                        Placeholder="選擇專案"
+                        Style="width: 100%;" />
+            </div>
+        </div>
+        <p class="meeting-draft-request-note">
+            只變更歸屬，不會重新產生會議紀錄，也不會產生任何費用。歸屬後即可抽出待辦事項。
+        </p>
+    </Modal>
+
+    <Modal Title="@draftModalTitle"
+           Class="meeting-draft-modal"
+           Width="800"
+           @bind-Visible="@draftViewModalVisible"
+           Keyboard="true"
+           Footer="null"
+           OnCancel="OnDraftViewModalCancelAsync">
+        @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性，
+           scoped 寫法得層層 ::deep，而且這組規則本來就不該每個元件各抄一份。 *@
+        <div class="markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(draftContent))</div>
+    </Modal>
+
+    <Modal Title="@draftModalTitle"
+           Class="meeting-draft-modal"
+           Width="800"
+           @bind-Visible="@draftEditModalVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@("儲存")"
+           CancelText="@("取消")"
+           ConfirmLoading="@isSavingDraft"
+           OnOk="OnDraftEditModalOkAsync"
+           OnCancel="OnDraftEditModalCancelAsync">
+        <TextArea @bind-Value="draftContent" Rows="20" Placeholder="會議紀錄內容" />
+    </Modal>
+
+    @* AiChatModal 與 TodoExtractionModal 都放在 Views.Projects 命名空間下。搬到共用目錄比較乾淨，
+       但那會動到專案頁；依外科手術原則這裡只加 @using。 *@
+    <AiChatModal @bind-Visible="aiChatVisible"
+                 Scope="AiChatScope.Meeting"
+                 TargetId="@aiChatTargetId"
+                 Title="@aiChatTitle"
+                 TargetName="@aiChatTargetName"
+                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export)" />
+
+    <TodoExtractionModal @bind-Visible="todoExtractionVisible"
+                         MeetingId="@todoExtractionMeetingId"
+                         ProjectId="@todoExtractionProjectId"
+                         MeetingTitle="@todoExtractionMeetingTitle" />
 }
 
 <FormModalHelper />

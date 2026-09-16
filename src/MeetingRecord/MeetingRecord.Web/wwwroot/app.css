@@ -310,3 +310,132 @@ body .ant-spin-dot-item {
     font-size: 1rem;
     line-height: 1;
 }
+
+/* ── Markdown 渲染內容 ──────────────────────────────────────────────
+   放在全域而不是 scoped .razor.css，理由有二：
+   1. MarkupString 塞進來的子節點拿不到 [b-xxxxx] scope 屬性，scoped 寫法一定要層層 ::deep，很囉嗦。
+   2. 會議紀錄與 AI 問答都要渲染 Markdown，同一組規則不該在每個元件各抄一份。
+   ⚠️ 專案頁的 .project-view-draft-content 與 AI 問答的 .ai-chat-bubble-markdown 仍是各自的
+   scoped 複本（先於本區塊存在）。日後要收斂的話，改成掛這個 class 即可。 */
+.markdown-content {
+    max-height: 60vh;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    background: var(--oat-50);
+    border: 1px solid #f0f0f0;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.8;
+    /* ⚠️ 內容是渲染過的 HTML，不能有 white-space: pre-wrap——Markdig 產出的標籤之間
+       本來就有換行，保留下來每個區塊之間會多一行。 */
+    word-break: break-word;
+}
+
+.markdown-content > :first-child {
+    margin-top: 0;
+}
+
+.markdown-content > :last-child {
+    margin-bottom: 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+    margin: 14px 0 6px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.markdown-content h1 {
+    font-size: 1.15rem;
+}
+
+.markdown-content h2 {
+    font-size: 1.05rem;
+}
+
+.markdown-content h3,
+.markdown-content h4 {
+    font-size: 0.95rem;
+}
+
+.markdown-content p {
+    margin: 6px 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin: 6px 0;
+    padding-left: 1.5em;
+}
+
+.markdown-content li {
+    margin: 2px 0;
+}
+
+.markdown-content blockquote {
+    margin: 6px 0;
+    padding-left: 10px;
+    border-left: 3px solid var(--oat-300);
+    color: var(--oat-ink-mid);
+}
+
+.markdown-content code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    /* Bootstrap 的預設 code 是粉紅色（--bs-code-color），在這個配色裡很突兀。 */
+    color: inherit;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.85em;
+}
+
+.markdown-content pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--oat-200);
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.markdown-content pre code {
+    padding: 0;
+    background: none;
+}
+
+.markdown-content table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    margin: 8px 0;
+    border-collapse: collapse;
+    overflow-x: auto;
+}
+
+.markdown-content th,
+.markdown-content td {
+    padding: 4px 8px;
+    border: 1px solid var(--oat-300);
+    text-align: left;
+    vertical-align: top;
+}
+
+.markdown-content th {
+    background: var(--oat-200);
+    font-weight: 600;
+}
+
+.markdown-content hr {
+    margin: 10px 0;
+    border: none;
+    border-top: 1px solid var(--oat-300);
+}
+
+.markdown-content img {
+    max-width: 100%;
+}

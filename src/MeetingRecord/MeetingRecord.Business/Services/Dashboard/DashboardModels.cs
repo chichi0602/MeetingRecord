@@ -39,7 +39,10 @@ public sealed record StatCardItem(string Title, string Value, string Caption, Ch
 /// <param name="AverageTranscriptionDuration">平均轉錄耗時（沒有完整區間時為「—」）。</param>
 /// <param name="AverageDraftDuration">平均會議紀錄生成耗時。</param>
 /// <param name="TranscriptionFailureRate">轉錄失敗率（0～100）；還沒有任何成敗紀錄時為 null。</param>
-/// <param name="UnassignedTranscriptCount">已轉錄完成但尚未歸屬專案的逐字稿數。</param>
+/// <param name="UnassignedTranscriptCount">
+/// 已轉錄完成、未歸屬專案<b>且尚未產生會議紀錄</b>的逐字稿數，也就是「還沒處理完」的待辦量。
+/// 0.4.73 起未歸屬但已有會議紀錄是正常終態，不計入。
+/// </param>
 public sealed record PerformanceSummary(
     string AverageTranscriptionDuration,
     string AverageDraftDuration,

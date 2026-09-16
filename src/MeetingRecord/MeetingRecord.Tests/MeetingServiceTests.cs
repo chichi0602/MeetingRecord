@@ -709,6 +709,230 @@ public sealed class MeetingServiceTests
         Assert.False((await service.DetachFromProjectAsync(999999, 1)).Success);
     }
 
+    [Fact]
+    public async Task RequestDraftAsync_ShouldEnqueueWithoutProject_WhenProjectIdIsNull()
+    {
+        // 真值表 (a)：不必先建專案也能產生會議紀錄，這是整個功能的前提。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("臨時討論");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, null, template.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(meeting.Id, Assert.Single(fixture.DraftQueue.Enqueued));
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+        Assert.Equal(DraftStatus.Pending, saved.DraftStatus);
+        Assert.Equal(template.Id, saved.DraftPromptTemplateId);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldKeepExistingProject_WhenProjectIdIsNull()
+    {
+        // 真值表 (c)：null 的語意是「不指定」，不是「解除歸屬」。
+        // 這支釘死一個會編譯成功但語意相反的寫法——少了 projectId is not null 這個條件，
+        // 已歸屬的會議會因為 A != null 被判成「已歸屬其他專案」而拒絕。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: project.Id);
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, null, template.Id);
+
+        Assert.True(result.Success);
+        Assert.Single(fixture.DraftQueue.Enqueued);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(project.Id, saved.ProjectId);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldReject_WhenProjectDoesNotExist()
+    {
+        // 防止有人為了讓 null 過關，把整段專案存在性檢查包進 null 判斷而誤放行不存在的 Id。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, 999999, template.Id);
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldStoreAttendees_WhenNoProject()
+    {
+        // 沒有專案名冊也可以手動帶與會者進來，快照照存。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("臨時討論");
+        var service = fixture.CreateService();
+
+        await service.RequestDraftAsync(meeting.Id, null, template.Id, ["王小明"]);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+        Assert.Equal("\n王小明\n", saved.DraftAttendees);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ShouldSetProjectId_AndKeepDraftIntact()
+    {
+        // 這支的核心承諾：只補歸屬，不重跑、不花錢。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("臨時討論", draftStatus: DraftStatus.Completed);
+        meeting.DraftContent = "AI 產生的會議紀錄";
+        meeting.DraftPromptTemplateId = 7;
+        meeting.DraftPromptTemplateName = "標準會議紀錄";
+        meeting.DraftAttendees = "\n王小明\n";
+        meeting.DraftCompletedAt = new DateTime(2026, 9, 15, 10, 0, 0);
+        fixture.Context.Meeting.Update(meeting);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var result = await service.AttachToProjectAsync(meeting.Id, project.Id);
+
+        Assert.True(result.Success);
+        // 不重新入列是整個功能的存在理由——重跑要再付一次 API 費用。
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(project.Id, saved.ProjectId);
+        Assert.Equal("AI 產生的會議紀錄", saved.DraftContent);
+        Assert.Equal(DraftStatus.Completed, saved.DraftStatus);
+        Assert.Equal(7, saved.DraftPromptTemplateId);
+        Assert.Equal("標準會議紀錄", saved.DraftPromptTemplateName);
+        Assert.Equal("\n王小明\n", saved.DraftAttendees);
+        Assert.Equal(new DateTime(2026, 9, 15, 10, 0, 0), saved.DraftCompletedAt);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ShouldReject_WhenAlreadyInSameProject()
+    {
+        // 畫面過期，重新整理就好——訊息要和「屬於別的專案」分開。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: project.Id);
+        var service = fixture.CreateService();
+
+        var result = await service.AttachToProjectAsync(meeting.Id, project.Id);
+
+        Assert.False(result.Success);
+        Assert.Contains("已經屬於這個專案", result.Message);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ShouldReject_WhenBelongsToAnotherProject()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var owner = await fixture.AddProjectAsync("客戶訪談專案");
+        var other = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: owner.Id);
+        var service = fixture.CreateService();
+
+        var result = await service.AttachToProjectAsync(meeting.Id, other.Id);
+
+        Assert.False(result.Success);
+        // 得先去原專案移除，訊息要講得出下一步。
+        Assert.Contains("請先從該專案移除", result.Message);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(owner.Id, saved.ProjectId);
+    }
+
+    [Theory]
+    [InlineData(DraftStatus.Pending)]
+    [InlineData(DraftStatus.Processing)]
+    public async Task AttachToProjectAsync_ShouldRejectWhileGenerating(DraftStatus draftStatus)
+    {
+        // 生成開始時就用當下的 ProjectId 決定要套哪一份常用名詞；
+        // 中途歸屬過去的草稿其實沒套到，卻會躺在那個專案的清單裡。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("生成中的會議", draftStatus: draftStatus);
+        var service = fixture.CreateService();
+
+        var result = await service.AttachToProjectAsync(meeting.Id, project.Id);
+
+        Assert.False(result.Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ShouldReject_WhenProjectIsMissing()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await fixture.AddCompletedMeetingAsync("臨時討論");
+        var service = fixture.CreateService();
+
+        var result = await service.AttachToProjectAsync(meeting.Id, 999999);
+
+        Assert.False(result.Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ShouldReject_WhenOutOfTeamScope()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("團隊B會議", teams: ["團隊B"]);
+        var service = fixture.CreateService(isAdmin: false, "團隊A");
+
+        var result = await service.AttachToProjectAsync(meeting.Id, project.Id);
+
+        Assert.False(result.Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ShouldFailWhenMeetingIsMissing()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var service = fixture.CreateService();
+
+        Assert.False((await service.AttachToProjectAsync(999999, 1)).Success);
+    }
+
+    [Fact]
+    public async Task AttachToProjectAsync_ThenDetach_ShouldClearDraft()
+    {
+        // 釘死一個反直覺但刻意的行為：兩支方法不是可逆的一對。
+        // 補歸屬只寫 ProjectId，移除卻會連草稿一起刪——確認文案必須講清楚這件事。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("臨時討論", draftStatus: DraftStatus.Completed);
+        meeting.DraftContent = "AI 產生的會議紀錄";
+        fixture.Context.Meeting.Update(meeting);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        Assert.True((await service.AttachToProjectAsync(meeting.Id, project.Id)).Success);
+        Assert.True((await service.DetachFromProjectAsync(meeting.Id, project.Id)).Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Null(saved.ProjectId);
+        Assert.Null(saved.DraftContent);
+        Assert.Equal(DraftStatus.NotGenerated, saved.DraftStatus);
+        // 影音檔與逐字稿仍然保留。
+        Assert.NotNull(saved.TranscriptRelativePath);
+    }
+
     private static async Task MarkDraftCompletedAsync(MeetingServiceFixture fixture, int meetingId)
     {
         // 被擋下來的 RequestDraftAsync 會提早 return、沒有清追蹤，直接 Update 會撞 identity conflict。
@@ -873,6 +1097,55 @@ public sealed class MeetingServiceTests
         Assert.Equal(2, result.Count);
         Assert.True(result.Single(x => x.Title == "未歸屬逐字稿").IsUnassigned);
         Assert.Equal("客戶訪談專案", result.Single(x => x.Title == "已歸屬逐字稿").ProjectTitle);
+    }
+
+    [Fact]
+    public async Task GetAsync_ShouldFillProjectTitle_ForClipboardList()
+    {
+        // 清單查詢少了 Include(Project) 的話，ProjectTitle 永遠是 null、
+        // 整欄會顯示「— 未歸屬」，而 ProjectId 卻是對的——只有顯示壞掉，很難察覺。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        await fixture.AddCompletedMeetingAsync("已歸屬會議", projectId: project.Id);
+        await fixture.AddCompletedMeetingAsync("未歸屬會議");
+        var service = fixture.CreateService();
+
+        var result = await service.GetAsync(NewRequest());
+
+        var assigned = result.Result!.Single(x => x.Title == "已歸屬會議");
+        Assert.Equal("客戶訪談專案", assigned.ProjectTitle);
+        Assert.False(assigned.IsUnassigned);
+
+        var unassigned = result.Result!.Single(x => x.Title == "未歸屬會議");
+        Assert.True(unassigned.IsUnassigned);
+        Assert.Equal("— 未歸屬", unassigned.ProjectTitleText);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldNotOverwriteAttendeesAndOwnership()
+    {
+        // AdapterModel 上根本沒有 DraftAttendees，Mapper 一定產出 null；
+        // 不從資料庫沿用的話，光是在畫面上改個標題就會把與會者快照清掉。
+        // ProjectId 同理：歸屬的權威路徑是 Attach/Detach，不是這張表單。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", projectId: project.Id);
+        meeting.DraftAttendees = "\n王小明\n陳大文\n";
+        fixture.Context.Meeting.Update(meeting);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var service = fixture.CreateService();
+        var stale = await service.GetAsync(meeting.Id);
+        stale.Title = "改過標題的舊複本";
+        stale.ProjectId = null;
+
+        Assert.True((await service.UpdateAsync(stale)).Success);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal("改過標題的舊複本", saved.Title);
+        Assert.Equal("\n王小明\n陳大文\n", saved.DraftAttendees);
+        Assert.Equal(project.Id, saved.ProjectId);
     }
 
     [Fact]

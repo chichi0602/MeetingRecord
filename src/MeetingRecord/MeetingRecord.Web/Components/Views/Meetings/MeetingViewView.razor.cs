@@ -5,13 +5,17 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.DataAccess;
+using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Services;
 
 namespace MeetingRecord.Web.Components.Views.Meetings;
 
@@ -23,6 +27,11 @@ public partial class MeetingViewView : IDisposable
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
     private readonly ITranscriptionProgressNotifier progressNotifier;
+    private readonly ProjectService projectService;
+    private readonly PromptTemplateService promptTemplateService;
+    private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
+    private readonly FileDownloadInterop fileDownloadInterop;
+    private readonly IPdfRenderer pdfRenderer;
     private ITable? table;
 
     private int _pageIndex = 1;
@@ -34,6 +43,15 @@ public partial class MeetingViewView : IDisposable
 
     /// <summary>已因「轉錄結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
     private readonly HashSet<int> reloadedFinishedMeetingIds = [];
+
+    /// <summary>
+    /// 已因「會議紀錄生成結束」重新載入過的會議 Id。
+    ///
+    /// ⚠️ 必須和轉錄那一份分開。共用一份的話，一筆會議轉錄完成後 Id 就已經在集合裡，
+    /// 之後同一筆草稿生成完成時 Add 會回 false、重新載入被靜默跳過，
+    /// 狀態欄會一直停在「生成中」直到使用者手動重新整理。
+    /// </summary>
+    private readonly HashSet<int> reloadedFinishedDraftMeetingIds = [];
 
     private List<MeetingAdapterModel> meetingAdapterModels = [];
 
@@ -68,6 +86,78 @@ public partial class MeetingViewView : IDisposable
     private bool canEditTranscript;
     private bool isSavingTranscript;
 
+    #region AI 會議紀錄
+
+    /// <summary>
+    /// 產生會議紀錄的費用說明。與專案頁各留一份，不抽共用常數——
+    /// 兩處的上下文不同，抽出來只會多一個為了單一用途存在的檔案。
+    /// </summary>
+    private const string DraftCostNotice =
+        "產生會議紀錄會呼叫 Azure OpenAI 文字生成服務並產生費用：逐字稿較長時會先分段摘要再合併，段數越多費用越高。";
+
+    private const string PdfContentType = "application/pdf";
+
+    /// <summary>專案與提示詞清單只在開啟對話框時撈，不放進 ReloadAsync——那支會被兩個進度通知器頻繁呼叫。</summary>
+    private List<ProjectAdapterModel> projects = [];
+    private List<PromptTemplateAdapterModel> promptTemplates = [];
+
+    private bool draftRequestVisible;
+    private int draftRequestMeetingId;
+    private string draftRequestMeetingTitle = string.Empty;
+    private int draftRequestPromptTemplateId;
+    private int draftRequestProjectId;
+    private List<string> draftRequestAttendees = [];
+    private bool draftRequestHasDraft;
+
+    /// <summary>已歸屬的逐字稿重新產生時不得改歸屬，下拉要預選並鎖住。</summary>
+    private bool draftRequestLockedProject;
+
+    /// <summary>
+    /// 對話框開啟次數。用來當 Select 的 @key。
+    ///
+    /// ⚠️ 不能用資料的 Id 當 key——同一筆會議關掉再開，Id 不變、元件實例不會重建，
+    /// 上一次的標籤會留在畫面上（Modal 只靠 @bind-Visible 開關，不是條件渲染）。
+    /// </summary>
+    private int draftRequestOpenCount;
+    private bool isGenerating;
+
+    private bool attachVisible;
+    private int attachMeetingId;
+    private string attachMeetingTitle = string.Empty;
+    private int attachProjectId;
+    private int attachOpenCount;
+    private bool isAttaching;
+
+    private bool draftViewModalVisible;
+    private bool draftEditModalVisible;
+    private int draftMeetingId;
+    private string draftModalTitle = "會議紀錄";
+    private string? draftContent;
+    private bool isSavingDraft;
+
+    /// <summary>正在匯出 PDF 的會議 Id。PDF 由無頭瀏覽器列印，會啟動外部程序，要擋重複點擊。</summary>
+    private int? exportingMeetingId;
+
+    private bool aiChatVisible;
+    private int aiChatTargetId;
+    private string aiChatTitle = "AI 問答";
+    private string aiChatTargetName = string.Empty;
+
+    private bool todoExtractionVisible;
+    private int todoExtractionMeetingId;
+    private int todoExtractionProjectId;
+    private string todoExtractionMeetingTitle = string.Empty;
+
+    /// <summary>目前選到的專案有沒有與會人員名冊；名冊是空的時候選擇器停用但不隱藏。</summary>
+    private List<string> DraftRequestParticipants
+        => projects.FirstOrDefault(x => x.Id == draftRequestProjectId)?.Participants ?? [];
+
+    private string DraftRequestAttendeePlaceholder => draftRequestProjectId <= 0
+        ? "請先選擇專案"
+        : DraftRequestParticipants.Count == 0 ? "此專案尚未設定與會人員" : "勾選本次到場的人";
+
+    #endregion
+
     [Inject]
     public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
 
@@ -83,7 +173,12 @@ public partial class MeetingViewView : IDisposable
         ModalService modalService,
         MessageService messageService,
         NotificationService notificationService,
-        ITranscriptionProgressNotifier progressNotifier)
+        ITranscriptionProgressNotifier progressNotifier,
+        ProjectService projectService,
+        PromptTemplateService promptTemplateService,
+        IMeetingDraftProgressNotifier draftProgressNotifier,
+        FileDownloadInterop fileDownloadInterop,
+        IPdfRenderer pdfRenderer)
     {
         this.logger = logger;
         this.meetingService = meetingService;
@@ -91,6 +186,11 @@ public partial class MeetingViewView : IDisposable
         this.messageService = messageService;
         this.notificationService = notificationService;
         this.progressNotifier = progressNotifier;
+        this.projectService = projectService;
+        this.promptTemplateService = promptTemplateService;
+        this.draftProgressNotifier = draftProgressNotifier;
+        this.fileDownloadInterop = fileDownloadInterop;
+        this.pdfRenderer = pdfRenderer;
     }
 
     protected override async Task OnInitializedAsync()
@@ -111,9 +211,36 @@ public partial class MeetingViewView : IDisposable
         }
 
         progressNotifier.Changed += OnTranscriptionProgressChanged;
+        draftProgressNotifier.Changed += OnDraftProgressChanged;
 
         await ReloadAsync();
     }
+
+    /// <summary>
+    /// 會議紀錄生成進度變動時更新「會議紀錄」欄。
+    /// 立場與轉錄那支相同：進行中只重繪，結束才重新查庫。
+    /// </summary>
+    private void OnDraftProgressChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            var finishedIds = draftProgressNotifier
+                .GetSnapshot()
+                .Where(x => x.Phase is MeetingDraftPhase.Completed or MeetingDraftPhase.Failed)
+                .Select(x => x.MeetingId)
+                .ToList();
+
+            // 用 Count 而非 Any——Any 會短路，漏掉同時完成的其他筆。
+            var newlyFinishedCount = finishedIds.Count(reloadedFinishedDraftMeetingIds.Add);
+
+            if (newlyFinishedCount > 0)
+            {
+                await ReloadAsync();
+            }
+            else
+            {
+                StateHasChanged();
+            }
+        });
 
     /// <summary>
     /// 轉錄進度變動時更新「轉錄狀態」欄。
@@ -710,6 +837,331 @@ public partial class MeetingViewView : IDisposable
         _ => string.Empty,
     };
 
+    #region AI 會議紀錄
+
+    /// <summary>開啟「AI 轉會議紀錄」對話框。專案與提示詞清單在這裡才撈，確保是最新的。</summary>
+    private async Task OnOpenDraftRequestAsync(MeetingAdapterModel meeting)
+    {
+        projects = await projectService.GetSelectableAsync();
+        promptTemplates = await promptTemplateService.GetEnabledSelectableAsync();
+
+        draftRequestMeetingId = meeting.Id;
+        draftRequestMeetingTitle = meeting.Title;
+        draftRequestHasDraft = meeting.HasDraft;
+        draftRequestPromptTemplateId = promptTemplates.Count == 1 ? promptTemplates[0].Id : 0;
+
+        // 已歸屬的逐字稿重新產生時不得改歸屬（服務層也會擋），下拉直接預選並鎖住，
+        // 使用者才不會看到一個已歸屬的會議顯示「不指定專案」。
+        draftRequestLockedProject = meeting.ProjectId is not null;
+        draftRequestProjectId = meeting.ProjectId ?? 0;
+        draftRequestAttendees = [];
+        draftRequestOpenCount++;
+        draftRequestVisible = true;
+    }
+
+    /// <summary>名冊是專案私有的，換專案一定要清掉已勾選的與會者。</summary>
+    private void OnDraftRequestProjectChanged() => draftRequestAttendees = [];
+
+    private void OnDraftRequestAttendeesChanged(IEnumerable<string>? values)
+        => draftRequestAttendees = values?.ToList() ?? [];
+
+    private async Task OnDraftRequestOkAsync(MouseEventArgs args)
+    {
+        if (isGenerating)
+        {
+            return;
+        }
+
+        if (draftRequestPromptTemplateId <= 0)
+        {
+            NotifyError("請選擇提示詞。");
+            // AntDesign 的 Modal 在 OnOk 之後會自己關窗，不推回去整張表單就消失了。
+            draftRequestVisible = true;
+            return;
+        }
+
+        // 首次生成也要確認：確認的理由是「會花錢」。覆蓋只是讓它「同時」變成破壞性動作，
+        // 所以 Danger 掛在 willOverwrite 上，而不是掛在「有費用」上。
+        var willOverwrite = draftRequestHasDraft;
+        var situation = willOverwrite
+            ? "這份逐字稿已經產生過會議紀錄，重新產生會覆蓋既有內容（包含人工編修過的部分），且無法復原。"
+            : "將以選定的提示詞為這份逐字稿產生會議紀錄。";
+
+        var confirmOptions = new ConfirmOptions
+        {
+            Title = willOverwrite ? "確認重新產生（會產生費用）" : "確認產生會議紀錄（會產生費用）",
+            Content = $"{situation}{DraftCostNotice}確定要繼續嗎？",
+            OkText = willOverwrite ? "覆蓋並重新產生" : "開始產生",
+            CancelText = "取消",
+            MaskClosable = false
+        };
+
+        if (willOverwrite)
+        {
+            confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+        }
+
+        if (!await modalService.ConfirmAsync(confirmOptions))
+        {
+            logger.LogDebug("Draft generation cancelled by user. MeetingId={MeetingId}", draftRequestMeetingId);
+            draftRequestVisible = true;
+            return;
+        }
+
+        isGenerating = true;
+        try
+        {
+            logger.LogInformation(
+                "Draft generation requested from meeting view. MeetingId={MeetingId}, ProjectId={ProjectId}, PromptTemplateId={PromptTemplateId}",
+                draftRequestMeetingId,
+                draftRequestProjectId,
+                draftRequestPromptTemplateId);
+
+            var result = await meetingService.RequestDraftAsync(
+                draftRequestMeetingId,
+                draftRequestProjectId > 0 ? draftRequestProjectId : null,
+                draftRequestPromptTemplateId,
+                draftRequestAttendees);
+
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                draftRequestVisible = true;
+                return;
+            }
+
+            draftRequestVisible = false;
+            NotifySuccess("已排入生成佇列，可在右下角看到進度，完成後清單會自動更新。");
+            await ReloadAsync();
+        }
+        finally
+        {
+            isGenerating = false;
+        }
+    }
+
+    private Task OnDraftRequestCancelAsync(MouseEventArgs args)
+    {
+        draftRequestVisible = false;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>開啟「歸屬到專案」對話框。</summary>
+    private async Task OnOpenAttachAsync(MeetingAdapterModel meeting)
+    {
+        projects = await projectService.GetSelectableAsync();
+
+        attachMeetingId = meeting.Id;
+        attachMeetingTitle = meeting.Title;
+        attachProjectId = 0;
+        attachOpenCount++;
+        attachVisible = true;
+    }
+
+    private async Task OnAttachOkAsync(MouseEventArgs args)
+    {
+        if (isAttaching)
+        {
+            return;
+        }
+
+        if (attachProjectId <= 0)
+        {
+            NotifyError("請選擇要歸屬的專案。");
+            attachVisible = true;
+            return;
+        }
+
+        var projectTitle = projects.FirstOrDefault(x => x.Id == attachProjectId)?.Title ?? string.Empty;
+
+        // 刻意不寫「會產生費用」——這支的重點就是不重跑。
+        // 但要講清楚已產生的內容不會因此套上該專案的常用名詞，否則使用者會有錯誤期待。
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認歸屬到專案",
+            Content = $"將把「{attachMeetingTitle}」歸屬到「{projectTitle}」。"
+                + "已產生的會議紀錄內容不會變動，也不會重新生成或產生任何費用"
+                + "（包含尚未套用該專案常用名詞的部分；若要套用請歸屬後重新產生）。"
+                + "歸屬後即可抽出待辦事項。確定要歸屬嗎？",
+            OkText = "歸屬",
+            CancelText = "取消",
+            MaskClosable = false
+        });
+
+        if (!confirmed)
+        {
+            attachVisible = true;
+            return;
+        }
+
+        isAttaching = true;
+        try
+        {
+            var result = await meetingService.AttachToProjectAsync(attachMeetingId, attachProjectId);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                attachVisible = true;
+                return;
+            }
+
+            attachVisible = false;
+            NotifySuccess($"已歸屬到「{projectTitle}」。");
+            await ReloadAsync();
+        }
+        finally
+        {
+            isAttaching = false;
+        }
+    }
+
+    private Task OnAttachCancelAsync(MouseEventArgs args)
+    {
+        attachVisible = false;
+        return Task.CompletedTask;
+    }
+
+    private Task OnViewDraftAsync(MeetingAdapterModel meeting)
+    {
+        draftMeetingId = meeting.Id;
+        draftModalTitle = $"會議紀錄 - {meeting.Title}";
+        draftContent = meeting.DraftContent;
+        draftViewModalVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private Task OnEditDraftAsync(MeetingAdapterModel meeting)
+    {
+        draftMeetingId = meeting.Id;
+        draftModalTitle = $"編修會議紀錄 - {meeting.Title}";
+        draftContent = meeting.DraftContent;
+        draftEditModalVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private Task OnDraftViewModalCancelAsync(MouseEventArgs args)
+    {
+        draftViewModalVisible = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnDraftEditModalOkAsync(MouseEventArgs args)
+    {
+        isSavingDraft = true;
+        try
+        {
+            var result = await meetingService.UpdateDraftAsync(draftMeetingId, draftContent);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                draftEditModalVisible = true;
+                return;
+            }
+
+            draftEditModalVisible = false;
+            NotifySuccess("會議紀錄已儲存。");
+            await ReloadAsync();
+        }
+        finally
+        {
+            isSavingDraft = false;
+        }
+    }
+
+    private Task OnDraftEditModalCancelAsync(MouseEventArgs args)
+    {
+        draftEditModalVisible = false;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 把會議紀錄匯出成 PDF 並直接推給瀏覽器下載（檔案不落地）。
+    /// 未歸屬專案時表頭的「專案」欄會是「未指定」，不影響匯出。
+    /// </summary>
+    private async Task OnExportDraftAsync(MeetingAdapterModel meeting)
+    {
+        if (!meeting.HasDraft || exportingMeetingId is not null)
+        {
+            return;
+        }
+
+        exportingMeetingId = meeting.Id;
+        StateHasChanged();
+
+        try
+        {
+            var fileName = MeetingDocumentExporter.BuildFileName(meeting);
+            var html = MeetingDocumentExporter.BuildHtml(meeting);
+            var pdf = await pdfRenderer.RenderAsync(html);
+
+            await fileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
+
+            logger.LogInformation(
+                "Meeting draft exported as pdf from meeting view. MeetingId={MeetingId}, FileName={FileName}, Bytes={Bytes}",
+                meeting.Id,
+                fileName,
+                pdf.Length);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to export meeting draft. MeetingId={MeetingId}", meeting.Id);
+            NotifyError($"匯出 PDF 失敗：{ex.Message}");
+        }
+        finally
+        {
+            exportingMeetingId = null;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>就單一會議提問：讀該會議的會議紀錄與逐字稿，與專案無關。</summary>
+    private void OpenMeetingChat(MeetingAdapterModel meeting)
+    {
+        aiChatTargetId = meeting.Id;
+        aiChatTitle = $"AI 問答 - {meeting.Title}";
+        aiChatTargetName = meeting.Title;
+        aiChatVisible = true;
+    }
+
+    /// <summary>
+    /// 從這場會議的會議紀錄抽出待辦。
+    ///
+    /// ⚠️ 未歸屬時按鈕仍然保持啟用，改在這裡擋——CrudActionButton 是 Tooltip 包 Button，
+    /// 而停用的 button 不觸發滑鼠事件，Tooltip 永遠不會出現，提示等於不存在。
+    /// </summary>
+    private async Task OnExtractTodosAsync(MeetingAdapterModel meeting)
+    {
+        if (meeting.ProjectId is null)
+        {
+            await messageService.WarningAsync("待辦事項一定隸屬於某個專案，請先用「歸屬到專案」把這筆會議紀錄歸檔後再抽出待辦。");
+            return;
+        }
+
+        todoExtractionMeetingId = meeting.Id;
+        todoExtractionProjectId = meeting.ProjectId.Value;
+        todoExtractionMeetingTitle = meeting.Title;
+        todoExtractionVisible = true;
+    }
+
+    private MeetingDraftProgressItem? GetLiveDraftProgress(int meetingId)
+    {
+        var item = draftProgressNotifier.Find(meetingId);
+        return item is { IsRunning: true } ? item : null;
+    }
+
+    private static string GetDraftStatusCssClass(DraftStatus status) => status switch
+    {
+        DraftStatus.Pending => "meeting-status-pending",
+        DraftStatus.Processing => "meeting-status-processing",
+        DraftStatus.Completed => "meeting-status-completed",
+        DraftStatus.Failed => "meeting-status-failed",
+        // 取消是中性結果，沿用 none 的灰色；明寫出來以免日後有人把它當成遺漏而改成紅色。
+        DraftStatus.Cancelled => "meeting-status-none",
+        _ => "meeting-status-none",
+    };
+
+    #endregion
+
     private static string GetStatusCssClass(TranscriptionStatus status) => status switch
     {
         TranscriptionStatus.Pending => "meeting-status-pending",
@@ -757,5 +1209,9 @@ public partial class MeetingViewView : IDisposable
         public void Report(int value) => onReport(value);
     }
 
-    public void Dispose() => progressNotifier.Changed -= OnTranscriptionProgressChanged;
+    public void Dispose()
+    {
+        progressNotifier.Changed -= OnTranscriptionProgressChanged;
+        draftProgressNotifier.Changed -= OnDraftProgressChanged;
+    }
 }

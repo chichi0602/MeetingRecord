@@ -1,0 +1,39 @@
+@*
+    可拖拉的檔案選取區。點擊開啟檔案挑選對話框，或直接把檔案拖進來。
+
+    ⚠️ 拖放是靠瀏覽器原生行為完成的，不是自己接 drop 事件：把檔案放到 <input type="file">
+    上面時，瀏覽器會自己設定 input.files 並觸發 change，Blazor 的 OnChange 照常拿得到
+    IBrowserFile。所以這裡的 <InputFile> 用 opacity:0 蓋滿整塊，檔案就會落在它身上。
+
+    因此 @ondragenter / @ondragleave 只用來切換視覺狀態，**一律不可以 preventDefault**——
+    那會擋掉原生的 drop，檔案就進不來了。
+
+    ⚠️ Accept 只對「檔案挑選對話框」有效，瀏覽器不會用它過濾拖進來的檔案。
+    需要限制格式的呼叫端一定要在 OnChange 裡自己再擋一次（例如 MeetingMediaPolicy.IsAllowedFileName）。
+*@
+<div class="file-drop-zone @(isDragging ? "file-drop-zone-active" : string.Empty) @(Disabled ? "file-drop-zone-disabled" : string.Empty)"
+     @ondragenter="OnDragEnter"
+     @ondragleave="OnDragLeave"
+     @ondrop="OnDrop"
+     @ondragover:stopPropagation="true"
+     @ondrop:stopPropagation="true">
+
+    @* ⚠️ @key 不是裝飾：input 在 change 之後不會清空 value，重新挑「同一個檔案」時
+       瀏覽器認為沒有變化、不再觸發 change，畫面就完全沒反應。每次選完換一個 key
+       強制重建 input，「拖錯 → 移除 → 再拖同一個」才會有反應。 *@
+    <InputFile @key="resetToken"
+               OnChange="OnFileChangedAsync"
+               multiple="@Multiple"
+               accept="@Accept"
+               disabled="@Disabled"
+               class="file-drop-zone-input" />
+
+    <div class="file-drop-zone-body">
+        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="upload_file" />
+        <span class="file-drop-zone-title">@Title</span>
+        @if (ChildContent is not null)
+        {
+            <div class="file-drop-zone-hint">@ChildContent</div>
+        }
+    </div>
+</div>

@@ -54,7 +54,7 @@ else
                 </Select>
                 @* 寬度用 Style 而不是 class：class 傳給 AntDesign 元件時不會帶 scoped CSS 的 scope 屬性，
                    .todo-view-search-input 那種寫法會被編成 [b-xxx] 而永遠選不到（原本的 220px 從來沒生效）。 *@
-                <Input @bind-Value="searchText" Placeholder="搜尋關鍵字" Style="width: 160px;" />
+                <Input @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="搜尋關鍵字" Style="width: 160px;" />
                 <Tooltip Title="搜尋">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnSearchAsync())">

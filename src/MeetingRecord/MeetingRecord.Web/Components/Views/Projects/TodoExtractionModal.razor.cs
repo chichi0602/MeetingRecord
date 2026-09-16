@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
+using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.TodoExtraction;
 using MeetingRecord.Models.AdapterModel;
@@ -159,6 +161,18 @@ public partial class TodoExtractionModal : ComponentBase
         foreach (var candidate in candidates)
         {
             candidate.Selected = selected;
+        }
+    }
+
+    /// <summary>
+    /// Enter 送出。走的是與按鈕相同的 <see cref="OnConfirmAsync"/>，
+    /// 所以「一條都沒勾」時照樣不會有動作（那顆按鈕本來就是 Disabled）。
+    /// </summary>
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await OnConfirmAsync();
         }
     }
 

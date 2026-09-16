@@ -1,0 +1,77 @@
+/* 拖放區。外觀自己畫而不是借 AntDesign 的 .ant-upload-drag——那組是它原生的藍色系，
+   與本站的燕麥奶茶色票不搭。 */
+.file-drop-zone {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px 16px;
+    border: 1px dashed var(--oat-300);
+    border-radius: 12px;
+    background: var(--oat-surface);
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.file-drop-zone:hover:not(.file-drop-zone-disabled) {
+    border-color: var(--oat-500);
+}
+
+/* 拖曳中。用實線加深底色，讓「放開就會進來」這件事一眼可見。 */
+.file-drop-zone-active {
+    border-style: solid;
+    border-color: var(--oat-500);
+    background: var(--oat-100);
+}
+
+.file-drop-zone-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ⚠️ 這個 input 是真正的拖放目標，不是裝飾：檔案放到 <input type="file"> 上面時，
+   瀏覽器會自己設定 files 並觸發 change。所以它必須蓋滿整塊、可點擊，只是看不見。
+
+   ⚠️ 一定要用 ::deep：class 傳給 <InputFile> 這個「元件」時，Blazor CSS 隔離的
+   scope 屬性不會跟著傳到它渲染出來的 <input> 上，直接寫 .file-drop-zone-input
+   會被編成 .file-drop-zone-input[b-xxxxx] 而永遠選不到（實跑驗出來的：
+   input 的 opacity 是 1、也沒有蓋住拖放區）。 */
+.file-drop-zone ::deep .file-drop-zone-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.file-drop-zone-disabled ::deep .file-drop-zone-input {
+    cursor: not-allowed;
+}
+
+/* 底下的 input 要吃得到滑鼠事件，所以文字區一律不攔截。 */
+.file-drop-zone-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+    text-align: center;
+}
+
+.file-drop-zone-body ::deep .material-icons-outlined {
+    font-size: 1.5rem;
+    color: var(--oat-ink-mid);
+    line-height: 1;
+}
+
+.file-drop-zone-title {
+    color: var(--oat-ink);
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.file-drop-zone-hint {
+    color: var(--oat-ink-mid);
+    font-size: 0.76rem;
+    line-height: 1.7;
+}

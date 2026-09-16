@@ -6,7 +6,8 @@
        MaskClosable="false"
        Footer="null"
        OnCancel="OnCancelAsync">
-    <div class="todo-extract">
+    @* keydown 掛在這層原生 div：Footer="null" 是自繪按鈕，AntDesign Modal 也沒有 keydown 掛載點。 *@
+    <div class="todo-extract" @onkeydown="OnKeyDownAsync">
 
         @if (!string.IsNullOrWhiteSpace(existingNotice))
         {

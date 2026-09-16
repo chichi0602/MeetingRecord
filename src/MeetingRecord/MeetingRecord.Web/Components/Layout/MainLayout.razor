@@ -1,6 +1,12 @@
 @inherits LayoutComponentBase
 
-<div class="page @(isSidebarCollapsed ? "sidebar-collapsed" : string.Empty)">
+@* ⚠️ 擋掉「拖到頁面空白處」的預設行為：瀏覽器會直接導航去開那個檔案，
+   Blazor 的 circuit 跟著死，填到一半的表單整份不見。有了拖放區之後這會變成常見誤操作。
+   只設 preventDefault、不接 handler：接了的話 dragover 每幾十毫秒就往返伺服器一次。
+   拖放區本身不受影響——它的 input 是 drop 的實際目標，這裡攔的是沒命中任何 input 的那些。 *@
+<div class="page @(isSidebarCollapsed ? "sidebar-collapsed" : string.Empty)"
+     @ondragover:preventDefault="true"
+     @ondrop:preventDefault="true">
     <div class="sidebar">
         <NavMenu IsSidebarCollapsed="isSidebarCollapsed" />
     </div>
@@ -75,21 +81,25 @@
     }
     else
     {
-        <AntDesign.Form TModel="ChangePasswordForm" Model="@changePasswordForm" Layout="FormLayout.Vertical">
-            <FormItem Label="目前密碼" Required>
-                <InputPassword @bind-Value="changePasswordForm.CurrentPassword" Placeholder="請輸入目前密碼" />
-            </FormItem>
-            <FormItem Label="新密碼" Required>
-                <InputPassword @bind-Value="changePasswordForm.NewPassword" Placeholder="請輸入新密碼（至少 6 個字元）" />
-            </FormItem>
-            <FormItem Label="確認新密碼" Required>
-                <InputPassword @bind-Value="changePasswordForm.ConfirmPassword" Placeholder="請再次輸入新密碼" />
-            </FormItem>
-            @if (!string.IsNullOrEmpty(changePasswordErrorMessage))
-            {
-                <AntDesign.Alert Message="@changePasswordErrorMessage" Type="@AntDesign.AlertType.Error" ShowIcon="true" />
-            }
-        </AntDesign.Form>
+        @* AntDesign Modal 沒有開放 keydown 掛載點（Keyboard 參數只管 Esc），
+           所以包一層原生 div 來接。密碼欄不會觸發輸入法，是最安全的 Enter 送出情境。 *@
+        <div @onkeydown="OnChangePasswordKeyDownAsync">
+            <AntDesign.Form TModel="ChangePasswordForm" Model="@changePasswordForm" Layout="FormLayout.Vertical">
+                <FormItem Label="目前密碼" Required>
+                    <InputPassword @bind-Value="changePasswordForm.CurrentPassword" Placeholder="請輸入目前密碼" />
+                </FormItem>
+                <FormItem Label="新密碼" Required>
+                    <InputPassword @bind-Value="changePasswordForm.NewPassword" Placeholder="請輸入新密碼（至少 6 個字元）" />
+                </FormItem>
+                <FormItem Label="確認新密碼" Required>
+                    <InputPassword @bind-Value="changePasswordForm.ConfirmPassword" Placeholder="請再次輸入新密碼" />
+                </FormItem>
+                @if (!string.IsNullOrEmpty(changePasswordErrorMessage))
+                {
+                    <AntDesign.Alert Message="@changePasswordErrorMessage" Type="@AntDesign.AlertType.Error" ShowIcon="true" />
+                }
+            </AntDesign.Form>
+        </div>
     }
 </Modal>
 

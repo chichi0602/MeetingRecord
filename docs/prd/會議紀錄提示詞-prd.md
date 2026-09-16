@@ -1,10 +1,10 @@
 ﻿# 會議紀錄提示詞 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.64
+- 現行系統版本：0.4.77
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/09/10
+- 最後核對日期：2026/09/16
 
 ## 一、目標與範圍
 
@@ -53,7 +53,7 @@
   - 團隊 `Teams`（多值標籤，Placeholder「選擇團隊（不設定表示公開）」，**決定可見範圍**）
   - 啟用狀態 `IsEnabled`（Switch，預設啟用）
 - 按鈕級權限：新增／修改／刪除按鈕分別以 `CheckAccessAction(角色_提示詞清單, PermissionActions.Create/Edit/Delete)` 控制顯示（與 `ProjectViewView` 一致，較 `CategoryViewView` 多此一層）。
-- 鍵盤行為：Esc 關閉 Modal。**與其他清單頁不同，本頁 Enter 不送出表單**——`Content` 是多行輸入，Enter 必須留給換行。
+- 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是 `Content` 為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在多行欄位換行**。
 - 刪除：`ConfirmAsync` 二次確認，提示不可復原。
 
 ### 內建範本（0.4.64）

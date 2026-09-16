@@ -10,6 +10,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Components.Commons;
 
 namespace MeetingRecord.Web.Components.Views.PromptTemplates;
 
@@ -550,7 +551,16 @@ public partial class PromptTemplateViewView
 
     private async Task OnModalKeyDownAsync(KeyboardEventArgs args)
     {
-        if (args.Key == "Escape" || args.Key == "Esc")
+        // 0.4.77 起本頁也支援 Enter 送出。先前刻意排除，理由是「提示詞內容是多行輸入，
+        // Enter 必須留給換行」——那個理由在 FormKeyboardHelper 之後不成立了：
+        // Shift+Enter 會落回瀏覽器原生的換行，而組字中的 Enter 被 IsComposing 擋掉。
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            // AntDesign Input 預設 change/blur 才回寫，不等就會拿到舊值。
+            await Task.Delay(200);
+            await OnModalOKHandleAsync(new MouseEventArgs());
+        }
+        else if (FormKeyboardHelper.IsCancel(args))
         {
             await OnModalCancelHandleAsync(new MouseEventArgs());
         }

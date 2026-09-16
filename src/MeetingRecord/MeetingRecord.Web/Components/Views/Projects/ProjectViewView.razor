@@ -441,8 +441,9 @@ else
                         </FormItem>
 
                         <FormItem Label="專案附件" Class="form-modal-full">
-                            <InputFile OnChange="OnProjectFilesSelectedAsync" multiple />
-                            <div class="mt-2 text-muted">可一次選擇多個檔案，每個檔案上限 1GB。</div>
+                            <FileDropZone OnChange="OnProjectFilesSelectedAsync" Multiple="true">
+                                可一次選擇或拖入多個檔案，每個檔案上限 1GB。
+                            </FileDropZone>
                         </FormItem>
 
                         @if (pendingUploadFiles.Count > 0)

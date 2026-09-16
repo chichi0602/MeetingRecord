@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Components.Commons;
 
 namespace MeetingRecord.Web.Components.Views.Todos;
 
@@ -446,12 +447,16 @@ public partial class TodoViewView
 
     private async Task OnModalKeyDownAsync(KeyboardEventArgs args)
     {
-        if (args.Key == "Enter")
+        // ⚠️ 一律走 FormKeyboardHelper：它會擋掉中文輸入法組字中的 Enter（選字用的那一下），
+        // 也讓 Shift+Enter 落回瀏覽器原生的換行。直接比對 args.Key 會誤觸。
+        if (FormKeyboardHelper.IsSubmit(args))
         {
+            // Task.Delay 不是可以省的：AntDesign Input 預設 change/blur 才回寫繫結值，
+            // Enter 送出時焦點還在欄位裡，不等就會拿到舊值。
             await Task.Delay(200);
             await OnModalOKHandleAsync(new MouseEventArgs());
         }
-        else if (args.Key == "Escape" || args.Key == "Esc")
+        else if (FormKeyboardHelper.IsCancel(args))
         {
             await OnModalCancelHandleAsync(new MouseEventArgs());
         }

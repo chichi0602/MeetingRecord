@@ -23,7 +23,7 @@ else
                 </Tooltip>
             </div>
             <div class="category-view-toolbar-right">
-                <Input class="category-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                <Input class="category-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <Tooltip Title="清空搜尋">

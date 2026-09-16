@@ -31,7 +31,7 @@ else
                 </Tooltip>
             </div>
             <div class="meeting-view-toolbar-right">
-                <Input class="meeting-view-search-input" @bind-Value="searchText" Placeholder="請輸入搜尋關鍵字" />
+                <Input class="meeting-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <Tooltip Title="清空搜尋">
@@ -244,11 +244,17 @@ else
                         </FormItem>
 
                         <FormItem Label="影音檔" Class="form-modal-full">
-                            <InputFile OnChange="OnMediaFileSelectedAsync" accept="@MeetingMediaPolicy.AcceptAttribute" disabled="@isUploading" />
-                            <div class="meeting-view-upload-hint">
+                            @* accept 只擋檔案挑選對話框，拖進來的檔案仍要靠 OnMediaFileSelectedAsync
+                               裡的 MeetingMediaPolicy.IsAllowedFileName 把關（那一段本來就在）。 *@
+                            <FileDropZone OnChange="OnMediaFileSelectedAsync"
+                                          Accept="@MeetingMediaPolicy.AcceptAttribute"
+                                          Disabled="@isUploading"
+                                          Title="把影音檔拖到這裡，或點擊選擇檔案（一次一個）">
+                                @* 「一次一個」要寫出來：單檔模式下一次拖入多個檔案，Chrome 會整個靜默拒絕——
+                                   不觸發 change、不報錯，使用者只會覺得「拖進去沒反應」。 *@
                                 單檔上限 @MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)，支援格式：@MeetingMediaPolicy.AllowedExtensionsText。
                                 儲存後會自動排入背景轉錄，影片只會取用聲音軌。
-                            </div>
+                            </FileDropZone>
 
                             @if (pendingMediaFile is not null)
                             {
@@ -330,8 +336,9 @@ else
            OnOk="OnDraftRequestOkAsync"
            OnCancel="OnDraftRequestCancelAsync">
         @* 這裡不用 AntDesign.Form／FormItem：那組元件需要一個 TModel，而這個對話框沒有對應的
-           資料模型，硬造一個假的只為了排版並不划算。欄位全部整列，本來也用不到兩欄格線。 *@
-        <div class="meeting-draft-request-form">
+           資料模型，硬造一個假的只為了排版並不划算。欄位全部整列，本來也用不到兩欄格線。
+           keydown 掛在這層原生 div：AntDesign Modal 沒有開放掛載點（Keyboard 只管 Esc）。 *@
+        <div class="meeting-draft-request-form" @onkeydown="OnDraftRequestKeyDownAsync">
             <div class="meeting-draft-request-field">
                 <span class="meeting-draft-request-label">來源逐字稿</span>
                 <span class="meeting-draft-request-source">@draftRequestMeetingTitle</span>
@@ -410,7 +417,7 @@ else
            ConfirmLoading="@isAttaching"
            OnOk="OnAttachOkAsync"
            OnCancel="OnAttachCancelAsync">
-        <div class="meeting-draft-request-form">
+        <div class="meeting-draft-request-form" @onkeydown="OnAttachKeyDownAsync">
             <div class="meeting-draft-request-field">
                 <span class="meeting-draft-request-label">會議紀錄</span>
                 <span class="meeting-draft-request-source">@attachMeetingTitle</span>

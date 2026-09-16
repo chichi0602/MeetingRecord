@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Web;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Web.Services;
+using MeetingRecord.Web.Components.Commons;
 
 namespace MeetingRecord.Web.Components.Views.Projects;
 
@@ -128,10 +129,14 @@ public partial class AiChatModal : ComponentBase
         }
     }
 
-    /// <summary>Enter 送出、Shift+Enter 換行。</summary>
+    /// <summary>
+    /// Enter 送出、Shift+Enter 換行。
+    /// 0.4.77 起改走 <see cref="FormKeyboardHelper"/>，補上中文輸入法組字的判斷——
+    /// 先前只擋 Shift，使用者用注音打完問題按 Enter 選字時會直接送出半成品。
+    /// </summary>
     private async Task OnKeyDownAsync(KeyboardEventArgs args)
     {
-        if (args.Key != "Enter" || args.ShiftKey)
+        if (!FormKeyboardHelper.IsSubmit(args))
         {
             return;
         }

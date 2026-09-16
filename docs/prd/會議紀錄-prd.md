@@ -2,7 +2,7 @@
 
 - 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：0.4.76
+- 現行系統版本：0.4.77
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/09/16
 
@@ -56,7 +56,7 @@
   - 會議日期 `MeetingDate`（選填，`DatePicker`）。**0.4.35 起：留空時於影音檔上傳成功當下自動帶入上傳當天**（`MeetingService.SaveMediaAsync` 以 `??=` 補值，已填的不覆蓋），要更正仍可從畫面編輯
   - 描述 `Description`（選填，最長 2000，3 列 `TextArea`）
   - ~~分類 `Categories`／團隊 `Teams`~~ —— **0.4.35 已從表單移除**，改由專案項目頁負責歸屬與分類。資料庫欄位與服務層權限判斷都保留，詳見下方「0.4.35 的權限副作用」
-  - 影音檔（`<InputFile>` 單檔，`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生）
+  - 影音檔（單檔，**0.4.77 起改用共用的 `FileDropZone`，可拖拉或點擊**；`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生，⚠️ 但 `accept` 對「拖入」不可信，副檔名把關以服務層的 `IsAllowedFileName` 為準）
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。
 - 操作按鈕：
@@ -67,7 +67,7 @@
   - **抽出待辦（0.4.73，`角色_待辦事項` + `create`）**：未歸屬時按鈕**仍然啟用**，點下去跳訊息要求先歸屬專案——待辦在資料表層級就必須有專案。⚠️ 之所以不用停用，是因為 `CrudActionButton` 是 Tooltip 包 Button，而停用的 button 不觸發滑鼠事件，Tooltip 永遠不會出現。**0.4.76 補上費用確認**：這顆鈕 0.4.73 加進來時漏了二次確認，而抽出待辦是付費動作（`TodoExtractionModal` 一開啟就呼叫 AI），等於誤按就扣錢且完全不問；文案與專案項目頁逐字相同
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - 修改（`edit`）、刪除（`delete`）
-- 鍵盤行為：Esc 關閉 Modal。**與提示詞頁一致，Enter 不送出表單**——描述為多行輸入，Enter 必須留給換行。
+- 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
 - 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。
 - 逐字稿預覽與編修（0.4.55）：另一個 Modal，內容由服務層直接讀檔回傳字串（**不開下載端點**，避免多一個檔案輸出的授權面）。0.4.55 起由唯讀 `<pre>` 改為可編輯的 `TextArea` ＋「儲存」，供人工修正 STT 聽錯的人名與專有名詞；儲存為**就地覆寫**（`MeetingFileStore.OverwriteTranscriptAsync`），不留版本歷程。**只有轉錄狀態為「已完成」時才允許儲存**——重新轉錄進行中存回去會被新逐字稿蓋掉，服務層會當場擋下並說明原因。另注意讀取時會經 `TranscriptionNoiseFilter` 濾掉供應商外漏的系統指令，因此使用者存回的是**過濾後**的內容，等於順手把那段雜訊從檔案永久清掉。
 

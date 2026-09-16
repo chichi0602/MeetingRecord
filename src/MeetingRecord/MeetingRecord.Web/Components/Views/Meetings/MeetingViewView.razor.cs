@@ -16,6 +16,7 @@ using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Services;
+using MeetingRecord.Web.Components.Commons;
 
 namespace MeetingRecord.Web.Components.Views.Meetings;
 
@@ -585,8 +586,16 @@ public partial class MeetingViewView : IDisposable
 
     private async Task OnModalKeyDownAsync(KeyboardEventArgs args)
     {
-        // 描述為多行輸入，Enter 保留給換行，只處理 Esc（與提示詞頁一致）。
-        if (args.Key == "Escape" || args.Key == "Esc")
+        // 0.4.77 起本頁也支援 Enter 送出。先前刻意排除，理由是「描述為多行輸入，
+        // Enter 保留給換行」——那個理由在 FormKeyboardHelper 之後不成立了：
+        // Shift+Enter 會落回瀏覽器原生的換行，而組字中的 Enter 被 IsComposing 擋掉。
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            // AntDesign Input 預設 change/blur 才回寫，不等就會拿到舊值。
+            await Task.Delay(200);
+            await OnModalOKHandleAsync(new MouseEventArgs());
+        }
+        else if (FormKeyboardHelper.IsCancel(args))
         {
             await OnModalCancelHandleAsync(new MouseEventArgs());
         }
@@ -865,6 +874,19 @@ public partial class MeetingViewView : IDisposable
     private void OnDraftRequestAttendeesChanged(IEnumerable<string>? values)
         => draftRequestAttendees = values?.ToList() ?? [];
 
+    /// <summary>
+    /// 「AI 轉會議紀錄」對話框的 Enter 送出。
+    /// ⚠️ 走的是與按鈕完全相同的 <see cref="OnDraftRequestOkAsync"/>，所以那道費用二次確認
+    /// 照樣會跳——Enter 只是取代滑鼠點「開始產生」，不會略過任何一關。
+    /// </summary>
+    private async Task OnDraftRequestKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await OnDraftRequestOkAsync(new MouseEventArgs());
+        }
+    }
+
     private async Task OnDraftRequestOkAsync(MouseEventArgs args)
     {
         if (isGenerating)
@@ -956,6 +978,15 @@ public partial class MeetingViewView : IDisposable
         attachProjectId = 0;
         attachOpenCount++;
         attachVisible = true;
+    }
+
+    /// <summary>「歸屬到專案」對話框的 Enter 送出（同樣會經過那道二次確認）。</summary>
+    private async Task OnAttachKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await OnAttachOkAsync(new MouseEventArgs());
+        }
     }
 
     private async Task OnAttachOkAsync(MouseEventArgs args)

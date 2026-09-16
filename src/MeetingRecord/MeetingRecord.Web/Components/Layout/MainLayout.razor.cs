@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Web.Health;
+using MeetingRecord.Web.Components.Commons;
 
 namespace MeetingRecord.Web.Components.Layout;
 
@@ -163,6 +164,18 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
         changePasswordForm = new ChangePasswordForm();
         changePasswordErrorMessage = string.Empty;
         changePasswordVisible = true;
+    }
+
+    /// <summary>
+    /// 變更密碼的 Enter 送出。密碼欄不會觸發輸入法，但仍走共用判斷——
+    /// 規則只有一份，才不會有人日後在這裡補出第二種寫法。
+    /// </summary>
+    private async Task OnChangePasswordKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args)
+    {
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await OnChangePasswordOkAsync();
+        }
     }
 
     private async Task OnChangePasswordOkAsync()

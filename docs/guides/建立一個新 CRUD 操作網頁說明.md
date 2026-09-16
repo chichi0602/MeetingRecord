@@ -103,7 +103,8 @@
    - 成功後關閉 Modal 並 Reload。
 
 7. **鍵盤操作**
-   - Enter 觸發儲存、Esc 關閉，提升可用性。
+   - Enter 送出、Esc 關閉，一律走 `FormKeyboardHelper.IsSubmit` / `IsCancel`（`Components/Commons/`）。
+   - ⚠️ **不要自己比對 `args.Key == "Enter"`**：那樣會漏掉 `IsComposing`，中文輸入法按 Enter 選字就會把對話框存檔關閉。理由見〈開發慣例與限制速查〉§6.8。
 
 ---
 
@@ -186,7 +187,7 @@
 7. 刪除：
    - 有二次確認。
    - 刪除成功後列表更新。
-8. 鍵盤操作：Enter 可送出、Esc 可關閉。
+8. 鍵盤操作：Enter 可送出、Esc 可關閉（走 `FormKeyboardHelper`）。驗收時**要用注音打字按 Enter 選字，對話框不可以關閉**。
 9. 例外路徑：服務拋錯時有錯誤紀錄與使用者可理解訊息。
 
 ---

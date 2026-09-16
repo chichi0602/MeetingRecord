@@ -49,6 +49,35 @@ public sealed record PerformanceSummary(
     double? TranscriptionFailureRate,
     int UnassignedTranscriptCount);
 
+/// <summary>提示詞範本的數量概況。</summary>
+/// <param name="TotalCount">看得到的範本總數（非管理員只算所屬團隊的，與提示詞範本頁一致）。</param>
+/// <param name="EnabledCount">啟用中的數量。</param>
+/// <param name="DisabledCount">已停用的數量。停用是正常的管理動作，畫面用警示色而非錯誤色。</param>
+/// <param name="UnusedEnabledCount">
+/// 啟用中、但沒有任何會議紀錄用過的數量。
+/// ⚠️ 比對的是 <c>Meeting.DraftPromptTemplateName</c> 這個「生成當下的名稱快照」而不是外鍵，
+/// 所以<b>改過名的範本會被算成未使用</b>；分母又受團隊過濾影響，非管理員看到的數字會偏高。
+/// 詳見 <see cref="DashboardMetrics.CountUnusedEnabledTemplates"/>。
+/// </param>
+public sealed record PromptTemplateSummary(
+    int TotalCount,
+    int EnabledCount,
+    int DisabledCount,
+    int UnusedEnabledCount);
+
+/// <summary>儲存空間細分。</summary>
+/// <param name="MediaBytes">影音檔，取自 <c>Meeting.MediaFileSize</c>（資料庫欄位）。</param>
+/// <param name="TranscriptBytes">
+/// 逐字稿。⚠️ 逐字稿<b>沒有容量欄位</b>，這是實際掃目錄量出來的，
+/// 因此可能大於資料庫認得的逐字稿總和（孤兒檔案也算）。
+/// </param>
+/// <param name="AttachmentBytes">專案附件，取自 <c>ProjectFile.FileSize</c>（資料庫欄位）。</param>
+public sealed record StorageSummary(long MediaBytes, long TranscriptBytes, long AttachmentBytes)
+{
+    /// <summary>三項相加。數字卡的「儲存空間」直接顯示這個值，確保卡片與細分同源。</summary>
+    public long TotalBytes => MediaBytes + TranscriptBytes + AttachmentBytes;
+}
+
 /// <summary>儀表板一次載入所需的全部資料。</summary>
 public sealed record DashboardSummary(
     IReadOnlyList<StatCardItem> Cards,
@@ -58,4 +87,6 @@ public sealed record DashboardSummary(
     IReadOnlyList<ChartSlice> MeetingsPerProject,
     IReadOnlyList<ChartSlice> PromptTemplateUsage,
     IReadOnlyList<TrendPoint> Trend,
-    PerformanceSummary Performance);
+    PerformanceSummary Performance,
+    PromptTemplateSummary PromptTemplates,
+    StorageSummary Storage);

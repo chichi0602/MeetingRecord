@@ -321,4 +321,140 @@ public sealed class DashboardMetricsTests
     }
 
     #endregion
+
+    #region 提示詞範本使用情形
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_ShouldExcludeUsedOnes()
+    {
+        var count = DashboardMetrics.CountUnusedEnabledTemplates(
+            [("標準會議紀錄", true), ("客戶訪談紀要", true), ("逐字稿重點條列", true)],
+            ["標準會議紀錄", "標準會議紀錄", "客戶訪談紀要"]);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_ShouldIgnoreDisabledTemplates()
+    {
+        // 停用的範本本來就不會有人用，算進「啟用但未使用」只會虛報。
+        var count = DashboardMetrics.CountUnusedEnabledTemplates(
+            [("已停用的範本", false), ("啟用沒人用", true)],
+            []);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_ShouldMatchCaseInsensitively()
+    {
+        var count = DashboardMetrics.CountUnusedEnabledTemplates(
+            [("Meeting Summary", true)],
+            ["meeting summary"]);
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_ShouldTrimBeforeComparing()
+    {
+        var count = DashboardMetrics.CountUnusedEnabledTemplates(
+            [("標準會議紀錄", true)],
+            ["  標準會議紀錄  "]);
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_ShouldIgnoreNullAndBlankUsedNames()
+    {
+        // 還沒產生會議紀錄的會議，DraftPromptTemplateName 是 null；
+        // 若沒濾掉，空字串會被當成「用過某個範本」，讓未使用數少算。
+        var count = DashboardMetrics.CountUnusedEnabledTemplates(
+            [("標準會議紀錄", true)],
+            [null, string.Empty, "   "]);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_RenamedTemplate_ShouldCountAsUnused()
+    {
+        // ⚠️ 這筆是把「已知限制」釘成契約，不是在描述理想行為：
+        // DraftPromptTemplateName 是生成當下的名稱快照，範本改名後舊紀錄仍記舊名，
+        // 所以改過名的範本一定會被算成未使用。日後有人覺得「數字不對」想改，
+        // 要先改掉快照設計，不是改這個函式。
+        var count = DashboardMetrics.CountUnusedEnabledTemplates(
+            [("標準會議紀錄（新版）", true)],
+            ["標準會議紀錄"]);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void CountUnusedEnabledTemplates_NoTemplates_ShouldReturnZero()
+    {
+        Assert.Equal(0, DashboardMetrics.CountUnusedEnabledTemplates([], ["標準會議紀錄"]));
+    }
+
+    #endregion
+
+    #region 目錄容量
+
+    [Fact]
+    public void DirectorySize_MissingDirectory_ShouldReturnZero()
+    {
+        // 全新環境還沒有任何逐字稿，不可以拋例外讓整個儀表板顯示不出來。
+        var missing = Path.Combine(Path.GetTempPath(), $"meetingrecord-missing-{Guid.NewGuid():N}");
+
+        Assert.Equal(0L, DirectorySizeCalculator.Measure(missing));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void DirectorySize_BlankPath_ShouldReturnZero(string? path)
+    {
+        Assert.Equal(0L, DirectorySizeCalculator.Measure(path));
+    }
+
+    [Fact]
+    public void DirectorySize_ShouldSumNestedFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"meetingrecord-size-{Guid.NewGuid():N}");
+        var nested = Path.Combine(root, "2026", "09");
+        Directory.CreateDirectory(nested);
+
+        try
+        {
+            File.WriteAllBytes(Path.Combine(root, "a.txt"), new byte[10]);
+            File.WriteAllBytes(Path.Combine(nested, "b.txt"), new byte[25]);
+
+            // 子目錄也要算——逐字稿是以「年／月」分層存放的。
+            Assert.Equal(35L, DirectorySizeCalculator.Measure(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DirectorySize_EmptyDirectory_ShouldReturnZero()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"meetingrecord-empty-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Assert.Equal(0L, DirectorySizeCalculator.Measure(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    #endregion
 }

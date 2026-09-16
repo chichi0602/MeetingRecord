@@ -41,6 +41,73 @@ else
                 <BarChart Title="提示詞範本使用次數" Items="summary.PromptTemplateUsage" />
             </div>
 
+            @* 兩塊都沿用「處理效能」的指標列結構，包進既有的 dashboard-grid-wide 排成兩欄。
+               dashboard-metrics-paired 只做一件事：把格子下限從 160px 收到 120px，
+               否則並排時四格會排成 3+1（見 .razor.css 的算式）。
+               「提示詞範本」緊接在使用次數長條圖之後，「有幾個」與「用了哪些」讀在一起才有意義。 *@
+            <div class="dashboard-grid dashboard-grid-wide dashboard-metrics-paired">
+                <div class="dashboard-performance">
+                    <div class="dashboard-performance-title">提示詞範本</div>
+                    <div class="dashboard-performance-grid">
+                        <div class="dashboard-metric">
+                            <span class="dashboard-metric-label">範本總數</span>
+                            <span class="dashboard-metric-value">@summary.PromptTemplates.TotalCount 個</span>
+                        </div>
+                        <div class="dashboard-metric">
+                            <span class="dashboard-metric-label">啟用中</span>
+                            <span class="dashboard-metric-value">@summary.PromptTemplates.EnabledCount 個</span>
+                        </div>
+                        <div class="dashboard-metric">
+                            @* 停用標黃不標紅：停用是正常的管理動作，不是故障。 *@
+                            <span class="dashboard-metric-label">已停用</span>
+                            <span class="dashboard-metric-value @(summary.PromptTemplates.DisabledCount > 0 ? "dashboard-metric-warning" : string.Empty)">
+                                @summary.PromptTemplates.DisabledCount 個
+                            </span>
+                        </div>
+                        <div class="dashboard-metric">
+                            <span class="dashboard-metric-label">啟用但未使用</span>
+                            <span class="dashboard-metric-value @(summary.PromptTemplates.UnusedEnabledCount > 0 ? "dashboard-metric-warning" : string.Empty)">
+                                @summary.PromptTemplates.UnusedEnabledCount 個
+                            </span>
+                        </div>
+                    </div>
+
+                    @if (summary.PromptTemplates.UnusedEnabledCount > 0)
+                    {
+                        <div class="dashboard-performance-hint">
+                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+                            <span>
+                                有 @summary.PromptTemplates.UnusedEnabledCount 個啟用中的範本從來沒被用過，可以考慮停用或改寫。
+                                改過名的範本也會被算在這裡——舊的會議紀錄記的是改名前的名稱。
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                <div class="dashboard-performance">
+                    <div class="dashboard-performance-title">儲存空間</div>
+                    <div class="dashboard-performance-grid">
+                        <div class="dashboard-metric">
+                            <span class="dashboard-metric-label">影音檔</span>
+                            <span class="dashboard-metric-value">@FileSizeFormatter.Describe(summary.Storage.MediaBytes)</span>
+                        </div>
+                        <div class="dashboard-metric">
+                            @* 逐字稿沒有容量欄位，這個值是實際掃目錄量的，可能含孤兒檔。 *@
+                            <span class="dashboard-metric-label">逐字稿</span>
+                            <span class="dashboard-metric-value">@FileSizeFormatter.Describe(summary.Storage.TranscriptBytes)</span>
+                        </div>
+                        <div class="dashboard-metric">
+                            <span class="dashboard-metric-label">專案附件</span>
+                            <span class="dashboard-metric-value">@FileSizeFormatter.Describe(summary.Storage.AttachmentBytes)</span>
+                        </div>
+                        <div class="dashboard-metric">
+                            <span class="dashboard-metric-label">合計</span>
+                            <span class="dashboard-metric-value">@FileSizeFormatter.Describe(summary.Storage.TotalBytes)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <LineChart Title="@($"近 {summary.Trend.Count} 天趨勢")" Points="summary.Trend">
                 <HeaderExtra>
                     @* Disabled 不可省：ReloadAsync 開頭是 if (isLoading) return;，首次載入還沒

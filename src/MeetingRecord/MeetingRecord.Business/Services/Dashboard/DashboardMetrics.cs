@@ -104,6 +104,38 @@ public static class DashboardMetrics
     }
 
     /// <summary>
+    /// 啟用中、但沒有任何會議紀錄用過的範本數。
+    ///
+    /// <para>
+    /// ⚠️ <b>比對的是名稱不是外鍵。</b><c>Meeting.DraftPromptTemplateName</c> 是生成當下的
+    /// 名稱快照（讓範本被刪掉之後仍看得出當初用了什麼），所以<b>範本改名之後，
+    /// 舊紀錄記的是舊名，這個範本會被算成「從沒用過」</b>。這是快照設計的必然結果，不是 bug。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 分母是呼叫端傳進來的會議清單，而那份清單**已經過團隊過濾**。
+    /// 所以非管理員看到的數字會偏高——別的團隊用過但他看不到。
+    /// 這與「提示詞範本使用次數」長條圖是同一個性質，刻意維持一致。
+    /// </para>
+    /// </summary>
+    public static int CountUnusedEnabledTemplates(
+        IEnumerable<(string Name, bool IsEnabled)> templates,
+        IEnumerable<string?> usedTemplateNames)
+    {
+        ArgumentNullException.ThrowIfNull(templates);
+        ArgumentNullException.ThrowIfNull(usedTemplateNames);
+
+        // 忽略大小寫比對，與 TagStringHelper 全站的去重慣例一致。
+        var used = usedTemplateNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return templates.Count(template =>
+            template.IsEnabled && !used.Contains((template.Name ?? string.Empty).Trim()));
+    }
+
+    /// <summary>
     /// 換算各項佔比（0～100）。總和為 0 時全部回 0——**不能除以零**，
     /// 而且「沒有資料」與「每項都佔 0%」在畫面上要能區分（由呼叫端判斷是否顯示空狀態）。
     /// </summary>

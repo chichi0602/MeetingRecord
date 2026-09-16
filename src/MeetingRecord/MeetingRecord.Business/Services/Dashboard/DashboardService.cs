@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
+using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 
@@ -37,17 +39,21 @@ public class DashboardService
     private readonly BackendDBContext context;
     private readonly IRecordAccessScopeProvider accessScope;
     private readonly AiChatStore chatStore;
+    private readonly string transcriptRootPath;
     private readonly ILogger<DashboardService> logger;
 
     public DashboardService(
         BackendDBContext context,
         IRecordAccessScopeProvider accessScope,
         AiChatStore chatStore,
+        IOptions<SystemSettings> systemSettings,
         ILogger<DashboardService> logger)
     {
         this.context = context;
         this.accessScope = accessScope;
         this.chatStore = chatStore;
+        // 根目錄一律取自 SystemSettings.ExternalFileSystem，比照 MeetingFileStore／AiChatStore。
+        transcriptRootPath = systemSettings.Value.ExternalFileSystem.MeetingTranscriptPath;
         this.logger = logger;
     }
 
@@ -85,19 +91,35 @@ public class DashboardService
             .Select(x => new { x.Status, x.DueDate })
             .ToListAsync(cancellationToken);
 
+        var promptTemplateFacts = await BuildPromptTemplateQuery(scope)
+            .Select(x => new PromptTemplateFact(x.Name, x.IsEnabled))
+            .ToListAsync(cancellationToken);
+
+        var attachmentBytes = await context.ProjectFile.AsNoTracking()
+            .SumAsync(x => (long?)x.FileSize, cancellationToken) ?? 0L;
+
         // 0.4.60 起對話存在檔案系統而不是資料庫，所以這裡是掃對話檔而不是 COUNT(*)。
         var chatQuestionCount = chatStore.CountQuestions();
 
+        // 逐字稿沒有容量欄位（Meeting 只記相對路徑），只能實際量目錄。
+        var storage = new StorageSummary(
+            meetingFacts.Sum(x => x.MediaFileSize ?? 0),
+            DirectorySizeCalculator.Measure(transcriptRootPath),
+            attachmentBytes);
+
         logger.LogDebug(
-            "Dashboard summary loaded. Meetings={Meetings}, Projects={Projects}, Todos={Todos}",
+            "Dashboard summary loaded. Meetings={Meetings}, Projects={Projects}, Todos={Todos}, PromptTemplates={PromptTemplates}, StorageBytes={StorageBytes}",
             meetingFacts.Count,
             projects.Count,
-            todoFacts.Count);
+            todoFacts.Count,
+            promptTemplateFacts.Count,
+            storage.TotalBytes);
 
         return new DashboardSummary(
             BuildCards(projects.Select(x => x.Status).ToList(), meetingFacts, todoFacts.Count, chatQuestionCount, monthStart, today,
                 todoFacts.Count(x => !IsTodoDone(x.Status)),
-                todoFacts.Count(x => !IsTodoDone(x.Status) && x.DueDate is not null && x.DueDate.Value.Date < today)),
+                todoFacts.Count(x => !IsTodoDone(x.Status) && x.DueDate is not null && x.DueDate.Value.Date < today),
+                storage),
             BuildProjectStatus(projects.Select(x => x.Status).ToList()),
             BuildTranscriptionStatus(meetingFacts),
             BuildDraftStatus(meetingFacts),
@@ -107,7 +129,9 @@ public class DashboardService
                 meetingFacts.Select(x => (x.CreatedAt, x.DraftCompletedAt)),
                 DateOnly.FromDateTime(today),
                 trendDays),
-            BuildPerformance(meetingFacts));
+            BuildPerformance(meetingFacts),
+            BuildPromptTemplates(promptTemplateFacts, meetingFacts),
+            storage);
     }
 
     #region 查詢範圍
@@ -130,6 +154,19 @@ public class DashboardService
         return context.Todo.AsNoTracking();
     }
 
+    /// <summary>
+    /// 提示詞範本查詢。**套團隊過濾**——<c>PromptTemplateService.GetAsync</c> 對非管理員
+    /// 就是這樣查的，這裡不跟著做就會出現「儀表板說有 10 個範本、點進去只看得到 6 個」。
+    /// </summary>
+    private IQueryable<PromptTemplate> BuildPromptTemplateQuery(RecordAccessScope scope)
+    {
+        IQueryable<PromptTemplate> query = context.PromptTemplate.AsNoTracking();
+
+        return scope.IsAdmin
+            ? query
+            : query.Where(TagStringHelper.BuildTeamAccessPredicate<PromptTemplate>(x => x.Teams, scope.Teams));
+    }
+
     #endregion
 
     #region 數字卡
@@ -142,14 +179,14 @@ public class DashboardService
         DateTime monthStart,
         DateTime today,
         int openTodoCount,
-        int overdueTodoCount)
+        int overdueTodoCount,
+        StorageSummary storage)
     {
         var inProgressProjects = projectStatuses.Count(status => status == "進行中");
         var newThisMonth = meetings.Count(x => x.CreatedAt >= monthStart);
         var transcribed = meetings.Count(x => x.TranscriptionStatus == TranscriptionStatus.Completed);
         var transcribing = meetings.Count(x =>
             x.TranscriptionStatus is TranscriptionStatus.Pending or TranscriptionStatus.Processing);
-        var mediaBytes = meetings.Sum(x => x.MediaFileSize ?? 0);
 
         return
         [
@@ -160,7 +197,9 @@ public class DashboardService
             new StatCardItem("待辦未完成", openTodoCount.ToString(),
                 overdueTodoCount > 0 ? $"已逾期 {overdueTodoCount}" : $"共 {totalTodoCount} 筆",
                 overdueTodoCount > 0 ? ChartTone.Danger : ChartTone.Neutral),
-            new StatCardItem("音檔總容量", FileSizeFormatter.Describe(mediaBytes), $"截至 {today:yyyy/MM/dd}"),
+            // 顯示三項合計而不是只有影音檔：下方「儲存空間」細分列的合計必須與這張卡同源，
+            // 否則卡片 234 MB、細分合計 260 MB，看起來像兩個數字在打架。
+            new StatCardItem("儲存空間", FileSizeFormatter.Describe(storage.TotalBytes), $"截至 {today:yyyy/MM/dd}"),
             new StatCardItem("AI 問答次數", chatQuestionCount.ToString(), "累計提問"),
         ];
     }
@@ -265,6 +304,25 @@ public class DashboardService
 
     #endregion
 
+    #region 提示詞範本
+
+    private static PromptTemplateSummary BuildPromptTemplates(
+        IReadOnlyList<PromptTemplateFact> templates,
+        IReadOnlyList<MeetingFact> meetings)
+    {
+        var enabled = templates.Count(x => x.IsEnabled);
+
+        return new PromptTemplateSummary(
+            templates.Count,
+            enabled,
+            templates.Count - enabled,
+            DashboardMetrics.CountUnusedEnabledTemplates(
+                templates.Select(x => (x.Name, x.IsEnabled)),
+                meetings.Select(x => x.DraftPromptTemplateName)));
+    }
+
+    #endregion
+
     /// <summary>從資料庫取回的會議欄位投影，避免把整個 Meeting 實體撈進記憶體。</summary>
     private sealed record MeetingFact(
         TranscriptionStatus TranscriptionStatus,
@@ -278,4 +336,7 @@ public class DashboardService
         DateTime? TranscriptionStartedAt,
         DateTime? TranscriptionCompletedAt,
         DateTime? DraftStartedAt);
+
+    /// <summary>提示詞範本的投影。只需要名稱（比對使用情形）與啟用狀態。</summary>
+    private sealed record PromptTemplateFact(string Name, bool IsEnabled);
 }

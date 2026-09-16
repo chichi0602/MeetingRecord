@@ -82,6 +82,14 @@
     gap: 14px;
 }
 
+/* 兩欄並排的指標列（提示詞範本、儲存空間）專用。
+   並排時單一區塊只剩約 580px、內容區 540px，沿用上面的 160px 下限只排得下 3 格，
+   第四格會單獨掉一行看起來像沒對齊。算式：4 × min + 3 × 14(gap) ≤ 540 → min ≤ 124。
+   只掛在這兩塊上，整頁寬的「處理效能」維持 160px 不動。 */
+.dashboard-metrics-paired .dashboard-performance-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
 .dashboard-metric {
     display: flex;
     flex-direction: column;

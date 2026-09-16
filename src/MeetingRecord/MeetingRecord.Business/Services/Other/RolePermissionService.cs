@@ -10,6 +10,9 @@ public class RolePermissionService
         return
         [
             [MagicObjectHelper.角色_儀表板],
+            // 單元素＝只有一個開關、沒有動作欄（比照儀表板）。使用說明是純閱讀頁，
+            // ⚠️ 但仍然要勾才看得到——新建角色時記得把它打開。
+            [MagicObjectHelper.角色_使用說明],
             [
                 MagicObjectHelper.角色_專案管理,
                 MagicObjectHelper.角色_專案項目,

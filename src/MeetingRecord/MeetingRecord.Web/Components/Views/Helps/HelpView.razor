@@ -1,0 +1,23 @@
+@using MeetingRecord.Share.Helpers
+@using MeetingRecord.Business.Helpers
+@if (string.IsNullOrEmpty(RoleMessage) == false)
+{
+    <div class="alert alert-danger" role="alert">
+        @RoleMessage
+    </div>
+}
+else
+{
+    <div class="help-view">
+        @if (string.IsNullOrWhiteSpace(content))
+        {
+            <div class="help-view-empty">使用說明載入中…</div>
+        }
+        else
+        {
+            @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。
+               與 AI 問答、會議紀錄草稿共用同一條渲染管線（含 URL 白名單消毒）。 *@
+            <div class="markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(content))</div>
+        }
+    </div>
+}

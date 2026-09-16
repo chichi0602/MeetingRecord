@@ -31,6 +31,7 @@ public sealed class MenuIconTests
         "mic",
         "logout",
         "checklist",
+        "help_outline",
     };
 
     [Fact]

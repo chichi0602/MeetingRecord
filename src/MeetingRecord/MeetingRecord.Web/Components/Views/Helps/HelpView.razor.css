@@ -1,0 +1,24 @@
+/* ⚠️ 刻意不限寬：長文限寬本來比較好讀，但全站其他頁面（清單、儀表板、專案）
+   都是滿版，單獨讓這一頁靠左縮排會在右邊留一大片空白，與系統其他部分不一致。
+   一致性優先。
+
+   ⚠️ app.css 的全域 .markdown-content 是為「對話框內的預覽」設計的：
+   max-height: 60vh + overflow: auto + font-size: 0.85rem。
+   整頁的手冊直接套上去，會被壓進一個 60vh 的內嵌捲動框、字還特別小——
+   頁面本來就能捲，不需要第二層捲軸。這裡把那三項解除。
+   用 ::deep 而不是直接寫 .markdown-content：後者只在這個 div 是本元件自己渲染時才成立，
+   ::deep 連 MarkupString 產生的子節點一起涵蓋，日後改結構也不會靜靜失效。 */
+.help-view ::deep .markdown-content {
+    max-height: none;
+    overflow: visible;
+    font-size: 0.95rem;
+}
+
+.help-view-empty {
+    padding: 40px 16px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px dashed var(--oat-300);
+    border-radius: 12px;
+}

@@ -28,6 +28,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 使用說明的內容來源是 docs\guides\系統使用說明.md，在這裡嵌進組件，
+         讓「文件庫的那一份」與「系統裡的那一頁」永遠是同一份內容。
+         ⚠️ 不要改用 Content + CopyToOutputDirectory：開發時 ContentRootPath 是專案目錄而不是
+         bin 輸出目錄，那樣會變成「發佈後看得到、開發時讀不到」。內嵌資源兩種情境行為一致。
+         ⚠️ LogicalName 必須與 HelpView.ResourceName 一致，改一邊會在執行期永遠停在「載入中」。 -->
+    <EmbeddedResource Include="..\..\..\docs\guides\系統使用說明.md"
+                      LogicalName="MeetingRecord.Web.系統使用說明.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Components\Dialogs\" />
     <Folder Include="Datas\" />
   </ItemGroup>

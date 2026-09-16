@@ -28,6 +28,13 @@
     "section": "核心功能"
   },
   {
+    "id": 12,
+    "name": "使用說明",
+    "icon": "help_outline",
+    "url": "/help",
+    "section": "核心功能"
+  },
+  {
     "id": 3,
     "name": "系統管理",
     "icon": "admin_panel_settings",

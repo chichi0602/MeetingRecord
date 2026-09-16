@@ -120,6 +120,20 @@
     word-break: break-word;
 }
 
+/* 重複項的標示。刻意用中性灰（沿用 --oat-ink-mid，與描述、欄位標籤同一階）
+   而不是警示色：重複只是「預設不勾」，不是警告也不是錯誤。
+   align-self: flex-start 讓它只占文字寬度——父層是 column flex，不加會撐滿整列。 */
+.todo-extract-dup {
+    align-self: flex-start;
+    padding: 1px 8px;
+    border: 1px solid var(--oat-300);
+    border-radius: 999px;
+    background: var(--oat-100);
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+    line-height: 1.7;
+}
+
 .todo-extract-meta {
     display: flex;
     align-items: center;

@@ -87,9 +87,37 @@ public class TodoExtractionService
         return results;
     }
 
-    /// <summary>這場會議先前已經加入過幾條待辦。用來提醒使用者不要重複加入。</summary>
-    public Task<int> CountExistingTodosAsync(int meetingId, CancellationToken cancellationToken = default)
-        => context.Todo.AsNoTracking().CountAsync(x => x.MeetingId == meetingId, cancellationToken);
+    /// <summary>
+    /// 這場會議先前已經加入過的待辦標題（已 Trim，比對忽略大小寫）。
+    ///
+    /// <para>
+    /// 用來在候選清單上標示「已加入過」並預設不勾選。⚠️ <b>那只是預設值，不是禁止</b>——
+    /// 使用者仍可刻意勾回去（開完後續會議再追蹤同一件事是合理的），
+    /// 所以服務層<b>不會</b>擋重複的寫入，去重只做在畫面上。
+    /// </para>
+    ///
+    /// <para>
+    /// 回傳集合而不是筆數：畫面同時需要「先前共幾則」與「哪幾則和這次重複」，
+    /// 筆數由集合長度得出，不必為了標題再查一次。
+    /// 比對用 <see cref="StringComparer.OrdinalIgnoreCase"/>，與 <c>PromptTemplateService</c>
+    /// 建立內建範本時比對既有名稱的做法一致（在記憶體比，不必在意 SQLite 的定序差異）。
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlySet<string>> GetExistingTitlesAsync(
+        int meetingId,
+        CancellationToken cancellationToken = default)
+    {
+        var titles = await context.Todo.AsNoTracking()
+            .Where(x => x.MeetingId == meetingId)
+            .Select(x => x.Title)
+            .ToListAsync(cancellationToken);
+
+        // Trim 是為了與寫入端一致——候選存進去時是 candidate.Title.Trim()。
+        return titles
+            .Where(title => !string.IsNullOrWhiteSpace(title))
+            .Select(title => title.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// 組出送進模型的使用者訊息。抽成 internal static 純函式以便單元測試（本專案既有慣例）。

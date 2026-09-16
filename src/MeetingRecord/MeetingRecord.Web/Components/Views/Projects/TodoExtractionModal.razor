@@ -57,6 +57,13 @@
                         </div>
 
                         <div class="todo-extract-fields">
+                            @if (candidate.AlreadyAdded)
+                            {
+                                @* 這不是警告也不是錯誤，所以用中性灰而不是警示色：
+                                   重複項只是預設不勾，使用者仍可勾回去。 *@
+                                <span class="todo-extract-dup">已加入過</span>
+                            }
+
                             <Input @bind-Value="candidate.Title"
                                    BindOnInput="true"
                                    Placeholder="待辦標題（必填）"

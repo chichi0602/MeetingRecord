@@ -46,6 +46,18 @@ public partial class TodoExtractionModal : ComponentBase
     {
         public bool Selected { get; set; } = true;
 
+        /// <summary>
+        /// 這條的標題與本會議「先前已加入的待辦」重複。
+        ///
+        /// <para>
+        /// 只影響<b>預設</b>勾選狀態與畫面上的標示，<b>不阻止</b>使用者勾回去儲存——
+        /// 開完後續會議再追蹤同一件事是合理的。判定是在載入候選時做一次的快照，
+        /// 使用者之後改了標題也不會重算（改過就不再是「同一條」，維持原標示反而誤導，
+        /// 但重算需要每次輸入都查一次 DB，不值得）。
+        /// </para>
+        /// </summary>
+        public bool AlreadyAdded { get; init; }
+
         public string Title { get; set; } = string.Empty;
 
         public string? Description { get; set; }
@@ -99,25 +111,35 @@ public partial class TodoExtractionModal : ComponentBase
 
         try
         {
-            var existingCount = await ExtractionService.CountExistingTodosAsync(MeetingId);
-            if (existingCount > 0)
-            {
-                // 只提示不阻擋——開完後續會議再抽一次新決議是合理的用法。
-                existingNotice = $"這場會議先前已加入 {existingCount} 條待辦，注意不要重複加入。";
-            }
+            var existingTitles = await ExtractionService.GetExistingTitlesAsync(MeetingId);
 
             var extracted = await ExtractionService.ExtractAsync(MeetingId);
 
             foreach (var item in extracted)
             {
+                // 預設不勾選重複項，但仍然列出來——使用者要再追蹤同一件事就自己勾回去。
+                var alreadyAdded = existingTitles.Contains(item.Title.Trim());
+
                 candidates.Add(new Candidate
                 {
+                    AlreadyAdded = alreadyAdded,
+                    Selected = !alreadyAdded,
                     Title = item.Title,
                     Description = item.Description,
                     Owner = item.Owner,
                     DueDate = item.DueDate,
                     Priority = item.Priority,
                 });
+            }
+
+            if (existingTitles.Count > 0)
+            {
+                var duplicateCount = candidates.Count(x => x.AlreadyAdded);
+
+                // 只講總數在第二次抽出時沒有幫助，要講得出「這次有幾條重複」。
+                existingNotice = duplicateCount > 0
+                    ? $"這場會議先前已加入 {existingTitles.Count} 條待辦，其中 {duplicateCount} 條與這次抽出的重複，已標示「已加入過」並預設不勾選。"
+                    : $"這場會議先前已加入 {existingTitles.Count} 條待辦，這次抽出的內容沒有重複。";
             }
         }
         catch (Exception ex)

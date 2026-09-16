@@ -1137,6 +1137,27 @@ public partial class MeetingViewView : IDisposable
             return;
         }
 
+        // 抽出待辦是付費動作：TodoExtractionModal 一開啟就呼叫 ExtractAsync，
+        // 視窗顯示出來時 API 已經打出去了，所以確認一定要擋在開視窗之前。
+        // 文案與專案項目頁逐字相同——同一個動作在兩頁講不同的話會讓人以為行為不同。
+        // 不套 Danger：抽出來的只是候選，勾選並儲存後才真的建立待辦。
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認抽出待辦（會產生費用）",
+            Content = $"將把「{meeting.Title}」的會議紀錄全文送給 AI 分析待辦事項，"
+                    + "這會呼叫 Azure OpenAI 文字生成服務並產生費用（每次抽取固定一次呼叫）。"
+                    + "抽出的項目要勾選並儲存才會真的建立待辦；關閉視窗後再開啟會重新抽一次、再計費一次。確定要繼續嗎？",
+            OkText = "開始抽取",
+            CancelText = "取消",
+            MaskClosable = false
+        });
+
+        if (!confirmed)
+        {
+            logger.LogDebug("Todo extraction cancelled by user. MeetingId={MeetingId}", meeting.Id);
+            return;
+        }
+
         todoExtractionMeetingId = meeting.Id;
         todoExtractionProjectId = meeting.ProjectId.Value;
         todoExtractionMeetingTitle = meeting.Title;

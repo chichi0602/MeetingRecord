@@ -23,7 +23,7 @@
                     var path = DashboardMetrics.BuildArcPath(50, 50, 45, startAngle, sweep);
 
                     <path d="@path" fill="@color">
-                        <title>@slice.Label：@slice.Value</title>
+                        <title>@slice.Label：@slice.DisplayText</title>
                     </path>
 
                     startAngle += sweep;
@@ -34,7 +34,12 @@
                 }
                 @* 中央挖空成甜甜圈，順便放總數。 *@
                 <circle cx="50" cy="50" r="26" class="pie-chart-hole" />
-                <text x="50" y="47" class="pie-chart-total">@Total</text>
+                @* ⚠️ 中央的洞只有 52 個單位寬。純數字放得下，但 0.4.80 起這裡也可能是
+                   「USD 0.24627」這種長字串，不壓縮的話會被 viewBox 切成「D 0.246」。
+                   長度超過門檻才加 textLength——短字串套上去反而會被拉開。 *@
+                <text x="50" y="47" class="pie-chart-total"
+                      textLength="@(IsTotalTextLong ? "46" : null)"
+                      lengthAdjust="@(IsTotalTextLong ? "spacingAndGlyphs" : null)">@TotalText</text>
                 <text x="50" y="58" class="pie-chart-total-label">總計</text>
             </svg>
 
@@ -53,7 +58,7 @@
                     <li class="pie-chart-legend-item">
                         <span class="pie-chart-swatch" style="background: @color"></span>
                         <span class="pie-chart-legend-label" title="@slice.Label">@slice.Label</span>
-                        <span class="pie-chart-legend-value">@slice.Value（@FormatPercent(slice.Value)）</span>
+                        <span class="pie-chart-legend-value">@slice.DisplayText（@FormatPercent(slice.Value)）</span>
                     </li>
                 }
             </ul>
@@ -68,7 +73,19 @@
     [Parameter, EditorRequired]
     public IReadOnlyList<ChartSlice> Slices { get; set; } = [];
 
+    /// <summary>
+    /// 覆寫中央的總計文字；null 時直接印 <see cref="Total"/>。
+    /// 切片的 Value 是換算過的整數（例如金額的「分」）時要用它，否則會印出「1234567」。
+    /// </summary>
+    [Parameter]
+    public string? TotalDisplay { get; set; }
+
     private int Total => Slices.Sum(x => x.Value);
+
+    private string TotalText => TotalDisplay ?? Total.ToString();
+
+    /// <summary>15px 字級下，中央的洞大約放得下 6 個字元。超過就要壓縮。</summary>
+    private bool IsTotalTextLong => TotalText.Length > 6;
 
     private string FormatPercent(int value) => $"{value * 100d / Total:0.#}%";
 }

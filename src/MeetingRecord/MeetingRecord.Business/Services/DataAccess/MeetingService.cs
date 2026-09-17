@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.AiChat;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
@@ -35,6 +36,7 @@ public class MeetingService
     private readonly ITranscriptionProgressNotifier progressNotifier;
     private readonly IMeetingDraftQueue draftQueue;
     private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
+    private readonly CurrentUserService currentUserService;
 
     public IMapper Mapper { get; }
     public ILogger<MeetingService> Logger { get; }
@@ -49,7 +51,8 @@ public class MeetingService
         ITranscriptionQueue transcriptionQueue,
         ITranscriptionProgressNotifier progressNotifier,
         IMeetingDraftQueue draftQueue,
-        IMeetingDraftProgressNotifier draftProgressNotifier)
+        IMeetingDraftProgressNotifier draftProgressNotifier,
+        CurrentUserService currentUserService)
     {
         this.context = context;
         Mapper = mapper;
@@ -61,6 +64,23 @@ public class MeetingService
         this.progressNotifier = progressNotifier;
         this.draftQueue = draftQueue;
         this.draftProgressNotifier = draftProgressNotifier;
+        this.currentUserService = currentUserService;
+    }
+
+    /// <summary>
+    /// 組出背景工作的請求，把「是誰按的」一起帶進佇列。
+    ///
+    /// <para>
+    /// ⚠️ 必須在這裡取使用者。這支跑在 Blazor circuit 裡，CurrentUserService 是填好的；
+    /// 但背景服務為每筆工作自建的 scope 裡它是空白物件（Id=0），
+    /// 等到 runner 才去問，用量帳本的「誰」就永遠是空的。
+    /// </para>
+    /// </summary>
+    private MeetingJobRequest BuildJobRequest(int meetingId)
+    {
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+
+        return new MeetingJobRequest(meetingId, userId, userName);
     }
 
     #region 查詢
@@ -460,7 +480,7 @@ public class MeetingService
 
             // 先登錄進度再入列：背景工作要等輪到才會知道這件事，先登錄畫面才立刻看得到「排隊中」。
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
-            await transcriptionQueue.EnqueueAsync(meetingId, cancellationToken);
+            await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
 
             Logger.LogInformation("Meeting media uploaded and queued for transcription. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(true);
@@ -519,7 +539,7 @@ public class MeetingService
             CleanTrackingHelper.Clean<Meeting>(context);
 
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
-            await transcriptionQueue.EnqueueAsync(meetingId, cancellationToken);
+            await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)
@@ -902,7 +922,7 @@ public class MeetingService
 
             // 先登錄進度再入列，理由同轉錄：背景工作要等輪到才知道，先登錄畫面才立刻看得到「排隊中」。
             draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
-            await draftQueue.EnqueueAsync(meetingId, cancellationToken);
+            await draftQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)

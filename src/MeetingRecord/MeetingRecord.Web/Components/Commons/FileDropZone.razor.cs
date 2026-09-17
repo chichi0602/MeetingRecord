@@ -109,7 +109,35 @@ public partial class FileDropZone : ComponentBase
             await OnChange.InvokeAsync(args);
         }
 
-        // 換 key 重建 input，讓「同一個檔案」再選一次時仍然會觸發 change（見 .razor 的註解）。
+        // ⚠️ 這裡**絕對不可以**換 key。
+        //
+        // 0.4.77 曾經在這一行換 key，結果是：Blazor 立刻銷毀並重建 <input type="file">，
+        // 而呼叫端剛拿到的 IBrowserFile 是綁在**那個已被銷毀的元素**上的。
+        // 稍後 OpenReadStream 去 JS 端查它就會拿到 null，錯誤訊息是
+        // 「Cannot read properties of null (reading '_blazorFilesById')」——
+        // 會議影音檔與專案附件都是「先存起來、稍後才讀」，兩條路徑全部上傳失敗。
+        //
+        // 重建 input 的時機改成由呼叫端在「用完這個檔案之後」呼叫 Reset()。
+    }
+
+    /// <summary>
+    /// 重建底下的 file input，讓「同一個檔案」可以再選一次。
+    ///
+    /// <para>
+    /// input 在 change 之後不會清空 value，重新拖同一個檔案時瀏覽器認為沒有變化、
+    /// 不再觸發 change，畫面就完全沒反應。（點擊挑選的路徑 Blazor 自己會在 click 時清 value，
+    /// 但**拖放不會觸發 click**，所以拖放這條路徑需要這個方法。）
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 呼叫端必須在**確定不再需要那個 <see cref="IBrowserFile"/> 之後**才呼叫——
+    /// 移除待上傳檔案時、或上傳完成之後。太早呼叫會讓檔案讀不出來（理由見
+    /// <see cref="OnFileChangedAsync"/> 的註解）。
+    /// </para>
+    /// </summary>
+    public void Reset()
+    {
         resetToken = Guid.NewGuid();
+        StateHasChanged();
     }
 }

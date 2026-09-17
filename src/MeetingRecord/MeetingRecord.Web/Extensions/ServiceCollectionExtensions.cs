@@ -91,6 +91,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();
         services.AddScoped<DashboardService>();
+
+        // 用量帳本（0.4.80）。Scoped 是因為要 BackendDBContext；背景服務為每筆工作自建 scope，
+        // job runner 在該 scope 內解析，所以轉錄與生成那兩條背景路徑也用得到。
+        services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiUsageRecorder>();
+        services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiUsageAnalysisService>();
         services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
         services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();

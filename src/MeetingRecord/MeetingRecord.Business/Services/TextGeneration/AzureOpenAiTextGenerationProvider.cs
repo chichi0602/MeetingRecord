@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Business.Services.TextGeneration;
@@ -53,7 +54,10 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
 
     public string ProviderName => AzureOpenAiProviderName;
 
-    public async Task<string> GenerateAsync(
+    /// <summary>目前生效的 deployment 名稱。用量帳本以它查單價。</summary>
+    public string ModelName => llmSettings.Value.GetDefaultProvider()?.Model ?? string.Empty;
+
+    public async Task<TextGenerationResult> GenerateAsync(
         string systemPrompt,
         string userPrompt,
         Action<string>? onDelta,
@@ -75,6 +79,13 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
         var payload = new ChatCompletionRequest
         {
             Stream = true,
+
+            // ⚠️ 串流預設**不回傳** usage，必須明確要求（0.4.80 起，用量帳本靠它）。
+            // 需要 api-version 2024-10-21 以上；舊版本會回 HTTP 400
+            // 「Unrecognized request argument supplied: stream_options」而不是忽略它——
+            // 也就是說把 ApiVersion 往回調會讓全站生成掛掉，而錯誤訊息看起來像金鑰壞了。
+            StreamOptions = new StreamOptions { IncludeUsage = true },
+
             Messages =
             [
                 new ChatMessage { Role = "system", Content = systemPrompt },
@@ -117,6 +128,7 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
         }
 
         var builder = new StringBuilder();
+        AiTokenUsage? usage = null;
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -140,7 +152,18 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
                 break;
             }
 
-            var delta = ExtractDelta(data);
+            // 一個片段只反序列化一次，delta 與 usage 都從這裡取。
+            var chunk = ParseChunk(data);
+
+            // ⚠️ usage 必須在 delta 的空值檢查**之前**取。
+            // 帶 usage 的那一片 choices 是**空陣列**，所以它取不到 delta；
+            // 放在下面的 continue 之後就會被整片吃掉——0.4.80 之前的 bug 正是長這樣。
+            if (ExtractUsage(chunk) is { } chunkUsage)
+            {
+                usage = chunkUsage;
+            }
+
+            var delta = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
             if (string.IsNullOrEmpty(delta))
             {
                 continue;
@@ -156,7 +179,9 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
             throw new InvalidOperationException("文字生成 API 未回傳任何內容。");
         }
 
-        return builder.ToString().Trim();
+        // usage 為 null 是可接受的結果（伺服器沒送 [DONE] 就關連線、或 api-version 不支援）。
+        // ⚠️ 絕不能因此拋例外——那會把「生成成功但拿不到帳」升級成「生成失敗」。
+        return new TextGenerationResult(builder.ToString().Trim(), usage);
     }
 
     /// <summary>組出 Azure OpenAI 的 chat completions 端點位址。抽成純函式以便單元測試。</summary>
@@ -195,19 +220,46 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
     /// 抽成純函式以便單元測試。
     /// </summary>
     internal static string? ExtractDelta(string dataPayload)
+        => ParseChunk(dataPayload)?.Choices?.FirstOrDefault()?.Delta?.Content;
+
+    /// <summary>
+    /// 反序列化單一 SSE 資料片段。抽出來是為了讓一個片段**只解析一次**，
+    /// delta 與 usage 都從同一個結果取。
+    /// </summary>
+    private static ChatCompletionChunk? ParseChunk(string dataPayload)
     {
-        ChatCompletionChunk? parsed;
         try
         {
-            parsed = JsonSerializer.Deserialize<ChatCompletionChunk>(dataPayload, SerializerOptions);
+            return JsonSerializer.Deserialize<ChatCompletionChunk>(dataPayload, SerializerOptions);
         }
         catch (JsonException ex)
         {
             throw new InvalidOperationException(
                 $"文字生成 API 的串流片段不是預期的 JSON 格式：{Truncate(dataPayload, 500)}", ex);
         }
+    }
 
-        return parsed?.Choices?.FirstOrDefault()?.Delta?.Content;
+    /// <summary>
+    /// 從單一片段取出 token 用量；這一片沒有用量時回 null。
+    ///
+    /// <para>
+    /// ⚠️ 開了 <c>include_usage</c> 之後，**中間每一片都會明確帶 <c>"usage": null</c>**，
+    /// 所以一定要做 null 檢查，不能用「有 usage 這個欄位就是最後一片」來判斷。
+    /// </para>
+    /// </summary>
+    internal static AiTokenUsage? ExtractUsage(string dataPayload) => ExtractUsage(ParseChunk(dataPayload));
+
+    private static AiTokenUsage? ExtractUsage(ChatCompletionChunk? chunk)
+    {
+        if (chunk?.Usage is not { } usage)
+        {
+            return null;
+        }
+
+        return new AiTokenUsage(
+            usage.PromptTokens,
+            usage.CompletionTokens,
+            usage.PromptTokensDetails?.CachedTokens);
     }
 
     private static string Truncate(string value, int maxLength)
@@ -229,6 +281,19 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
 
         [JsonPropertyName("stream")]
         public bool Stream { get; set; }
+
+        /// <summary>
+        /// 留 null 時不會被送出（SerializerOptions 是 WhenWritingNull），
+        /// 所以不支援這個參數的供應商可以安全地不設定它。
+        /// </summary>
+        [JsonPropertyName("stream_options")]
+        public StreamOptions? StreamOptions { get; set; }
+    }
+
+    private sealed class StreamOptions
+    {
+        [JsonPropertyName("include_usage")]
+        public bool IncludeUsage { get; set; }
     }
 
     private sealed class ChatMessage
@@ -244,6 +309,32 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
     {
         [JsonPropertyName("choices")]
         public List<ChatChunkChoice>? Choices { get; set; }
+
+        /// <summary>
+        /// ⚠️ 只有**最後一片**會帶（且該片的 <c>choices</c> 是空陣列）；
+        /// 中間每一片都是明確的 null。它在 <c>finish_reason</c> 那片之後、<c>[DONE]</c> 之前到達。
+        /// </summary>
+        [JsonPropertyName("usage")]
+        public ChatUsage? Usage { get; set; }
+    }
+
+    private sealed class ChatUsage
+    {
+        [JsonPropertyName("prompt_tokens")]
+        public int PromptTokens { get; set; }
+
+        [JsonPropertyName("completion_tokens")]
+        public int CompletionTokens { get; set; }
+
+        [JsonPropertyName("prompt_tokens_details")]
+        public ChatPromptTokensDetails? PromptTokensDetails { get; set; }
+    }
+
+    private sealed class ChatPromptTokensDetails
+    {
+        /// <summary>命中提示詞快取的輸入 token。⚠️ 已含在 <c>prompt_tokens</c> 裡，不可再加一次。</summary>
+        [JsonPropertyName("cached_tokens")]
+        public int? CachedTokens { get; set; }
     }
 
     private sealed class ChatChunkChoice

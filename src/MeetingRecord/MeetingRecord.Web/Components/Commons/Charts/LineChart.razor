@@ -11,8 +11,8 @@
             <span class="line-chart-head-extra">@HeaderExtra</span>
         }
         <span class="line-chart-legend">
-            <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-created"></i>新增會議</span>
-            <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-completed"></i>完成紀錄</span>
+            <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-created"></i>@SeriesOneLabel</span>
+            <span class="line-chart-key"><i class="line-chart-dot line-chart-dot-completed"></i>@SeriesTwoLabel</span>
         </span>
     </div>
 
@@ -34,11 +34,11 @@
                 var point = Points[index];
                 <line x1="@X(index)" y1="@Y(point.Created)" x2="@X(index)" y2="@Y(point.Created)"
                       class="line-chart-marker line-chart-dot-created" stroke-width="@Format(DotDiameter)">
-                    <title>@point.Label 新增 @point.Created</title>
+                    <title>@point.Label @SeriesOneLabel @point.Created</title>
                 </line>
                 <line x1="@X(index)" y1="@Y(point.Completed)" x2="@X(index)" y2="@Y(point.Completed)"
                       class="line-chart-marker line-chart-dot-completed" stroke-width="@Format(DotDiameter)">
-                    <title>@point.Label 完成 @point.Completed</title>
+                    <title>@point.Label @SeriesTwoLabel @point.Completed</title>
                 </line>
             }
         </svg>
@@ -86,6 +86,17 @@
     private double DotDiameter => Points.Count > 30 ? 3 : 6;
 
     private int MaxValue => Points.Count == 0 ? 0 : Points.Max(p => Math.Max(p.Created, p.Completed));
+
+    /// <summary>
+    /// 第一條線的名稱（圖例與 marker 的懸停提示共用）。
+    /// **預設值就是儀表板現行的文字**，所以儀表板不必改任何一個字。
+    /// </summary>
+    [Parameter]
+    public string SeriesOneLabel { get; set; } = "新增會議";
+
+    /// <summary>第二條線的名稱。</summary>
+    [Parameter]
+    public string SeriesTwoLabel { get; set; } = "完成紀錄";
 
     /// <summary>單一資料點時分母會是 0，直接置中；否則平均分佈。</summary>
     private double X(int index)

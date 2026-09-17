@@ -441,7 +441,7 @@ else
                         </FormItem>
 
                         <FormItem Label="專案附件" Class="form-modal-full">
-                            <FileDropZone OnChange="OnProjectFilesSelectedAsync" Multiple="true">
+                            <FileDropZone @ref="attachmentDropZone" OnChange="OnProjectFilesSelectedAsync" Multiple="true">
                                 可一次選擇或拖入多個檔案，每個檔案上限 1GB。
                             </FileDropZone>
                         </FormItem>

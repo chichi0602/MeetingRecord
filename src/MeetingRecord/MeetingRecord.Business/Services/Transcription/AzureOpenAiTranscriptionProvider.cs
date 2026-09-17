@@ -34,6 +34,10 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
 
     public string ProviderName => AzureOpenAiProviderName;
 
+    /// <summary>目前生效的轉錄 deployment 名稱。用量帳本以它查單價。</summary>
+    public string ModelName =>
+        llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel ?? string.Empty;
+
     public async Task<string> TranscribeAsync(Stream audio, string fileName, CancellationToken cancellationToken)
     {
         var settings = llmSettings.Value;

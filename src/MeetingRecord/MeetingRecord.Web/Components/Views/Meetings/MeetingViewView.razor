@@ -246,7 +246,8 @@ else
                         <FormItem Label="影音檔" Class="form-modal-full">
                             @* accept 只擋檔案挑選對話框，拖進來的檔案仍要靠 OnMediaFileSelectedAsync
                                裡的 MeetingMediaPolicy.IsAllowedFileName 把關（那一段本來就在）。 *@
-                            <FileDropZone OnChange="OnMediaFileSelectedAsync"
+                            <FileDropZone @ref="mediaDropZone"
+                                          OnChange="OnMediaFileSelectedAsync"
                                           Accept="@MeetingMediaPolicy.AcceptAttribute"
                                           Disabled="@isUploading"
                                           Title="把影音檔拖到這裡，或點擊選擇檔案（一次一個）">

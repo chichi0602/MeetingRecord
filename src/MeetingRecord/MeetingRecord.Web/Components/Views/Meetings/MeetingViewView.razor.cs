@@ -529,6 +529,12 @@ public partial class MeetingViewView : IDisposable
             logger.LogInformation("Meeting create submitted. MeetingId={MeetingId}, Title={Title}", CurrentRecord.Id, CurrentRecord.Title);
             NotifySuccess("新增成功");
             _ = messageService.SuccessAsync("新增成功");
+
+            // ⚠️ 這一筆已經存進資料庫、CurrentRecord.Id 也已經被填上了，所以不能再算是「新增模式」。
+            //    下面的影音檔上傳若失敗，使用者會留在這個 Modal 重試；此時若仍是新增模式，
+            //    再按一次「確定」會拿著同一個 Id 再 INSERT 一次，得到
+            //    「UNIQUE constraint failed: Meeting.Id」——整個視窗就卡死了，只能取消重來。
+            isNewRecordMode = false;
         }
         else
         {
@@ -632,10 +638,19 @@ public partial class MeetingViewView : IDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// 底下那個拖拉區。用完檔案之後要呼叫 Reset()，「移除 → 再拖同一個檔案」才會有反應。
+    /// </summary>
+    private FileDropZone? mediaDropZone;
+
     private void ClearPendingMediaFile()
     {
         pendingMediaFile = null;
         uploadPercent = 0;
+
+        // ⚠️ 只能在這裡（確定不再需要那個 IBrowserFile 之後）重建 input。
+        //    在「剛選完檔案」時重建，會把檔案自己弄丟——見 FileDropZone 的註解。
+        mediaDropZone?.Reset();
     }
 
     private async Task<bool> UploadPendingMediaAsync()
@@ -676,7 +691,9 @@ public partial class MeetingViewView : IDisposable
                 return false;
             }
 
+            // 檔案已經讀完寫進儲存區了，這時才可以重建 input（見 FileDropZone.Reset）。
             pendingMediaFile = null;
+            mediaDropZone?.Reset();
             NotifySuccess("影音檔已上傳，系統已排入背景轉錄，完成後可在清單預覽逐字稿。");
             return true;
         }
@@ -824,6 +841,7 @@ public partial class MeetingViewView : IDisposable
         pendingMediaFile = null;
         isUploading = false;
         uploadPercent = 0;
+        mediaDropZone?.Reset();
     }
 
     #endregion

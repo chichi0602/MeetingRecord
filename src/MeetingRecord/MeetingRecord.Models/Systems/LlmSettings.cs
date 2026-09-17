@@ -40,6 +40,31 @@ public class LlmSettings : IValidatableObject
     public Dictionary<string, LlmProviderSettings> Providers { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 估算金額的幣別代碼。**只用於顯示，不做匯率換算**——Azure 的公告價與帳單都是美金，
+    /// 多一道匯率只會讓這頁的數字與帳單對不起來。
+    /// </summary>
+    public string Currency { get; set; } = "USD";
+
+    /// <summary>
+    /// 用量單價表，鍵為 <b>deployment／model 名稱</b>（對應
+    /// <see cref="LlmProviderSettings.Model"/> 與 <see cref="LlmProviderSettings.TranscriptionModel"/>，
+    /// 也是用量帳本 <c>AiUsageLog.Model</c> 記下的字串，三者對得起來）。
+    ///
+    /// <para>
+    /// 查不到或欄位為 null 時，帳本的金額欄位**留空白而不是 0**——0 會讓總額靜靜地少報。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ <see cref="StringComparer.OrdinalIgnoreCase"/> 必須寫在這個屬性初始化器裡
+    /// （與 <see cref="Providers"/> 同樣的寫法）。Configuration binder 是往既有實例裡塞，
+    /// comparer 會保留；寫成 <c>= new()</c> 就變成大小寫敏感，
+    /// <c>GPT-4o-mini</c> 查不到單價而靜靜地不計費。
+    /// </para>
+    /// </summary>
+    public Dictionary<string, LlmPricingSettings> Pricing { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>是否已指定預設供應商。</summary>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(DefaultProvider);
 
@@ -106,6 +131,28 @@ public class LlmSettings : IValidatableObject
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // ⚠️ 單價檢查必須放在最前面：下面的分支有 yield break，
+        // 放在後面時「沒有指定 TranscriptionProvider」的部署就永遠檢查不到。
+        foreach (var (model, price) in Pricing)
+        {
+            // 負單價會產生負成本，而負成本在圖表上只是看起來「這個月比較省」——
+            // 沒有任何跡象顯示是設定打錯了。
+            foreach (var (field, value) in new (string, decimal?)[]
+                     {
+                         (nameof(LlmPricingSettings.InputPerMillionTokens), price.InputPerMillionTokens),
+                         (nameof(LlmPricingSettings.OutputPerMillionTokens), price.OutputPerMillionTokens),
+                         (nameof(LlmPricingSettings.AudioPerMinute), price.AudioPerMinute),
+                     })
+            {
+                if (value < 0)
+                {
+                    yield return new ValidationResult(
+                        $"{SectionName}:Pricing:{model}:{field} 不可為負數（目前為 {value}）。",
+                        [nameof(Pricing)]);
+                }
+            }
+        }
+
         if (IsConfigured)
         {
             var name = DefaultProvider.Trim();
@@ -163,6 +210,26 @@ public class LlmSettings : IValidatableObject
                 [nameof(Providers)]);
         }
     }
+}
+
+/// <summary>
+/// 單一 deployment／model 的用量單價，供「AI 用量分析」估算金額。
+///
+/// <para>
+/// 全部欄位可為 null：只設了文字生成單價、沒設轉錄單價是正常狀態。
+/// 缺少必要單價時該筆帳的金額會留空白，**不會被當成 0**。
+/// </para>
+/// </summary>
+public class LlmPricingSettings
+{
+    /// <summary>每百萬輸入 token 的單價。</summary>
+    public decimal? InputPerMillionTokens { get; set; }
+
+    /// <summary>每百萬輸出 token 的單價。通常是輸入的 3～4 倍。</summary>
+    public decimal? OutputPerMillionTokens { get; set; }
+
+    /// <summary>每分鐘音訊的單價（語音轉錄用）。</summary>
+    public decimal? AudioPerMinute { get; set; }
 }
 
 /// <summary>

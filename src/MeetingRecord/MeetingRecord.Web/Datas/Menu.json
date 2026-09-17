@@ -51,6 +51,12 @@
         "name": "角色管理",
         "icon": "shield_person",
         "url": "/roleviews"
+      },
+      {
+        "id": 33,
+        "name": "AI 用量分析",
+        "icon": "monetization_on",
+        "url": "/ai-usage"
       }
     ]
   },

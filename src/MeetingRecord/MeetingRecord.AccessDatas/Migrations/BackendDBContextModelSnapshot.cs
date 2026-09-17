@@ -19,6 +19,81 @@ namespace MeetingRecord.AccessDatas.Migrations
                 .UseCollation("Chinese_Taiwan_Stroke_CI_AS")
                 .HasAnnotation("ProductVersion", "10.0.5");
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AiUsageLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("AudioPricePerMinute")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("AudioSeconds")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("CachedInputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Currency")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("EstimatedCost")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Feature")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("InputPricePerMillion")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsAudioDurationEstimated")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MeetingId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("OutputPricePerMillion")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserName")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.ToTable("AiUsageLog");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AuditLog", b =>
                 {
                     b.Property<int>("Id")

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using MeetingRecord.Business.Services.Other;
 
 namespace MeetingRecord.Business.Services.Transcription;
 
@@ -14,23 +15,23 @@ namespace MeetingRecord.Business.Services.Transcription;
 public interface ITranscriptionQueue
 {
     /// <summary>將會議排入轉錄佇列。</summary>
-    ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default);
+    ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>取出下一筆待轉錄的會議 Id（無資料時等待）。</summary>
-    ValueTask<int> DequeueAsync(CancellationToken cancellationToken);
+    ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken);
 }
 
 public sealed class TranscriptionQueue : ITranscriptionQueue
 {
-    private readonly Channel<int> channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions
+    private readonly Channel<MeetingJobRequest> channel = Channel.CreateUnbounded<MeetingJobRequest>(new UnboundedChannelOptions
     {
         SingleReader = true,
         SingleWriter = false,
     });
 
-    public ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default)
-        => channel.Writer.WriteAsync(meetingId, cancellationToken);
+    public ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default)
+        => channel.Writer.WriteAsync(request, cancellationToken);
 
-    public ValueTask<int> DequeueAsync(CancellationToken cancellationToken)
+    public ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken)
         => channel.Reader.ReadAsync(cancellationToken);
 }

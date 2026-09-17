@@ -6,7 +6,9 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.AiChat;
 
@@ -66,6 +68,7 @@ public class AiChatService
     private readonly AttachmentTextExtractor attachmentTextExtractor;
     private readonly CurrentUserService currentUserService;
     private readonly IOptions<LlmSettings> llmSettings;
+    private readonly AiUsageRecorder usageRecorder;
     private readonly ILogger<AiChatService> logger;
 
     public AiChatService(
@@ -76,6 +79,7 @@ public class AiChatService
         AttachmentTextExtractor attachmentTextExtractor,
         CurrentUserService currentUserService,
         IOptions<LlmSettings> llmSettings,
+        AiUsageRecorder usageRecorder,
         ILogger<AiChatService> logger)
     {
         this.context = context;
@@ -85,6 +89,7 @@ public class AiChatService
         this.attachmentTextExtractor = attachmentTextExtractor;
         this.currentUserService = currentUserService;
         this.llmSettings = llmSettings;
+        this.usageRecorder = usageRecorder;
         this.logger = logger;
     }
 
@@ -341,9 +346,63 @@ public class AiChatService
         }
 
         var userPrompt = BuildUserPrompt(contextResult.Context, history, question);
-        var answer = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken);
 
-        return (answer, contextResult);
+        // 記帳放在這裡而不是 AskAsync／RegenerateAsync，是因為這一支是兩條路徑共用的唯一出口。
+        // ⚠️ 特別重要的是 RegenerateAsync：它在模型呼叫**成功之後**還可能因為樂觀鎖失敗而拋例外，
+        //    那時錢已經花了。帳記在這裡才不會漏掉那一種。
+        TextGenerationResult generated;
+        try
+        {
+            generated = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await RecordUsageAsync(
+                provider,
+                scope,
+                targetId,
+                ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
+                tokens: null,
+                errorMessage: ex.Message);
+            throw;
+        }
+
+        await RecordUsageAsync(
+            provider, scope, targetId, AiUsageOutcome.Succeeded, generated.Usage, errorMessage: null);
+
+        return (generated.Content, contextResult);
+    }
+
+    /// <summary>
+    /// 把這次問答寫進用量帳本。
+    ///
+    /// <para>
+    /// ⚠️ 「重新產生答案」也會走到這裡，所以帳本的呼叫次數會**高於**儀表板既有的
+    /// 「AI 問答次數」——後者是數對話檔裡的提問行，而重新產生是覆寫原訊息、不增行。
+    /// 那個數字一直在低估，帳本不重蹈覆轍。
+    /// </para>
+    /// </summary>
+    private Task RecordUsageAsync(
+        ITextGenerationProvider provider,
+        AiChatScope scope,
+        int targetId,
+        AiUsageOutcome outcome,
+        AiTokenUsage? tokens,
+        string? errorMessage)
+    {
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+
+        return usageRecorder.RecordAsync(new AiUsageEntry(
+            AiUsageFeature.AiChat,
+            outcome,
+            provider.ProviderName,
+            provider.ModelName,
+            Tokens: tokens,
+            UserId: userId,
+            UserName: userName,
+            MeetingId: scope == AiChatScope.Meeting ? targetId : null,
+            ProjectId: scope == AiChatScope.Project ? targetId : null,
+            ErrorMessage: errorMessage));
     }
 
     /// <summary>

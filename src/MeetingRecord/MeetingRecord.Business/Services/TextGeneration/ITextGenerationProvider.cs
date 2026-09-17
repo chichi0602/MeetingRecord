@@ -1,16 +1,38 @@
+using MeetingRecord.Business.Services.AiUsage;
+
 namespace MeetingRecord.Business.Services.TextGeneration;
+
+/// <summary>
+/// 一次文字生成的結果。
+///
+/// <para>
+/// <paramref name="Usage"/> 為 null 代表**供應商沒有回報用量**——串流被中斷、或
+/// api-version 不支援 <c>stream_options</c> 都會這樣。那不是錯誤，帳本會把 token 欄位留白
+/// 而不是記成 0（0 會讓人以為那次呼叫不用錢）。
+/// </para>
+/// </summary>
+public sealed record TextGenerationResult(string Content, AiTokenUsage? Usage);
 
 /// <summary>
 /// 文字生成（chat completion）供應商。這是「未來支援其他廠商」的擴充點：
 /// 新增一個實作並在 <c>LlmSettings.DefaultProvider</c> 指定其 <see cref="ProviderName"/> 即可切換。
 ///
-/// 與 <c>ITranscriptionProvider</c> 對稱：介面保持極簡，回傳純字串，
-/// 不外露 token 用量等供應商細節（本系統刻意不做成本計量）。
+/// <para>
+/// 0.4.80 起回傳 <see cref="TextGenerationResult"/> 而非純字串，以便把 token 用量帶給用量帳本。
+/// ⚠️ 刻意**不保留** <c>Task&lt;string&gt;</c> 的多載：兩個並存時，新程式碼會隨手挑到丟棄用量的那一個，
+/// 而帳本要求涵蓋**全部**付費呼叫。這裡的編譯錯誤是資產。
+/// </para>
 /// </summary>
 public interface ITextGenerationProvider
 {
     /// <summary>供應商名稱，需與 <c>LlmSettings:Providers</c> 的鍵一致（比對不分大小寫）。</summary>
     string ProviderName { get; }
+
+    /// <summary>
+    /// 實際使用的 deployment／model 名稱。
+    /// **單價是以這個字串查表的**，失敗時呼叫端也要靠它才知道這次打在哪個模型上。
+    /// </summary>
+    string ModelName { get; }
 
     /// <summary>
     /// 產生文字。
@@ -30,7 +52,7 @@ public interface ITextGenerationProvider
     /// 但這裡的呼叫端在背景執行緒、接收端本身就是 thread-safe，同步呼叫即可。
     /// </para>
     /// </param>
-    Task<string> GenerateAsync(
+    Task<TextGenerationResult> GenerateAsync(
         string systemPrompt,
         string userPrompt,
         Action<string>? onDelta,

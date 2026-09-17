@@ -3,9 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.TodoExtraction;
 
@@ -35,17 +38,23 @@ public class TodoExtractionService
     private readonly BackendDBContext context;
     private readonly IEnumerable<ITextGenerationProvider> textGenerationProviders;
     private readonly IOptions<LlmSettings> llmSettings;
+    private readonly AiUsageRecorder usageRecorder;
+    private readonly CurrentUserService currentUserService;
     private readonly ILogger<TodoExtractionService> logger;
 
     public TodoExtractionService(
         BackendDBContext context,
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         IOptions<LlmSettings> llmSettings,
+        AiUsageRecorder usageRecorder,
+        CurrentUserService currentUserService,
         ILogger<TodoExtractionService> logger)
     {
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
         this.llmSettings = llmSettings;
+        this.usageRecorder = usageRecorder;
+        this.currentUserService = currentUserService;
         this.logger = logger;
     }
 
@@ -62,7 +71,8 @@ public class TodoExtractionService
         // 從資料庫讀，不信任 UI 傳來的複本——畫面上那份可能已經是別人改過之前的舊資料。
         var meeting = await context.Meeting.AsNoTracking()
             .Where(x => x.Id == meetingId)
-            .Select(x => new { x.Title, x.MeetingDate, x.DraftContent })
+            // ProjectId 是給用量帳本用的：要能回答「哪個專案最燒錢」。
+            .Select(x => new { x.Title, x.MeetingDate, x.DraftContent, x.ProjectId })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException($"找不到 Id 為 {meetingId} 的會議紀錄，可能已被刪除。");
 
@@ -74,9 +84,28 @@ public class TodoExtractionService
         var userPrompt = BuildUserPrompt(meeting.DraftContent, meeting.MeetingDate);
 
         // onDelta 傳 null：輸出是 JSON，逐字顯示對使用者沒有意義。
-        var raw = await provider.GenerateAsync(SystemPrompt, userPrompt, null, cancellationToken);
+        TextGenerationResult generated;
+        try
+        {
+            generated = await provider.GenerateAsync(SystemPrompt, userPrompt, null, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // 先記帳再往外拋：串流跑到一半斷掉時，已經生成的 token 供應商照算。
+            await RecordUsageAsync(
+                provider,
+                meetingId,
+                meeting.ProjectId,
+                ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
+                tokens: null,
+                errorMessage: ex.Message);
+            throw;
+        }
 
-        var results = TodoExtractionParser.Parse(raw);
+        await RecordUsageAsync(
+            provider, meetingId, meeting.ProjectId, AiUsageOutcome.Succeeded, generated.Usage, errorMessage: null);
+
+        var results = TodoExtractionParser.Parse(generated.Content);
 
         logger.LogInformation(
             "Todo extraction completed. MeetingId={MeetingId}, DraftLength={DraftLength}, ExtractedCount={ExtractedCount}",
@@ -85,6 +114,30 @@ public class TodoExtractionService
             results.Count);
 
         return results;
+    }
+
+    /// <summary>把這次呼叫寫進用量帳本。這條路徑走在使用者的請求裡，所以拿得到 CurrentUserService。</summary>
+    private Task RecordUsageAsync(
+        ITextGenerationProvider provider,
+        int meetingId,
+        int? projectId,
+        AiUsageOutcome outcome,
+        AiTokenUsage? tokens,
+        string? errorMessage)
+    {
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+
+        return usageRecorder.RecordAsync(new AiUsageEntry(
+            AiUsageFeature.TodoExtraction,
+            outcome,
+            provider.ProviderName,
+            provider.ModelName,
+            Tokens: tokens,
+            UserId: userId,
+            UserName: userName,
+            MeetingId: meetingId,
+            ProjectId: projectId,
+            ErrorMessage: errorMessage));
     }
 
     /// <summary>

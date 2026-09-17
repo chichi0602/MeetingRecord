@@ -6,6 +6,8 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.TodoExtraction;
+using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Tests;
@@ -136,10 +138,14 @@ public sealed class TodoExtractionServiceTests
         /// </summary>
         public TodoExtractionService CreateService()
         {
+            var settings = Options.Create(new LlmSettings());
+
             return new TodoExtractionService(
                 Context,
                 [],
-                Options.Create(new LlmSettings()),
+                settings,
+                new AiUsageRecorder(Context, settings, loggerFactory.CreateLogger<AiUsageRecorder>()),
+                new CurrentUserService(),
                 loggerFactory.CreateLogger<TodoExtractionService>());
         }
 

@@ -1,0 +1,145 @@
+@using MeetingRecord.Business.Services.AiUsage
+@using MeetingRecord.Business.Services.Dashboard
+@using MeetingRecord.Share.Enums
+
+@if (!string.IsNullOrWhiteSpace(RoleMessage))
+{
+    <div class="ai-usage-denied">@RoleMessage</div>
+}
+else
+{
+    @* 左邊重新整理、右邊期間，與全站清單頁一致（0.4.75 定案）。 *@
+    <div class="ai-usage-toolbar">
+        <div class="ai-usage-toolbar-left">
+            <Tooltip Title="重新整理">
+                <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="ReloadAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+                </Button>
+            </Tooltip>
+        </div>
+
+        <div class="ai-usage-toolbar-right">
+            @* 整頁共用同一個期間：圖表一個範圍、表格另一個範圍，必然會出現
+               「圖說 1,200 次、表格只有 80 筆」這種看起來像 bug 的畫面。 *@
+            <Select TItem="int" TItemValue="int"
+                    Value="@trendDays"
+                    ValueChanged="OnTrendDaysChangedAsync"
+                    Disabled="@isLoading"
+                    Style="min-width: 130px;">
+                @foreach (var days in TrendDayOptions)
+                {
+                    <SelectOption TItem="int" TItemValue="int" Value="@days">@($"最近 {days} 天")</SelectOption>
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string"
+                    Value="@featureFilter"
+                    ValueChanged="OnFeatureChangedAsync"
+                    Disabled="@isLoading"
+                    Style="min-width: 150px;">
+                <SelectOption TItem="string" TItemValue="string" Value="@AllFeatures">全部功能</SelectOption>
+                @foreach (var feature in AllFeatureValues)
+                {
+                    <SelectOption TItem="string" TItemValue="string"
+                                  Value="@feature.ToString()">@AiUsageFeatureText.Describe(feature)</SelectOption>
+                }
+            </Select>
+        </div>
+    </div>
+
+    @if (summary is null)
+    {
+        <div class="ai-usage-empty">載入中…</div>
+    }
+    else
+    {
+        @* ⚠️ 統計起始日一定要寫出來。這張帳本沒有回填，不講清楚的話使用者會以為
+           系統在此之前都沒有花錢。 *@
+        <div class="ai-usage-note">
+            @if (summary.StartedAt is { } startedAt)
+            {
+                <span>統計起始 @startedAt.ToString("yyyy/MM/dd")，此日之前的呼叫沒有留下用量資料。</span>
+            }
+            else
+            {
+                <span>尚未記錄到任何 AI 呼叫。這張帳本從 0.4.80 起開始累積，不回填先前的用量。</span>
+            }
+        </div>
+
+        @if (summary.UnpricedCallCount > 0)
+        {
+            @* 這一條是整個功能最容易無聲出錯的地方：換了 deployment 卻沒設單價時，
+               金額會是空的而不是 0，但使用者不會知道為什麼。 *@
+            <div class="ai-usage-warning">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+                <span>
+                    有 @summary.UnpricedCallCount 次呼叫的模型未設定單價，金額<b>未</b>納入統計。
+                    請在 <code>appsettings.json</code> 的 <code>LlmSettings:Pricing</code> 依 deployment 名稱補上。
+                </span>
+            </div>
+        }
+
+        <div class="ai-usage-cards">
+            @foreach (var card in summary.Cards)
+            {
+                <StatCard Item="card" />
+            }
+        </div>
+
+        <LineChart Title="@($"近 {summary.DailyCost.Count} 天每日估算金額")"
+                   Points="summary.DailyCost"
+                   SeriesOneLabel="@summary.CostSeriesOneLabel"
+                   SeriesTwoLabel="@summary.CostSeriesTwoLabel" />
+
+        <div class="ai-usage-grid">
+            <PieChart Title="本月依功能別" Slices="summary.ByFeature" TotalDisplay="@summary.TotalCostDisplay" />
+            <BarChart Title="本月依模型" Items="summary.ByModel" />
+        </div>
+
+        <BarChart Title="本月依使用者" Items="summary.ByUser" />
+
+        <div class="ai-usage-table">
+            <div class="ai-usage-table-title">最近呼叫明細</div>
+
+            <Table @ref="table"
+                   TItem="AiUsageRow"
+                   RemoteDataSource="true"
+                   DataSource="@rows"
+                   OnChange="OnTableChangeAsync"
+                   @bind-PageIndex="pageIndex"
+                   @bind-PageSize="pageSize"
+                   @bind-Total="total"
+                   Size="TableSize.Small">
+                <Column TData="DateTime" Title="時間">
+                    <span class="ai-usage-time">@context.OccurredAt.ToString("MM/dd HH:mm:ss")</span>
+                </Column>
+                <Column TData="string" Title="功能">@context.FeatureText</Column>
+                <Column TData="string" Title="模型">@context.Model</Column>
+                <Column TData="string" Title="使用者">@(context.UserName ?? "—")</Column>
+                <Column TData="string" Title="對象">@context.Target</Column>
+                <Column TData="string" Title="用量">@context.UsageText</Column>
+                <Column TData="string" Title="估算金額">
+                    <span class="ai-usage-cost">@context.CostText</span>
+                </Column>
+                <Column TData="string" Title="狀態">
+                    @if (context.Outcome == AiUsageOutcome.Succeeded)
+                    {
+                        <span>@context.OutcomeText</span>
+                    }
+                    else
+                    {
+                        <span class="ai-usage-failed" title="@context.ErrorMessage">@context.OutcomeText</span>
+                    }
+                </Column>
+            </Table>
+        </div>
+
+        @* 誠實的下限說明。失敗與取消的呼叫沒有用量資料，但供應商仍可能計費——
+           這是這個功能唯一站得住腳的講法，而且零成本。 *@
+        <div class="ai-usage-footnote">
+            金額為<b>估算</b>：依 <code>LlmSettings:Pricing</code> 的單價在呼叫當下換算，改設定不影響既有紀錄。
+            失敗與取消的呼叫沒有用量資料，但串流中斷時供應商仍可能計費，因此本頁的金額是<b>下限</b>，
+            實際帳單可能略高。
+        </div>
+    }
+}

@@ -18,9 +18,13 @@
      @ondragover:stopPropagation="true"
      @ondrop:stopPropagation="true">
 
-    @* ⚠️ @key 不是裝飾：input 在 change 之後不會清空 value，重新挑「同一個檔案」時
-       瀏覽器認為沒有變化、不再觸發 change，畫面就完全沒反應。每次選完換一個 key
-       強制重建 input，「拖錯 → 移除 → 再拖同一個」才會有反應。 *@
+    @* @key 讓呼叫端可以用 Reset() 重建 input：input 在 change 之後不會清空 value，
+       重新拖「同一個檔案」時瀏覽器認為沒有變化、不再觸發 change，畫面就完全沒反應。
+
+       ⚠️ 換 key 的時機**只能**是呼叫端用完那個檔案之後（見 FileDropZone.Reset）。
+       0.4.77 曾經在「選完檔案」當下就換 key，結果 Blazor 立刻銷毀了這個 input，
+       而呼叫端剛拿到的 IBrowserFile 正是綁在它身上——稍後讀檔就會拿到
+       「Cannot read properties of null (reading '_blazorFilesById')」，上傳全部失敗。 *@
     <InputFile @key="resetToken"
                OnChange="OnFileChangedAsync"
                multiple="@Multiple"

@@ -88,6 +88,12 @@ public partial class ProjectViewView : IDisposable
         && SelectedTranscript?.CanGenerateDraft == true;
 
     private readonly List<PendingUploadFileItem> pendingUploadFiles = [];
+
+    /// <summary>
+    /// 附件的拖拉區。⚠️ Reset() 只能在「確定不再需要那些 IBrowserFile 之後」呼叫——
+    /// 它會重建底下的 input，太早呼叫會讓待上傳的檔案讀不出來（見 FileDropZone 的註解）。
+    /// </summary>
+    private FileDropZone? attachmentDropZone;
     private readonly HashSet<int> removedFileIds = [];
 
     private string modalTitle = "專案維護";
@@ -857,8 +863,10 @@ public partial class ProjectViewView : IDisposable
                 return;
             }
 
+            // 附件已經讀完上傳完了，這時才可以重建 input。
             pendingUploadFiles.Clear();
             removedFileIds.Clear();
+            attachmentDropZone?.Reset();
 
             NotifySuccess(isNewRecordMode ? "新增成功" : "修改成功");
 
@@ -891,6 +899,7 @@ public partial class ProjectViewView : IDisposable
         modalVisible = false;
         pendingUploadFiles.Clear();
         removedFileIds.Clear();
+        attachmentDropZone?.Reset();
         logger.LogDebug("Project modal cancelled.");
         return Task.CompletedTask;
     }
@@ -923,6 +932,9 @@ public partial class ProjectViewView : IDisposable
         if (file is not null)
         {
             pendingUploadFiles.Remove(file);
+
+            // 移除之後重建 input，「拖錯 → 移除 → 再拖同一個」才會再觸發 change。
+            attachmentDropZone?.Reset();
         }
     }
 

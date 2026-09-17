@@ -13,6 +13,12 @@ public class RolePermissionService
             // 單元素＝只有一個開關、沒有動作欄（比照儀表板）。使用說明是純閱讀頁，
             // ⚠️ 但仍然要勾才看得到——新建角色時記得把它打開。
             [MagicObjectHelper.角色_使用說明],
+
+            // AI 用量分析（0.4.80）。同樣是純閱讀頁，所以是單元素而不是塞進「系統管理」那一組
+            // ——那組的 Skip(1) 成員會長出 create/edit/delete/export 勾選欄，對唯讀頁沒有意義。
+            // ⚠️ 這一頁看得到**全公司**的用量與人名，而且不套團隊過濾。
+            //    預設只給管理員；勾給其他角色之前請先確認那是刻意的。
+            [MagicObjectHelper.角色_AI用量分析],
             [
                 MagicObjectHelper.角色_專案管理,
                 MagicObjectHelper.角色_專案項目,

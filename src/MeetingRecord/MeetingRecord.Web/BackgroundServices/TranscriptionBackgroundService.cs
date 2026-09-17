@@ -73,15 +73,17 @@ public sealed class TranscriptionBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            int meetingId;
+            MeetingJobRequest request;
             try
             {
-                meetingId = await queue.DequeueAsync(stoppingToken);
+                request = await queue.DequeueAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
                 break;
             }
+
+            var meetingId = request.MeetingId;
 
             try
             {
@@ -98,7 +100,12 @@ public sealed class TranscriptionBackgroundService : BackgroundService
                 using var handle = cancellationRegistry.BeginJob(BackgroundJobKind.Transcription, meetingId, stoppingToken);
                 var runner = scope.ServiceProvider.GetRequiredService<TranscriptionJobRunner>();
 
-                await runner.RunAsync(meetingId, handle.Token, () => handle.IsCancelledByUser);
+                await runner.RunAsync(
+                    meetingId,
+                    handle.Token,
+                    () => handle.IsCancelledByUser,
+                    request.RequestedByUserId,
+                    request.RequestedByUserName);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

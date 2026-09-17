@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
@@ -178,6 +179,171 @@ public sealed class MeetingDraftJobRunnerTests
 
     #endregion
 
+    #region 用量帳本（0.4.80）
+
+    [Fact]
+    public async Task RunAsync_ShouldRecordOneLedgerRowPerApiCall()
+    {
+        // ⚠️ 「一次生成 = 一次呼叫」是錯的。長逐字稿會走 map-reduce：
+        // N 次分段摘要 ＋ 1 次最終整理。只記一筆的話，長會議的成本會被嚴重低估——
+        // 而長會議正是最貴的那種。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var longTranscript = string.Join(
+            "\n\n",
+            new string('甲', 10000),
+            new string('乙', 10000));
+        var meeting = await fixture.AddCompletedMeetingAsync("長會議", longTranscript, template);
+
+        var provider = new FakeTextGenerationProvider("段落摘要");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var ledger = await fixture.ReadUsageLogAsync();
+
+        // 帳本的筆數必須等於實際的 API 呼叫次數。
+        Assert.Equal(provider.Calls.Count, ledger.Count);
+        Assert.Equal(2, ledger.Count(x => x.Feature == AiUsageFeature.MeetingDraftChunkSummary));
+        Assert.Equal(1, ledger.Count(x => x.Feature == AiUsageFeature.MeetingDraft));
+        Assert.All(ledger, x => Assert.Equal(AiUsageOutcome.Succeeded, x.Outcome));
+        Assert.All(ledger, x => Assert.Equal(meeting.Id, x.MeetingId));
+        Assert.All(ledger, x => Assert.Equal("gpt-4o-mini", x.Model));
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldRecordTokensAndCost()
+    {
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "內容", template);
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var row = Assert.Single(await fixture.ReadUsageLogAsync());
+
+        Assert.Equal(100, row.InputTokens);
+        Assert.Equal(50, row.OutputTokens);
+
+        // 100/1e6*0.15 + 50/1e6*0.60 = 0.000015 + 0.00003 = 0.000045
+        Assert.Equal(0.000045m, row.EstimatedCost);
+
+        // 單價一起存下來，日後才回答得出「這個數字是怎麼算的」。
+        Assert.Equal(0.15m, row.InputPricePerMillion);
+        Assert.Equal(0.60m, row.OutputPricePerMillion);
+
+        // 文字生成不是按時長計費，時長欄位必須留空。
+        Assert.Null(row.AudioSeconds);
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldStillRecord_WhenChunkSummaryComesBackBlank()
+    {
+        // ⚠️ 空白摘要會被 continue 跳過，但那一次呼叫**照樣花了錢**。
+        // 記帳必須放在 continue 之前——這個專案在「進度回報」上已經踩過同一個坑。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var longTranscript = string.Join(
+            "\n\n",
+            new string('甲', 10000),
+            new string('乙', 10000));
+        var meeting = await fixture.AddCompletedMeetingAsync("長會議", longTranscript, template);
+
+        // 摘要全是空白字元 → 每一段都會走 continue，最後整個工作以失敗收場。
+        var provider = new FakeTextGenerationProvider("   ");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(DraftStatus.Failed, saved.DraftStatus);
+
+        var ledger = await fixture.ReadUsageLogAsync();
+
+        // 兩段摘要都打了 API，兩筆都要在帳上，儘管最後整個工作失敗。
+        Assert.Equal(2, ledger.Count);
+        Assert.All(ledger, x => Assert.Equal(AiUsageFeature.MeetingDraftChunkSummary, x.Feature));
+        Assert.All(ledger, x => Assert.Equal(AiUsageOutcome.Succeeded, x.Outcome));
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldRecordFailedCallWithoutGuessingTokens()
+    {
+        // 串流跑到一半斷掉時，已經生成的 token 供應商照算，但 usage 那一片永遠不會到。
+        // 所以要記一筆、但**不猜用量**——猜出來的數字會被當成事實。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "內容", template);
+
+        var provider = new FakeTextGenerationProvider(new InvalidOperationException("連線中斷"));
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var row = Assert.Single(await fixture.ReadUsageLogAsync());
+
+        Assert.Equal(AiUsageOutcome.Failed, row.Outcome);
+        Assert.Null(row.InputTokens);
+        Assert.Null(row.OutputTokens);
+        Assert.Null(row.EstimatedCost);
+        Assert.Contains("連線中斷", row.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordingShouldNotCommitDraftBeforeItIsReady()
+    {
+        // ⚠️ Recorder 與 runner 共用同一個 BackendDBContext，它的 SaveChanges 會把
+        // runner 所有未提交的追蹤變更一起送出去。所以記帳必須放在「修改 meeting 之前」；
+        // 放在後面的話，生成失敗時反而會把半成品的草稿寫進資料庫。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "內容", template);
+
+        var provider = new FakeTextGenerationProvider(new InvalidOperationException("連線中斷"));
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+
+        Assert.Equal(DraftStatus.Failed, saved.DraftStatus);
+        Assert.Null(saved.DraftContent);
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldAttributeToTheRequester()
+    {
+        // ⚠️ 背景 scope 的 CurrentUserService 是空白物件（Id=0、Name=""），不是 null。
+        // 觸發者一定要一路從佇列傳進來，否則所有背景呼叫都會被記到「空白使用者」而且不報錯。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "內容", template);
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(
+            meeting.Id, CancellationToken.None, isCancelledByUser: null,
+            requestedByUserId: 7, requestedByUserName: "王小明");
+
+        var row = Assert.Single(await fixture.ReadUsageLogAsync());
+
+        Assert.Equal(7, row.UserId);
+        Assert.Equal("王小明", row.UserName);
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldRecordWithoutCost_WhenProviderReportsNoUsage()
+    {
+        // api-version 不支援 stream_options 時會走到這裡。呼叫成功、但沒有用量可記——
+        // 金額必須留白而不是 0，否則總額會靜靜地少報。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "內容", template);
+
+        var provider = new FakeTextGenerationProvider("會議紀錄") { Usage = null };
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var row = Assert.Single(await fixture.ReadUsageLogAsync());
+
+        Assert.Equal(AiUsageOutcome.Succeeded, row.Outcome);
+        Assert.Null(row.InputTokens);
+        Assert.Null(row.EstimatedCost);
+    }
+
+    #endregion
+
     #region 失敗與跳過
 
     [Fact]
@@ -269,7 +435,12 @@ public sealed class MeetingDraftJobRunnerTests
 
         public string ProviderName => "AzureOpenAI";
 
-        public Task<string> GenerateAsync(
+        public string ModelName => "gpt-4o-mini";
+
+        /// <summary>每次呼叫回報的 token 用量。設成 null 可模擬「供應商沒回報用量」。</summary>
+        public AiTokenUsage? Usage { get; set; } = new(InputTokens: 100, OutputTokens: 50);
+
+        public Task<TextGenerationResult> GenerateAsync(
             string systemPrompt,
             string userPrompt,
             Action<string>? onDelta,
@@ -288,7 +459,7 @@ public sealed class MeetingDraftJobRunnerTests
             onDelta?.Invoke(response[..midpoint]);
             onDelta?.Invoke(response[midpoint..]);
 
-            return Task.FromResult(response);
+            return Task.FromResult(new TextGenerationResult(response, Usage));
         }
     }
 
@@ -324,6 +495,14 @@ public sealed class MeetingDraftJobRunnerTests
                 Model = "gpt-4o-mini",
                 ApiVersion = "2024-10-21",
             };
+
+            // 單價設好，帳本的金額欄位才測得到；沒設的話金額一律是 null（那是另一組測試在守的）。
+            settings.Pricing["gpt-4o-mini"] = new LlmPricingSettings
+            {
+                InputPerMillionTokens = 0.15m,
+                OutputPerMillionTokens = 0.60m,
+            };
+
             llmSettings = Options.Create(settings);
         }
 
@@ -360,8 +539,15 @@ public sealed class MeetingDraftJobRunnerTests
                 fileStore,
                 llmSettings,
                 ProgressNotifier,
+                // 用真的 Recorder 而不是假的：它與 runner 共用同一個 context，
+                // 而「記帳的 SaveChanges 會不會提前提交 runner 的變更」正是要測的事情之一。
+                new AiUsageRecorder(Context, llmSettings, loggerFactory.CreateLogger<AiUsageRecorder>()),
                 loggerFactory.CreateLogger<MeetingDraftJobRunner>());
         }
+
+        /// <summary>這個 fixture 的帳本內容，依寫入順序。</summary>
+        public async Task<List<AiUsageLog>> ReadUsageLogAsync()
+            => await Context.AiUsageLog.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
 
         public async Task<PromptTemplate> AddTemplateAsync(string content)
         {

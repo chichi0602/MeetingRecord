@@ -1,0 +1,119 @@
+/* 工具列：左邊新增／重新整理、右邊過濾（0.4.75 定案的全站慣例）。
+   這 14 行在七個清單頁各有一份——scoped CSS 沒有共用元件，照既有現況複製。 */
+.ai-usage-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.ai-usage-toolbar-left,
+.ai-usage-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-usage-denied,
+.ai-usage-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+/* 統計起始日。這一條不能省——帳本沒有回填，不講清楚會讓人以為之前沒在花錢。 */
+.ai-usage-note {
+    margin-bottom: 12px;
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+    line-height: 1.7;
+}
+
+.ai-usage-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 10px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.ai-usage-warning ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.ai-usage-warning code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    color: inherit;
+    font-size: 0.85em;
+}
+
+/* 指標卡片。
+   ⚠️ 不能直接借用儀表板的 .dashboard-cards——那條規則在 DashboardView.razor.css 裡是
+   **scoped** 的（會被編成 [b-xxxxx]），在這一頁完全不生效，卡片會變成一張一列。
+   scoped CSS 沒有共用元件，照既有現況複製一份。 */
+.ai-usage-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+/* 兩欄並排；窄版退成單欄，比照儀表板。 */
+.ai-usage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.ai-usage-table {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.ai-usage-table-title {
+    margin-bottom: 12px;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+/* 時間與金額用等寬數字，逐列比對才對得齊。 */
+.ai-usage-time,
+.ai-usage-cost {
+    font-variant-numeric: tabular-nums;
+}
+
+.ai-usage-failed {
+    color: var(--oat-err);
+    /* 失敗原因放在 title 上，滑過才顯示——完整訊息會把表格撐爆。 */
+    cursor: help;
+}
+
+.ai-usage-footnote {
+    margin-top: 16px;
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+    line-height: 1.9;
+}
+
+.ai-usage-footnote code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    color: inherit;
+    font-size: 0.9em;
+}

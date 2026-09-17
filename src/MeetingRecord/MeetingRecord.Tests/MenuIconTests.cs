@@ -32,6 +32,10 @@ public sealed class MenuIconTests
         "logout",
         "checklist",
         "help_outline",
+        // AI 用量分析（0.4.80）。⚠️ 必須是 classic Material Icons——App.razor 載的是
+        // Material+Icons+Outlined，用 Material Symbols 專有名稱（monitoring、query_stats）
+        // 會渲染成破圖，而這個白名單擋不了那種錯。
+        "monetization_on",
     };
 
     [Fact]

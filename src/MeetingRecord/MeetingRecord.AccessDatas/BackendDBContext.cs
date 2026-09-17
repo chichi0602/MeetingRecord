@@ -29,6 +29,9 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<UserRole> UserRole { get; set; }
     public virtual DbSet<UserTeam> UserTeam { get; set; }
 
+    /// <summary>AI 呼叫的用量帳本（0.4.80）。一次呼叫一列，永久保留，不回填歷史。</summary>
+    public virtual DbSet<AiUsageLog> AiUsageLog { get; set; }
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -106,6 +109,15 @@ public partial class BackendDBContext : DbContext
             entity.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
         });
         #endregion
+
+        modelBuilder.Entity<AiUsageLog>(entity =>
+        {
+            // 每一個查詢都以時間範圍開頭（本月、上月同期、最近 N 天、明細分頁），
+            // 分組則全部在記憶體做（資料量與 DashboardService 同一個量級）。
+            // 刻意不為 Feature／UserId 另建索引：它們只在日期過濾之後才用到，
+            // 選擇性不足以打敗表掃描，徒增寫入成本——而帳本是全系統寫入最頻繁的表。
+            entity.HasIndex(x => x.OccurredAt);
+        });
 
         OnModelCreatingPartial(modelBuilder);
     }

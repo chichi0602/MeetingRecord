@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using MeetingRecord.Business.Services.Other;
 
 namespace MeetingRecord.Business.Services.TextGeneration;
 
@@ -13,22 +14,22 @@ namespace MeetingRecord.Business.Services.TextGeneration;
 /// </summary>
 public interface IMeetingDraftQueue
 {
-    ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default);
+    ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default);
 
-    ValueTask<int> DequeueAsync(CancellationToken cancellationToken);
+    ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken);
 }
 
 public sealed class MeetingDraftQueue : IMeetingDraftQueue
 {
-    private readonly Channel<int> channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions
+    private readonly Channel<MeetingJobRequest> channel = Channel.CreateUnbounded<MeetingJobRequest>(new UnboundedChannelOptions
     {
         SingleReader = true,
         SingleWriter = false,
     });
 
-    public ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default)
-        => channel.Writer.WriteAsync(meetingId, cancellationToken);
+    public ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default)
+        => channel.Writer.WriteAsync(request, cancellationToken);
 
-    public ValueTask<int> DequeueAsync(CancellationToken cancellationToken)
+    public ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken)
         => channel.Reader.ReadAsync(cancellationToken);
 }

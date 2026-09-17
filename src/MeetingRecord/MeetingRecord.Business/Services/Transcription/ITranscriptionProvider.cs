@@ -10,6 +10,11 @@ public interface ITranscriptionProvider
     string ProviderName { get; }
 
     /// <summary>
+    /// 實際使用的 deployment／model 名稱。用量帳本以它查單價（0.4.80）。
+    /// </summary>
+    string ModelName { get; }
+
+    /// <summary>
     /// 將單一音訊段落轉成文字。
     /// </summary>
     /// <param name="audio">音訊內容（本專案一律傳入 mp3）。</param>

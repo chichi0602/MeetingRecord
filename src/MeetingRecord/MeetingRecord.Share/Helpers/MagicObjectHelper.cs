@@ -33,6 +33,13 @@ public class MagicObjectHelper
     public const string 角色_系統管理 = "系統管理功能";
     public const string 角色_使用者管理 = "使用者管理";
     public const string 角色_角色管理 = "角色管理 ";
+
+    /// <summary>
+    /// AI 用量分析（0.4.80）。⚠️ 這個值會直接拿去做字串比對，也是側邊欄的顯示名，
+    /// 而且必須與 Menu.json 的 name 一字不差。上面幾個常數尾端有空白是既有資料的
+    /// 既成事實（「角色管理 」「登出 」），新常數不要跟著加。
+    /// </summary>
+    public const string 角色_AI用量分析 = "AI 用量分析";
     public const string 角色_資料定義 = "資料定義管理功能";
     public const string 角色_分類清單 = "分類清單";
     public const string 角色_團隊清單 = "團隊清單";

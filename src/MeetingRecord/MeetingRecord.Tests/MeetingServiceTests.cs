@@ -10,6 +10,7 @@ using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Models.Others;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
@@ -1003,6 +1004,30 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task RequestDraftAsync_ShouldCarryTheRequesterIntoTheQueue()
+    {
+        // ⚠️ 用量帳本要回答「誰在燒錢」，而生成跑在背景服務自建的 scope 裡——
+        // 那裡的 CurrentUser 是空白物件（Id=0、Name=""），不是 null 也不會拋例外。
+        // 所以觸發者一定要在入列這一刻就抓下來帶著走；漏掉的話，所有背景呼叫
+        // 都會被默默記成無名氏，而且完全不報錯。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("已轉錄的會議");
+
+        fixture.CurrentUserService.CurrentUser = new CurrentUser { Id = 7, Name = "王小明", Account = "wang" };
+
+        var result = await fixture.CreateService().RequestDraftAsync(meeting.Id, project.Id, template.Id);
+
+        Assert.True(result.Success);
+
+        var request = Assert.Single(fixture.DraftQueue.Requests);
+        Assert.Equal(meeting.Id, request.MeetingId);
+        Assert.Equal(7, request.RequestedByUserId);
+        Assert.Equal("王小明", request.RequestedByUserName);
+    }
+
+    [Fact]
     public async Task RequestDraftAsync_ShouldReject_WhenTranscriptIsNotCompleted()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
@@ -1352,29 +1377,39 @@ public sealed class MeetingServiceTests
 
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue
     {
+        /// <summary>入列的會議 Id。刻意維持 List&lt;int&gt;，讓既有的 23 處斷言一行都不用改。</summary>
         public List<int> Enqueued { get; } = [];
 
-        public ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default)
+        /// <summary>完整的請求內容，用來驗證觸發者有沒有一路傳進來（0.4.80）。</summary>
+        public List<MeetingJobRequest> Requests { get; } = [];
+
+        public ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default)
         {
-            Enqueued.Add(meetingId);
+            Enqueued.Add(request.MeetingId);
+            Requests.Add(request);
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask<int> DequeueAsync(CancellationToken cancellationToken)
+        public ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException("測試不會消費佇列。");
     }
 
     private sealed class FakeMeetingDraftQueue : IMeetingDraftQueue
     {
+        /// <summary>入列的會議 Id。刻意維持 List&lt;int&gt;，讓既有的 23 處斷言一行都不用改。</summary>
         public List<int> Enqueued { get; } = [];
 
-        public ValueTask EnqueueAsync(int meetingId, CancellationToken cancellationToken = default)
+        /// <summary>完整的請求內容，用來驗證觸發者有沒有一路傳進來（0.4.80）。</summary>
+        public List<MeetingJobRequest> Requests { get; } = [];
+
+        public ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default)
         {
-            Enqueued.Add(meetingId);
+            Enqueued.Add(request.MeetingId);
+            Requests.Add(request);
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask<int> DequeueAsync(CancellationToken cancellationToken)
+        public ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException("測試不會消費佇列。");
     }
 
@@ -1453,6 +1488,12 @@ public sealed class MeetingServiceTests
             return new MeetingServiceFixture(connection, context, rootPath);
         }
 
+        /// <summary>
+        /// 入列時要記成哪一位使用者（0.4.80 的用量帳本歸屬）。
+        /// 預設是空白的 <c>CurrentUser</c>，與「未登入或背景 scope」的實際狀況一致。
+        /// </summary>
+        public CurrentUserService CurrentUserService { get; } = new();
+
         public MeetingService CreateService(bool isAdmin = true, params string[] teams)
         {
             return new MeetingService(
@@ -1465,7 +1506,8 @@ public sealed class MeetingServiceTests
                 Queue,
                 ProgressNotifier,
                 DraftQueue,
-                DraftProgressNotifier);
+                DraftProgressNotifier,
+                CurrentUserService);
         }
 
         public async Task<Meeting> AddMeetingAsync(

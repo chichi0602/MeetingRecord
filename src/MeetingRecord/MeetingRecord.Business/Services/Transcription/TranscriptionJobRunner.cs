@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
@@ -26,6 +28,7 @@ public class TranscriptionJobRunner
     private readonly MeetingFileStore fileStore;
     private readonly IOptions<LlmSettings> llmSettings;
     private readonly ITranscriptionProgressNotifier progressNotifier;
+    private readonly AiUsageRecorder usageRecorder;
     private readonly ILogger<TranscriptionJobRunner> logger;
 
     public TranscriptionJobRunner(
@@ -35,6 +38,7 @@ public class TranscriptionJobRunner
         MeetingFileStore fileStore,
         IOptions<LlmSettings> llmSettings,
         ITranscriptionProgressNotifier progressNotifier,
+        AiUsageRecorder usageRecorder,
         ILogger<TranscriptionJobRunner> logger)
     {
         this.context = context;
@@ -43,6 +47,7 @@ public class TranscriptionJobRunner
         this.fileStore = fileStore;
         this.llmSettings = llmSettings;
         this.progressNotifier = progressNotifier;
+        this.usageRecorder = usageRecorder;
         this.logger = logger;
     }
 
@@ -50,10 +55,16 @@ public class TranscriptionJobRunner
     /// 回報這次中斷是不是使用者主動要求的。應用程式關機同樣會拋 OperationCanceledException，
     /// 沒有這個判斷就會把關機時中斷的工作全部誤標成「已取消」。
     /// </param>
+    /// <param name="requestedByUserId">
+    /// 觸發這次轉錄的使用者，供用量帳本歸屬。⚠️ 必須由呼叫端傳進來——背景服務自建的 scope 裡
+    /// CurrentUser 是空白物件（Id=0），自己去問只會把全部背景呼叫記到「空白使用者」而且不報錯。
+    /// </param>
     public async Task RunAsync(
         int meetingId,
         CancellationToken cancellationToken,
-        Func<bool>? isCancelledByUser = null)
+        Func<bool>? isCancelledByUser = null,
+        int? requestedByUserId = null,
+        string? requestedByUserName = null)
     {
         var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null)
@@ -85,6 +96,13 @@ public class TranscriptionJobRunner
 
             using var segments = await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
 
+            // 每一段各自的秒數：轉錄按時長計費，而最後一段通常不是整整 15 分鐘。
+            // 全部算成整段會把費用高估。
+            var segmentSeconds = MediaDurationParser.SplitSegmentSeconds(
+                segments.TotalDuration,
+                segments.SegmentFullPaths.Count,
+                FfmpegMediaConverter.SegmentSeconds);
+
             var transcript = new StringBuilder();
             for (var index = 0; index < segments.SegmentFullPaths.Count; index++)
             {
@@ -97,8 +115,43 @@ public class TranscriptionJobRunner
                     index + 1,
                     segments.SegmentFullPaths.Count);
 
-                await using var segmentStream = File.OpenRead(segmentPath);
-                var segmentText = await provider.TranscribeAsync(segmentStream, Path.GetFileName(segmentPath), cancellationToken);
+                var thisSegmentSeconds = index < segmentSeconds.Count ? segmentSeconds[index] : (double?)null;
+
+                string segmentText;
+                await using (var segmentStream = File.OpenRead(segmentPath))
+                {
+                    try
+                    {
+                        segmentText = await provider.TranscribeAsync(
+                            segmentStream, Path.GetFileName(segmentPath), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        // 音檔已經上傳出去了，多半已計費。先記帳再往外拋。
+                        await RecordUsageAsync(
+                            provider,
+                            meeting,
+                            requestedByUserId,
+                            requestedByUserName,
+                            ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
+                            audioSeconds: null,
+                            segments.IsDurationEstimated,
+                            ex.Message);
+                        throw;
+                    }
+                }
+
+                // ⚠️ 記帳與進度一樣，都必須在下面兩個 continue **之前**：
+                //    指令洩漏被丟棄、或整段無人說話的段落，那一次轉錄照樣花了錢。
+                await RecordUsageAsync(
+                    provider,
+                    meeting,
+                    requestedByUserId,
+                    requestedByUserName,
+                    AiUsageOutcome.Succeeded,
+                    thisSegmentSeconds,
+                    segments.IsDurationEstimated,
+                    errorMessage: null);
 
                 // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
                 progressNotifier.ReportSegment(meetingId, index + 1, segments.SegmentFullPaths.Count);
@@ -173,6 +226,36 @@ public class TranscriptionJobRunner
     /// <summary>
     /// 依 <c>LlmSettings.TranscriptionProvider</c>（或 DefaultProvider）挑出對應的供應商實作。
     /// </summary>
+    /// <summary>
+    /// 把一段轉錄呼叫寫進用量帳本。
+    ///
+    /// <para>
+    /// ⚠️ 一個音檔會寫下 <b>N 筆</b>（每 15 分鐘一段各打一次 API），不是一筆。
+    /// 轉錄按**時長**計費，所以這裡填的是 <c>AudioSeconds</c> 而不是 token。
+    /// </para>
+    /// </summary>
+    private Task RecordUsageAsync(
+        ITranscriptionProvider provider,
+        Meeting meeting,
+        int? requestedByUserId,
+        string? requestedByUserName,
+        AiUsageOutcome outcome,
+        double? audioSeconds,
+        bool isDurationEstimated,
+        string? errorMessage)
+        => usageRecorder.RecordAsync(new AiUsageEntry(
+            AiUsageFeature.Transcription,
+            outcome,
+            provider.ProviderName,
+            provider.ModelName,
+            AudioSeconds: audioSeconds,
+            IsAudioDurationEstimated: isDurationEstimated,
+            UserId: requestedByUserId,
+            UserName: requestedByUserName,
+            MeetingId: meeting.Id,
+            ProjectId: meeting.ProjectId,
+            ErrorMessage: errorMessage));
+
     private ITranscriptionProvider ResolveProvider()
     {
         var settings = llmSettings.Value;

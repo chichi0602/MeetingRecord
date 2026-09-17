@@ -2,9 +2,33 @@ namespace MeetingRecord.Business.Services.Dashboard;
 
 /// <summary>圓餅圖的一個切片，或長條圖的一列。</summary>
 /// <param name="Label">顯示名稱。</param>
-/// <param name="Value">數量。</param>
+/// <param name="Value">
+/// 數量。**同時決定幾何（長條寬度、圓餅角度）與預設顯示文字**。
+///
+/// <para>
+/// 要畫的量不是整數時（例如金額），把它換算成整數的最小單位放這裡負責幾何，
+/// 再用 <paramref name="Display"/> 給正確的文字——見下。
+/// </para>
+/// </param>
 /// <param name="Tone">配色語意，讓「失敗」之類的項目在各張圖裡顏色一致。</param>
-public sealed record ChartSlice(string Label, int Value, ChartTone Tone = ChartTone.Neutral);
+/// <param name="Display">
+/// 覆寫顯示文字；null 時直接印 <paramref name="Value"/>。
+///
+/// <para>
+/// 0.4.80 新增，位置在最後且有預設值，所以既有的所有建構呼叫**原樣編譯、行為不變**。
+/// 存在的理由：<c>BarChart</c> 與 <c>PieChart</c> 是把 <c>Value</c> **原樣印出來**的，
+/// 金額以「分」為單位塞進去會顯示成「1234567」。
+/// </para>
+/// </param>
+public sealed record ChartSlice(
+    string Label,
+    int Value,
+    ChartTone Tone = ChartTone.Neutral,
+    string? Display = null)
+{
+    /// <summary>圖表上要印的文字。</summary>
+    public string DisplayText => Display ?? Value.ToString();
+}
 
 /// <summary>切片的配色語意。實際色碼由圖表元件對應到燕麥奶茶色票。</summary>
 public enum ChartTone

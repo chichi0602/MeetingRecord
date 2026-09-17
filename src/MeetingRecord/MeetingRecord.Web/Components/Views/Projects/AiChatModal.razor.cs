@@ -83,6 +83,24 @@ public partial class AiChatModal : ComponentBase
     /// <summary>上一次載入歷史用的對象，用來判斷是否需要重新載入。</summary>
     private (AiChatScope Scope, int TargetId)? loadedTarget;
 
+    /// <summary>這個對象底下的所有對話，最近更新的排最前面。</summary>
+    private IReadOnlyList<AiChatConversationInfo> conversations = [];
+
+    /// <summary>目前正在看哪一段對話。空字串代表還沒有任何對話。</summary>
+    private string currentConversationId = string.Empty;
+
+    /// <summary>正在改名的是哪一段；空字串表示沒有在改名。</summary>
+    private string renamingId = string.Empty;
+    private string renamingText = string.Empty;
+    private bool isSwitching;
+
+    private AiChatConversationInfo? CurrentConversation
+        => conversations.FirstOrDefault(x => string.Equals(x.Id, currentConversationId, StringComparison.Ordinal));
+
+    /// <summary>目前這段還沒問過問題時，按鈕是停用的，要說清楚為什麼。</summary>
+    private string NewConversationTooltip
+        => CurrentConversation is { MessageCount: 0 } ? "目前已經是一段空白的新對話" : "開新對話";
+
     /// <summary>
     /// 任一個耗時或會改狀態的動作進行中。所有按鈕共用同一個閘門：
     /// 匯出 PDF 要起無頭瀏覽器（數秒、上百 MB），連點會把伺服器打爛。
@@ -104,7 +122,216 @@ public partial class AiChatModal : ComponentBase
         }
 
         loadedTarget = (Scope, TargetId);
+        await LoadConversationsAsync(preferredId: null);
+    }
+
+    /// <summary>
+    /// 重新列出對話清單，並決定要顯示哪一段。
+    ///
+    /// <para>
+    /// 沒有指定就載**最近更新的那一段**；完全沒有對話時直接開一段新的——
+    /// 不要讓使用者面對一個空畫面還得先按「開新對話」才能問問題。
+    /// </para>
+    /// </summary>
+    private async Task LoadConversationsAsync(string? preferredId)
+    {
+        try
+        {
+            conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
+
+            var target = preferredId is not null
+                && conversations.Any(x => string.Equals(x.Id, preferredId, StringComparison.Ordinal))
+                    ? preferredId
+                    : conversations.FirstOrDefault()?.Id;
+
+            if (target is null)
+            {
+                // 一段都沒有：開一段空的，使用者可以直接開始問。
+                target = await AiChatService.CreateConversationAsync(Scope, TargetId);
+                conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
+            }
+
+            currentConversationId = target;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Loading AI chat conversations failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
+            errorMessage = $"載入對話清單失敗：{ex.Message}";
+            return;
+        }
+
         await LoadHistoryAsync();
+    }
+
+    /// <summary>切換到另一段對話。</summary>
+    private async Task OnSelectConversationAsync(string conversationId)
+    {
+        if (IsBusy || isSwitching || string.Equals(conversationId, currentConversationId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        isSwitching = true;
+        try
+        {
+            currentConversationId = conversationId;
+            await LoadHistoryAsync();
+        }
+        finally
+        {
+            isSwitching = false;
+        }
+    }
+
+    /// <summary>
+    /// 開一段新對話。
+    /// <b>不呼叫模型、不會產生費用</b>——只是建一個空檔案，所以不跳費用確認。
+    /// </summary>
+    private async Task OnNewConversationAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        // 目前這段一個字都還沒問，就是一段空白的新對話了。再開一段只會在共用的清單上
+        // 多堆一列「新對話」，而且誰也分不出差別。
+        if (CurrentConversation is { MessageCount: 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var created = await AiChatService.CreateConversationAsync(Scope, TargetId);
+            await LoadConversationsAsync(created);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Creating AI chat conversation failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
+            errorMessage = $"開新對話失敗：{ex.Message}";
+        }
+    }
+
+    private void OnRenameStart(AiChatConversationInfo session)
+    {
+        renamingId = session.Id;
+        renamingText = session.Title;
+    }
+
+    private void OnRenameCancel()
+    {
+        renamingId = string.Empty;
+        renamingText = string.Empty;
+    }
+
+    private async Task OnRenameKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await OnRenameCommitAsync();
+        }
+        else if (FormKeyboardHelper.IsCancel(args))
+        {
+            OnRenameCancel();
+        }
+    }
+
+    /// <summary>送出改名。空白視同取消——不要讓對話變成沒有名字。</summary>
+    private async Task OnRenameCommitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(renamingId) || string.IsNullOrWhiteSpace(renamingText))
+        {
+            OnRenameCancel();
+            return;
+        }
+
+        var target = renamingId;
+        var title = renamingText.Trim();
+        OnRenameCancel();
+
+        try
+        {
+            var outcome = await AiChatService.RenameConversationAsync(Scope, TargetId, target, title);
+            if (outcome == UpdateOutcome.NotFound)
+            {
+                errorMessage = "這段對話已經被刪除了，請重新整理後再試。";
+            }
+
+            await LoadConversationsAsync(currentConversationId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Renaming AI chat conversation failed. ConversationId={ConversationId}", target);
+            errorMessage = $"重新命名失敗：{ex.Message}";
+        }
+    }
+
+    /// <summary>刪掉其中一段對話。會刪資料，所以跳二次確認。</summary>
+    private async Task OnDeleteConversationAsync(AiChatConversationInfo session)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認刪除這段對話",
+            Content = session.MessageCount > 0
+                ? $"將刪除「{session.Title}」的全部 {session.MessageCount} 則訊息，所有人都會看不到，且無法復原。確定要刪除嗎？"
+                : $"將刪除「{session.Title}」。確定要刪除嗎？",
+            OkText = "刪除",
+            CancelText = "取消",
+            MaskClosable = false,
+            OkButtonProps = new ButtonProps { Danger = true },
+        });
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            await AiChatService.ClearHistoryAsync(Scope, TargetId, session.Id);
+
+            // 刪掉的正好是目前這一段時，交給 LoadConversationsAsync 自己挑下一段
+            // （沒有任何對話時它會開一段新的）。
+            var preferred = string.Equals(session.Id, currentConversationId, StringComparison.Ordinal)
+                ? null
+                : currentConversationId;
+
+            await LoadConversationsAsync(preferred);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Deleting AI chat conversation failed. ConversationId={ConversationId}", session.Id);
+            errorMessage = $"刪除對話失敗：{ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 只重新列出左側清單，不動目前顯示的訊息。
+    ///
+    /// <para>
+    /// ⚠️ 每一個會改到對話內容的動作（提問、編輯、重新產生）結束後都要呼叫。
+    /// 漏掉的話，第一次發問後左側仍然寫著「新對話」，而且因為則數還停在 0，
+    /// 「開新對話」會一直是停用的。
+    /// </para>
+    /// </summary>
+    private async Task RefreshConversationListAsync()
+    {
+        try
+        {
+            conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
+        }
+        catch (Exception ex)
+        {
+            // 清單沒刷新不該蓋掉剛剛得到的回答，記下來就好。
+            Logger.LogWarning(ex, "Refreshing AI chat conversation list failed. Scope={Scope}, TargetId={TargetId}",
+                Scope, TargetId);
+        }
     }
 
     private async Task LoadHistoryAsync()
@@ -120,7 +347,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            messages.AddRange(await AiChatService.GetHistoryAsync(Scope, TargetId));
+            messages.AddRange(await AiChatService.GetHistoryAsync(Scope, TargetId, currentConversationId));
         }
         catch (Exception ex)
         {
@@ -163,10 +390,11 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var answer = await AiChatService.AskAsync(Scope, TargetId, asked, OnDelta);
+            var answer = await AiChatService.AskAsync(Scope, TargetId, currentConversationId, asked, OnDelta);
 
             // 用服務層回傳的內容重建整段歷史，順便把提問者名稱與落庫時間補正。
             await LoadHistoryAsync();
+            await RefreshConversationListAsync();
             sourceNotice = DescribeSources(answer);
         }
         catch (Exception ex)
@@ -292,13 +520,14 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var outcome = await AiChatService.UpdateMessageAsync(Scope, TargetId, index, original, newContent);
+            var outcome = await AiChatService.UpdateMessageAsync(Scope, TargetId, currentConversationId, index, original, newContent);
             if (!HandleUpdateOutcome(outcome))
             {
                 return;
             }
 
             await LoadHistoryAsync();
+            await RefreshConversationListAsync();
             _ = MessageService.SuccessAsync("已更新這則訊息");
         }
         catch (Exception ex)
@@ -361,9 +590,10 @@ public partial class AiChatModal : ComponentBase
         try
         {
             var answer = await AiChatService.RegenerateAsync(
-                Scope, TargetId, index, original.Content, newQuestion, OnDelta);
+                Scope, TargetId, currentConversationId, index, original.Content, newQuestion, OnDelta);
 
             await LoadHistoryAsync();
+            await RefreshConversationListAsync();
             sourceNotice = DescribeSources(answer);
         }
         catch (Exception ex)
@@ -418,7 +648,7 @@ public partial class AiChatModal : ComponentBase
         {
             var exportedAt = DateTime.Now;
             var html = AiChatDocumentExporter.BuildMessageHtml(TargetName, messages[index], index + 1, exportedAt);
-            var fileName = AiChatDocumentExporter.BuildMessageFileName(TargetName, index + 1, exportedAt);
+            var fileName = AiChatDocumentExporter.BuildMessageFileName(TargetName, index + 1, exportedAt, CurrentConversation?.Title);
 
             await ExportAsync(html, fileName);
         }
@@ -449,8 +679,8 @@ public partial class AiChatModal : ComponentBase
         try
         {
             var exportedAt = DateTime.Now;
-            var html = AiChatDocumentExporter.BuildConversationHtml(TargetName, messages, exportedAt);
-            var fileName = AiChatDocumentExporter.BuildConversationFileName(TargetName, exportedAt);
+            var html = AiChatDocumentExporter.BuildConversationHtml(TargetName, messages, exportedAt, CurrentConversation?.Title);
+            var fileName = AiChatDocumentExporter.BuildConversationFileName(TargetName, exportedAt, CurrentConversation?.Title);
 
             await ExportAsync(html, fileName);
         }
@@ -476,38 +706,16 @@ public partial class AiChatModal : ComponentBase
 
     #endregion
 
+    /// <summary>
+    /// 刪掉目前這一段對話。與清單上那顆刪除鈕是同一件事，所以直接走同一條路徑——
+    /// 各寫一份的話，這裡刪完之後不重載清單，currentConversationId 會指向一個
+    /// 已經不存在的檔案。
+    /// </summary>
     private async Task OnClearAsync()
     {
-        if (IsBusy)
+        if (CurrentConversation is { } current)
         {
-            return;
-        }
-
-        // 這會直接把對話檔刪掉，不可復原，而且對話是所有人共用的。
-        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
-        {
-            Title = "確認清空這段對話",
-            Content = $"將刪除這段對話的全部 {messages.Count} 則訊息，所有人都會看不到，且無法復原。確定要清空嗎？",
-            OkText = "清空",
-            CancelText = "取消",
-            MaskClosable = false,
-            OkButtonProps = new ButtonProps { Danger = true },
-        });
-
-        if (!confirmed)
-        {
-            return;
-        }
-
-        try
-        {
-            await AiChatService.ClearHistoryAsync(Scope, TargetId);
-            await LoadHistoryAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Clearing AI chat history failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
-            errorMessage = $"清空對話失敗：{ex.Message}";
+            await OnDeleteConversationAsync(current);
         }
     }
 

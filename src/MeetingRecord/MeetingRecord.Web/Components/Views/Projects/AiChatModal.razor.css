@@ -1,7 +1,132 @@
+/* 左清單、右對話。清單固定寬，對話區吃掉剩下的（min-width: 0 不可省，
+   否則長訊息會把 grid 欄位撐開、把清單擠掉）。 */
+.ai-chat-shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 16px;
+}
+
+/* 視窗本身是 1080px，但小螢幕上 AntDesign 會自己縮。清單退到上方變成橫向一排，
+   比照待辦頁「負責人面板」在窄版退成單欄的既有作法。 */
+@media (max-width: 900px) {
+    .ai-chat-shell {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.ai-chat-sessions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--oat-50);
+    border: 1px solid var(--oat-200);
+    border-radius: 12px;
+}
+
+.ai-chat-sessions-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ai-chat-sessions-title {
+    color: var(--oat-ink);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+/* 對話很多時清單自己捲，不要把整個視窗撐長。
+   左欄會被 grid 拉成與對話區同高，所以這裡吃掉剩下的空間再自己捲
+   （min-height: 0 不可省，否則 flex 子項的最小高度是內容高度，根本捲不起來）。 */
+.ai-chat-sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.ai-chat-session {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}
+
+.ai-chat-session:hover {
+    background: var(--oat-100);
+}
+
+.ai-chat-session-on {
+    border-color: var(--oat-500);
+    background: var(--oat-100);
+}
+
+/* 整列可點。用 button 而不是 div：鍵盤 tab 得進去，讀螢幕軟體也認得。 */
+.ai-chat-session-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    text-align: left;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.ai-chat-session-main:disabled {
+    cursor: not-allowed;
+}
+
+.ai-chat-session-name {
+    color: var(--oat-ink);
+    font-size: 0.82rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-chat-session-meta {
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    /* 刻意不截斷：欄寬扣掉兩顆圖示鈕之後放不下「日期 · 建立者」，
+       截成「supp…」等於看不出是誰開的，換行多佔一行比較划算。 */
+    overflow-wrap: anywhere;
+}
+
+.ai-chat-session-tools {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.ai-chat-session-rename {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.ai-chat-session-rename-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
 .ai-chat {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 0;
 }
 
 /* 讀了哪些資料、哪些被截斷或跳過。這一條不能省——使用者要知道 AI 看到的是不是全部。 */

@@ -2,12 +2,72 @@
 
 @* 專案層級與單一會議共用同一個問答視窗，差別只在 Scope 與 TargetId。 *@
 <Modal Title="@Title"
-       Width="820"
+       Width="1080"
        Visible="@Visible"
        Keyboard="true"
        MaskClosable="false"
        Footer="null"
        OnCancel="OnCancelAsync">
+  <div class="ai-chat-shell">
+    @* 左欄：這個專案／會議底下的所有對話。共用的，所以每一列要看得出是誰開的。 *@
+    <aside class="ai-chat-sessions">
+        <div class="ai-chat-sessions-head">
+            <span class="ai-chat-sessions-title">對話紀錄</span>
+            <Tooltip Title="@NewConversationTooltip">
+                <Button Type="ButtonType.Default" Size="ButtonSize.Small"
+                        Disabled="@(IsBusy || CurrentConversation is { MessageCount: 0 })"
+                        OnClick="OnNewConversationAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>開新對話</span></span>
+                </Button>
+            </Tooltip>
+        </div>
+
+        <div class="ai-chat-sessions-list">
+            @foreach (var session in conversations)
+            {
+                var sessionId = session.Id;
+
+                <div class="ai-chat-session @(string.Equals(sessionId, currentConversationId, StringComparison.Ordinal) ? "ai-chat-session-on" : string.Empty)">
+                    @if (string.Equals(renamingId, sessionId, StringComparison.Ordinal))
+                    {
+                        @* 改名中。Enter 送出、Esc 取消，與全站一致（走 FormKeyboardHelper）。 *@
+                        <div class="ai-chat-session-rename" @onkeydown="OnRenameKeyDownAsync">
+                            <Input @bind-Value="renamingText" BindOnInput="true" DebounceMilliseconds="0" MaxLength="60" />
+                            <div class="ai-chat-session-rename-actions">
+                                <Button Type="ButtonType.Link" Size="ButtonSize.Small" OnClick="OnRenameCommitAsync">儲存</Button>
+                                <Button Type="ButtonType.Link" Size="ButtonSize.Small" OnClick="OnRenameCancel">取消</Button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <button type="button" class="ai-chat-session-main"
+                                disabled="@IsBusy"
+                                @onclick="@(async () => await OnSelectConversationAsync(sessionId))">
+                            <span class="ai-chat-session-name" title="@session.Title">@session.Title</span>
+                            <span class="ai-chat-session-meta">
+                                @session.UpdatedAt.ToString("yyyy/MM/dd HH:mm")
+                                @if (!string.IsNullOrWhiteSpace(session.CreatedBy))
+                                {
+                                    <span> · @session.CreatedBy</span>
+                                }
+                            </span>
+                        </button>
+
+                        <div class="ai-chat-session-tools">
+                            <CrudActionButton Title="重新命名" Icon="edit"
+                                              Disabled="@IsBusy"
+                                              OnClick="@(() => OnRenameStart(session))" />
+                            <CrudActionButton Title="刪除這段對話" Icon="delete" Danger="true"
+                                              Disabled="@IsBusy"
+                                              OnClick="@(async () => await OnDeleteConversationAsync(session))" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </aside>
+
     <div class="ai-chat">
         @if (!string.IsNullOrWhiteSpace(sourceNotice))
         {
@@ -186,4 +246,5 @@
             </div>
         }
     </div>
+  </div>
 </Modal>

@@ -88,20 +88,51 @@ public class AiChatService
         this.logger = logger;
     }
 
+    /// <summary>
+    /// 列出這個對象底下的所有對話，最近更新的排最前面。
+    /// 會順帶把 0.4.79 之前的單檔對話搬進新結構。
+    /// </summary>
+    public Task<IReadOnlyList<AiChatConversationInfo>> ListConversationsAsync(
+        AiChatScope scope,
+        int targetId,
+        CancellationToken cancellationToken = default)
+        => chatStore.ListConversationsAsync(scope, targetId, cancellationToken);
+
+    /// <summary>開一段新對話，回傳它的 Id。建立者記的是現在這個人。</summary>
+    public Task<string> CreateConversationAsync(
+        AiChatScope scope,
+        int targetId,
+        CancellationToken cancellationToken = default)
+        => chatStore.CreateConversationAsync(scope, targetId, ResolveCurrentUserName(), cancellationToken);
+
+    /// <summary>
+    /// 改這段對話的名字。<b>不呼叫模型，不會產生費用。</b>
+    /// 沒改過名的對話標題會自動取第一句提問，改過之後就固定用改的。
+    /// </summary>
+    public Task<UpdateOutcome> RenameConversationAsync(
+        AiChatScope scope,
+        int targetId,
+        string conversationId,
+        string title,
+        CancellationToken cancellationToken = default)
+        => chatStore.RenameConversationAsync(scope, targetId, conversationId, title, cancellationToken);
+
     /// <summary>取出這段對話的完整歷史（依時間由舊到新）。</summary>
     public Task<List<AiChatMessageItem>> GetHistoryAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         CancellationToken cancellationToken = default)
-        => chatStore.ReadHistoryAsync(scope, targetId, cancellationToken);
+        => chatStore.ReadHistoryAsync(scope, targetId, conversationId, cancellationToken);
 
-    /// <summary>清空這段對話（直接刪掉那個對話檔）。</summary>
+    /// <summary>刪掉這一段對話（同一個對象底下的其他段不受影響）。</summary>
     public Task ClearHistoryAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         CancellationToken cancellationToken = default)
     {
-        chatStore.TryDelete(scope, targetId);
+        chatStore.TryDeleteConversation(scope, targetId, conversationId);
         return Task.CompletedTask;
     }
 
@@ -111,17 +142,18 @@ public class AiChatService
     public async Task<AiChatAnswer> AskAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         string question,
         Action<string>? onDelta = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(question);
 
-        var history = await GetHistoryAsync(scope, targetId, cancellationToken);
+        var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
         var (answer, contextResult) = await GenerateAnswerAsync(
             scope, targetId, question, history, onDelta, cancellationToken);
 
-        await SaveTurnAsync(scope, targetId, question, answer, cancellationToken);
+        await SaveTurnAsync(scope, targetId, conversationId, question, answer, cancellationToken);
 
         logger.LogInformation(
             "AI chat answered. Scope={Scope}, TargetId={TargetId}, ContextLength={ContextLength}, AnswerLength={AnswerLength}",
@@ -147,6 +179,7 @@ public class AiChatService
     public Task<UpdateOutcome> UpdateMessageAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         int index,
         AiChatMessageItem original,
         string newContent,
@@ -157,6 +190,7 @@ public class AiChatService
         return chatStore.UpdateMessagesAsync(
             scope,
             targetId,
+            conversationId,
             [new MessageEdit(index, original.Role, original.Content, newContent)],
             cancellationToken);
     }
@@ -172,6 +206,7 @@ public class AiChatService
     public async Task<AiChatAnswer> RegenerateAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         int questionIndex,
         string expectedQuestion,
         string newQuestion,
@@ -180,7 +215,7 @@ public class AiChatService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newQuestion);
 
-        var history = await GetHistoryAsync(scope, targetId, cancellationToken);
+        var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
 
         // 先擋掉對不上的情況再送 API——確認之後才花錢。
         if (questionIndex < 0 || questionIndex >= history.Count || !history[questionIndex].IsUser)
@@ -213,6 +248,7 @@ public class AiChatService
         var outcome = await chatStore.UpdateMessagesAsync(
             scope,
             targetId,
+            conversationId,
             [
                 new MessageEdit(
                     questionIndex,
@@ -422,11 +458,12 @@ public class AiChatService
     private Task SaveTurnAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         string question,
         string answer,
         CancellationToken cancellationToken)
         => chatStore.AppendTurnAsync(
-            scope, targetId, question, ResolveCurrentUserName(), answer, cancellationToken);
+            scope, targetId, conversationId, question, ResolveCurrentUserName(), answer, cancellationToken);
 
     private string? ResolveCurrentUserName()
     {

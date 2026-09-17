@@ -24,6 +24,26 @@ public readonly record struct MessageEdit(
     string NewContent,
     string? NewAskedBy = null);
 
+/// <summary>
+/// 對話清單上的一列。
+/// </summary>
+/// <param name="Id">對話 Id，同時也是檔名（不含副檔名）。</param>
+/// <param name="Title">
+/// 顯示標題。使用者改過名就用改過的；沒改過則取第一句提問（見
+/// <see cref="AiChatStore.ListConversationsAsync"/>）。
+/// </param>
+/// <param name="CreatedBy">開啟這段對話的人。對話是共用的，清單上要看得出來是誰開的。</param>
+/// <param name="CreatedAt">建立時間。</param>
+/// <param name="UpdatedAt">最後一則訊息的時間；沒有訊息時等於建立時間。</param>
+/// <param name="MessageCount">有效訊息則數（不含 meta 行）。</param>
+public sealed record AiChatConversationInfo(
+    string Id,
+    string Title,
+    string? CreatedBy,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    int MessageCount);
+
 /// <summary>修改的結果。</summary>
 public enum UpdateOutcome
 {
@@ -46,9 +66,11 @@ public enum UpdateOutcome
 /// </para>
 ///
 /// <para>
-/// **一段對話一個檔**，路徑由「範圍＋對象 Id」直接算出來（<c>project/3.jsonl</c>、
-/// <c>meeting/12.jsonl</c>），所以資料庫連相對路徑都不必存——這也是這一版能把整張資料表
-/// 移除的原因。根目錄取自 <see cref="SystemSettings.ExternalFileSystem"/>，
+/// **一段對話一個檔**，路徑由「範圍＋對象 Id＋對話 Id」直接算出來
+/// （<c>project/3/&lt;對話 Id&gt;.jsonl</c>、<c>meeting/12/&lt;對話 Id&gt;.jsonl</c>），
+/// 所以資料庫連相對路徑都不必存——這也是這一版能把整張資料表移除的原因。
+/// 0.4.79 起一個對象底下可以有多段對話，**清單也直接從檔案系統列出來，不引入資料表**。
+/// 根目錄取自 <see cref="SystemSettings.ExternalFileSystem"/>，
 /// 比照 <c>MeetingFileStore</c>，禁止直接讀 IConfiguration。
 /// </para>
 ///
@@ -96,17 +118,372 @@ public class AiChatStore
         this.logger = logger;
     }
 
-    /// <summary>某段對話的檔案完整路徑。專案 12 與會議 12 會落在不同子目錄，不會互相污染。</summary>
-    public string GetFullPath(AiChatScope scope, int targetId)
+    /// <summary>
+    /// 一個對象（專案或會議）底下所有對話的資料夾。
+    ///
+    /// <para>
+    /// 0.4.79 之前一個對象只有一段對話（<c>project/3.jsonl</c>），現在是
+    /// <c>project/3/&lt;對話 Id&gt;.jsonl</c>。**「一段對話一個檔」這個基本單位沒有變**，
+    /// 只是一個對象底下可以有多個；路徑依然由「範圍＋對象 Id」直接算出來，
+    /// 資料庫仍然連相對路徑都不必存。
+    /// </para>
+    /// </summary>
+    public string GetConversationDirectory(AiChatScope scope, int targetId)
+    {
+        var folder = scope == AiChatScope.Project ? "project" : "meeting";
+        return Path.Combine(rootPath, folder, targetId.ToString());
+    }
+
+    /// <summary>某段對話的檔案完整路徑。</summary>
+    public string GetFullPath(AiChatScope scope, int targetId, string conversationId)
+        => Path.Combine(GetConversationDirectory(scope, targetId), $"{SanitizeConversationId(conversationId)}.jsonl");
+
+    /// <summary>
+    /// 0.4.79 之前的單檔路徑。只有轉檔用得到。
+    /// </summary>
+    private string GetLegacyPath(AiChatScope scope, int targetId)
     {
         var folder = scope == AiChatScope.Project ? "project" : "meeting";
         return Path.Combine(rootPath, folder, $"{targetId}.jsonl");
+    }
+
+    /// <summary>
+    /// 產生新的對話 Id。
+    ///
+    /// <para>
+    /// 前段是可排序的時間戳，**檔名本身就帶時間**——列清單時不必把每個檔案打開就能排序。
+    /// 後段補一段隨機碼，避免同一毫秒建立兩段對話時撞名。
+    /// </para>
+    /// </summary>
+    private static string NewConversationId()
+        => $"{DateTime.Now:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..21];
+
+    /// <summary>
+    /// ⚠️ 對話 Id 會直接變成檔名，一定要擋掉路徑跳脫（<c>..</c>、分隔符號）。
+    /// 它雖然只由本類別產生，但會經過畫面與網址來回一趟。
+    /// </summary>
+    private static string SanitizeConversationId(string conversationId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
+
+        var cleaned = new string([.. conversationId.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-')]);
+
+        return cleaned.Length == 0
+            ? throw new ArgumentException($"對話 Id 不合法：{conversationId}", nameof(conversationId))
+            : cleaned;
+    }
+
+    /// <summary>
+    /// meta 行的角色。
+    ///
+    /// <para>
+    /// 標題與建立者放在對話檔的**第一行**，不另開一個 meta 檔——那會讓「一段對話」
+    /// 變成兩個檔案，與 0.4.60「留一張表只是把一段對話拆成兩個地方維護」的理由自相矛盾。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ meta 行<b>不是訊息</b>：它必須同時被 <see cref="ReadHistoryAsync"/> 與
+    /// <see cref="MapValidLineIndexes"/> 排除，否則兩邊的「第 n 則」會錯開一位，
+    /// 編輯訊息時會改到隔壁那一則。
+    /// </para>
+    /// </summary>
+    private const string MetaRole = "meta";
+
+    /// <summary>自動標題最多取幾個字。太長的話清單會被一句話撐爆。</summary>
+    private const int AutoTitleMaxLength = 20;
+
+    /// <summary>
+    /// 列出一個對象底下的所有對話，最近更新的排最前面。
+    ///
+    /// <para>
+    /// 會順帶把 0.4.79 之前的單檔對話搬進新結構（見 <see cref="MigrateLegacyIfNeeded"/>），
+    /// 所以畫面只要呼叫這一支就好，不必自己判斷要不要轉檔。
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<AiChatConversationInfo>> ListConversationsAsync(
+        AiChatScope scope,
+        int targetId,
+        CancellationToken cancellationToken = default)
+    {
+        MigrateLegacyIfNeeded(scope, targetId);
+
+        var directory = GetConversationDirectory(scope, targetId);
+        if (!Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        var result = new List<AiChatConversationInfo>();
+
+        foreach (var file in Directory.EnumerateFiles(directory, "*.jsonl", SearchOption.TopDirectoryOnly))
+        {
+            var info = await TryReadConversationInfoAsync(file, cancellationToken);
+            if (info is not null)
+            {
+                result.Add(info);
+            }
+        }
+
+        return [.. result.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id, StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// 讀出一段對話的清單資訊。
+    ///
+    /// <para>
+    /// 標題的規則：使用者改過名就用改過的；**沒改過就取第一句提問**。
+    /// 刻意用「讀的時候算」而不是「第一次發問時寫回檔案」——後者會讓 append
+    /// 變成「讀出來、改一行、整檔重寫」，而整檔重寫是這個類別最危險的路徑。
+    /// </para>
+    /// </summary>
+    private async Task<AiChatConversationInfo?> TryReadConversationInfoAsync(
+        string fullPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var lines = await File.ReadAllLinesAsync(fullPath, cancellationToken);
+
+            string? explicitTitle = null;
+            string? createdBy = null;
+            DateTime? createdAt = null;
+            string? firstQuestion = null;
+            DateTime? lastAt = null;
+            var messageCount = 0;
+
+            foreach (var raw in lines)
+            {
+                var stored = TryParseStored(raw, logMalformed: false);
+                if (stored is null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(stored.Role, MetaRole, StringComparison.Ordinal))
+                {
+                    explicitTitle = stored.Content;
+                    createdBy = stored.AskedBy;
+                    createdAt = stored.CreatedAt;
+                    continue;
+                }
+
+                messageCount++;
+                lastAt = stored.CreatedAt;
+
+                if (firstQuestion is null
+                    && string.Equals(stored.Role, AiChatService.UserRole, StringComparison.Ordinal))
+                {
+                    firstQuestion = stored.Content;
+                }
+            }
+
+            var id = Path.GetFileNameWithoutExtension(fullPath);
+            var created = createdAt ?? File.GetCreationTime(fullPath);
+
+            return new AiChatConversationInfo(
+                id,
+                BuildTitle(explicitTitle, firstQuestion),
+                createdBy,
+                created,
+                lastAt ?? created,
+                messageCount);
+        }
+        catch (IOException ex)
+        {
+            // 正在被寫入的檔案讀不到，不該讓整份清單開不出來。
+            logger.LogWarning(ex, "Failed to read AI chat conversation. FullPath={FullPath}", fullPath);
+            return null;
+        }
+    }
+
+    /// <summary>標題：改過名優先，其次取第一句提問，都沒有就是一段還沒問過問題的新對話。</summary>
+    private static string BuildTitle(string? explicitTitle, string? firstQuestion)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitTitle))
+        {
+            return explicitTitle.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(firstQuestion))
+        {
+            return "新對話";
+        }
+
+        var trimmed = firstQuestion.Trim().ReplaceLineEndings(" ");
+
+        return trimmed.Length <= AutoTitleMaxLength
+            ? trimmed
+            : string.Concat(trimmed.AsSpan(0, AutoTitleMaxLength), "…");
+    }
+
+    /// <summary>
+    /// 建立一段新對話，回傳它的 Id。
+    ///
+    /// <para>
+    /// 一開始就寫一行 meta，讓這段對話即使還沒問過問題也會出現在清單上——
+    /// 否則使用者按了「開新對話」卻什麼都沒發生。
+    /// </para>
+    /// </summary>
+    public async Task<string> CreateConversationAsync(
+        AiChatScope scope,
+        int targetId,
+        string? createdBy,
+        CancellationToken cancellationToken = default)
+    {
+        var conversationId = NewConversationId();
+        var fullPath = GetFullPath(scope, targetId, conversationId);
+        EnsureParentDirectory(fullPath);
+
+        var meta = JsonSerializer.Serialize(
+            new StoredMessage(MetaRole, string.Empty, createdBy, DateTime.Now), SerializerOptions);
+
+        await File.WriteAllTextAsync(fullPath, meta + Environment.NewLine, FileEncoding, cancellationToken);
+
+        logger.LogInformation(
+            "AI chat conversation created. Scope={Scope}, TargetId={TargetId}, ConversationId={ConversationId}",
+            scope,
+            targetId,
+            conversationId);
+
+        return conversationId;
+    }
+
+    /// <summary>
+    /// 把 0.4.79 之前的單檔對話搬進新結構。
+    ///
+    /// <para>
+    /// ⚠️ **先寫新檔、成功之後才刪舊檔**：中途失敗寧可留兩份，也不要兩邊都沒有。
+    /// 資料夾已存在就什麼都不做（冪等），所以每次列清單都呼叫也不會重複搬。
+    /// </para>
+    /// </summary>
+    private void MigrateLegacyIfNeeded(AiChatScope scope, int targetId)
+    {
+        var legacyPath = GetLegacyPath(scope, targetId);
+        if (!File.Exists(legacyPath))
+        {
+            return;
+        }
+
+        var directory = GetConversationDirectory(scope, targetId);
+        if (Directory.Exists(directory))
+        {
+            // 已經轉過了。舊檔還在代表上一次搬完之後刪除失敗，這裡順手補刪。
+            TryDeleteFile(legacyPath);
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            var target = Path.Combine(directory, $"{NewConversationId()}.jsonl");
+            File.Copy(legacyPath, target, overwrite: false);
+
+            logger.LogInformation(
+                "Legacy AI chat conversation migrated. Scope={Scope}, TargetId={TargetId}, Target={Target}",
+                scope,
+                targetId,
+                target);
+
+            TryDeleteFile(legacyPath);
+        }
+        catch (IOException ex)
+        {
+            // 搬不動就維持原狀：舊檔還在，下次再試。不能讓對話視窗因此打不開。
+            logger.LogWarning(ex, "Failed to migrate legacy AI chat conversation. FullPath={FullPath}", legacyPath);
+        }
+    }
+
+    private void TryDeleteFile(string fullPath)
+    {
+        try
+        {
+            File.Delete(fullPath);
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Failed to delete file. FullPath={FullPath}", fullPath);
+        }
+    }
+
+    /// <summary>改這段對話的名字。對話不存在時回 <see cref="UpdateOutcome.NotFound"/>。</summary>
+    public async Task<UpdateOutcome> RenameConversationAsync(
+        AiChatScope scope,
+        int targetId,
+        string conversationId,
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        var fullPath = GetFullPath(scope, targetId, conversationId);
+        var gate = writeLocks.GetOrAdd(fullPath, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!File.Exists(fullPath))
+            {
+                return UpdateOutcome.NotFound;
+            }
+
+            var lines = (await File.ReadAllLinesAsync(fullPath, cancellationToken)).ToList();
+            var metaIndex = lines.FindIndex(x =>
+                TryParseStored(x, logMalformed: false) is { } stored
+                && string.Equals(stored.Role, MetaRole, StringComparison.Ordinal));
+
+            var trimmed = title.Trim();
+
+            if (metaIndex >= 0)
+            {
+                var current = TryParseStored(lines[metaIndex], logMalformed: false)!;
+                lines[metaIndex] = JsonSerializer.Serialize(current with { Content = trimmed }, SerializerOptions);
+            }
+            else
+            {
+                // 轉檔進來的舊對話沒有 meta 行，補一行在最前面。
+                lines.Insert(0, JsonSerializer.Serialize(
+                    new StoredMessage(MetaRole, trimmed, null, DateTime.Now), SerializerOptions));
+            }
+
+            var content = string.Join(Environment.NewLine, lines) + Environment.NewLine;
+            var tempPath = fullPath + ".tmp";
+            await File.WriteAllTextAsync(tempPath, content, FileEncoding, cancellationToken);
+            File.Move(tempPath, fullPath, overwrite: true);
+
+            return UpdateOutcome.Updated;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>刪掉其中一段對話。其他段不受影響。</summary>
+    public void TryDeleteConversation(AiChatScope scope, int targetId, string conversationId)
+    {
+        var fullPath = GetFullPath(scope, targetId, conversationId);
+
+        try
+        {
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+                logger.LogInformation(
+                    "AI chat conversation deleted. Scope={Scope}, TargetId={TargetId}, ConversationId={ConversationId}",
+                    scope,
+                    targetId,
+                    conversationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to delete AI chat conversation. FullPath={FullPath}", fullPath);
+        }
     }
 
     /// <summary>把一輪問答（兩則訊息）接到對話尾端。</summary>
     public async Task AppendTurnAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         string question,
         string? askedBy,
         string answer,
@@ -120,7 +497,7 @@ public class AiChatStore
         lines.AppendLine(JsonSerializer.Serialize(
             new StoredMessage(AiChatService.AssistantRole, answer, null, now), SerializerOptions));
 
-        var fullPath = GetFullPath(scope, targetId);
+        var fullPath = GetFullPath(scope, targetId, conversationId);
         EnsureParentDirectory(fullPath);
 
         var gate = writeLocks.GetOrAdd(fullPath, _ => new SemaphoreSlim(1, 1));
@@ -146,9 +523,10 @@ public class AiChatStore
     public async Task<List<AiChatMessageItem>> ReadHistoryAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         CancellationToken cancellationToken = default)
     {
-        var fullPath = GetFullPath(scope, targetId);
+        var fullPath = GetFullPath(scope, targetId, conversationId);
         if (!File.Exists(fullPath))
         {
             return [];
@@ -170,30 +548,45 @@ public class AiChatStore
     }
 
     /// <summary>
-    /// 刪除整段對話的檔案。檔案不存在不算錯誤，失敗只記 Warning 不阻斷主流程
+    /// 刪除一個對象底下的**所有**對話（專案或會議被刪除時）。
+    /// 不存在不算錯誤，失敗只記 Warning 不阻斷主流程
     /// （比照 <c>MeetingFileStore.TryDeleteTranscript</c>）。
+    ///
+    /// <para>
+    /// ⚠️ 0.4.79 起刪的是**整個資料夾**而不是單一檔案。只刪一個檔的話，
+    /// 該對象底下其他幾段對話會永遠留在硬碟上變成孤兒。
+    /// 舊結構的單檔也要一起刪——可能有還沒被轉檔就直接刪除的對象。
+    /// </para>
     /// </summary>
     public void TryDelete(AiChatScope scope, int targetId)
     {
-        var fullPath = GetFullPath(scope, targetId);
+        var directory = GetConversationDirectory(scope, targetId);
 
         try
         {
-            if (File.Exists(fullPath))
+            if (Directory.Exists(directory))
             {
-                File.Delete(fullPath);
+                Directory.Delete(directory, recursive: true);
                 logger.LogInformation(
                     "AI chat history deleted. Scope={Scope}, TargetId={TargetId}", scope, targetId);
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to delete AI chat history file. FullPath={FullPath}", fullPath);
+            logger.LogWarning(ex, "Failed to delete AI chat history folder. FullPath={FullPath}", directory);
         }
 
-        // ⚠️ 刻意不 TryRemove 這個路徑的鎖。移除之後，已經持鎖的寫入者與下一個
-        // GetOrAdd 拿到的會是兩把不同的號誌，互斥直接失效。多留一個 SemaphoreSlim
-        // 遠比那個競態便宜——對話檔的數量本來就是「有問過問題的專案＋會議」的量級。
+        // 還沒轉檔就被刪除的對象，舊的單檔仍在。
+        var legacyPath = GetLegacyPath(scope, targetId);
+        if (File.Exists(legacyPath))
+        {
+            TryDeleteFile(legacyPath);
+        }
+
+        // ⚠️ 刻意不 TryRemove 這些路徑的鎖。移除之後，已經持鎖的寫入者與下一個
+        // GetOrAdd 拿到的會是兩把不同的號誌，互斥直接失效。多留幾個 SemaphoreSlim
+        // 遠比那個競態便宜——鎖以完整路徑為鍵，0.4.79 之後粒度自動細到「單段對話」，
+        // 上限是「有問過問題的專案＋會議」再乘上每個對象開過的對話段數。
     }
 
     /// <summary>
@@ -221,6 +614,7 @@ public class AiChatStore
     public async Task<UpdateOutcome> UpdateMessagesAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         IReadOnlyList<MessageEdit> edits,
         CancellationToken cancellationToken = default)
     {
@@ -230,7 +624,7 @@ public class AiChatStore
             return UpdateOutcome.Updated;
         }
 
-        var fullPath = GetFullPath(scope, targetId);
+        var fullPath = GetFullPath(scope, targetId, conversationId);
         var gate = writeLocks.GetOrAdd(fullPath, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
         try
@@ -308,7 +702,9 @@ public class AiChatStore
 
         for (var index = 0; index < lines.Length; index++)
         {
-            if (TryParseStored(lines[index], logMalformed: false) is not null)
+            // ⚠️ 排除條件必須與 ReadHistoryAsync 完全一致（壞行、空行、meta 行）。
+            // 少排除一種，兩邊的「第 n 則」就會錯開一位，編輯時會改到隔壁那一則。
+            if (TryParseStored(lines[index], logMalformed: false) is { } stored && !IsMeta(stored))
             {
                 map.Add(index);
             }
@@ -320,8 +716,16 @@ public class AiChatStore
     /// <summary>
     /// 全站累計的提問則數（儀表板用）。
     ///
-    /// 逐檔數行而不是維護一個計數器：對話檔數量是「有問過問題的專案＋會議」的量級，
-    /// 儀表板一次載入掃過去可以接受，而額外的計數器要跟檔案保持同步反而更容易錯。
+    /// <para>
+    /// 逐檔數行而不是維護一個計數器：對話檔數量是「有問過問題的專案＋會議」再乘上
+    /// 每個對象開過的對話段數，儀表板一次載入掃過去可以接受，而額外的計數器要跟檔案
+    /// 保持同步反而更容易錯。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 必須是 <see cref="SearchOption.AllDirectories"/>。0.4.79 起對話檔多了一層
+    /// 對象資料夾，只掃根目錄的話這個數字會直接變成 0。
+    /// </para>
     /// </summary>
     public int CountQuestions()
     {
@@ -362,10 +766,15 @@ public class AiChatStore
     {
         var stored = TryParseStored(raw, logMalformed: true);
 
-        return stored is null
+        // ⚠️ meta 行不是訊息。漏掉這個判斷的話，畫面上會出現一則沒有內容、
+        // 發話者是「AI 助理」的空氣訊息（role 不是 user 就會被當成回答）。
+        return stored is null || IsMeta(stored)
             ? null
             : new AiChatMessageItem(stored.Role, stored.Content, stored.AskedBy, stored.CreatedAt);
     }
+
+    private static bool IsMeta(StoredMessage stored)
+        => string.Equals(stored.Role, MetaRole, StringComparison.Ordinal);
 
     /// <summary>
     /// 解析一行成磁碟格式。重寫檔案時要保留 <c>askedBy</c> 與 <c>createdAt</c>，

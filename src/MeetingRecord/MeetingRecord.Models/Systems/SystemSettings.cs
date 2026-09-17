@@ -35,7 +35,9 @@ public class ExternalFileSystem
     /// AI 問答對話（.jsonl）存放根目錄。
     ///
     /// 對話文字不需要被查詢或索引，只會整段讀出來顯示，放資料庫只會讓它無謂膨脹，
-    /// 所以 0.4.60 起移到檔案系統。底下再分 <c>project/</c> 與 <c>meeting/</c> 兩個子目錄。
+    /// 所以 0.4.60 起移到檔案系統。底下再分 <c>project/</c> 與 <c>meeting/</c> 兩個子目錄；
+    /// 0.4.79 起再往下多一層對象 Id 資料夾（<c>project/3/&lt;對話 Id&gt;.jsonl</c>），
+    /// 一個專案或會議可以有多段對話。
     /// </summary>
     public string AiChatPath { get; set; } = string.Empty;
 }

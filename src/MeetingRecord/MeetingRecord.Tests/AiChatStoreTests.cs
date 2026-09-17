@@ -15,6 +15,9 @@ public sealed class AiChatStoreTests : IDisposable
 {
     private readonly string rootPath;
     private readonly ILoggerFactory loggerFactory;
+    /// <summary>測試用的固定對話 Id。0.4.79 起一個對象底下可以有多段對話。</summary>
+    private const string Conv = "test-conversation";
+
     private readonly AiChatStore store;
 
     public AiChatStoreTests()
@@ -35,9 +38,9 @@ public sealed class AiChatStoreTests : IDisposable
     [Fact]
     public async Task AppendTurn_ThenRead_ShouldRoundTripBothMessages()
     {
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "這次會議結論是什麼", "王小明", "依據會議紀錄，結論是…");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "這次會議結論是什麼", "王小明", "依據會議紀錄，結論是…");
 
-        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12);
+        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv);
 
         Assert.Equal(2, history.Count);
 
@@ -56,12 +59,12 @@ public sealed class AiChatStoreTests : IDisposable
     {
         // 檔案以 UTF-8 含 BOM 寫入（與逐字稿一致，使用者可能用記事本開）。
         // 沒有 TrimStart('\uFEFF') 的話，第一則訊息會被當成壞行而默默消失。
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "第一個問題", "王小明", "第一個回答");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "第一個問題", "王小明", "第一個回答");
 
-        var bytes = await File.ReadAllBytesAsync(store.GetFullPath(AiChatScope.Meeting, 12));
+        var bytes = await File.ReadAllBytesAsync(store.GetFullPath(AiChatScope.Meeting, 12, Conv));
         Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, bytes.Take(3).ToArray());
 
-        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12);
+        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv);
 
         Assert.Equal(2, history.Count);
         Assert.Equal("第一個問題", history[0].Content);
@@ -70,10 +73,10 @@ public sealed class AiChatStoreTests : IDisposable
     [Fact]
     public async Task AppendTurn_Twice_ShouldAppendNotOverwriteAndNotRepeatBom()
     {
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "問題一", "王小明", "回答一");
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "問題二", "李小華", "回答二");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "問題一", "王小明", "回答一");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "問題二", "李小華", "回答二");
 
-        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12);
+        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv);
 
         Assert.Equal(4, history.Count);
         Assert.Equal("問題一", history[0].Content);
@@ -81,7 +84,7 @@ public sealed class AiChatStoreTests : IDisposable
 
         // BOM 只能出現一次。這裡一定要看原始位元組——File.ReadAllText 會自動吃掉開頭的
         // BOM，用字串去數永遠是 0，那條斷言驗不到任何東西。
-        var bytes = await File.ReadAllBytesAsync(store.GetFullPath(AiChatScope.Meeting, 12));
+        var bytes = await File.ReadAllBytesAsync(store.GetFullPath(AiChatScope.Meeting, 12, Conv));
         var bomCount = 0;
         for (var i = 0; i + 2 < bytes.Length; i++)
         {
@@ -101,9 +104,9 @@ public sealed class AiChatStoreTests : IDisposable
         // 換行若沒被 JSON 逃脫，一則訊息會被拆成好幾行而讀壞整個檔案。
         const string answer = "第一點\n第二點：他說「好」\n路徑是 C:\temp\a.txt";
 
-        await store.AppendTurnAsync(AiChatScope.Project, 3, "請條列", "王小明", answer);
+        await store.AppendTurnAsync(AiChatScope.Project, 3, Conv, "請條列", "王小明", answer);
 
-        var history = await store.ReadHistoryAsync(AiChatScope.Project, 3);
+        var history = await store.ReadHistoryAsync(AiChatScope.Project, 3, Conv);
 
         Assert.Equal(2, history.Count);
         Assert.Equal(answer, history[1].Content);
@@ -112,9 +115,9 @@ public sealed class AiChatStoreTests : IDisposable
     [Fact]
     public async Task AppendTurn_ShouldTrimQuestionButKeepAnswerAsIs()
     {
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "  有空白  ", "王小明", "  回答保持原樣  ");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "  有空白  ", "王小明", "  回答保持原樣  ");
 
-        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12);
+        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv);
 
         Assert.Equal("有空白", history[0].Content);
         Assert.Equal("  回答保持原樣  ", history[1].Content);
@@ -128,17 +131,17 @@ public sealed class AiChatStoreTests : IDisposable
     public async Task Scopes_WithSameId_ShouldNotShareFile()
     {
         // 專案 12 與會議 12 是完全不同的兩段對話，混在一起會外洩到不相干的畫面。
-        await store.AppendTurnAsync(AiChatScope.Project, 12, "專案的問題", "王小明", "專案的回答");
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "會議的問題", "王小明", "會議的回答");
+        await store.AppendTurnAsync(AiChatScope.Project, 12, Conv, "專案的問題", "王小明", "專案的回答");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "會議的問題", "王小明", "會議的回答");
 
-        var projectHistory = await store.ReadHistoryAsync(AiChatScope.Project, 12);
-        var meetingHistory = await store.ReadHistoryAsync(AiChatScope.Meeting, 12);
+        var projectHistory = await store.ReadHistoryAsync(AiChatScope.Project, 12, Conv);
+        var meetingHistory = await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv);
 
         Assert.Equal("專案的問題", Assert.Single(projectHistory, x => x.IsUser).Content);
         Assert.Equal("會議的問題", Assert.Single(meetingHistory, x => x.IsUser).Content);
         Assert.NotEqual(
-            store.GetFullPath(AiChatScope.Project, 12),
-            store.GetFullPath(AiChatScope.Meeting, 12));
+            store.GetFullPath(AiChatScope.Project, 12, Conv),
+            store.GetFullPath(AiChatScope.Meeting, 12, Conv));
     }
 
     #endregion
@@ -149,7 +152,7 @@ public sealed class AiChatStoreTests : IDisposable
     public async Task ReadHistory_ForUnknownConversation_ShouldReturnEmpty()
     {
         // 每個對話視窗第一次開啟都會走到這裡，不能拋例外。
-        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 999);
+        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 999, Conv);
 
         Assert.Empty(history);
     }
@@ -165,24 +168,24 @@ public sealed class AiChatStoreTests : IDisposable
     [Fact]
     public async Task TryDelete_ShouldRemoveTheWholeConversation()
     {
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "問題", "王小明", "回答");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "問題", "王小明", "回答");
 
         store.TryDelete(AiChatScope.Meeting, 12);
 
-        Assert.False(File.Exists(store.GetFullPath(AiChatScope.Meeting, 12)));
-        Assert.Empty(await store.ReadHistoryAsync(AiChatScope.Meeting, 12));
+        Assert.False(File.Exists(store.GetFullPath(AiChatScope.Meeting, 12, Conv)));
+        Assert.Empty(await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv));
     }
 
     [Fact]
     public async Task ReadHistory_ShouldSkipMalformedLinesAndKeepTheRest()
     {
         // 手動編輯過、或寫到一半斷電。一行壞掉不該讓整段歷史都讀不出來。
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "好的問題", "王小明", "好的回答");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "好的問題", "王小明", "好的回答");
 
-        var path = store.GetFullPath(AiChatScope.Meeting, 12);
+        var path = store.GetFullPath(AiChatScope.Meeting, 12, Conv);
         await File.AppendAllTextAsync(path, "{ 這不是合法的 JSON\n\n");
 
-        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12);
+        var history = await store.ReadHistoryAsync(AiChatScope.Meeting, 12, Conv);
 
         Assert.Equal(2, history.Count);
         Assert.Equal("好的問題", history[0].Content);
@@ -195,9 +198,9 @@ public sealed class AiChatStoreTests : IDisposable
     [Fact]
     public async Task CountQuestions_ShouldCountOnlyUserMessagesAcrossAllConversations()
     {
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "問題一", "王小明", "回答一");
-        await store.AppendTurnAsync(AiChatScope.Meeting, 12, "問題二", "王小明", "回答二");
-        await store.AppendTurnAsync(AiChatScope.Project, 3, "問題三", "李小華", "回答三");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "問題一", "王小明", "回答一");
+        await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "問題二", "王小明", "回答二");
+        await store.AppendTurnAsync(AiChatScope.Project, 3, Conv, "問題三", "李小華", "回答三");
 
         // 三問三答共六則，但「提問次數」只算三次。
         Assert.Equal(3, store.CountQuestions());

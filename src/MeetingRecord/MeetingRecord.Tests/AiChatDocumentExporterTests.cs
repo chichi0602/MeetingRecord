@@ -182,5 +182,36 @@ public sealed class AiChatDocumentExporterTests
         Assert.Equal($"AI問答_{new string('專', 60)}_20260915.pdf", name);
     }
 
+    [Fact]
+    public void BuildConversationFileName_ShouldIncludeConversationTitle()
+    {
+        // ⚠️ 0.4.79 起一個對象底下有多段對話。少了標題，同一天匯出兩段會撞成同名檔案。
+        var first = AiChatDocumentExporter.BuildConversationFileName("Q3 專案", ExportedAt, "合約條款討論");
+        var second = AiChatDocumentExporter.BuildConversationFileName("Q3 專案", ExportedAt, "驗收範圍");
+
+        Assert.Equal("AI問答_Q3_專案_合約條款討論_20260915.pdf", first);
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void BuildMessageFileName_ShouldIncludeConversationTitle()
+    {
+        var name = AiChatDocumentExporter.BuildMessageFileName("專案", ordinal: 7, ExportedAt, "驗收範圍");
+
+        Assert.Equal("AI問答_專案_驗收範圍_第7則_20260915.pdf", name);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BuildConversationFileName_ShouldOmitEmptyConversationTitle(string? title)
+    {
+        // 沒有標題就整段省略，不要留下一個突兀的空底線。
+        var name = AiChatDocumentExporter.BuildConversationFileName("專案", ExportedAt, title);
+
+        Assert.Equal("AI問答_專案_20260915.pdf", name);
+    }
+
     #endregion
 }

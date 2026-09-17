@@ -44,21 +44,34 @@ public static class AiChatDocumentExporter
         .chat-content > :last-child { margin-bottom: 0; }
         """;
 
-    /// <summary>整段對話。</summary>
+    /// <summary>
+    /// 整段對話。
+    /// </summary>
+    /// <param name="conversationTitle">
+    /// 這一段對話的標題。0.4.79 起一個對象底下可以有好幾段對話，不標出來的話
+    /// 匯出的 PDF 看不出是哪一段。
+    /// </param>
     public static string BuildConversationHtml(
         string? targetName,
         IReadOnlyList<AiChatMessageItem> messages,
-        DateTime exportedAt)
+        DateTime exportedAt,
+        string? conversationTitle = null)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
         var name = Fallback(targetName);
         var builder = StartDocument($"AI 問答：{name}");
 
-        AppendHeader(
-            builder,
-            name,
-            [("對象", name), ("訊息則數", messages.Count.ToString()), ("匯出時間", FormatDateTime(exportedAt))]);
+        List<(string, string)> rows = [("對象", name)];
+        if (!string.IsNullOrWhiteSpace(conversationTitle))
+        {
+            rows.Add(("對話", conversationTitle.Trim()));
+        }
+
+        rows.Add(("訊息則數", messages.Count.ToString()));
+        rows.Add(("匯出時間", FormatDateTime(exportedAt)));
+
+        AppendHeader(builder, name, rows);
 
         for (var index = 0; index < messages.Count; index++)
         {
@@ -90,13 +103,38 @@ public static class AiChatDocumentExporter
         return EndDocument(builder);
     }
 
-    /// <summary>整段對話的下載檔名：<c>AI問答_{對象}_{匯出日}.pdf</c>。</summary>
-    public static string BuildConversationFileName(string? targetName, DateTime exportedAt)
-        => $"AI問答_{SafeName(targetName)}_{exportedAt:yyyyMMdd}.pdf";
+    /// <summary>
+    /// 整段對話的下載檔名：<c>AI問答_{對象}_{對話}_{匯出日}.pdf</c>。
+    ///
+    /// <para>
+    /// ⚠️ 對話標題一定要進檔名。0.4.79 起一個對象底下有多段對話，少了它，
+    /// 同一天匯出兩段會變成同名檔案，使用者只會看到瀏覽器自己補的 (1)、(2)。
+    /// </para>
+    /// </summary>
+    public static string BuildConversationFileName(
+        string? targetName,
+        DateTime exportedAt,
+        string? conversationTitle = null)
+        => $"AI問答_{SafeName(targetName)}{NamePart(conversationTitle)}_{exportedAt:yyyyMMdd}.pdf";
 
-    /// <summary>單則訊息的下載檔名：<c>AI問答_{對象}_第{n}則_{匯出日}.pdf</c>。</summary>
-    public static string BuildMessageFileName(string? targetName, int ordinal, DateTime exportedAt)
-        => $"AI問答_{SafeName(targetName)}_第{ordinal}則_{exportedAt:yyyyMMdd}.pdf";
+    /// <summary>單則訊息的下載檔名：<c>AI問答_{對象}_{對話}_第{n}則_{匯出日}.pdf</c>。</summary>
+    public static string BuildMessageFileName(
+        string? targetName,
+        int ordinal,
+        DateTime exportedAt,
+        string? conversationTitle = null)
+        => $"AI問答_{SafeName(targetName)}{NamePart(conversationTitle)}_第{ordinal}則_{exportedAt:yyyyMMdd}.pdf";
+
+    /// <summary>
+    /// 檔名中的對話標題片段。沒有標題（或只是預設的空白對話）就整段省略，
+    /// 不要留下一個突兀的空底線。
+    /// </summary>
+    private static string NamePart(string? conversationTitle)
+    {
+        var safe = ExportFileNameBuilder.SafeTitle(conversationTitle);
+
+        return string.IsNullOrWhiteSpace(safe) ? string.Empty : $"_{safe}";
+    }
 
     private static StringBuilder StartDocument(string title)
     {

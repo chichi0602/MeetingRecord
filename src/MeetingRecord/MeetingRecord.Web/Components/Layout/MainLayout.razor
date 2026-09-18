@@ -68,7 +68,7 @@
 </div>
 
 <Modal Title="變更密碼"
-       Class="change-password-modal form-modal-compact"
+       Class="form-modal-compact"
        @bind-Visible="@changePasswordVisible"
        Keyboard="true"
        OnOk="OnChangePasswordOkAsync"
@@ -104,8 +104,7 @@
 </Modal>
 
 <Modal Title="關於"
-       Class="about-modal"
-       Width="520"
+       Class="form-modal-compact"
        @bind-Visible="@aboutVisible"
        Keyboard="true"
        Footer="null"
@@ -121,15 +120,9 @@
     </dl>
 </Modal>
 
-@* 變更密碼與關於視窗都在這個 layout 裡，外框樣式同樣要靠 FormModalHelper 的全域 <style>。
-   ⚠️ 0.4.69 之前這裡沒有 render 它，所以 .change-password-modal 那條規則從來沒生效過。 *@
+@* 全站**唯一**的 FormModalHelper 掛載點。所有頁面都以這個 layout 為底
+   （Routes.razor 的 DefaultLayout 也是它），所以每一個對話框的外框樣式都從這裡來。
+
+   ⚠️ 不要在頁面裡再掛一個。0.4.69 之前這裡沒有 render 它，各頁面就自己補了 8 個，
+   結果同一段 <style> 在 DOM 裡出現 9 次；0.4.82 把那 8 個移除、只留這一個。 *@
 <FormModalHelper />
-
-@* 常駐於所有頁面：轉錄與會議紀錄生成都是背景工作，離開來源頁面也要看得到進度。 *@
-<BackgroundJobProgressPanel />
-
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">關閉</span>
-</div>

@@ -64,6 +64,15 @@ public partial class MeetingViewView : IDisposable
     private string RoleMessage = string.Empty;
 
     private IBrowserFile? pendingMediaFile;
+
+    /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
+    private string? formSnapshot;
+
+    /// <summary>
+    /// ⚠️ Esc 會**同時**走兩條路：AntDesign Modal 的 <c>Keyboard</c> 與表單上的 <c>@onkeydown</c>，
+    /// 兩者都會呼叫 <see cref="OnModalCancelHandleAsync"/>。少了這道旗標會疊出兩個確認視窗。
+    /// </summary>
+    private bool isDiscardConfirming;
     private bool isUploading;
 
     /// <summary>正在重新排入轉錄的會議 Id。CrudActionButton 沒有 Loading 參數，只能靠 Disabled 擋重複點擊。</summary>
@@ -77,15 +86,6 @@ public partial class MeetingViewView : IDisposable
     private static readonly string TranscriptionCostNotice =
         $"轉錄會呼叫 Azure OpenAI 語音服務並產生費用：音檔每 {FfmpegMediaConverter.SegmentSeconds / 60} 分鐘切成一段、逐段送出，音檔越長費用越高。";
     private int uploadPercent;
-
-    private bool transcriptModalVisible;
-    private string transcriptModalTitle = "逐字稿";
-    private string transcriptContent = string.Empty;
-
-    /// <summary>目前開著的逐字稿屬於哪一筆會議；儲存時要用。</summary>
-    private int editingTranscriptMeetingId;
-    private bool canEditTranscript;
-    private bool isSavingTranscript;
 
     #region AI 會議紀錄
 
@@ -129,12 +129,18 @@ public partial class MeetingViewView : IDisposable
     private int attachOpenCount;
     private bool isAttaching;
 
-    private bool draftViewModalVisible;
-    private bool draftEditModalVisible;
+    // 檢視與編修共用同一個 MarkdownEditorModal，所以只有一組狀態；形狀由 draftCanEdit 決定。
+    private bool draftModalVisible;
+    private bool draftCanEdit;
+    private bool draftCanExport;
     private int draftMeetingId;
     private string draftModalTitle = "會議紀錄";
     private string? draftContent;
+    private string? draftNotice;
     private bool isSavingDraft;
+
+    /// <summary>目前視窗對應的會議。匯出 PDF 需要整個 model，不只是 Id。</summary>
+    private MeetingAdapterModel? draftMeeting;
 
     /// <summary>正在匯出 PDF 的會議 Id。PDF 由無頭瀏覽器列印，會啟動外部程序，要擋重複點擊。</summary>
     private int? exportingMeetingId;
@@ -143,11 +149,6 @@ public partial class MeetingViewView : IDisposable
     private int aiChatTargetId;
     private string aiChatTitle = "AI 問答";
     private string aiChatTargetName = string.Empty;
-
-    private bool todoExtractionVisible;
-    private int todoExtractionMeetingId;
-    private int todoExtractionProjectId;
-    private string todoExtractionMeetingTitle = string.Empty;
 
     /// <summary>目前選到的專案有沒有與會人員名冊；名冊是空的時候選擇器停用但不隱藏。</summary>
     private List<string> DraftRequestParticipants
@@ -392,6 +393,7 @@ public partial class MeetingViewView : IDisposable
         ResetUploadState();
         isNewRecordMode = true;
         modalTitle = "新增會議紀錄";
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingMedia());
         modalVisible = true;
         logger.LogInformation("Opened create modal for meeting.");
         return Task.CompletedTask;
@@ -403,6 +405,7 @@ public partial class MeetingViewView : IDisposable
         modalTitle = "修改會議紀錄";
         CurrentRecord = meetingAdapterModel.Clone();
         ResetUploadState();
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingMedia());
         modalVisible = true;
         logger.LogInformation("Opened edit modal for meeting. MeetingId={MeetingId}, Title={Title}", meetingAdapterModel.Id, meetingAdapterModel.Title);
         return Task.CompletedTask;
@@ -577,17 +580,57 @@ public partial class MeetingViewView : IDisposable
         ResetUploadState();
     }
 
-    private Task OnModalCancelHandleAsync(MouseEventArgs args)
+    /// <summary>
+    /// 待上傳影音檔的識別。
+    ///
+    /// <para>
+    /// ⚠️ 不能把 <see cref="IBrowserFile"/> 本身交給 <see cref="FormDirtyHelper.Capture"/>——
+    /// 它身上帶著 Stream，序列化出來的東西與使用者選了哪個檔案無關，**所有檔案都會長得一樣**。
+    /// 檔名＋大小才是識別。
+    /// </para>
+    /// </summary>
+    private string? DescribePendingMedia()
+        => pendingMediaFile is null ? null : $"{pendingMediaFile.Name}:{pendingMediaFile.Size}";
+
+    private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
+        // 上傳中根本不該關窗，這道早退要留在最前面（先於 dirty 判斷）。
         if (isUploading)
         {
-            return Task.CompletedTask;
+            return;
+        }
+
+        if (isDiscardConfirming)
+        {
+            return;
+        }
+
+        // ⚠️ 只拖了檔案、一個欄位都沒改，也算改過——所以要把待上傳檔案一起比。
+        if (FormDirtyHelper.IsDirty(formSnapshot, CurrentRecord, DescribePendingMedia()))
+        {
+            isDiscardConfirming = true;
+            bool discard;
+            try
+            {
+                discard = await FormDirtyHelper.ConfirmDiscardAsync(modalService, "這筆會議紀錄");
+            }
+            finally
+            {
+                isDiscardConfirming = false;
+            }
+
+            if (!discard)
+            {
+                // ⚠️ @bind-Visible 是雙向的，AntDesign 已經把視窗關掉了；不重開會失去整張表單。
+                modalVisible = true;
+                return;
+            }
         }
 
         modalVisible = false;
+        formSnapshot = null;
         ResetUploadState();
         logger.LogDebug("Meeting modal cancelled.");
-        return Task.CompletedTask;
     }
 
     private async Task OnModalKeyDownAsync(KeyboardEventArgs args)
@@ -772,68 +815,6 @@ public partial class MeetingViewView : IDisposable
         {
             requeueingMeetingId = null;
         }
-    }
-
-    private async Task OnPreviewTranscriptAsync(MeetingAdapterModel meetingAdapterModel)
-    {
-        logger.LogInformation("Transcript preview requested. MeetingId={MeetingId}", meetingAdapterModel.Id);
-
-        var content = await meetingService.ReadTranscriptAsync(meetingAdapterModel.Id);
-        if (content is null)
-        {
-            NotifyError("找不到逐字稿檔案，請重新執行轉錄。");
-            return;
-        }
-
-        transcriptModalTitle = $"逐字稿 - {meetingAdapterModel.Title}";
-        transcriptContent = content;
-
-        // 只有轉錄完成的才給編修：正在重新轉錄時存回去，只會被即將產生的新逐字稿覆蓋。
-        editingTranscriptMeetingId = meetingAdapterModel.Id;
-        canEditTranscript = meetingAdapterModel.TranscriptionStatus == TranscriptionStatus.Completed;
-
-        transcriptModalVisible = true;
-    }
-
-    private async Task OnSaveTranscriptAsync()
-    {
-        if (!canEditTranscript || isSavingTranscript || editingTranscriptMeetingId <= 0)
-        {
-            return;
-        }
-
-        isSavingTranscript = true;
-
-        try
-        {
-            var result = await meetingService.UpdateTranscriptAsync(editingTranscriptMeetingId, transcriptContent);
-            if (!result.Success)
-            {
-                NotifyError(result.Message);
-                return;
-            }
-
-            await messageService.SuccessAsync("逐字稿已儲存");
-            await ReloadAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Saving transcript failed. MeetingId={MeetingId}", editingTranscriptMeetingId);
-            NotifyError($"儲存逐字稿失敗：{ex.Message}");
-        }
-        finally
-        {
-            isSavingTranscript = false;
-        }
-    }
-
-    private Task OnTranscriptModalCancelHandleAsync(MouseEventArgs args)
-    {
-        transcriptModalVisible = false;
-        transcriptContent = string.Empty;
-        editingTranscriptMeetingId = 0;
-        canEditTranscript = false;
-        return Task.CompletedTask;
     }
 
     private void ResetUploadState()
@@ -1070,44 +1051,71 @@ public partial class MeetingViewView : IDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// 唯讀檢視。所有會議都開得了。
+    ///
+    /// <para>
+    /// 已歸屬專案的會議在這一頁**不能**編修也不能下載 PDF，所以視窗底部要講清楚去哪裡做——
+    /// 沒有這行說明，使用者只會覺得按鈕莫名其妙消失了。
+    /// </para>
+    /// </summary>
     private Task OnViewDraftAsync(MeetingAdapterModel meeting)
     {
-        draftMeetingId = meeting.Id;
-        draftModalTitle = $"會議紀錄 - {meeting.Title}";
-        draftContent = meeting.DraftContent;
-        draftViewModalVisible = true;
+        OpenDraftModal(
+            meeting,
+            canEdit: false,
+            title: $"會議紀錄 - {meeting.Title}",
+            notice: meeting.IsUnassigned
+                ? null
+                : $"這份會議紀錄已歸屬「{meeting.ProjectTitleText}」專案，編修與下載 PDF 請到「專案項目」頁。");
+
         return Task.CompletedTask;
     }
 
+    /// <summary>編修。只有未歸屬專案的會議走得到這裡（按鈕本身就已經擋掉了）。</summary>
     private Task OnEditDraftAsync(MeetingAdapterModel meeting)
     {
-        draftMeetingId = meeting.Id;
-        draftModalTitle = $"編修會議紀錄 - {meeting.Title}";
-        draftContent = meeting.DraftContent;
-        draftEditModalVisible = true;
+        OpenDraftModal(
+            meeting,
+            canEdit: true,
+            title: $"編修會議紀錄 - {meeting.Title}",
+            notice: null);
+
         return Task.CompletedTask;
     }
 
-    private Task OnDraftViewModalCancelAsync(MouseEventArgs args)
+    private void OpenDraftModal(MeetingAdapterModel meeting, bool canEdit, string title, string? notice)
     {
-        draftViewModalVisible = false;
-        return Task.CompletedTask;
+        draftMeeting = meeting;
+        draftMeetingId = meeting.Id;
+        draftModalTitle = title;
+        draftContent = meeting.DraftContent;
+        draftCanEdit = canEdit;
+        draftNotice = notice;
+
+        // PDF 只在未歸屬時從這一頁下載：已歸屬的要帶專案名稱進表頭，那是專案頁才有的脈絡。
+        draftCanExport = meeting.IsUnassigned
+            && meeting.HasDraft
+            && AuthenticationStateHelper.CheckAccessAction(
+                MagicObjectHelper.角色_會議紀錄, PermissionActions.Export);
+
+        draftModalVisible = true;
     }
 
-    private async Task OnDraftEditModalOkAsync(MouseEventArgs args)
+    private async Task OnDraftSavedAsync(string content)
     {
         isSavingDraft = true;
         try
         {
-            var result = await meetingService.UpdateDraftAsync(draftMeetingId, draftContent);
+            var result = await meetingService.UpdateDraftAsync(draftMeetingId, content);
             if (!result.Success)
             {
+                // 存檔失敗時視窗留著，使用者的編修還在裡面。
                 NotifyError(result.Message);
-                draftEditModalVisible = true;
                 return;
             }
 
-            draftEditModalVisible = false;
+            draftModalVisible = false;
             NotifySuccess("會議紀錄已儲存。");
             await ReloadAsync();
         }
@@ -1117,10 +1125,26 @@ public partial class MeetingViewView : IDisposable
         }
     }
 
-    private Task OnDraftEditModalCancelAsync(MouseEventArgs args)
+    /// <summary>
+    /// 編修視窗裡的「下載 PDF」。
+    ///
+    /// <para>
+    /// ⚠️ 拿的是**視窗裡當下的內容**而不是 <c>draftMeeting.DraftContent</c>：
+    /// 使用者改了字、還沒儲存就按下載時，後者是資料庫裡的舊版本，
+    /// 產出來的 PDF 會與畫面不符而且看不出來。複本只服務這一次匯出，不回寫清單。
+    /// </para>
+    /// </summary>
+    private Task OnExportCurrentDraftAsync(string content)
     {
-        draftEditModalVisible = false;
-        return Task.CompletedTask;
+        if (draftMeeting is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var snapshot = draftMeeting.Clone();
+        snapshot.DraftContent = content;
+
+        return OnExportDraftAsync(snapshot);
     }
 
     /// <summary>
@@ -1150,6 +1174,8 @@ public partial class MeetingViewView : IDisposable
                 meeting.Id,
                 fileName,
                 pdf.Length);
+
+            NotifySuccess($"已下載「{fileName}」。");
         }
         catch (Exception ex)
         {
@@ -1170,47 +1196,6 @@ public partial class MeetingViewView : IDisposable
         aiChatTitle = $"AI 問答 - {meeting.Title}";
         aiChatTargetName = meeting.Title;
         aiChatVisible = true;
-    }
-
-    /// <summary>
-    /// 從這場會議的會議紀錄抽出待辦。
-    ///
-    /// ⚠️ 未歸屬時按鈕仍然保持啟用，改在這裡擋——CrudActionButton 是 Tooltip 包 Button，
-    /// 而停用的 button 不觸發滑鼠事件，Tooltip 永遠不會出現，提示等於不存在。
-    /// </summary>
-    private async Task OnExtractTodosAsync(MeetingAdapterModel meeting)
-    {
-        if (meeting.ProjectId is null)
-        {
-            await messageService.WarningAsync("待辦事項一定隸屬於某個專案，請先用「歸屬到專案」把這筆會議紀錄歸檔後再抽出待辦。");
-            return;
-        }
-
-        // 抽出待辦是付費動作：TodoExtractionModal 一開啟就呼叫 ExtractAsync，
-        // 視窗顯示出來時 API 已經打出去了，所以確認一定要擋在開視窗之前。
-        // 文案與專案項目頁逐字相同——同一個動作在兩頁講不同的話會讓人以為行為不同。
-        // 不套 Danger：抽出來的只是候選，勾選並儲存後才真的建立待辦。
-        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
-        {
-            Title = "確認抽出待辦（會產生費用）",
-            Content = $"將把「{meeting.Title}」的會議紀錄全文送給 AI 分析待辦事項，"
-                    + "這會呼叫 Azure OpenAI 文字生成服務並產生費用（每次抽取固定一次呼叫）。"
-                    + "抽出的項目要勾選並儲存才會真的建立待辦；關閉視窗後再開啟會重新抽一次、再計費一次。確定要繼續嗎？",
-            OkText = "開始抽取",
-            CancelText = "取消",
-            MaskClosable = false
-        });
-
-        if (!confirmed)
-        {
-            logger.LogDebug("Todo extraction cancelled by user. MeetingId={MeetingId}", meeting.Id);
-            return;
-        }
-
-        todoExtractionMeetingId = meeting.Id;
-        todoExtractionProjectId = meeting.ProjectId.Value;
-        todoExtractionMeetingTitle = meeting.Title;
-        todoExtractionVisible = true;
     }
 
     private MeetingDraftProgressItem? GetLiveDraftProgress(int meetingId)

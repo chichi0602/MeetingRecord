@@ -4,6 +4,10 @@
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
     gap: 16px;
+    /* 撐滿 .ant-modal-body 算出來的高度，好讓底下的清單與訊息區改吃「剩餘空間」
+       而不是猜一個 vh 常數。min-height: 0 不可省，否則 grid 子項捲不起來。 */
+    height: 100%;
+    min-height: 0;
 }
 
 /* 視窗本身是 1080px，但小螢幕上 AntDesign 會自己縮。清單退到上方變成橫向一排，
@@ -11,6 +15,9 @@
 @media (max-width: 900px) {
     .ai-chat-shell {
         grid-template-columns: minmax(0, 1fr);
+        /* 單欄時清單與對話區是上下疊的，再鎖 100% 會把對話區壓扁。
+           放掉高度讓 .ant-modal-body 自己捲——那是唯一允許捲的地方。 */
+        height: auto;
     }
 }
 
@@ -18,6 +25,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-height: 0;
     padding: 12px;
     background: var(--oat-50);
     border: 1px solid var(--oat-200);
@@ -127,6 +135,7 @@
     flex-direction: column;
     gap: 12px;
     min-width: 0;
+    min-height: 0;
 }
 
 /* 讀了哪些資料、哪些被截斷或跳過。這一條不能省——使用者要知道 AI 看到的是不是全部。 */
@@ -152,8 +161,16 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    /* 固定高度而非 max-height：對話變長時視窗本身不該跟著長，捲軸留在訊息區內。 */
-    height: 52vh;
+    /* 吃掉 .ai-chat 的剩餘高度（notice、輸入框、按鈕列都是固定高，剩下的全給訊息區）。
+
+       0.4.82 之前是 height: 52vh——一個猜出來的常數。在 1366×768 上
+       notice ＋ 52vh ＋ 輸入框 ＋ 按鈕列加起來超過視窗高，整個視窗就被撐爆了。
+       改吃剩餘空間之後，螢幕多矮它都自己縮。
+
+       ⚠️ min-height 是 160px 而不是 0：訊息區被壓成 0 高（連一則訊息都看不到）
+       比「視窗略微超出、由 .ant-modal-body 捲」更糟。 */
+    flex: 1 1 auto;
+    min-height: 160px;
     overflow-y: auto;
     padding: 14px;
     border: 1px solid var(--oat-200);

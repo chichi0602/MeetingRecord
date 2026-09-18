@@ -34,6 +34,9 @@ public partial class AiChatModal : ComponentBase
     private MessageService MessageService { get; set; } = default!;
 
     [Inject]
+    private NotificationService NotificationService { get; set; } = default!;
+
+    [Inject]
     private ILogger<AiChatModal> Logger { get; set; } = default!;
 
     [Parameter]
@@ -702,6 +705,20 @@ public partial class AiChatModal : ComponentBase
         var pdf = await PdfRenderer.RenderAsync(html);
 
         await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
+
+        // 單則與整段對話都走這裡，所以提示只寫一次；檔名本身就分得出是哪一種。
+        //
+        // ⚠️ 走 NotificationService（右下角）而不是本檔其他地方用的 MessageService（頂部置中）：
+        //    全站的「下載完成」一律在右下角，與「已複製到剪貼簿」那種瞬時操作回饋不同層級。
+        // ⚠️ NotificationType.Warning 是刻意與全站現況對齊、不是筆誤——
+        //    全專案 30 處成功提示都用 Warning，這裡單獨改成 Success 只會多一種不一致。
+        _ = NotificationService.Open(new NotificationConfig
+        {
+            Message = "系統訊息",
+            Description = $"已下載「{fileName}」。",
+            NotificationType = NotificationType.Warning,
+            Placement = NotificationPlacement.BottomRight,
+        });
     }
 
     #endregion

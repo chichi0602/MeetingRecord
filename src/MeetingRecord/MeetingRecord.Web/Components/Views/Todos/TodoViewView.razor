@@ -251,7 +251,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="todo-view-modal form-modal-standard"
+           Class="form-modal-standard"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -333,13 +333,10 @@ else
 @* 待辦內容的唯讀檢視。刻意放在元件根層而不是 <Column> 裡——放在欄位內會讓每一列都渲染一個視窗。
    描述來自 TextArea，換行有意義，比照檢視會議紀錄用 <pre> 保留。 *@
 <Modal Title="@detailTitle"
-       Class="todo-view-detail-modal"
-       Width="800"
+       Class="form-modal-standard"
        @bind-Visible="@detailVisible"
        Keyboard="true"
        Footer="null"
        OnCancel="OnDetailCancel">
     <pre class="todo-view-detail-content">@detailContent</pre>
 </Modal>
-
-<FormModalHelper />

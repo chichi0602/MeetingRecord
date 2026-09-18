@@ -1,6 +1,5 @@
 @using MeetingRecord.Share.Helpers
 @using MeetingRecord.Share.Enums
-@using MeetingRecord.Business.Helpers
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -281,13 +280,6 @@ else
                                                       OnClick="@(async () => await OnExportDraftAsync(context))" />
                                 </SpaceItem>
                             }
-                            @if (context.CanPreviewTranscript)
-                            {
-                                <SpaceItem>
-                                    <CrudActionButton Title="預覽逐字稿" Icon="description"
-                                                      OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
-                                </SpaceItem>
-                            }
                             @* 這顆鈕真正做的事是「新增待辦」，所以權限鍵是待辦事項而不是專案項目。
                                HasDraft 與同列的「檢視會議紀錄」一致——沒有草稿就沒有東西可抽。 *@
                             @if (context.HasDraft
@@ -322,7 +314,7 @@ else
     </div>
 
     <Modal Title="@modalTitle"
-           Class="project-view-modal form-modal-large"
+           Class="form-modal-large"
            @bind-Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"
@@ -490,33 +482,20 @@ else
         </div>
     </Modal>
 
-    <Modal Title="@draftModalTitle"
-           Class="project-view-draft-modal"
-           Width="800"
-           @bind-Visible="@draftViewModalVisible"
-           Keyboard="true"
-           Footer="null"
-           OnCancel="OnDraftViewModalCancelAsync">
-        @* 草稿是 LLM 產的 Markdown。0.4.70 之前整塊原文丟在 <pre> 裡，畫面上滿是 ## 與 **。
-           改用 <div>：<pre> 自帶等寬字型與 white-space: pre，渲染成 HTML 之後兩者都是錯的。 *@
-        <div class="project-view-draft-content">@((MarkupString)MarkdownRenderer.ToHtml(draftContent))</div>
-    </Modal>
-
-    <Modal Title="@draftModalTitle"
-           Class="project-view-draft-modal"
-           Width="800"
-           @bind-Visible="@draftEditModalVisible"
-           Keyboard="true"
-           MaskClosable="false"
-           OkText="@("儲存")"
-           CancelText="@("取消")"
-           OnOk="OnDraftEditModalOkAsync"
-           OnCancel="OnDraftEditModalCancelAsync">
-        <TextArea @bind-Value="draftContent" Rows="20" Placeholder="會議紀錄內容" />
-    </Modal>
+    @* 檢視與編修 0.4.82 起共用同一個視窗，差別只在 CanEdit。
+       編修模式是左改右看＋常駐搜尋取代列；唯讀模式只剩右邊的預覽。 *@
+    <MarkdownEditorModal @bind-Visible="@draftModalVisible"
+                         Title="@draftModalTitle"
+                         Content="@draftContent"
+                         CanEdit="@draftCanEdit"
+                         CanExport="@draftCanExport"
+                         IsExporting="@(exportingMeetingId is not null)"
+                         IsSaving="@isSavingDraft"
+                         OnExport="OnExportCurrentDraftAsync"
+                         OnSave="OnDraftSavedAsync" />
 
     <Modal Title="@("專案附件")"
-           Width="720"
+           Class="form-modal-standard"
            @bind-Visible="@attachmentModalVisible"
            Keyboard="true"
            Footer="null"
@@ -555,38 +534,4 @@ else
                          MeetingId="@todoExtractMeetingId"
                          ProjectId="@(SelectedProject?.Id ?? 0)"
                          MeetingTitle="@todoExtractMeetingTitle" />
-
-    <Modal Title="@transcriptModalTitle"
-           Class="project-view-transcript-modal"
-           Width="800"
-           @bind-Visible="@transcriptModalVisible"
-           Keyboard="true"
-           Footer="null"
-           OnCancel="OnTranscriptModalCancelAsync">
-        @* 這裡也能編修：「正要產生會議紀錄時發現錯字」才是最該修的時機，
-           逼使用者跳到會議紀錄頁是沒有必要的摩擦。 *@
-        <TextArea @bind-Value="transcriptContent"
-                  BindOnInput="true"
-                  Rows="18"
-                  Disabled="@(!canEditTranscript || isSavingTranscript)"
-                  Placeholder="逐字稿內容" />
-
-        <div class="project-view-transcript-actions">
-            @if (canEditTranscript)
-            {
-                <span class="project-view-transcript-hint">修正錯字後儲存，之後產生的會議紀錄就會用修正後的內容。</span>
-                <Button Type="ButtonType.Primary"
-                        Loading="@isSavingTranscript"
-                        OnClick="@(async () => await OnSaveTranscriptAsync())">
-                    儲存逐字稿
-                </Button>
-            }
-            else
-            {
-                <span class="project-view-transcript-hint">目前的轉錄狀態無法編修，完成後才能修改。</span>
-            }
-        </div>
-    </Modal>
 }
-
-<FormModalHelper />

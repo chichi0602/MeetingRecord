@@ -315,8 +315,11 @@ body .ant-spin-dot-item {
    放在全域而不是 scoped .razor.css，理由有二：
    1. MarkupString 塞進來的子節點拿不到 [b-xxxxx] scope 屬性，scoped 寫法一定要層層 ::deep，很囉嗦。
    2. 會議紀錄與 AI 問答都要渲染 Markdown，同一組規則不該在每個元件各抄一份。
-   ⚠️ 專案頁的 .project-view-draft-content 與 AI 問答的 .ai-chat-bubble-markdown 仍是各自的
-   scoped 複本（先於本區塊存在）。日後要收斂的話，改成掛這個 class 即可。 */
+   0.4.82：專案頁的 .project-view-draft-content（125 行 scoped 複本）已經連同舊的草稿視窗一起移除，
+   改由共用的 MarkdownEditorModal 掛這個 class。AI 問答的 .ai-chat-bubble-markdown 仍是各自的複本。
+
+   ⚠️ max-height: 60vh 是為「對話框裡的一小塊預覽」設計的。整頁手冊或左右分欄的編輯器套上去
+   會變成兩層捲軸，那些地方要用 ::deep 解除（見 HelpView.razor.css 與 MarkdownEditorModal.razor.css）。 */
 .markdown-content {
     max-height: 60vh;
     overflow: auto;

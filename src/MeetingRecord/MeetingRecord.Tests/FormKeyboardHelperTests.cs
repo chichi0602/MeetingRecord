@@ -84,4 +84,51 @@ public sealed class FormKeyboardHelperTests
     {
         Assert.Throws<ArgumentNullException>(() => FormKeyboardHelper.IsSubmit(null!));
     }
+
+    #region IsReverseSubmit（搜尋框的「上一筆」，0.4.82）
+
+    [Fact]
+    public void IsReverseSubmit_ShiftEnter_ShouldBeTrue()
+    {
+        Assert.True(FormKeyboardHelper.IsReverseSubmit(
+            new KeyboardEventArgs { Key = "Enter", ShiftKey = true }));
+    }
+
+    [Fact]
+    public void IsReverseSubmit_WhileComposing_ShouldBeFalse()
+    {
+        // 中文輸入法組字期間的 Shift+Enter 是在選字，不是在找上一筆。
+        // 這是 0.4.77 花了一整版修的東西，新元件不能倒退回去。
+        Assert.False(FormKeyboardHelper.IsReverseSubmit(
+            new KeyboardEventArgs { Key = "Enter", ShiftKey = true, IsComposing = true }));
+    }
+
+    [Fact]
+    public void IsReverseSubmit_PlainEnter_ShouldBeFalse()
+    {
+        // 純 Enter 是「下一筆」，由 IsSubmit 負責。兩支不可以同時回 true，
+        // 否則按一次 Enter 會前進又後退，看起來像卡住不動。
+        var args = new KeyboardEventArgs { Key = "Enter" };
+
+        Assert.True(FormKeyboardHelper.IsSubmit(args));
+        Assert.False(FormKeyboardHelper.IsReverseSubmit(args));
+    }
+
+    [Theory]
+    [InlineData("Escape")]
+    [InlineData("a")]
+    [InlineData("Tab")]
+    public void IsReverseSubmit_OtherKeys_ShouldBeFalse(string key)
+    {
+        Assert.False(FormKeyboardHelper.IsReverseSubmit(
+            new KeyboardEventArgs { Key = key, ShiftKey = true }));
+    }
+
+    [Fact]
+    public void IsReverseSubmit_NullArgs_ShouldThrow()
+    {
+        Assert.Throws<ArgumentNullException>(() => FormKeyboardHelper.IsReverseSubmit(null!));
+    }
+
+    #endregion
 }

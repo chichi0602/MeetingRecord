@@ -1,3 +1,4 @@
+using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using MeetingRecord.Web.Components.Commons;
@@ -25,6 +26,9 @@ public partial class TodoExtractionModal : ComponentBase
 
     [Inject]
     private ILogger<TodoExtractionModal> Logger { get; set; } = default!;
+
+    [Inject]
+    private ModalService ModalService { get; set; } = default!;
 
     [Parameter]
     public bool Visible { get; set; }
@@ -73,6 +77,14 @@ public partial class TodoExtractionModal : ComponentBase
 
     private readonly List<Candidate> candidates = [];
 
+    /// <summary>
+    /// 抽取完成當下的候選清單快照。null 代表還沒抽出東西（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。
+    /// </summary>
+    private string? candidateSnapshot;
+
+    /// <summary>少了這道旗標，連按兩次取消會疊出兩個確認視窗。</summary>
+    private bool isDiscardConfirming;
+
     private static IReadOnlyList<string> PriorityOptions => TodoAdapterModel.PriorityOptions;
 
     private bool isExtracting;
@@ -106,6 +118,7 @@ public partial class TodoExtractionModal : ComponentBase
     private async Task ExtractAsync()
     {
         candidates.Clear();
+        candidateSnapshot = null;
         errorMessage = null;
         existingNotice = null;
         isExtracting = true;
@@ -152,6 +165,12 @@ public partial class TodoExtractionModal : ComponentBase
         finally
         {
             isExtracting = false;
+
+            // ⚠️ 快照一定要拍在這裡，不能拍在開窗時——開窗的當下 candidates 還是空的，
+            //    那樣「什麼都沒改」也會被判成 dirty，每次關閉都要多按一次。
+            //    抽取失敗時 candidates 是空的，快照與比對都是 []，照樣不會誤問。
+            candidateSnapshot = FormDirtyHelper.Capture(candidates);
+
             StateHasChanged();
         }
     }
@@ -250,7 +269,40 @@ public partial class TodoExtractionModal : ComponentBase
         }
     }
 
-    private async Task OnCancelAsync() => await CloseAsync();
+    private async Task OnCancelAsync()
+    {
+        if (isSaving || isDiscardConfirming)
+        {
+            return;
+        }
+
+        if (FormDirtyHelper.IsDirty(candidateSnapshot, candidates))
+        {
+            isDiscardConfirming = true;
+            bool discard;
+            try
+            {
+                // ⚠️ 這裡的額外警語特別有價值：關掉之後重開會**再打一次付費 API**。
+                discard = await FormDirtyHelper.ConfirmDiscardAsync(
+                    ModalService,
+                    "抽出的待辦清單",
+                    "關閉之後再開啟會重新抽取一次，並且再計費一次。");
+            }
+            finally
+            {
+                isDiscardConfirming = false;
+            }
+
+            if (!discard)
+            {
+                // ⚠️ 這個視窗是**單向** Visible=（不是 @bind-Visible），AntDesign 不會自己關窗，
+                //    所以直接 return 就留得住，不需要也不可以寫 Visible = true。
+                return;
+            }
+        }
+
+        await CloseAsync();
+    }
 
     private async Task CloseAsync()
     {

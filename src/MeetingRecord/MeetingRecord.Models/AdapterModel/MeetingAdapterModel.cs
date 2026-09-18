@@ -55,8 +55,18 @@ public class MeetingAdapterModel : ICloneable
     /// <summary>轉錄狀態的顯示文字（清單欄位用）</summary>
     public string TranscriptionStatusText => Share.Enums.TranscriptionStatusText.Describe(TranscriptionStatus);
 
-    /// <summary>逐字稿已產生，可供預覽</summary>
-    public bool CanPreviewTranscript =>
+    /// <summary>
+    /// 逐字稿已產生。與 <see cref="HasMedia"/>、<see cref="HasDraft"/> 命名對稱。
+    ///
+    /// <para>
+    /// 0.4.82 之前叫 <c>CanPreviewTranscript</c>——逐字稿的預覽與編修在那一版整個移除了，
+    /// 但這個判斷本身還有兩個用途：<see cref="CanGenerateDraft"/> 的前置條件，
+    /// 以及畫面上「AI 問答」按鈕的顯示條件（只有逐字稿、還沒生成會議紀錄的會議也問得到）。
+    /// 所以留著，但改成一個不騙人的名字——留一個叫 Preview、系統裡卻已經沒有 Preview 的屬性，
+    /// 比刪掉更糟。
+    /// </para>
+    /// </summary>
+    public bool HasTranscript =>
         TranscriptionStatus == TranscriptionStatus.Completed
         && !string.IsNullOrWhiteSpace(TranscriptRelativePath);
 
@@ -123,7 +133,7 @@ public class MeetingAdapterModel : ICloneable
 
     /// <summary>可送出生成（逐字稿已完成，且目前不在生成中）</summary>
     public bool CanGenerateDraft =>
-        CanPreviewTranscript
+        HasTranscript
         && DraftStatus != DraftStatus.Processing
         && DraftStatus != DraftStatus.Pending;
 

@@ -33,6 +33,17 @@ namespace MeetingRecord.Web.Components.Views.Categories
         string modalTitle = "分類維護";
         bool modalVisible = false;
         CategoryAdapterModel CurrentRecord = new();
+
+        /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
+        private string? formSnapshot;
+
+        /// <summary>
+        /// ⚠️ Esc 會**同時**走兩條路：AntDesign Modal 的 <c>Keyboard="true"</c> 與表單上的
+        /// <c>@onkeydown</c>（<see cref="OnModalKeyDownAsync"/>），兩者都會呼叫
+        /// <see cref="OnModalCancelHandleAsync"/>。0.4.84 之前兩次都只是 <c>modalVisible = false</c>，
+        /// 冪等所以沒人發現；加了確認框之後會**疊出兩個確認視窗**，所以要這道旗標。
+        /// </summary>
+        private bool isDiscardConfirming;
         public EditContext? LocalEditContext { get; set; }
         bool isNewRecordMode;
         string RoleMessage = string.Empty;
@@ -186,6 +197,7 @@ namespace MeetingRecord.Web.Components.Views.Categories
             isNewRecordMode = false;
             modalTitle = "修改分類";
             CurrentRecord = categoryAdapterModel.Clone();
+            formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened edit modal for category. CategoryId={CategoryId}, Name={Name}", categoryAdapterModel.Id, categoryAdapterModel.Name);
         }
@@ -229,6 +241,7 @@ namespace MeetingRecord.Web.Components.Views.Categories
             CurrentRecord = new();
             isNewRecordMode = true;
             modalTitle = "新增分類";
+            formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened create modal for category.");
         }
@@ -324,11 +337,39 @@ namespace MeetingRecord.Web.Components.Views.Categories
             modalVisible = false;
         }
 
-        private Task OnModalCancelHandleAsync(MouseEventArgs args)
+        private async Task OnModalCancelHandleAsync(MouseEventArgs args)
         {
+            if (isDiscardConfirming)
+            {
+                return;
+            }
+
+            if (FormDirtyHelper.IsDirty(formSnapshot, CurrentRecord))
+            {
+                isDiscardConfirming = true;
+                bool discard;
+                try
+                {
+                    discard = await FormDirtyHelper.ConfirmDiscardAsync(modalService, "這筆分類");
+                }
+                finally
+                {
+                    isDiscardConfirming = false;
+                }
+
+                if (!discard)
+                {
+                    // ⚠️ @bind-Visible 是雙向的，AntDesign 在呼叫這個 handler 之前就已經把視窗關掉了。
+                    //    不重新開啟的話，按「繼續編修」反而會失去整張表單——正好是我們要修的反面。
+                    //    與 OnModalOKHandleAsync 的驗證失敗分支同一個處理。
+                    modalVisible = true;
+                    return;
+                }
+            }
+
             modalVisible = false;
+            formSnapshot = null;
             logger.LogDebug("Category modal cancelled.");
-            return Task.CompletedTask;
         }
 
         private async Task OnModalKeyDownAsync(KeyboardEventArgs args)

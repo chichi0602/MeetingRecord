@@ -37,6 +37,16 @@ namespace MeetingRecord.Web.Components.Views.Admins
         string modalTitle = "角色維護";
         bool modalVisible = false;
         RoleViewAdapterModel CurrentRecord = new();
+
+        /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
+        private string? formSnapshot;
+
+        /// <summary>
+        /// ⚠️ Esc 會**同時**走兩條路：AntDesign Modal 的 <c>Keyboard="true"</c> 與表單上的
+        /// <c>@onkeydown</c>，兩者都會呼叫 <see cref="OnModalCancelHandleAsync"/>。0.4.84 之前兩次
+        /// 都只是 <c>modalVisible = false</c>，冪等所以沒人發現；加了確認框之後會**疊出兩個確認視窗**。
+        /// </summary>
+        private bool isDiscardConfirming;
         public EditContext? LocalEditContext { get; set; }
         bool isNewRecordMode;
         string RoleMessage = string.Empty;
@@ -196,6 +206,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
             isNewRecordMode = false;
             modalTitle = "修改角色";
             CurrentRecord = roleViewAdapterModel.Clone();
+            formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened edit modal for role view. RoleViewId={RoleViewId}, Name={RoleName}", roleViewAdapterModel.Id, roleViewAdapterModel.Name);
         }
@@ -241,6 +252,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
             isNewRecordMode = true;
             modalTitle = "新增角色";
+            formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened create modal for role view.");
         }
@@ -336,11 +348,37 @@ namespace MeetingRecord.Web.Components.Views.Admins
             modalVisible = false;
         }
 
-        private Task OnModalCancelHandleAsync(MouseEventArgs args)
+        private async Task OnModalCancelHandleAsync(MouseEventArgs args)
         {
+            if (isDiscardConfirming)
+            {
+                return;
+            }
+
+            if (FormDirtyHelper.IsDirty(formSnapshot, CurrentRecord))
+            {
+                isDiscardConfirming = true;
+                bool discard;
+                try
+                {
+                    discard = await FormDirtyHelper.ConfirmDiscardAsync(modalService, "這個角色");
+                }
+                finally
+                {
+                    isDiscardConfirming = false;
+                }
+
+                if (!discard)
+                {
+                    // ⚠️ @bind-Visible 是雙向的，AntDesign 在呼叫這個 handler 之前就把視窗關掉了。
+                    //    不重新開啟的話，按「繼續編修」反而會失去整張表單——正好是我們要修的反面。
+                    modalVisible = true;
+                    return;
+                }
+            }
+
             modalVisible = false;
-            logger.LogDebug("Role view modal cancelled.");
-            return Task.CompletedTask;
+            formSnapshot = null;
         }
 
         private async Task OnModalKeyDownAsync(KeyboardEventArgs args)

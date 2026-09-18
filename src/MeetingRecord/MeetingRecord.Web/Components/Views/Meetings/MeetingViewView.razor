@@ -117,13 +117,6 @@ else
                 <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
-                        @if (context.CanPreviewTranscript)
-                        {
-                            <SpaceItem>
-                                <CrudActionButton Title="預覽逐字稿" Icon="description"
-                                                  OnClick="@(async () => await OnPreviewTranscriptAsync(context))" />
-                            </SpaceItem>
-                        }
                         @if (context.HasDraft)
                         {
                             <SpaceItem>
@@ -140,7 +133,12 @@ else
                                                       OnClick="@(async () => await OnOpenDraftRequestAsync(context))" />
                                 </SpaceItem>
                             }
-                            @if (context.HasDraft)
+                            @* ⚠️ 只有**未歸屬專案**的會議能在這裡編修（0.4.82）。
+                               已歸屬的會議，編修與匯出都集中在專案項目頁——那裡才有專案脈絡
+                               （常用名詞、與會人員），而且 PDF 表頭要帶專案名稱。
+                               已歸屬的使用者在這裡按「檢視」會看到視窗底部的指路說明，
+                               不會以為功能不見了。 *@
+                            @if (context.HasDraft && context.IsUnassigned)
                             {
                                 @* 用 edit_note 而不是 edit，免得跟底下那顆「修改」撞圖示。 *@
                                 <SpaceItem>
@@ -149,33 +147,19 @@ else
                                 </SpaceItem>
                             }
                         }
-                        @if (context.HasDraft
-                            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export))
-                        {
-                            <SpaceItem>
-                                <CrudActionButton Title="匯出 PDF" Icon="download"
-                                                  Disabled="@(exportingMeetingId is not null)"
-                                                  OnClick="@(async () => await OnExportDraftAsync(context))" />
-                            </SpaceItem>
-                        }
+                        @* 匯出 PDF 的按鈕 0.4.82 起不放在列上：未歸屬的在編修視窗裡按，
+                           已歸屬的到專案項目頁按（那裡的 PDF 會帶專案名稱，這裡的不會）。 *@
                         @* 問答的脈絡來自會議紀錄與逐字稿，兩者都沒有時開了也只會得到空脈絡。 *@
-                        @if (context.HasDraft || context.CanPreviewTranscript)
+                        @if (context.HasDraft || context.HasTranscript)
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="AI 問答" Icon="forum"
                                                   OnClick="@(() => OpenMeetingChat(context))" />
                             </SpaceItem>
                         }
-                        @if (context.HasDraft
-                            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
-                        {
-                            @* 未歸屬時刻意不停用：停用的 button 不觸發滑鼠事件，Tooltip 永遠不會出現，
-                               改由 handler 跳訊息說明要先歸屬專案。 *@
-                            <SpaceItem>
-                                <CrudActionButton Title="抽出待辦" Icon="playlist_add"
-                                                  OnClick="@(async () => await OnExtractTodosAsync(context))" />
-                            </SpaceItem>
-                        }
+                        @* 「抽出待辦」0.4.83 起只留在專案項目頁。待辦在資料表層級就必須有專案，
+                           這一頁有一半的會議是未歸屬的，按了也只能跳訊息叫使用者先去歸屬——
+                           那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案頁的清單裡。 *@
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
                         {
                             @* 歸屬不是破壞性動作，不掛 Danger；紅色留給專案頁那顆「從專案移除」。 *@
@@ -286,48 +270,8 @@ else
         </div>
     </Modal>
 
-    <Modal Title="@transcriptModalTitle"
-           Class="meeting-view-transcript-modal"
-           Width="800"
-           @bind-Visible="@transcriptModalVisible"
-           Keyboard="true"
-           Footer="null"
-           OnCancel="OnTranscriptModalCancelHandleAsync">
-        @if (string.IsNullOrWhiteSpace(transcriptContent) && !canEditTranscript)
-        {
-            <div class="meeting-transcript-empty">目前沒有可顯示的逐字稿內容。</div>
-        }
-        else
-        {
-            @* 可編修：STT 聽錯人名或專有名詞時，這是整條流程唯一的人工介入點——
-               不修的話錯誤會被帶進 AI 會議紀錄，再帶進匯出的 PDF。 *@
-            <TextArea @bind-Value="transcriptContent"
-                      BindOnInput="true"
-                      Rows="18"
-                      Disabled="@(!canEditTranscript || isSavingTranscript)"
-                      Placeholder="逐字稿內容" />
-
-            <div class="meeting-transcript-actions">
-                @if (canEditTranscript)
-                {
-                    <span class="meeting-transcript-hint">修正錯字後儲存，之後產生的會議紀錄就會用修正後的內容。</span>
-                    <Button Type="ButtonType.Primary"
-                            Loading="@isSavingTranscript"
-                            OnClick="@(async () => await OnSaveTranscriptAsync())">
-                        儲存逐字稿
-                    </Button>
-                }
-                else
-                {
-                    <span class="meeting-transcript-hint">目前的轉錄狀態無法編修，完成後才能修改。</span>
-                }
-            </div>
-        }
-    </Modal>
-
     <Modal Title="AI 轉會議紀錄"
-           Class="meeting-draft-request-modal"
-           Width="560"
+           Class="form-modal-compact"
            @bind-Visible="@draftRequestVisible"
            Keyboard="true"
            MaskClosable="false"
@@ -408,8 +352,7 @@ else
     </Modal>
 
     <Modal Title="歸屬到專案"
-           Class="meeting-attach-modal"
-           Width="480"
+           Class="form-modal-compact"
            @bind-Visible="@attachVisible"
            Keyboard="true"
            MaskClosable="false"
@@ -442,45 +385,25 @@ else
         </p>
     </Modal>
 
-    <Modal Title="@draftModalTitle"
-           Class="meeting-draft-modal"
-           Width="800"
-           @bind-Visible="@draftViewModalVisible"
-           Keyboard="true"
-           Footer="null"
-           OnCancel="OnDraftViewModalCancelAsync">
-        @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性，
-           scoped 寫法得層層 ::deep，而且這組規則本來就不該每個元件各抄一份。 *@
-        <div class="markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(draftContent))</div>
-    </Modal>
+    @* 檢視與編修 0.4.82 起共用同一個視窗，差別只在 CanEdit。
+       編修模式是左改右看＋常駐搜尋取代列；唯讀模式只剩右邊的預覽。 *@
+    <MarkdownEditorModal @bind-Visible="@draftModalVisible"
+                         Title="@draftModalTitle"
+                         Content="@draftContent"
+                         CanEdit="@draftCanEdit"
+                         CanExport="@draftCanExport"
+                         IsExporting="@(exportingMeetingId is not null)"
+                         IsSaving="@isSavingDraft"
+                         Notice="@draftNotice"
+                         OnExport="OnExportCurrentDraftAsync"
+                         OnSave="OnDraftSavedAsync" />
 
-    <Modal Title="@draftModalTitle"
-           Class="meeting-draft-modal"
-           Width="800"
-           @bind-Visible="@draftEditModalVisible"
-           Keyboard="true"
-           MaskClosable="false"
-           OkText="@("儲存")"
-           CancelText="@("取消")"
-           ConfirmLoading="@isSavingDraft"
-           OnOk="OnDraftEditModalOkAsync"
-           OnCancel="OnDraftEditModalCancelAsync">
-        <TextArea @bind-Value="draftContent" Rows="20" Placeholder="會議紀錄內容" />
-    </Modal>
-
-    @* AiChatModal 與 TodoExtractionModal 都放在 Views.Projects 命名空間下。搬到共用目錄比較乾淨，
-       但那會動到專案頁；依外科手術原則這裡只加 @using。 *@
+    @* AiChatModal 放在 Views.Projects 命名空間下。搬到共用目錄比較乾淨，
+       但那會動到專案頁；依外科手術原則這裡只加 using。 *@
     <AiChatModal @bind-Visible="aiChatVisible"
                  Scope="AiChatScope.Meeting"
                  TargetId="@aiChatTargetId"
                  Title="@aiChatTitle"
                  TargetName="@aiChatTargetName"
                  CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export)" />
-
-    <TodoExtractionModal @bind-Visible="todoExtractionVisible"
-                         MeetingId="@todoExtractionMeetingId"
-                         ProjectId="@todoExtractionProjectId"
-                         MeetingTitle="@todoExtractionMeetingTitle" />
 }
-
-<FormModalHelper />

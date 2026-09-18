@@ -40,6 +40,16 @@ public partial class TodoViewView
     private string modalTitle = "待辦事項維護";
     private bool modalVisible;
     private TodoAdapterModel CurrentRecord = new();
+
+    /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
+    private string? formSnapshot;
+
+    /// <summary>
+    /// ⚠️ Esc 會**同時**走兩條路：AntDesign Modal 的 <c>Keyboard="true"</c> 與表單上的
+    /// <c>@onkeydown</c>，兩者都會呼叫 <see cref="OnModalCancelHandleAsync"/>。0.4.84 之前兩次
+    /// 都只是 <c>modalVisible = false</c>，冪等所以沒人發現；加了確認框之後會**疊出兩個確認視窗**。
+    /// </summary>
+    private bool isDiscardConfirming;
     public EditContext? LocalEditContext { get; set; }
     private bool isNewRecordMode;
     private string RoleMessage = string.Empty;
@@ -314,6 +324,7 @@ public partial class TodoViewView
 
         isNewRecordMode = true;
         modalTitle = "新增待辦事項";
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;
         logger.LogInformation("Opened create modal for todo.");
         return Task.CompletedTask;
@@ -324,6 +335,7 @@ public partial class TodoViewView
         isNewRecordMode = false;
         modalTitle = "修改待辦事項";
         CurrentRecord = todoAdapterModel.Clone();
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;
         logger.LogInformation("Opened edit modal for todo. TodoId={TodoId}", todoAdapterModel.Id);
         return Task.CompletedTask;
@@ -438,11 +450,37 @@ public partial class TodoViewView
         modalVisible = false;
     }
 
-    private Task OnModalCancelHandleAsync(MouseEventArgs args)
+    private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
+        if (isDiscardConfirming)
+        {
+            return;
+        }
+
+        if (FormDirtyHelper.IsDirty(formSnapshot, CurrentRecord))
+        {
+            isDiscardConfirming = true;
+            bool discard;
+            try
+            {
+                discard = await FormDirtyHelper.ConfirmDiscardAsync(modalService, "這筆待辦事項");
+            }
+            finally
+            {
+                isDiscardConfirming = false;
+            }
+
+            if (!discard)
+            {
+                // ⚠️ @bind-Visible 是雙向的，AntDesign 在呼叫這個 handler 之前就把視窗關掉了。
+                //    不重新開啟的話，按「繼續編修」反而會失去整張表單——正好是我們要修的反面。
+                modalVisible = true;
+                return;
+            }
+        }
+
         modalVisible = false;
-        logger.LogDebug("Todo modal cancelled.");
-        return Task.CompletedTask;
+        formSnapshot = null;
     }
 
     private async Task OnModalKeyDownAsync(KeyboardEventArgs args)

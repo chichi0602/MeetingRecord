@@ -1,0 +1,125 @@
+@using MeetingRecord.Web.Components.Commons
+
+@* 左邊改、右邊看的 Markdown 編修視窗，附常駐的搜尋／取代列。
+   唯讀（CanEdit = false）時只剩右邊的預覽，佔滿整寬。
+
+   ⚠️ Keyboard／MaskClosable 都跟著 CanEdit 走：編修時一律關掉 Esc 與點遮罩關閉，
+   一整篇打到一半的會議紀錄，按錯一次鍵就沒了。要離開只能按下面的「取消」，
+   而且改過的話會再問一次。唯讀模式沒有東西可丟，Esc 放行。
+
+   ⚠️ **不要把 Razor 註解寫進下面的屬性列表裡。**註解夾在兩個屬性中間時，
+   Razor 會把整段註解當成**屬性名稱**傳給元件，執行期丟 InvalidOperationException
+   （does not have a property matching the name），而且**編譯得過**——
+   只有真的把畫面打開才會發現。註解一律寫在標籤外面。
+
+   ⚠️ 另外，**註解內文本身不可以出現註解的結束符號**。Razor 的註解不能巢狀，
+   它看到第一個結束符號就收工，後面的文字會變成一般 markup **直接渲染到畫面上**。
+   0.4.82 就是這樣讓一段說明文字外洩到會議紀錄頁的底部。要提到那組符號時用文字敘述，
+   不要把符號本身打出來（連包在反引號裡都不行——Razor 不看 Markdown）。 *@
+<Modal Title="@Title"
+       Class="@ModalClass"
+       Visible="@Visible"
+       Keyboard="@(!CanEdit)"
+       MaskClosable="@(!CanEdit)"
+       Footer="null"
+       OnCancel="OnCancelAsync">
+
+    <div class="markdown-editor @(CanEdit ? "markdown-editor-split" : "markdown-editor-readonly")">
+
+        @if (CanEdit)
+        {
+            @* 常駐一列，不綁 Ctrl+F。
+               ⚠️ Blazor 的 @@onkeydown:preventDefault 是編譯期決定的，沒辦法只在左欄生效；
+               要攔 Ctrl+F 就得對整個容器無條件攔，連右邊預覽區的瀏覽器原生搜尋都會被吃掉。
+               既然這一列本來就一直在，也沒有「叫出來」的需求。 *@
+            <div class="markdown-editor-findbar">
+                <Input @bind-Value="@SearchTerm"
+                       BindOnInput="true"
+                       DebounceMilliseconds="0"
+                       OnkeyDown="OnSearchKeyDownAsync"
+                       Placeholder="搜尋（不分大小寫）"
+                       Size="@InputSize.Small" />
+
+                <span class="markdown-editor-findbar-count">@MatchCountText</span>
+
+                <Tooltip Title="@("上一個（Shift+Enter）")">
+                    <Button Size="ButtonSize.Small"
+                            Disabled="@(matches.Count == 0)"
+                            OnClick="OnFindPreviousAsync">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="keyboard_arrow_up" />
+                    </Button>
+                </Tooltip>
+
+                <Tooltip Title="@("下一個（Enter）")">
+                    <Button Size="ButtonSize.Small"
+                            Disabled="@(matches.Count == 0)"
+                            OnClick="OnFindNextAsync">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="keyboard_arrow_down" />
+                    </Button>
+                </Tooltip>
+
+                <Input @bind-Value="@replaceTerm"
+                       BindOnInput="true"
+                       DebounceMilliseconds="0"
+                       Placeholder="取代為"
+                       Size="@InputSize.Small" />
+
+                <Button Size="ButtonSize.Small"
+                        Disabled="@(currentIndex < 0)"
+                        OnClick="OnReplaceCurrentAsync">取代</Button>
+
+                <Button Size="ButtonSize.Small"
+                        Disabled="@(matches.Count == 0)"
+                        OnClick="OnReplaceAllAsync">全部取代</Button>
+            </div>
+
+            <div class="markdown-editor-pane markdown-editor-source">
+                @* ⚠️ 刻意用原生 <textarea> 而不是 AntDesign 的 TextArea：反白要把 ElementReference
+                   直接交給 JS 的 setSelectionRange，而 AntDesign 沒有把它內部的 input 元素開放出來。
+                   class="ant-input" 讓外觀一致（AntDesign 的樣式是全域的）。
+
+                   ⚠️ @@bind:event="oninput" 等同「不 debounce」，這是正確性要求不是效能選擇：
+                   搜尋、取代、存檔都必須讀到當下的文字。要 debounce 的是右邊的預覽，不是這裡。 *@
+                <textarea @ref="sourceElement"
+                          class="ant-input markdown-editor-textarea"
+                          value="@editingText"
+                          @oninput="OnSourceInputAsync"
+                          spellcheck="false"
+                          placeholder="會議紀錄內容（Markdown）"></textarea>
+            </div>
+        }
+
+        <div class="markdown-editor-pane markdown-editor-preview">
+            @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。 *@
+            <div class="markdown-content">@((MarkupString)previewHtml)</div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Notice))
+    {
+        <p class="markdown-editor-notice">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+            <span>@Notice</span>
+        </p>
+    }
+
+    <div class="markdown-editor-actions">
+        @if (CanExport)
+        {
+            <Button Loading="@IsExporting" Disabled="@IsExporting" OnClick="OnExportAsync">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" />
+                    <span>下載 PDF</span>
+                </span>
+            </Button>
+        }
+        <Button OnClick="OnCancelAsync">@(CanEdit ? "取消" : "關閉")</Button>
+        @if (CanEdit)
+        {
+            <Button Type="ButtonType.Primary"
+                    Loading="@IsSaving"
+                    Disabled="@IsSaving"
+                    OnClick="OnSaveAsync">儲存</Button>
+        }
+    </div>
+</Modal>

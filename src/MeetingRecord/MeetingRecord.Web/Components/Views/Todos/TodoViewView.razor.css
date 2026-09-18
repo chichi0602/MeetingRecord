@@ -53,8 +53,9 @@
 /* 詳細內容的唯讀視窗。描述保留換行，所以用 pre 並允許自動換行。 */
 .todo-view-detail-content {
     margin: 0;
-    max-height: 60vh;
-    overflow: auto;
+    /* 0.4.82 拿掉了 max-height: 60vh + overflow: auto。
+       基準線已經讓 .ant-modal-body 自己捲，這裡再捲一次就是兩層捲軸：
+       內框捲到底之後還要再捲外框，使用者會以為內容已經到底了。 */
     color: var(--oat-ink);
     font-family: inherit;
     font-size: 0.9rem;

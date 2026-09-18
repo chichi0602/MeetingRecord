@@ -2,6 +2,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* 撐滿 .ant-modal-body，好讓底下的清單吃剩餘空間而不是猜一個 vh 常數。 */
+    height: 100%;
+    min-height: 0;
 }
 
 .todo-extract-notice,
@@ -73,7 +76,10 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 52vh;
+    /* 吃掉 .todo-extract 的剩餘高度。0.4.82 之前是 max-height: 52vh——
+       一個與視窗其他部分無關的常數，在矮螢幕上會把整個視窗撐出視野。 */
+    flex: 1 1 auto;
+    min-height: 120px;
     overflow-y: auto;
     padding-right: 4px;
 }

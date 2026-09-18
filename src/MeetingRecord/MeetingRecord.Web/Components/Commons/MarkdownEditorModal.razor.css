@@ -1,0 +1,133 @@
+/* 兩種形狀（分欄／唯讀）共用的只有高度。display 交給各自那一條設，
+   不要在這裡先設一個再被後面蓋掉——那種寫法下一個人會看不懂到底哪一條生效。 */
+.markdown-editor {
+    /* 吃掉 .ant-modal-body 的剩餘高度，把說明列與按鈕列留在下面。
+
+       ⚠️ 不可以寫成 height: 100%——那會佔滿整個 body，把底下的
+       .markdown-editor-actions 擠出捲動區，「儲存」按鈕永遠按不到。
+       body 是 flex column（規則在 FormModalHelper，因為那是 portal DOM）。
+       min-height: 0 不可省，否則底下的兩欄捲不起來。 */
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* 左改右看。
+   ⚠️ 欄寬必須是 minmax(0, 1fr) 而不是 1fr：1fr 的最小值是 auto（內容寬度），
+   一行不換行的長文字會把自己那一欄撐開、把另一欄擠掉。
+   AiChatModal 已經踩過一次，見它 .razor.css 開頭的註解。 */
+.markdown-editor-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 12px;
+}
+
+/* 窄螢幕退成單欄：上面改、下面看。這時兩欄疊起來，高度交給 .ant-modal-body 捲。 */
+@media (max-width: 1100px) {
+    .markdown-editor-split {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(160px, 1fr) minmax(160px, 1fr);
+        height: auto;
+    }
+}
+
+.markdown-editor-findbar {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-50);
+}
+
+    /* 搜尋框與取代框各佔一段彈性寬度，按鈕維持原寬。 */
+    .markdown-editor-findbar .ant-input-affix-wrapper,
+    .markdown-editor-findbar .ant-input {
+        flex: 1 1 140px;
+        min-width: 120px;
+    }
+
+.markdown-editor-findbar-count {
+    flex: 0 0 auto;
+    min-width: 108px;
+    color: var(--oat-ink-soft);
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.markdown-editor-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+}
+
+.markdown-editor-source {
+    padding: 0;
+    overflow: hidden;
+}
+
+.markdown-editor-preview {
+    padding: 12px 16px;
+    background: #ffffff;
+}
+
+/* 唯讀模式只有預覽，一欄佔滿。 */
+.markdown-editor-readonly {
+    display: flex;
+    flex-direction: column;
+}
+
+.markdown-editor-textarea {
+    flex: 1 1 auto;
+    min-height: 240px;
+    /* 手動拉高度會破壞左右兩欄的對齊，而且外框已經是可捲的了。 */
+    resize: none;
+    border: none;
+    border-radius: 10px;
+    font-family: Consolas, "Microsoft JhengHei", monospace;
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+/* ⚠️ 必須用 ::deep：MarkupString 塞進來的子節點拿不到 [b-xxxxx]，直接寫選不到。
+
+   app.css 的全域 .markdown-content 是為「對話框裡的一小塊預覽」設計的
+   （max-height: 60vh + overflow: auto）。套在這裡會變成兩層捲軸：
+   內框捲到底之後還要再捲外框，使用者會以為內容已經到底了。
+   比照 HelpView.razor.css 的既有作法解除。 */
+.markdown-editor-preview ::deep .markdown-content {
+    max-height: none;
+    overflow: visible;
+    border: none;
+    padding: 0;
+    background: transparent;
+}
+
+.markdown-editor-notice {
+    /* 說明列與按鈕列都不參與伸縮，永遠看得到。 */
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--oat-50);
+    color: var(--oat-ink-soft);
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.markdown-editor-actions {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}

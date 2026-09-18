@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：1.9
+- 文件版本：2.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.77
+- 現行系統版本：0.4.83
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/09/16
+- 最後核對日期：2026/09/18
 
 ## 一、目標與範圍
 
@@ -19,10 +19,10 @@
 **影音檔與逐字稿一律存放於檔案系統，不入資料庫**；資料表只保存相對路徑等中繼資料。存放根目錄與 AI 供應商（provider／endpoint／key／model）皆由 `appsettings.json` 決定。
 
 非範圍（本版刻意不做）：
-- 本頁**自 0.4.73 起也包含**「套用提示詞 → LLM 產生會議紀錄」：每列有「AI 轉會議紀錄」，對話框裡的「所屬專案」是**選填**，不必先建立專案。專案頁 `/projects` 的入口同時保留（見 [專案項目 PRD](專案項目-prd.md)），兩者共用同一支服務；流程全貌見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)，提示詞範本維護見 [會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)。0.4.73 起本頁涵蓋整條動線：上傳、轉錄、逐字稿預覽與編修，以及產生／檢視／編修／匯出會議紀錄、AI 問答與歸屬到專案。
+- 本頁**自 0.4.73 起也包含**「套用提示詞 → LLM 產生會議紀錄」：每列有「AI 轉會議紀錄」，對話框裡的「所屬專案」是**選填**，不必先建立專案。專案頁 `/projects` 的入口同時保留（見 [專案項目 PRD](專案項目-prd.md)），兩者共用同一支服務；流程全貌見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)，提示詞範本維護見 [會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)。0.4.73 起本頁涵蓋整條動線：上傳、轉錄，以及產生／檢視／編修／匯出會議紀錄、AI 問答與歸屬到專案。**0.4.82 起逐字稿的預覽與編修整個移除**（檔案仍在，只是人看不到），且編修與匯出改依「有沒有歸屬專案」分流，見下方「操作按鈕」。
 - 不做即時（會議進行中）轉錄與逐字稿串流。
 - 不做說話者聲紋辨識與身分綁定。
-- 不做逐字稿編修的版本歷程（0.4.55 起可線上編修，但為就地覆寫，改掉的舊內容不保留）。
+- **不做逐字稿的預覽與編修**（0.4.55 曾提供，0.4.82 移除）。逐字稿檔案仍是生成會議紀錄與 AI 問答的輸入，只是不再有「人直接讀／改逐字稿」的介面。
 - 不做影音檔／逐字稿的下載端點與線上播放。
 - 不做一筆會議掛多個影音檔（一對一，替換即覆寫）。
 - Web API 只開放中繼資料 CRUD，不開放上傳、轉錄與逐字稿讀取。
@@ -60,16 +60,25 @@
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。
 - 操作按鈕：
-  - 預覽逐字稿（狀態為「已完成」且有逐字稿檔案時才出現）
   - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
   - **AI 轉會議紀錄（0.4.73，`edit`）**：開對話框選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員。按確定會再跳一次費用確認
-  - **檢視會議紀錄 / 編修（`edit`）/ 匯出 PDF（`export`）/ AI 問答（0.4.73）**：與專案頁同一組能力，未歸屬專案也能用；匯出的 PDF 表頭「專案」欄會顯示「未指定」
-  - **抽出待辦（0.4.73，`角色_待辦事項` + `create`）**：未歸屬時按鈕**仍然啟用**，點下去跳訊息要求先歸屬專案——待辦在資料表層級就必須有專案。⚠️ 之所以不用停用，是因為 `CrudActionButton` 是 Tooltip 包 Button，而停用的 button 不觸發滑鼠事件，Tooltip 永遠不會出現。**0.4.76 補上費用確認**：這顆鈕 0.4.73 加進來時漏了二次確認，而抽出待辦是付費動作（`TodoExtractionModal` 一開啟就呼叫 AI），等於誤按就扣錢且完全不問；文案與專案項目頁逐字相同
+  - **檢視會議紀錄（所有會議都有）**：唯讀，左右分欄的編修器只顯示右邊的預覽。已歸屬專案時視窗底部會有一行指路說明，講清楚編修與下載要去專案項目頁——沒有這行，使用者只會覺得按鈕莫名其妙消失了
+  - **編修會議紀錄（`edit`，0.4.82 起僅「未歸屬專案」時出現）**：左改右看 ＋ 常駐搜尋／取代列，元件是共用的 `Components/Commons/MarkdownEditorModal`
+  - **匯出 PDF（`export`）**：0.4.82 起**不放在清單列上**。未歸屬的在編修視窗裡按（表頭「專案」欄顯示「未指定」）；已歸屬的到專案項目頁按，那裡的 PDF 表頭才帶得到專案名稱
+  - **AI 問答（0.4.73）**：`HasDraft || HasTranscript` 時出現——⚠️ **不要簡化成只看 `HasDraft`**，「已轉錄完成但還沒生成會議紀錄」的會議會因此失去入口，而那正是「先問問看逐字稿講了什麼再決定要不要花錢生成」最有用的時機。0.4.82 移除逐字稿預覽後，這是使用者接觸逐字稿內容的唯一路徑
+  - **抽出待辦：0.4.83 起本頁沒有這顆鈕**（0.4.73～0.4.82 曾有）。待辦在資料表層級就必須有專案，而這一頁有一半的會議是未歸屬的，按了只能跳訊息叫使用者先去歸屬——那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案項目頁的清單裡，入口集中在那裡。
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - 修改（`edit`）、刪除（`delete`）
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
 - 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。
-- 逐字稿預覽與編修（0.4.55）：另一個 Modal，內容由服務層直接讀檔回傳字串（**不開下載端點**，避免多一個檔案輸出的授權面）。0.4.55 起由唯讀 `<pre>` 改為可編輯的 `TextArea` ＋「儲存」，供人工修正 STT 聽錯的人名與專有名詞；儲存為**就地覆寫**（`MeetingFileStore.OverwriteTranscriptAsync`），不留版本歷程。**只有轉錄狀態為「已完成」時才允許儲存**——重新轉錄進行中存回去會被新逐字稿蓋掉，服務層會當場擋下並說明原因。另注意讀取時會經 `TranscriptionNoiseFilter` 濾掉供應商外漏的系統指令，因此使用者存回的是**過濾後**的內容，等於順手把那段雜訊從檔案永久清掉。
+- **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。
+  版面是左邊 `<textarea>`、右邊 Markdown 即時預覽，上方一列常駐的搜尋／取代（搜尋、上一個／下一個、取代、全部取代，顯示「第 n / 共 m 筆」）。
+  - 搜尋取代的邏輯全在 `Business/Helpers/TextSearchHelper`（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
+  - ⚠️ **只反白當前那一筆**。`<textarea>` 裡唯一能做的反白就是 selection；要同時標記全部 m 筆得做逐像素對齊的 overlay，中文字型 fallback 一有差異就整段錯位。用「第 n / 共 m 筆」補足資訊。
+  - ⚠️ **刻意不綁 Ctrl+F**。Blazor 的 `@onkeydown:preventDefault` 是編譯期決定的，攔 Ctrl+F 就得對整個容器無條件攔，連右邊預覽區的瀏覽器原生搜尋都會被吃掉。
+  - ⚠️ **編修時 `Keyboard="false"`**（Esc 不關窗），改過後按「取消」會先跳確認——一整篇打到一半的會議紀錄，按錯一次鍵就沒了。
+  - ⚠️ **文字繫結不 debounce（0ms），只有右邊預覽 debounce 250ms**。搜尋、取代、存檔都必須讀到當下的文字（0.4.52 在 AI 問答上踩過「讀到舊值」）；預覽是 `MarkupString`，一變就整串重送，不 debounce 每秒會往下推 100KB。
+  - ⚠️ **視窗裡的「下載 PDF」拿的是編輯區當下的內容**，不是資料庫那份——改了字還沒存就按下載，用舊內容產 PDF 會給出一份與畫面不符的檔案且毫無徵兆。
 
 ### 轉錄狀態
 
@@ -137,7 +146,11 @@
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`會議紀錄:view`、`會議紀錄:create`、`會議紀錄:edit`、`會議紀錄:delete`。裸鍵「會議紀錄」代表該頁全部動作（向後相容）。
 - **上傳影音檔與重新轉錄歸在 `edit`**，不新增動作類型。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路。
-- **團隊列級權控只在 Blazor Service 層生效**：非管理員於 `MeetingService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的會議；單筆讀取、上傳影音檔、重新轉錄、逐字稿預覽皆以 `TagStringHelper.IsTeamAccessible` 守門。**Web API 的 repository 路徑不做列級過濾**，與 `ProjectController`／`PromptTemplateController` 一致（見 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §4.1）。
+- **團隊列級權控只在 Blazor Service 層生效**：非管理員於 `MeetingService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的會議；單筆讀取、上傳影音檔、重新轉錄皆以 `TagStringHelper.IsTeamAccessible` 守門。
+
+  ⚠️ **0.4.82 起逐字稿沒有任何列級守門。**先前唯一有守門的讀取路徑 `MeetingService.ReadTranscriptAsync` 隨著逐字稿預覽一起移除了，
+  現在讀逐字稿原文的唯一路徑是 **AI 問答**（`AiChatService`），而該服務全檔沒有 `IsTeamAccessible`／`accessScope`——
+  **那條路徑比被刪掉的預覽路徑更鬆。**要不要補守門是待決事項，見下方「待決事項」。**Web API 的 repository 路徑不做列級過濾**，與 `ProjectController`／`PromptTemplateController` 一致（見 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §4.1）。
 - 逐字稿內容為高敏感資料：預覽走 Blazor 服務層（Cookie 驗證 + 團隊守門），**沒有任何可直接下載檔案的 HTTP 端點**。
 
 ### ⚠️ 0.4.35 的權限副作用（刻意為之，非 bug）
@@ -146,7 +159,7 @@
 
 副作用是 **`Teams` 是會議唯一的列權限來源**（沒有 owner 欄位，`ProjectId` 可為空無法替代），而 `TagStringHelper.ToStored([])` 回傳 `null`、predicate 把 `null` 視為公開，因此：
 
-- **0.4.35 之後新建的會議一律是公開的**，任何有「會議紀錄」頁權限的人都看得到，**包含逐字稿預覽**。
+- **0.4.35 之後新建的會議一律是公開的**，任何有「會議紀錄」頁權限的人都看得到，**包含透過 AI 問答讀到的逐字稿內容**。
 - 0.4.35 之前已標團隊的舊資料**維持原本的可見範圍**——DB 欄位與服務層 11 處權限判斷都沒有動。
 
 要把團隊控管收回來，只需要把表單那個團隊 `Select` 加回 `MeetingViewView.razor`，服務層不必改。
@@ -233,7 +246,8 @@
 - `SaveMediaAsync_ShouldReplacePreviousMediaAndTranscript`：替換檔案時清掉舊檔與舊逐字稿。
 - `SaveMediaAsync_NonAdmin_ShouldDenyRecordOutsideTeamScope`：越權上傳被拒。
 - `RequeueTranscriptionAsync_*`：重設狀態並入列；沒有影音檔或處理中時拒絕。
-- `ReadTranscriptAsync_ShouldReturnFileContent`／`ReadTranscriptAsync_NonAdmin_ShouldDenyRecordOutsideTeamScope`：預覽內容與越權守門。
+- `TextSearchHelperTests`（0.4.82，30 筆）：搜尋取代的純函式。重點在**不重疊掃描**（寫成 `at + 1` 會多算一筆）、**`OrdinalIgnoreCase` 保證比對到的片段長度等於搜尋字串長度**（換成 culture-sensitive 比對，索引就會歪）、**換行正規化**（`<textarea>` 的 value 一律是 LF，含 CRLF 的文字索引會愈往後偏愈多，只有長文件的後半段才看得出來）、以及**取代字串含搜尋字串時不連鎖**（把「a」換成「aa」）。以突變測試確認三條規則都會變紅。
+- `ModalSizeClassTests`（0.4.82）：掃描所有 `.razor` 的 `<Modal>`，每個都要剛好一個尺寸 class，且不可以同時留下已失效的 `Width`（尺寸 class 的 `width` 是 author-important，贏過 `Width` 產生的 inline style）。
 - `GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords`、`GetAsync_NonAdminWithoutTeams_ShouldSeeOnlyPublicRecords`、`GetById_NonAdmin_ShouldDenyRecordOutsideTeamScope`、`GetAsync_WithTeamFilter_ShouldFilterByTeam`、`GetAsync_WithKeyword_ShouldMatchMediaFileName`：團隊可見性與查詢條件。
 
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TranscriptionRequestTests.cs`（只測純函式，**不打真實 API、不跑真實 ffmpeg**）：
@@ -259,7 +273,8 @@
 1. 啟動 → 確認 `MeetingMediaPath` / `MeetingTranscriptPath` 自動建立。
 2. 登入 → 側邊欄出現「會議管理 > 會議紀錄」→ 進 `/meetings`。
 3. 新增會議並上傳 mp3：進度列 0%→100%，狀態依序為「待處理」→「處理中」→「已完成」。
-4. 點「預覽逐字稿」，中文內容正常無亂碼。
+4. 開「AI 問答」提問，確認回答引用的逐字稿片段中文正常無亂碼。
+   ⚠️ 0.4.82 移除逐字稿預覽後，這是唯一還會碰到逐字稿檔案編碼的驗收點——`MeetingFileStore` 的讀寫編碼一旦有人動了，別處只會表現成「AI 寫出來的內容怪怪的」。
 5. 上傳 mp4（含影像軌）與 wma，確認 FFmpeg 抽音軌成功、同樣產出逐字稿。
 6. 故意填錯 `ApiKey` → 狀態「失敗」並可看到錯誤訊息 → 按「重新轉錄」可重跑。
 7. 轉錄進行中重啟應用程式 → 該筆自動變成「失敗」（不卡在「處理中」）。
@@ -271,7 +286,8 @@
 以下**尚未實作**，不屬於 0.4.27 驗收範圍：
 
 - 套用提示詞範本 → 呼叫 LLM 產生會議紀錄草稿（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。
-- 逐字稿編修的版本歷程與還原（0.4.55 起可編修，但為就地覆寫）。
+- **把團隊守門補進 `AiChatService`**（0.4.82 起它是逐字稿原文的唯一出口，且無列級權控）。
+- 逐字稿的預覽與編修（0.4.55 曾有，0.4.82 移除）。若要復原，連同版本歷程一起想清楚——先前是就地覆寫，不留舊內容。
 - 影音檔／逐字稿的下載端點與線上播放。
 - 清單轉錄狀態的自動輪詢或即時推播。
 - 逐字稿保留期限與自動清理政策。
@@ -281,7 +297,7 @@
 
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Meetings/MeetingPage.razor:1`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor.cs:1`（頁面權限、上傳進度、逐字稿預覽）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor.cs:1`（頁面權限、上傳進度、會議紀錄編修入口）
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs:1`（`[HasPermission]` 動作鍵）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MeetingService.cs:1`（CRUD、團隊權控、上傳與重新轉錄）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/MeetingFileStore.cs:1`（實體檔案存取與上傳進度回報）

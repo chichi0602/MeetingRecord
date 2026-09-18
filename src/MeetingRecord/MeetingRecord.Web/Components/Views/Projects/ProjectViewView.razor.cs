@@ -99,24 +99,31 @@ public partial class ProjectViewView : IDisposable
     private string modalTitle = "專案維護";
     private bool modalVisible;
     private ProjectAdapterModel CurrentRecord = new();
+
+    /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
+    private string? formSnapshot;
+
+    /// <summary>
+    /// ⚠️ Esc 會**同時**走兩條路：AntDesign Modal 的 <c>Keyboard</c> 與表單上的 <c>@onkeydown</c>，
+    /// 兩者都會呼叫 <see cref="OnModalCancelHandleAsync"/>。少了這道旗標會疊出兩個確認視窗。
+    /// </summary>
+    private bool isDiscardConfirming;
+
     public EditContext? LocalEditContext { get; set; }
     private bool isNewRecordMode;
     private string RoleMessage = string.Empty;
 
-    private bool draftViewModalVisible;
-    private bool draftEditModalVisible;
+    // 檢視與編修共用同一個 MarkdownEditorModal，所以只有一組狀態；形狀由 draftCanEdit 決定。
+    private bool draftModalVisible;
+    private bool draftCanEdit;
+    private bool draftCanExport;
+    private bool isSavingDraft;
+
+    /// <summary>目前視窗對應的會議。匯出 PDF 需要整個 model，不只是 Id。</summary>
+    private MeetingAdapterModel? draftMeeting;
     private string draftModalTitle = "會議紀錄";
     private string? draftContent;
     private int draftMeetingId;
-
-    private bool transcriptModalVisible;
-    private string transcriptModalTitle = "逐字稿預覽";
-    private string? transcriptContent;
-
-    /// <summary>目前開著的逐字稿屬於哪一筆會議；儲存時要用。</summary>
-    private int editingTranscriptMeetingId;
-    private bool canEditTranscript;
-    private bool isSavingTranscript;
 
     /// <summary>目前選取專案的附件。由 <see cref="ReloadProjectContextAsync"/> 載入。</summary>
     private List<ProjectFileAdapterModel> projectFiles = [];
@@ -474,20 +481,33 @@ public partial class ProjectViewView : IDisposable
 
     private Task OnViewDraftAsync(MeetingAdapterModel meeting)
     {
-        draftMeetingId = meeting.Id;
-        draftModalTitle = $"會議紀錄 - {meeting.Title}";
-        draftContent = meeting.DraftContent;
-        draftViewModalVisible = true;
+        OpenDraftModal(meeting, canEdit: false, title: $"會議紀錄 - {meeting.Title}");
         return Task.CompletedTask;
     }
 
     private Task OnEditDraftAsync(MeetingAdapterModel meeting)
     {
-        draftMeetingId = meeting.Id;
-        draftModalTitle = $"編修會議紀錄 - {meeting.Title}";
-        draftContent = meeting.DraftContent;
-        draftEditModalVisible = true;
+        OpenDraftModal(meeting, canEdit: true, title: $"編修會議紀錄 - {meeting.Title}");
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 這一頁的會議一律已歸屬本專案，所以檢視與編修都給得起，PDF 也帶得到專案名稱。
+    /// 列上那顆「匯出 PDF」刻意保留（使用者明確要求外層可以直接點），視窗裡再放一顆。
+    /// </summary>
+    private void OpenDraftModal(MeetingAdapterModel meeting, bool canEdit, string title)
+    {
+        draftMeeting = meeting;
+        draftMeetingId = meeting.Id;
+        draftModalTitle = title;
+        draftContent = meeting.DraftContent;
+        draftCanEdit = canEdit;
+
+        draftCanExport = meeting.HasDraft
+            && AuthenticationStateHelper.CheckAccessAction(
+                MagicObjectHelper.角色_會議紀錄, PermissionActions.Export);
+
+        draftModalVisible = true;
     }
 
     /// <summary>把會議紀錄匯出成 Markdown 檔並直接推給瀏覽器下載（檔案不落地）。</summary>
@@ -518,6 +538,8 @@ public partial class ProjectViewView : IDisposable
                 meeting.Id,
                 fileName,
                 pdf.Length);
+
+            NotifySuccess($"已下載「{fileName}」。");
         }
         catch (Exception ex)
         {
@@ -531,39 +553,49 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private Task OnDraftViewModalCancelAsync(MouseEventArgs args)
+    private async Task OnDraftSavedAsync(string content)
     {
-        draftViewModalVisible = false;
-        return Task.CompletedTask;
+        isSavingDraft = true;
+        try
+        {
+            var result = await meetingService.UpdateDraftAsync(draftMeetingId, content);
+            if (!result.Success)
+            {
+                // 存檔失敗時視窗留著，使用者的編修還在裡面。
+                NotifyError(result.Message);
+                return;
+            }
+
+            NotifySuccess("會議紀錄已儲存。");
+            draftModalVisible = false;
+            await ReloadProjectContextAsync();
+        }
+        finally
+        {
+            isSavingDraft = false;
+        }
     }
 
-    private async Task OnDraftEditModalOkAsync(MouseEventArgs args)
+    /// <summary>
+    /// 編修視窗裡的「下載 PDF」。
+    ///
+    /// <para>
+    /// ⚠️ 拿的是**視窗裡當下的內容**而不是 <c>draftMeeting.DraftContent</c>：
+    /// 使用者改了字、還沒儲存就按下載時，後者是資料庫裡的舊版本，
+    /// 產出來的 PDF 會與畫面不符而且看不出來。複本只服務這一次匯出，不回寫清單。
+    /// </para>
+    /// </summary>
+    private Task OnExportCurrentDraftAsync(string content)
     {
-        var result = await meetingService.UpdateDraftAsync(draftMeetingId, draftContent);
-        if (!result.Success)
+        if (draftMeeting is null)
         {
-            NotifyError(result.Message);
-            draftEditModalVisible = true;
-            return;
+            return Task.CompletedTask;
         }
 
-        NotifySuccess("會議紀錄已儲存。");
-        draftEditModalVisible = false;
-        await ReloadProjectContextAsync();
-    }
+        var snapshot = draftMeeting.Clone();
+        snapshot.DraftContent = content;
 
-    private Task OnDraftEditModalCancelAsync(MouseEventArgs args)
-    {
-        draftEditModalVisible = false;
-        return Task.CompletedTask;
-    }
-
-    private Task OnTranscriptModalCancelAsync(MouseEventArgs args)
-    {
-        transcriptModalVisible = false;
-        editingTranscriptMeetingId = 0;
-        canEditTranscript = false;
-        return Task.CompletedTask;
+        return OnExportDraftAsync(snapshot);
     }
 
     /// <summary>
@@ -607,7 +639,7 @@ public partial class ProjectViewView : IDisposable
                 return;
             }
 
-            await messageService.SuccessAsync("已從專案移除");
+            NotifySuccess($"已將「{meeting.Title}」從專案移除。");
             await ReloadProjectContextAsync();
         }
         catch (Exception ex)
@@ -622,54 +654,6 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private async Task OnPreviewTranscriptAsync(MeetingAdapterModel meeting)
-    {
-        transcriptModalTitle = $"逐字稿 - {meeting.Title}";
-        transcriptContent = await meetingService.ReadTranscriptAsync(meeting.Id);
-
-        if (string.IsNullOrWhiteSpace(transcriptContent))
-        {
-            NotifyError("找不到逐字稿內容，或沒有權限檢視。");
-            return;
-        }
-
-        // 只有轉錄完成的才給編修：正在重新轉錄時存回去，只會被即將產生的新逐字稿覆蓋。
-        editingTranscriptMeetingId = meeting.Id;
-        canEditTranscript = meeting.TranscriptionStatus == TranscriptionStatus.Completed;
-
-        transcriptModalVisible = true;
-    }
-
-    private async Task OnSaveTranscriptAsync()
-    {
-        if (!canEditTranscript || isSavingTranscript || editingTranscriptMeetingId <= 0)
-        {
-            return;
-        }
-
-        isSavingTranscript = true;
-
-        try
-        {
-            var result = await meetingService.UpdateTranscriptAsync(editingTranscriptMeetingId, transcriptContent ?? string.Empty);
-            if (!result.Success)
-            {
-                NotifyError(result.Message);
-                return;
-            }
-
-            await messageService.SuccessAsync("逐字稿已儲存");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Saving transcript failed. MeetingId={MeetingId}", editingTranscriptMeetingId);
-            NotifyError($"儲存逐字稿失敗：{ex.Message}");
-        }
-        finally
-        {
-            isSavingTranscript = false;
-        }
-    }
 
     #endregion
 
@@ -687,6 +671,7 @@ public partial class ProjectViewView : IDisposable
         CurrentRecord = await projectService.GetAsync(SelectedProject.Id);
         pendingUploadFiles.Clear();
         removedFileIds.Clear();
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingFiles());
         modalVisible = true;
         logger.LogInformation("Opened edit modal for project. ProjectId={ProjectId}", CurrentRecord.Id);
     }
@@ -750,6 +735,7 @@ public partial class ProjectViewView : IDisposable
         removedFileIds.Clear();
         isNewRecordMode = true;
         modalTitle = "新增專案";
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingFiles());
         modalVisible = true;
         logger.LogInformation("Opened create modal for project.");
         return Task.CompletedTask;
@@ -894,14 +880,58 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private Task OnModalCancelHandleAsync(MouseEventArgs args)
+    /// <summary>
+    /// 待上傳附件的識別。
+    ///
+    /// <para>
+    /// ⚠️ 不能把 <see cref="IBrowserFile"/> 本身交給 <see cref="FormDirtyHelper.Capture"/>——
+    /// 它身上帶著 Stream，序列化出來的東西與使用者選了哪個檔案無關。檔名＋大小才是識別。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ <c>removedFileIds</c> 刻意**不**比：<c>RemoveExistingFile</c> 在把 Id 加進去的同時
+    /// 也會從 <c>CurrentRecord.Files</c> 移除，而 <c>Files</c> 已經在 model 快照裡了。
+    /// 再比一次是重複，不是漏掉。
+    /// </para>
+    /// </summary>
+    private string DescribePendingFiles()
+        => string.Join('|', pendingUploadFiles.Select(x => $"{x.File.Name}:{x.File.Size}"));
+
+    private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
+        if (isDiscardConfirming)
+        {
+            return;
+        }
+
+        // ⚠️ 只拖了附件、一個欄位都沒改，也算改過。
+        if (FormDirtyHelper.IsDirty(formSnapshot, CurrentRecord, DescribePendingFiles()))
+        {
+            isDiscardConfirming = true;
+            bool discard;
+            try
+            {
+                discard = await FormDirtyHelper.ConfirmDiscardAsync(modalService, "這個專案");
+            }
+            finally
+            {
+                isDiscardConfirming = false;
+            }
+
+            if (!discard)
+            {
+                // ⚠️ @bind-Visible 是雙向的，AntDesign 已經把視窗關掉了；不重開會失去整張表單。
+                modalVisible = true;
+                return;
+            }
+        }
+
         modalVisible = false;
+        formSnapshot = null;
         pendingUploadFiles.Clear();
         removedFileIds.Clear();
         attachmentDropZone?.Reset();
         logger.LogDebug("Project modal cancelled.");
-        return Task.CompletedTask;
     }
 
     private async Task OnModalKeyDownAsync(KeyboardEventArgs args)
@@ -1114,6 +1144,8 @@ public partial class ProjectViewView : IDisposable
                 "Project file downloaded. ProjectFileId={ProjectFileId}, FileName={FileName}",
                 file.Id,
                 download.DownloadFileName);
+
+            NotifySuccess($"已下載「{download.DownloadFileName}」。");
         }
         catch (Exception ex)
         {

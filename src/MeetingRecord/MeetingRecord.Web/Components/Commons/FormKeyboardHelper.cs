@@ -36,6 +36,33 @@ public static class FormKeyboardHelper
     }
 
     /// <summary>
+    /// 這個按鍵是不是「反向送出」（Shift+Enter）。
+    ///
+    /// <para>
+    /// ⚠️ <b>只能用在單行欄位。</b>多行欄位的 Shift+Enter 是換行鍵，
+    /// <see cref="IsSubmit"/> 刻意讓它回 <c>false</c> 好讓瀏覽器原生換行；
+    /// 在多行欄位上改用這一支，等於把換行鍵搶走。
+    /// 目前唯一的使用者是會議紀錄編修視窗的搜尋框（單行 Input，Shift+Enter = 上一筆）。
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="KeyboardEventArgs.IsComposing"/> 的防護與 <see cref="IsSubmit"/> 同理：
+    /// 中文輸入法組字期間按的 Enter 是在選字，不是在操作畫面。
+    /// </para>
+    /// </summary>
+    public static bool IsReverseSubmit(KeyboardEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        return args.Key == "Enter"
+            && !args.IsComposing
+            && args.ShiftKey
+            && !args.CtrlKey
+            && !args.AltKey
+            && !args.MetaKey;
+    }
+
+    /// <summary>
     /// 這個按鍵是不是「取消」。Esc 在不同瀏覽器回報的字串不一致，兩種都要收。
     /// </summary>
     public static bool IsCancel(KeyboardEventArgs args)

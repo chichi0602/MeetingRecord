@@ -97,48 +97,12 @@
     cursor: help;
 }
 
-.meeting-transcript-content {
-    max-height: 60vh;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: inherit;
-    font-size: 14px;
-    line-height: 1.7;
-    margin: 0;
-    padding: 12px;
-    background: var(--oat-50);
-    border: 1px solid #f0f0f0;
-    border-radius: 4px;
-}
-
-.meeting-transcript-empty {
-    color: var(--oat-ink-mid);
-    padding: 24px 0;
-    text-align: center;
-}
-
 /* 轉錄進行中時，狀態徽章旁的即時百分比（資料來自 ITranscriptionProgressNotifier）。 */
 .meeting-status-percent {
     margin-left: 6px;
     color: #6b7a8d;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-}
-
-/* 逐字稿編修列：提示文字靠左、儲存鈕靠右。 */
-.meeting-transcript-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 12px;
-}
-
-.meeting-transcript-hint {
-    color: var(--oat-ink-mid);
-    font-size: 0.78rem;
 }
 
 /* 會議標題儲存格：標題一行、所屬專案一行。

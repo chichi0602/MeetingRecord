@@ -7,95 +7,152 @@
 
     ⚠️ 這裡的規則是**全域**的，沒有任何 scope。新增規則時選擇器要夠獨特。
 
-    尺寸分四級（0.4.69 起）。刻意不是一律滿版——3 個欄位的表單撐成整個螢幕高，
-    中間會空一大片：
+    ⚠️ 本元件掛在 **MainLayout**，所以全站每一頁都吃得到——
+    個別頁面**不需要**也不應該再各掛一個（0.4.82 之前有 8 個重複掛載點，
+    同一段 <style> 在 DOM 裡被渲染 9 次）。
 
-      .form-modal-compact   680px，**高度自適應**（不設 height/overflow）  3～4 個欄位
-      .form-modal-standard  880px，max-height 88vh，超過才捲              5～8 個欄位
-      .form-modal-large     90vw / 90vh                                   欄位多或內含矩陣、檔案清單
-      .meeting-view-modal   96vw / 96vh                                   會議紀錄（含影音上傳）
+    0.4.82 起分兩層：
+
+      **基準線**（`.ant-modal*`）——所有對話框都適用：外框永不捲、標題與按鈕固定、
+      只有內容區捲動、留白收斂。新的對話框什麼都不做就已經是對的。
+
+      **分級**——只負責寬度。刻意不是一律滿版：3 個欄位的表單撐成整個螢幕寬，
+      欄位會漂在一片空白中間。
+
+        .form-modal-compact   680px    3～4 個欄位、唯讀短清單
+        .form-modal-standard  880px    5～8 個欄位、清單型
+        .form-modal-wide      1080px   左右分欄的對話式內容
+        .form-modal-large     90vw     欄位多、或內含矩陣與檔案清單
+        .meeting-view-modal   96vw     含影音上傳這類真的需要整個螢幕的
+
+    ⚠️ 掛了尺寸 class 就**不要再設 `Width`**。這裡的 `width` 是 author-important，
+    依 CSS 串聯順序贏過 `Width` 產生的 inline style——參數會靜默失效，
+    留著只會讓下一個人以為調它有用。（`ModalSizeClassTests` 會擋。）
 
     短欄位一行兩欄：把 FormItem 包進 <div class="form-modal-grid">，
     要跨整列的 FormItem 加 Class="form-modal-full"。
 *@
 <style>
 
-    /* ===== 尺寸 ===== */
+    /* ===== 所有對話框的基準線（0.4.82）=====
+
+       0.4.69 建了正確的機制（content 是 flex column、只讓 body 捲），但只套在 9 個
+       **表單**對話框上；唯讀檢視、清單、chat 那些完全沒有 class，仍吃 AntDesign 的
+       預設值，於是「外圍留白太多」與「整頁在捲」在那些對話框上完全沒被修到。
+
+       這一段把基準線本身改對，所以**不需要幫每個 Modal 各補一組規則**——
+       分級之後只負責寬度。 */
+
+    /* ⚠️ **刻意不覆寫 `.ant-modal-wrap` 的 `overflow: auto`。**
+
+       它是「整頁在捲」的**現場**，但不是**原因**：wrap 會捲，是因為 .ant-modal 比視窗高
+       （AntDesign 預設 top: 100px ＋ 內容高度 ＋ padding-bottom: 24px）。下面把
+       「4vh ＋ 最多 92vh ＝ 96vh，永遠塞得進視窗」做成事實之後，
+       wrap 的 scrollHeight 就等於 clientHeight，overflow: auto 不會產生捲軸、也吃不到滾輪。
+
+       那為什麼不乾脆一起寫成 hidden？因為它是唯一的退路。萬一日後有人給某個 Modal
+       加上更大的 max-height、破壞了上面那個不等式：
+         overflow: auto   → 可以捲到底，難看但救得回來。
+         overflow: hidden → 底部連同按鈕被永久裁掉，使用者既操作不到也看不出來。
+       正常情況下兩者的行為完全一樣，壞掉時的代價差很多。 */
+
+    .ant-modal {
+        /* 預設 top: 100px 在 768 高的螢幕上就吃掉 13%，而且是固定 px、不隨螢幕縮放。 */
+        top: 4vh !important;
+        padding-bottom: 0 !important;
+        max-width: 94vw !important;
+    }
+
+    .ant-modal-content {
+        display: flex !important;
+        flex-direction: column !important;
+        /* max-height 而不是固定 height：短內容仍然收縮，不會硬撐成整個螢幕高。 */
+        max-height: 92vh !important;
+        overflow: hidden !important;
+    }
+
+    /* 橫向一律 20px，與 body 對齊。不對齊的話標題、第一個欄位、按鈕列的左邊界
+       會各差幾 px，在同一個視窗裡看得很清楚。 */
+    .ant-modal-header {
+        flex-shrink: 0 !important;
+        padding: 12px 20px !important;
+    }
+
+    .ant-modal-footer {
+        flex-shrink: 0 !important;
+        padding: 10px 20px !important;
+    }
+
+    .ant-modal-body {
+        flex: 1 1 auto !important;
+        /* ⚠️ min-height: 0 不可省。flex 子項的預設最小高度是內容高度，
+           少了它 overflow-y 根本不會生效——捲軸出不來，內容直接把 content 撐破。 */
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        /* 原本四邊 24px。縱向收一點，橫向留 20px 讓文字不貼邊。 */
+        padding: 16px 20px !important;
+    }
+
+    /* 確認框（.ant-modal-confirm）的按鈕在 body 裡、內容都是短文字，基準線對它無害：
+       它一樣碰不到 92vh，body 的捲軸也不會出現，只是位置從 100px 上移到 4vh。 */
+
+    /* 編修視窗用 Footer="null" 自繪按鈕列（要多一顆「下載 PDF」），所以按鈕在 body 裡面，
+       吃不到基準線給 .ant-modal-footer 的 flex-shrink: 0。
+
+       ⚠️ 少了這一段，按鈕列會被上面佔滿高度的編輯器擠到 body 的捲動區外——
+       視窗看起來正常，但「儲存」永遠按不到。實測（1366×768）確認過會發生。
+       body 自己不捲，捲動交給左右兩欄各自負責。 */
+    .markdown-editor-modal .ant-modal-body {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+        overflow: hidden !important;
+    }
+
+    /* ===== 尺寸（分級只負責寬度）===== */
 
     .form-modal-compact {
         width: 680px !important;
-        max-width: 92vw !important;
-        top: 10vh !important;
-        padding-bottom: 0 !important;
         margin: 0 auto !important;
     }
 
     .form-modal-standard {
         width: 880px !important;
-        max-width: 92vw !important;
-        top: 6vh !important;
-        padding-bottom: 0 !important;
         margin: 0 auto !important;
     }
 
-    .form-modal-large,
-    .meeting-view-modal {
+    /* 對話式的內容用固定寬度，不用 vw。
+       AI 問答如果吃 .form-modal-large（90vw），在 1920 的螢幕上是 1728px，
+       扣掉側欄之後單行會逼近 1200px——一行太長，眼睛從行尾跳回行首會找不到位置，
+       可讀性反而比 1080 差。文件類內容「愈寬愈好」是不成立的。 */
+    .form-modal-wide {
+        width: 1080px !important;
+        margin: 0 auto !important;
+    }
+
+    .form-modal-large {
         width: 90vw !important;
         max-width: 90vw !important;
-        top: 5vh !important;
-        padding-bottom: 0 !important;
         margin: 0 auto !important;
     }
 
-    /* 會議紀錄再放大一級：表單內有影音上傳與進度列 */
+    /* 再放大一級：內含影音上傳、左右分欄編輯器這類真的需要整個螢幕的內容。 */
     .meeting-view-modal {
         width: 96vw !important;
         max-width: 96vw !important;
         top: 2vh !important;
     }
 
-    /* ===== 有高度上限者：標題與按鈕固定，只有內容區捲動 =====
-       compact 刻意不在這組裡——它要讓對話框跟著內容收縮。 */
-
-    .form-modal-standard .ant-modal-content,
-    .form-modal-large .ant-modal-content,
     .meeting-view-modal .ant-modal-content {
-        display: flex !important;
-        flex-direction: column !important;
-        overflow: hidden !important;
-    }
-
-    /* standard 用 max-height（內容不夠高就收縮），large 系列維持固定高度 */
-    .form-modal-standard .ant-modal-content {
-        max-height: 88vh !important;
-    }
-
-    .form-modal-large .ant-modal-content {
-        height: 90vh !important;
-        max-height: 90vh !important;
-    }
-
-    .meeting-view-modal .ant-modal-content {
-        height: 96vh !important;
         max-height: 96vh !important;
     }
 
-    .form-modal-standard .ant-modal-header,
-    .form-modal-large .ant-modal-header,
-    .meeting-view-modal .ant-modal-header,
-    .form-modal-standard .ant-modal-footer,
-    .form-modal-large .ant-modal-footer,
-    .meeting-view-modal .ant-modal-footer {
-        flex-shrink: 0;
-    }
+    /* 「標題與按鈕固定、只有內容區捲動」現在由上面的基準線負責，
+       不必再為每一級各寫一次。
 
-    .form-modal-standard .ant-modal-body,
-    .form-modal-large .ant-modal-body,
-    .meeting-view-modal .ant-modal-body {
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        overflow-y: auto !important;
-    }
+       ⚠️ .form-modal-large 原本是**固定** height: 90vh——內容不夠高時會硬撐成
+       整個螢幕高、中間空一大片（新增專案時三個清單都是空的，最明顯）。
+       改吃基準線的 max-height: 92vh（上限而非固定），短內容仍然收縮。 */
 
     /* ===== 短欄位一行兩欄（全站共用） ===== */
 

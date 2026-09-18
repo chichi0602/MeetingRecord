@@ -19,6 +19,9 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     private NavigationManager NavigationManager { get; set; } = default!;
 
     [Inject]
+    private ModalService ModalService { get; set; } = default!;
+
+    [Inject]
     private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
 
     [Inject]
@@ -65,6 +68,12 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     private bool isSupportAccount = false;
     private string changePasswordErrorMessage = string.Empty;
     private ChangePasswordForm changePasswordForm = new();
+
+    /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
+    private string? formSnapshot;
+
+    /// <summary>Esc 會同時走 AntDesign 的 Keyboard 與表單的 keydown，少了旗標會疊出兩個確認框。</summary>
+    private bool isDiscardConfirming;
 
     private bool aboutVisible = false;
     private IReadOnlyList<KeyValuePair<string, string>> aboutItems = [];
@@ -163,6 +172,7 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
         isSupportAccount = CurrentUserService.CurrentUser.Account == supportAccount;
         changePasswordForm = new ChangePasswordForm();
         changePasswordErrorMessage = string.Empty;
+        formSnapshot = FormDirtyHelper.Capture(changePasswordForm);
         changePasswordVisible = true;
     }
 
@@ -223,9 +233,37 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
         _ = MessageService.SuccessAsync("密碼變更成功！");
     }
 
-    private void OnChangePasswordCancelAsync()
+    private async Task OnChangePasswordCancelAsync()
     {
+        if (isDiscardConfirming)
+        {
+            return;
+        }
+
+        // support 帳號時表單根本沒渲染（只有一張 Alert），快照與比對都是空表單 → 不會問。
+        if (FormDirtyHelper.IsDirty(formSnapshot, changePasswordForm))
+        {
+            isDiscardConfirming = true;
+            bool discard;
+            try
+            {
+                discard = await FormDirtyHelper.ConfirmDiscardAsync(ModalService, "密碼變更表單");
+            }
+            finally
+            {
+                isDiscardConfirming = false;
+            }
+
+            if (!discard)
+            {
+                // ⚠️ @bind-Visible 是雙向的，AntDesign 已經把視窗關掉了；不重開會失去已填的內容。
+                changePasswordVisible = true;
+                return;
+            }
+        }
+
         changePasswordVisible = false;
+        formSnapshot = null;
         changePasswordErrorMessage = string.Empty;
     }
 

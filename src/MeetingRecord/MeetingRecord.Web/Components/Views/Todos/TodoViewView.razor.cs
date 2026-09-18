@@ -10,10 +10,12 @@ using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Components.Commons;
+using MeetingRecord.Web.Services;
+using Microsoft.JSInterop;
 
 namespace MeetingRecord.Web.Components.Views.Todos;
 
-public partial class TodoViewView
+public partial class TodoViewView : IAsyncDisposable
 {
     private readonly ILogger<TodoViewView> logger;
     private readonly TodoService todoService;
@@ -28,8 +30,37 @@ public partial class TodoViewView
     private int selectedProjectFilter;
     private string selectedStatusFilter = string.Empty;
 
+    /// <summary>量測用的根元素。<c>todo-auto-fit.js</c> 從這裡往下找表格與面板。</summary>
+    private ElementReference rootElement;
+
+    /// <summary>給 JS 回呼用的參照。null 代表還沒掛上觀察者（沒權限時就不會掛）。</summary>
+    private DotNetObjectReference<TodoViewView>? autoFitReference;
+
+    /// <summary>
+    /// 每頁筆數是否還跟著畫面高度走（0.4.86）。
+    ///
+    /// <para>
+    /// ⚠️ 使用者自己在分頁器上改過每頁筆數之後就關掉，否則他選了 20 筆，
+    /// 下一次量測會立刻把它蓋回 11 筆——看起來就像那個選單壞了。
+    /// 分頁器的筆數選單在總筆數超過 50 時才會出現（AntDesign 的
+    /// <c>TotalBoundaryShowSizeChanger</c> 預設值），所以這條路徑不常走，但走得到。
+    /// </para>
+    /// </summary>
+    private bool autoFitEnabled = true;
+
+    /// <summary>
+    /// 自動調整列數的控制器狀態。見 <see cref="TodoFitState"/>——
+    /// 沒有那個上限，列數會在「補一列」與「縮一列」之間來回跳，每跳一次還打一輪查詢。
+    /// </summary>
+    private TodoFitState fitState = TodoAutoFit.InitialState;
+
     private int _pageIndex = 1;
-    private int _pageSize = MagicObjectHelper.PageSize;
+
+    /// <summary>
+    /// 每頁筆數。0.4.85 是寫死的 5，0.4.86 起改成量畫面高度算出來的
+    /// （見 <see cref="TodoAutoFit"/>），這裡的值只是「量到之前」的起手式。
+    /// </summary>
+    private int _pageSize = TodoAutoFit.FallbackRows;
     private int _total;
     private string searchText = string.Empty;
     private string sortField = string.Empty;
@@ -57,6 +88,11 @@ public partial class TodoViewView
     private IReadOnlyList<TodoOwnerSummary> ownerSummaries = [];
     private IReadOnlyList<TodoAdapterModel> ownerTodos = [];
     private string selectedOwner = string.Empty;
+
+    /// <summary>
+    /// 面板小清單的狀態篩選（0.4.85）。點膠囊切換，只影響右邊那份小清單，左邊的表格不動。
+    /// </summary>
+    private OwnerTodoFilter ownerTodoFilter = OwnerTodoFilter.All;
     private bool ownerPanelCollapsed;
 
     private string detailTitle = string.Empty;
@@ -65,6 +101,19 @@ public partial class TodoViewView
 
     private TodoOwnerSummary? SelectedOwnerSummary
         => ownerSummaries.FirstOrDefault(x => x.Owner == selectedOwner);
+
+    /// <summary>
+    /// 套上膠囊篩選之後的小清單。
+    ///
+    /// <para>
+    /// ⚠️ 刻意是 computed property，不另存一份「篩過的清單」欄位：
+    /// <c>ownerTodos</c> 是資料來源、<c>ownerTodoFilter</c> 是檢視狀態，合併之後每一條重載路徑
+    /// （面板重載、換人、勾完成、刪除、Modal 送出）都要記得重套一次，
+    /// 漏掉任何一條就會顯示上一次的篩選結果，而且畫面看起來完全合理。
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<TodoAdapterModel> FilteredOwnerTodos
+        => TodoOwnerFilter.Apply(ownerTodos, ownerTodoFilter);
 
     /// <summary>面板標題旁的範圍說明。面板只跟專案過濾連動，所以要讓使用者看得出目前算的是哪個範圍。</summary>
     private string OwnerPanelScopeText
@@ -83,6 +132,9 @@ public partial class TodoViewView
 
     [Inject]
     public NavigationManager NavigationManager { get; set; } = default!;
+
+    [Inject]
+    public TodoAutoFitInterop AutoFitInterop { get; set; } = default!;
 
     public TodoViewView(
         ILogger<TodoViewView> logger,
@@ -122,6 +174,85 @@ public partial class TodoViewView
         await ReloadAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 沒權限時根本沒算繪那個 <div>，rootElement 還是 default，掛上去只會在 JS 端找不到元素。
+        if (!firstRender || !string.IsNullOrEmpty(RoleMessage))
+        {
+            return;
+        }
+
+        autoFitReference = DotNetObjectReference.Create(this);
+        await AutoFitInterop.ObserveAsync(rootElement, autoFitReference);
+    }
+
+    /// <summary>
+    /// JS 量完畫面之後回報（0.4.86）。第一次是掛上觀察者時立刻量一次，
+    /// 之後是視窗大小／版面寬度變了，或是我們自己改完列數主動再量一次。
+    ///
+    /// <para>
+    /// ⚠️ 這是**回授**不是一次算到位：每調整一次就再量一次，直到剩餘空間連一列都放不下。
+    /// 收斂的理由見 <see cref="TodoAutoFit.Decide"/>。因此載入時會多打一兩次查詢——
+    /// 要省掉就得先算繪一個沒有資料的空表格來量，為了幾次查詢把載入流程整個翻掉不划算。
+    /// </para>
+    /// </summary>
+    [JSInvokable]
+    public async Task OnAutoFitMeasuredAsync(
+        double leftover,
+        double tallestRow,
+        double shortestRow,
+        double contentWidth,
+        double viewportHeight)
+    {
+        if (!autoFitEnabled)
+        {
+            return;
+        }
+
+        var sample = new TodoFitSample(leftover, tallestRow, shortestRow, contentWidth, viewportHeight);
+        var decision = TodoAutoFit.Decide(_pageSize, sample, fitState);
+        fitState = decision.State;
+
+        if (decision.PageSize == _pageSize)
+        {
+            return;
+        }
+
+        logger.LogDebug(
+            "Todo page size auto-fitted. Leftover={Leftover}, TallestRow={TallestRow}, ShortestRow={ShortestRow}, Ceiling={Ceiling}, PageSize={PageSize}",
+            leftover,
+            tallestRow,
+            shortestRow,
+            decision.State.Ceiling,
+            decision.PageSize);
+
+        // JS 回呼不保證落在算繪執行緒上，改狀態與重載一律包進 InvokeAsync。
+        await InvokeAsync(async () =>
+        {
+            _pageSize = decision.PageSize;
+
+            // 頁碼刻意不歸 1：使用者只是拉了視窗大小，不該被丟回第一頁。
+            // 新的每頁筆數讓目前頁碼超出範圍時，ReloadAsync 尾端的夾頁碼會處理。
+            await ReloadAsync();
+
+            // ⚠️ 一定要再量一次。ResizeObserver 只看寬度，而我們剛剛只改了高度——
+            //    少了這一行，列數就只會被調整一次，永遠停在第一次估的值。
+            await AutoFitInterop.RemeasureAsync(rootElement);
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (autoFitReference is null)
+        {
+            return;
+        }
+
+        await AutoFitInterop.DisconnectAsync(rootElement);
+        autoFitReference.Dispose();
+        autoFitReference = null;
+    }
+
     public async Task ReloadAsync()
     {
         logger.LogDebug(
@@ -146,6 +277,20 @@ public partial class TodoViewView
 
         todoAdapterModels = dataRequestResult.Result.ToList();
         _total = dataRequestResult.Count;
+
+        // 分頁修好之後（0.4.85）頁碼有可能落在最後一頁之後——例如停在第 2 頁時把該頁
+        // 唯一一筆刪掉，Skip 就會跳過全部資料而顯示空白表格。夾回最後一頁重載一次。
+        //
+        // ⚠️ Math.Max(1, ...) 不可省：AntDesign 在 PageIndex < 1 時不會觸發 OnChange，
+        //    夾出 0 會讓分頁器再也叫不動。
+        // 遞迴有界：Count 與資料列是同一個查詢算出來的，_total > 0 代表夾到的最後一頁必定非空。
+        if (todoAdapterModels.Count == 0 && _total > 0 && _pageIndex > 1)
+        {
+            _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);
+            logger.LogDebug("Todo page index clamped to the last page. PageIndex={PageIndex}", _pageIndex);
+            await ReloadAsync();
+            return;
+        }
 
         // 面板與清單一律同進同出。所有變更資料的路徑（勾完成、刪除、Modal 送出）都只呼叫
         // ReloadAsync，掛在這裡才不會出現「左邊變了、右邊完成度不動」。
@@ -188,7 +333,42 @@ public partial class TodoViewView
         ownerTodos = string.IsNullOrEmpty(selectedOwner)
             ? []
             : await todoService.GetByOwnerAsync(selectedOwner, projectFilter);
+
+        ClampOwnerTodoFilter();
     }
+
+    /// <summary>
+    /// 四顆膠囊的資料來源。逾期那顆維持「0 筆就不渲染」的既有行為（0.4.66）。
+    /// </summary>
+    private static IEnumerable<(OwnerTodoFilter Filter, string Label, int Count, string CssClass)> OwnerStatPills(
+        TodoOwnerSummary summary)
+    {
+        yield return (OwnerTodoFilter.Pending, TodoOwnerFilter.Describe(OwnerTodoFilter.Pending), summary.Pending, "todo-view-status-pending");
+        yield return (OwnerTodoFilter.InProgress, TodoOwnerFilter.Describe(OwnerTodoFilter.InProgress), summary.InProgress, "todo-view-status-processing");
+        yield return (OwnerTodoFilter.Completed, TodoOwnerFilter.Describe(OwnerTodoFilter.Completed), summary.Completed, "todo-view-status-completed");
+
+        if (summary.Overdue > 0)
+        {
+            yield return (OwnerTodoFilter.Overdue, TodoOwnerFilter.Describe(OwnerTodoFilter.Overdue), summary.Overdue, "todo-view-overdue");
+        }
+    }
+
+    /// <summary>
+    /// 點膠囊＝篩「這個人 ＋ 這個狀態」，再點同一顆回到全部。
+    ///
+    /// <para>
+    /// 刻意不重撈資料：<c>ownerTodos</c> 已經是這個人的全部，篩選純粹是檢視狀態。
+    /// 也刻意是**互斥單選**——逾期 ∩ 已完成 恆為空，允許複選一定會做出「永遠是空清單」的組合；
+    /// 而且單選才保得住「膠囊上的數字 = 點下去看到的筆數」。
+    /// </para>
+    /// </summary>
+    private void ToggleOwnerTodoFilter(OwnerTodoFilter filter)
+    {
+        ownerTodoFilter = ownerTodoFilter == filter ? OwnerTodoFilter.All : filter;
+        logger.LogDebug("Todo owner panel filter changed. Owner={Owner}, Filter={Filter}", selectedOwner, ownerTodoFilter);
+    }
+
+    private void ClearOwnerTodoFilter() => ownerTodoFilter = OwnerTodoFilter.All;
 
     /// <summary>
     /// 收合／展開右側面板。收合時外層 grid 退回單欄，表格拿回整個寬度。
@@ -209,7 +389,29 @@ public partial class TodoViewView
         ownerTodos = string.IsNullOrEmpty(selectedOwner)
             ? []
             : await todoService.GetByOwnerAsync(selectedOwner, projectFilter);
+
+        // 換人刻意**不重設**篩選：典型用法是跨人巡同一個狀態（「還有誰有逾期」），
+        // 每換一個人就要重點一次等於把功能做廢一半。對新的人沒意義的篩選由 clamp 收掉。
+        ClampOwnerTodoFilter();
     }
+
+    /// <summary>
+    /// 把作用中的篩選收斂回合法狀態：選中的膠囊變 0 筆時回到「全部」。
+    ///
+    /// <para>
+    /// 守的不變式是「作用中的篩選，畫面上一定要有一顆可以點掉它的膠囊」。典型情境是
+    /// 篩了逾期、再把最後一筆逾期的改成已完成——逾期膠囊會整個消失，篩選若留著就變成
+    /// 「空清單，而且沒有任何東西可以按掉它」。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 日後若有人想改成「換專案要重設篩選」，那一行只能放在
+    /// <see cref="OnProjectFilterChanged"/>，<b>絕不能放進 <c>ReloadOwnerPanelAsync</c></b>——
+    /// 後者在每次勾完成／刪除／新增之後都會跑，放那裡等於使用者每勾一個完成，篩選就被默默清掉。
+    /// </para>
+    /// </summary>
+    private void ClampOwnerTodoFilter()
+        => ownerTodoFilter = TodoOwnerFilter.Clamp(SelectedOwnerSummary, ownerTodoFilter);
 
     /// <summary>開啟待辦內容的唯讀檢視。清單只顯示大綱，完整描述在這裡看。</summary>
     private void OpenDetail(TodoAdapterModel todoAdapterModel)
@@ -228,6 +430,21 @@ public partial class TodoViewView
     private async Task OnTableChange(QueryModel<TodoAdapterModel> args)
     {
         _pageIndex = args.PageIndex;
+
+        // 0.4.85 之前分頁根本沒作用，所以「使用者改每頁筆數」不可能被觀察到；修好之後它第一次真的會動。
+        // 只靠 @bind-PageSize 的話，要賭 AntDesign 內部 callback 與繫結回寫的先後順序——
+        // 那是沒有文件保證的實作細節，明確賦值把它釘死（與 AiUsageView 一致）。
+        //
+        // _pageSize 一定是我們自己最後設進去的值（回退值或量測值），所以回報的筆數只要跟它不同，
+        // 就只可能來自分頁器上的筆數選單——也就是使用者自己選的。從這一刻起不再自動調整，
+        // 否則他選了 20 筆，下一次量測會立刻蓋回去（0.4.86）。
+        if (autoFitEnabled && args.PageSize != _pageSize)
+        {
+            autoFitEnabled = false;
+            logger.LogDebug("Todo page size auto-fit disabled because the user picked {PageSize} manually.", args.PageSize);
+        }
+
+        _pageSize = args.PageSize;
 
         if (args.SortModel?.Any() == true)
         {

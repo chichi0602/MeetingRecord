@@ -7,7 +7,9 @@
 }
 else
 {
-    <div>
+    @* @ref 是「列數自動吃滿畫面」的量測起點（0.4.86）：
+       todo-auto-fit.js 從這個元素往下找表格與面板，往上找 <article> 算要留的底部空白。 *@
+    <div @ref="rootElement">
         @* 一列排完：左邊是過濾與搜尋，右邊是新增與重新整理。
            欄寬刻意壓窄（專案 150／狀態 110／搜尋 160）讓整列在雙欄版面下仍塞得進去。 *@
         <div class="todo-view-toolbar">
@@ -221,19 +223,63 @@ else
                             </div>
                         </div>
 
-                        <div class="todo-view-owner-stats">
-                            <span class="todo-view-pill todo-view-status-pending">待辦 @current.Pending</span>
-                            <span class="todo-view-pill todo-view-status-processing">進行中 @current.InProgress</span>
-                            <span class="todo-view-pill todo-view-status-completed">已完成 @current.Completed</span>
-                            @if (current.Overdue > 0)
+                        @* 四顆膠囊同時是「這個人 ＋ 這個狀態」的篩選鈕，篩的是下面那份小清單，左邊的表格不動。
+
+                           ⚠️ 膠囊上的數字與完成度一律維持未篩選：把狀態帶回 GetOwnerSummariesAsync
+                              會得到「每個人都 100%」或「都 0%」——那不是空資料，是看起來合理的錯誤數字。
+
+                           ⚠️ 0 筆的膠囊渲染成 span 而不是停用的 button，沿用本頁 UI 慣例第三類
+                              「沒權限就渲染回 span」同一條理由：停用的按鈕不能 focus，
+                              掛在上面的說明會讀不到；而且點了也只會得到空清單。 *@
+                        <div class="todo-view-owner-stats @(ownerTodoFilter == OwnerTodoFilter.All ? string.Empty : "todo-view-owner-stats-filtered")">
+                            @foreach (var pill in OwnerStatPills(current))
                             {
-                                <span class="todo-view-pill todo-view-overdue">逾期 @current.Overdue</span>
+                                var isActive = ownerTodoFilter == pill.Filter;
+
+                                if (pill.Count == 0)
+                                {
+                                    <span class="todo-view-pill @pill.CssClass todo-view-pill-zero">@pill.Label @pill.Count</span>
+                                }
+                                else
+                                {
+                                    <button type="button"
+                                            class="todo-view-pill @pill.CssClass @(isActive ? "todo-view-pill-active" : string.Empty)"
+                                            aria-pressed="@(isActive ? "true" : "false")"
+                                            title="@(isActive ? "再點一次顯示全部" : $"只顯示{pill.Label}的待辦")"
+                                            aria-label="@($"{current.Owner} 的{pill.Label} {pill.Count} 筆，{(isActive ? "點擊顯示全部" : "點擊只顯示這些")}")"
+                                            @onclick="@(() => ToggleOwnerTodoFilter(pill.Filter))">
+                                        @pill.Label @pill.Count
+                                    </button>
+                                }
                             }
                         </div>
                     }
 
+                    var filteredOwnerTodos = FilteredOwnerTodos;
+
+                    @if (ownerTodoFilter != OwnerTodoFilter.All)
+                    {
+                        @* 只靠選中那顆變粗，四顆並排時看不出來，所以另外給一行明講現在篩了什麼。
+                           條件式顯示的清除鈕與本頁工具列的「清空搜尋」是同一個慣例。 *@
+                        <div class="todo-view-owner-filter">
+                            <span>只顯示 @TodoOwnerFilter.Describe(ownerTodoFilter) · @filteredOwnerTodos.Count 筆</span>
+                            <button type="button" class="todo-view-owner-filter-clear"
+                                    @onclick="ClearOwnerTodoFilter">顯示全部</button>
+                        </div>
+                    }
+
+                    @if (filteredOwnerTodos.Count == 0)
+                    {
+                        <div class="todo-view-owner-empty">
+                            @(ownerTodoFilter == OwnerTodoFilter.All
+                                ? "這位負責人目前沒有待辦事項。"
+                                : "這位負責人沒有符合這個狀態的待辦事項。")
+                        </div>
+                    }
+                    else
+                    {
                     <ul class="todo-view-owner-list">
-                        @foreach (var item in ownerTodos)
+                        @foreach (var item in filteredOwnerTodos)
                         {
                             <li class="todo-view-owner-item" @key="item.Id">
                                 <span class="todo-view-owner-item-title @(item.IsCompleted ? "todo-view-title-done" : string.Empty)"
@@ -245,6 +291,7 @@ else
                             </li>
                         }
                     </ul>
+                    }
                 }
             </aside>
         </div>

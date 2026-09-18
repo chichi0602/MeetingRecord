@@ -116,7 +116,7 @@ public class PromptTemplateService
         // Take 刻意不再看 dataRequest.Take：呼叫端（清單頁）一律傳 0，原本的
         // `if (dataRequest.Take != 0)` 等於從來沒有分頁——第 N 頁會回「第 N 頁以後的全部資料」。
         // Count 是在 Skip/Take 之前算的，所以分頁器的總數本來就對，修好之後才第一次真的對上。
-        // 註：其餘 7 支 *Service.GetAsync(DataRequest) 仍是舊寫法，見「開發慣例與限制速查」。
+        // 註：其餘 6 支 *Service.GetAsync(DataRequest) 仍是舊寫法，見「開發慣例與限制速查」。
         dataSource = dataSource
             .Skip((dataRequest.CurrentPage - 1) * dataRequest.PageSize)
             .Take(dataRequest.PageSize);

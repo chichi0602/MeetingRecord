@@ -155,10 +155,16 @@
     }
 }
 
+/* 面板高度上限量到視窗底為止（0.4.86）：內容再多也是下面那份小清單自己捲，
+   不會把整頁撐長。--todo-view-panel-max 由 todo-auto-fit.js 掛在 <html> 上，
+   ⚠️ 不是掛在面板自己的 inline style——面板是 Blazor 算繪的元素，
+   把樣式寫在它身上等於跟框架搶同一個位置。量不到時 fallback 是 none，退回自然高度。 */
 .todo-view-owner-panel {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-height: var(--todo-view-panel-max, none);
+    min-height: 0;
     padding: 15px 18px;
     background: rgba(248, 250, 252, 0.9);
     border: 1px solid rgba(226, 232, 240, 0.9);
@@ -229,15 +235,99 @@
     gap: 6px;
 }
 
+/* 膠囊同時是篩選鈕（0.4.85）。沿用上面同一組膠囊配色，只補按鈕化需要的重設。
+   ⚠️ 原生 button 不繼承字型，font: inherit 之後要把 12px 設回來，否則會跳成頁面預設大小。
+   這裡不需要 ::deep：button 是本元件自己寫的元素，選得到 scope 屬性。 */
+button.todo-view-pill {
+    margin: 0;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+button.todo-view-pill:hover {
+    filter: brightness(0.96);
+}
+
+button.todo-view-pill:focus-visible {
+    outline: 2px solid var(--oat-ink-mid);
+    outline-offset: 1px;
+}
+
+/* 選中：同色系加粗外環。四顆膠囊各有自己的顏色，用 currentColor 就不必為四種狀態
+   各發明一組反白配色（逾期那顆本來就沒有底色，反白會整個走樣）。 */
+.todo-view-pill-active {
+    box-shadow: inset 0 0 0 2px currentColor;
+    font-weight: 700;
+}
+
+/* 有篩選時其餘膠囊退到背景。只靠選中那顆變粗，四顆並排時看不出來。 */
+.todo-view-owner-stats-filtered .todo-view-pill:not(.todo-view-pill-active) {
+    opacity: 0.5;
+}
+
+/* 0 筆的膠囊不是按鈕（理由見 .razor 的註解），視覺上也要看得出來不能點。 */
+.todo-view-pill-zero {
+    opacity: 0.45;
+}
+
+/* 目前篩了什麼 ＋ 一鍵清掉。與工具列「清空搜尋」一樣是條件式顯示。 */
+.todo-view-owner-filter {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--oat-ink-mid);
+    font-size: 0.74rem;
+}
+
+.todo-view-owner-filter-clear {
+    padding: 0;
+    color: var(--oat-ink);
+    font: inherit;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.todo-view-owner-filter-clear:focus-visible {
+    outline: 2px solid var(--oat-ink-mid);
+    outline-offset: 1px;
+}
+
+/* flex: 1 1 auto + min-height: 0 讓小清單成為面板裡唯一會被壓縮的區塊：
+   上面的下拉、完成度、膠囊都是內容高（flex 項的 min-height: auto 會擋住壓縮），
+   只有這個捲動容器的 min-height: auto 依規範解成 0，所以縮的一定是它。
+   ⚠️ 0.4.86 起沒有固定的 420px 上限，改由面板的 max-height 決定（單欄時才退回固定值）。 */
 .todo-view-owner-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin: 0;
     padding: 0;
-    max-height: 420px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     list-style: none;
+}
+
+/* ⚠️ 這段一定要排在 .todo-view-owner-panel 與 .todo-view-owner-list 的基礎規則「之後」。
+   兩邊特異度相同，靠的是原始碼順序；寫在上面那個 grid 的 media query 裡會被基礎規則蓋掉
+   （0.4.86 實跑時面板真的吃到了 113px 的上限）。
+
+   單欄時面板是疊在表格「下面」的，量「面板頂到視窗底」會得到幾乎沒有高度的結果，
+   所以退回 0.4.66 的固定上限：小清單一樣自己捲，只是整頁要捲一段才看得到面板——
+   兩塊都要完整塞進一個畫面，在這個寬度下本來就辦不到。 */
+@media (max-width: 1400px) {
+    .todo-view-owner-panel {
+        max-height: none;
+    }
+
+    .todo-view-owner-list {
+        max-height: 420px;
+    }
 }
 
 .todo-view-owner-item {

@@ -7,6 +7,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Web.Components.Views.Todos;
 
 namespace MeetingRecord.Tests;
 
@@ -336,6 +337,50 @@ public sealed class TodoServiceTests
 
     #endregion
 
+    [Fact]
+    public async Task OwnerSummaryCounts_ShouldMatchWhatTheFilteredListReturns()
+    {
+        // ⭐ 這是膠囊篩選唯一真正的不變式：**膠囊上的數字 = 點下去看到的筆數**。
+        //
+        // 兩邊是各自獨立的實作——數字來自 GetOwnerSummariesAsync（在查詢端數），
+        // 清單來自 GetByOwnerAsync + TodoOwnerFilter.Apply（用 TodoAdapterModel 的衍生屬性）。
+        // 逾期尤其容易走樣：一邊是「Status != 已完成 && DueDate < today」，
+        // 一邊是 IsOverdue。對不上的話使用者會看到「逾期 3」點下去只有 2 筆，
+        // 而且不會有任何例外或紅字。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+
+        await fixture.AddTodoAsync("尚未開始", project.Id, status: "待辦", owner: "王小明");
+        await fixture.AddTodoAsync("做到一半", project.Id, status: "進行中", owner: "王小明");
+        await fixture.AddTodoAsync("已經做完", project.Id, status: "已完成", owner: "王小明");
+        await fixture.AddTodoAsync(
+            "逾期未完成", project.Id, status: "進行中", owner: "王小明", dueDate: DateTime.Today.AddDays(-3));
+
+        // 已完成但截止日早就過了——不該被算成逾期，兩邊都是。
+        await fixture.AddTodoAsync(
+            "做完但過期", project.Id, status: "已完成", owner: "王小明", dueDate: DateTime.Today.AddDays(-9));
+
+        var service = fixture.CreateService();
+        var summary = Assert.Single(await service.GetOwnerSummariesAsync(null));
+        var todos = await service.GetByOwnerAsync("王小明", null);
+
+        foreach (var filter in new[]
+        {
+            OwnerTodoFilter.Pending,
+            OwnerTodoFilter.InProgress,
+            OwnerTodoFilter.Completed,
+            OwnerTodoFilter.Overdue,
+        })
+        {
+            Assert.Equal(
+                TodoOwnerFilter.CountOf(summary, filter),
+                TodoOwnerFilter.Apply(todos, filter).Count);
+        }
+
+        // 順帶釘住上面那筆「做完但過期」確實兩邊都不算逾期。
+        Assert.Equal(1, summary.Overdue);
+    }
+
     #region 前置檢查
 
     [Fact]
@@ -348,6 +393,109 @@ public sealed class TodoServiceTests
 
         Assert.False(result.Success);
         Assert.Contains("專案", result.Message);
+    }
+
+    #endregion
+
+    #region 分頁
+
+    // 0.4.85 之前這一頁的分頁從來沒作用過：TodoService 的 Take 被包在
+    // `if (dataRequest.Take != 0)` 裡，而呼叫端一律傳 0，所以第 1 頁會回全部資料。
+    // Count 是在 Skip/Take 之前算的，分頁器的總數與頁數一直是對的，只有內容沒被切——
+    // 這就是它一直沒被發現的原因。下面三條是那個缺陷的回歸測試。
+    //
+    // 種子刻意都不給 DueDate，讓預設排序落在「有截止日在前、再依 Id 遞減」的
+    // Id 這條穩定鍵上，翻頁才不會因為排序不穩而重複或漏列。
+
+    [Fact]
+    public async Task GetAsync_WithFirstPage_ShouldNotReturnAllRecords()
+    {
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        for (var index = 0; index < 10; index++)
+        {
+            await fixture.AddTodoAsync($"待辦{index:00}", project.Id);
+        }
+
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 4;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Equal(4, result.Result.Count());
+        Assert.Equal(10, result.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithSecondPage_ShouldReturnOnlyPageSizeRecords()
+    {
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        for (var index = 0; index < 10; index++)
+        {
+            await fixture.AddTodoAsync($"待辦{index:00}", project.Id);
+        }
+
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 4;
+        request.CurrentPage = 2;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Equal(4, result.Result.Count());
+
+        // Count 是在 Skip/Take 之前算的，所以它一律是過濾後的總數而不是本頁筆數。
+        Assert.Equal(10, result.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithPageBeyondLastPage_ShouldReturnEmptyResultWithFullCount()
+    {
+        // 頁碼越界會回空集合但 Count 仍是總數——畫面端要靠這個組合把頁碼夾回最後一頁，
+        // 否則刪掉最後一頁唯一一筆之後會停在空白表格。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        for (var index = 0; index < 5; index++)
+        {
+            await fixture.AddTodoAsync($"待辦{index:00}", project.Id);
+        }
+
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 4;
+        request.CurrentPage = 3;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Empty(result.Result);
+        Assert.Equal(5, result.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_PagingShouldCoverEveryRecordExactlyOnce()
+    {
+        // 翻完所有頁應該不重不漏。排序不穩的話這條會抓到（預設排序的第二鍵是 Id）。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        for (var index = 0; index < 10; index++)
+        {
+            await fixture.AddTodoAsync($"待辦{index:00}", project.Id);
+        }
+
+        var service = fixture.CreateService();
+        var seen = new List<int>();
+        for (var page = 1; page <= 3; page++)
+        {
+            var request = NewRequest();
+            request.PageSize = 4;
+            request.CurrentPage = page;
+            seen.AddRange((await service.GetAsync(request)).Result.Select(x => x.Id));
+        }
+
+        Assert.Equal(10, seen.Count);
+        Assert.Equal(10, seen.Distinct().Count());
     }
 
     #endregion

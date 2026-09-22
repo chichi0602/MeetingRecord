@@ -88,15 +88,18 @@ public class AiUsageRecorder
 
     private readonly BackendDBContext context;
     private readonly IOptions<LlmSettings> llmSettings;
+    private readonly ExchangeRateCache exchangeRates;
     private readonly ILogger<AiUsageRecorder> logger;
 
     public AiUsageRecorder(
         BackendDBContext context,
         IOptions<LlmSettings> llmSettings,
+        ExchangeRateCache exchangeRates,
         ILogger<AiUsageRecorder> logger)
     {
         this.context = context;
         this.llmSettings = llmSettings;
+        this.exchangeRates = exchangeRates;
         this.logger = logger;
     }
 
@@ -131,6 +134,18 @@ public class AiUsageRecorder
 
             var isTokenBased = AiUsageFeatureText.IsTokenBased(entry.Feature);
 
+            // ⚠️ 這裡只是讀一個欄位，**不是** await 一個 HTTP。抓匯率在背景軌道上跑
+            //    （ExchangeRateBackgroundService），理由見 ExchangeRateCache 的說明：
+            //    本方法跑在使用者等待中的 AI 呼叫裡，多一個網路往返就是多一個卡住的地方。
+            //
+            // ⚠️ 來源幣別對不上就整組留空。有人把 Currency 改成 EUR 卻沒改匯率來源時，
+            //    得到的是空白（畫面顯示「—」），而不是錯了 8% 卻看起來很正常的金額。
+            var rate = exchangeRates.Current;
+            if (rate is not null && !string.Equals(rate.BaseCurrency, settings.Currency, StringComparison.OrdinalIgnoreCase))
+            {
+                rate = null;
+            }
+
             context.AiUsageLog.Add(new AiUsageLog
             {
                 OccurredAt = DateTime.Now,
@@ -153,6 +168,8 @@ public class AiUsageRecorder
                 InputPricePerMillion = price?.InputPerMillionTokens,
                 OutputPricePerMillion = price?.OutputPerMillionTokens,
                 AudioPricePerMinute = price?.AudioPerMinute,
+                ExchangeRate = rate?.Rate,
+                ConvertedCurrency = rate?.TargetCurrency,
 
                 UserId = entry.UserId,
                 UserName = entry.UserName,

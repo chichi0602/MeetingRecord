@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Options;
 using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Tests;
@@ -22,6 +24,9 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
     private readonly BackendDBContext context;
     private readonly AiUsageAnalysisService service;
 
+    /// <summary>匯率快取。具體類別而不是介面，測試直接 Set 一個匯率進去即可。</summary>
+    private readonly ExchangeRateCache exchangeRates = new();
+
     public AiUsageAnalysisServiceTests()
     {
         connection = new SqliteConnection("DataSource=:memory:");
@@ -32,10 +37,16 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
             .Options);
         context.Database.EnsureCreated();
 
-        service = new AiUsageAnalysisService(
-            context,
-            LoggerFactory.Create(_ => { }).CreateLogger<AiUsageAnalysisService>());
+        service = BuildService(new ExchangeRateSettings());
     }
+
+    /// <summary>用指定的匯率設定建一支 service（預設那支是啟用換算的）。</summary>
+    private AiUsageAnalysisService BuildService(ExchangeRateSettings settings)
+        => new(
+            context,
+            exchangeRates,
+            Options.Create(settings),
+            LoggerFactory.Create(_ => { }).CreateLogger<AiUsageAnalysisService>());
 
     #region 分頁
 
@@ -181,14 +192,14 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
     [Fact]
     public async Task Summary_ShouldLabelGroupsThatHaveNoUnitPrice()
     {
-        // ⚠️ 整組都沒有單價時加總會是 0，顯示成「USD 0」——那與「真的沒花錢」
-        // 看起來一模一樣。這一組必須標成「未設定單價」。
+        // ⚠️ 整組都算不出金額時加總會是 0，顯示成「NT$ 0」——那與「真的沒花錢」
+        // 看起來一模一樣。這一組必須被標示出來。0.4.88 起「算不出來」多了一種原因：有單價但沒匯率。
         await AddAsync(cost: null, feature: AiUsageFeature.AiChat);
 
         var summary = await service.GetSummaryAsync(trendDays: 30);
 
         var slice = Assert.Single(summary.ByFeature);
-        Assert.Equal("未設定單價", slice.DisplayText);
+        Assert.Equal("未設定單價或無匯率", slice.DisplayText);
         Assert.DoesNotContain("0", slice.DisplayText);
     }
 
@@ -203,6 +214,116 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
 
         Assert.Contains(summary.ByUser, x => x.Label == "王小明");
         Assert.Contains(summary.ByUser, x => x.Label == "（未記錄）");
+    }
+
+    #endregion
+
+    #region 台幣換算（0.4.88）
+
+    [Fact]
+    public async Task Summary_ShouldConvertUsingEachRowsOwnRate()
+    {
+        exchangeRates.Set(new ExchangeRateSnapshot("USD", "TWD", 31.863639m, DateTime.Now));
+
+        // 兩列金額相同但匯率不同——換算必須各用各的，而不是一律套今天的匯率。
+        await AddAsync(cost: 1m, exchangeRate: 30m);
+        await AddAsync(cost: 1m, exchangeRate: 32m);
+
+        var summary = await service.GetSummaryAsync(trendDays: 30);
+
+        Assert.Contains("62", summary.Cards[0].Value);
+        Assert.Contains("NT$", summary.Cards[0].Value);
+    }
+
+    [Fact]
+    public async Task Summary_ShouldExcludeRowsWithoutRateAndCountThem()
+    {
+        // 0.4.88 之前的舊紀錄有金額但沒有匯率。它們不可以被當成 0 混進總額，
+        // 也不可以默默消失——畫面要能提示「有 N 筆沒算進去」。
+        await AddAsync(cost: 2m, exchangeRate: 30m);
+        await AddAsync(cost: 5m, exchangeRate: null);
+
+        var summary = await service.GetSummaryAsync(trendDays: 30);
+
+        Assert.Contains("60", summary.Cards[0].Value);
+        Assert.Equal(1, summary.NoRateCallCount);
+    }
+
+    [Fact]
+    public async Task Summary_MonthOverMonth_ShouldUseSourceCurrencyNotConverted()
+    {
+        // ⭐ 整組最重要的一條。台幣的月比月 = 用量變化 × 匯率變化，
+        // 匯率動 10% 會在卡片上顯示成「花費增加 10%」，而畫面上沒有任何線索指出那是匯率。
+        // 比較的必須是**實際花掉的錢**（定價幣別），顯示才用台幣。
+        var now = DateTime.Now;
+
+        // ⚠️ 直接用 now.AddMonths(-1) 會剛好落在 previousToExclusive 上而被排除（比較是 <）。
+        //    用同一支區間函式算出視窗中點，測試才不會依今天幾號而時好時壞。
+        var (currentFrom, previousFrom, previousToExclusive) = AiUsageMetrics.BuildMonthToDateRanges(now);
+        var lastMonthMidpoint = previousFrom.AddTicks((previousToExclusive - previousFrom).Ticks / 2);
+
+        await AddAsync(cost: 1m, exchangeRate: 30m, occurredAt: currentFrom.AddTicks((now - currentFrom).Ticks / 2));
+        await AddAsync(cost: 1m, exchangeRate: 33m, occurredAt: lastMonthMidpoint);
+
+        var summary = await service.GetSummaryAsync(trendDays: 60);
+
+        // 美金花費一模一樣 ⇒ 變化率必須是 0%，不可以因為匯率差 10% 而變成 -10%。
+        Assert.Contains("0%", summary.Cards[0].Caption);
+    }
+
+    [Fact]
+    public async Task Summary_WhenConversionDisabled_ShouldFallBackToSourceCurrency()
+    {
+        // ⚠️ 關閉換算時整頁退回定價幣別。「有匯率顯示台幣、沒有顯示美金」
+        // 會讓總額變成兩種幣別相加——那不是降級，是錯的數字。
+        await AddAsync(cost: 9m, exchangeRate: 30m);
+        await AddAsync(cost: 10m, exchangeRate: null);
+
+        var disabled = BuildService(new ExchangeRateSettings { Enabled = false });
+        var summary = await disabled.GetSummaryAsync(trendDays: 30);
+
+        Assert.Contains("19", summary.Cards[0].Value);
+        Assert.Contains("USD", summary.Cards[0].Value);
+
+        // 沒在換算，就不該跳「有 N 筆沒有匯率」的提示。
+        Assert.Equal(0, summary.NoRateCallCount);
+        Assert.Null(summary.ExchangeRateNote);
+    }
+
+    [Fact]
+    public async Task Summary_ShouldReportTheRateInUse()
+    {
+        exchangeRates.Set(new ExchangeRateSnapshot("USD", "TWD", 31.863639m, DateTime.Now));
+        await AddAsync(cost: 1m, exchangeRate: 31.863639m);
+
+        var summary = await service.GetSummaryAsync(trendDays: 30);
+
+        Assert.NotNull(summary.ExchangeRateNote);
+        Assert.Contains("31.8636", summary.ExchangeRateNote);
+        Assert.Contains("TWD", summary.ExchangeRateNote);
+    }
+
+    [Fact]
+    public async Task RecentCalls_ShouldConvertTheCostColumn()
+    {
+        await AddAsync(cost: 2m, exchangeRate: 30m);
+
+        var page = await service.GetRecentCallsAsync(Query(currentPage: 1, pageSize: 10));
+
+        var row = Assert.Single(page.Rows);
+        Assert.Equal("NT$ 60.00", row.CostText);
+    }
+
+    [Fact]
+    public async Task RecentCalls_WithoutRate_ShouldShowDash()
+    {
+        // 有金額但換不出來時顯示「—」，不可以退回顯示美金金額——
+        // 同一欄裡混兩種幣別會讓人把數字看錯三十幾倍。
+        await AddAsync(cost: 2m, exchangeRate: null);
+
+        var page = await service.GetRecentCallsAsync(Query(currentPage: 1, pageSize: 10));
+
+        Assert.Equal("—", Assert.Single(page.Rows).CostText);
     }
 
     #endregion
@@ -231,12 +352,17 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         }
     }
 
+    /// <param name="exchangeRate">
+    /// 0.4.88 起金額會乘上這一列自己的匯率。預設 1 讓既有測試維持「金額原樣顯示」的語意，
+    /// 專測換算的那幾筆才會傳別的值。**傳 null 代表這一列沒有匯率**（0.4.88 之前的舊紀錄）。
+    /// </param>
     private async Task AddAsync(
         decimal? cost,
         AiUsageFeature feature = AiUsageFeature.AiChat,
         AiUsageOutcome outcome = AiUsageOutcome.Succeeded,
         string? userName = "王小明",
-        DateTime? occurredAt = null)
+        DateTime? occurredAt = null,
+        decimal? exchangeRate = 1m)
     {
         context.AiUsageLog.Add(new AiUsageLog
         {
@@ -249,6 +375,8 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
             OutputTokens = outcome == AiUsageOutcome.Succeeded ? 50 : null,
             EstimatedCost = cost,
             Currency = "USD",
+            ExchangeRate = exchangeRate,
+            ConvertedCurrency = exchangeRate is null ? null : "TWD",
             UserName = userName,
         });
 

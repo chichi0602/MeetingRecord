@@ -17,6 +17,14 @@ namespace MeetingRecord.Business.Services.AiUsage;
 /// 模型未設定單價、因而金額未納入統計的呼叫筆數。
 /// **大於 0 時畫面一定要提示**——否則使用者會以為那些呼叫真的免費。
 /// </param>
+/// <param name="NoRateCallCount">
+/// 有金額但沒有匯率、因而未納入換算後統計的呼叫筆數（0.4.88）。
+/// 典型來源是 0.4.88 之前的舊紀錄，或抓不到匯率的那段期間。
+/// **大於 0 時畫面一定要提示**，理由與 <paramref name="UnpricedCallCount"/> 相同。
+/// </param>
+/// <param name="ExchangeRateNote">
+/// 目前生效的匯率說明，例如「匯率 1 USD = 31.8636 TWD」。未啟用換算或沒有匯率時為 null。
+/// </param>
 public sealed record AiUsageSummary(
     DateTime? StartedAt,
     IReadOnlyList<StatCardItem> Cards,
@@ -28,7 +36,9 @@ public sealed record AiUsageSummary(
     string CostSeriesTwoLabel,
     string TotalCostDisplay,
     int UnpricedCallCount,
-    int FailedCallCount);
+    int FailedCallCount,
+    int NoRateCallCount,
+    string? ExchangeRateNote);
 
 /// <summary>明細表的一列。</summary>
 /// <param name="UsageText">token 或音訊時長，依功能別擇一。</param>

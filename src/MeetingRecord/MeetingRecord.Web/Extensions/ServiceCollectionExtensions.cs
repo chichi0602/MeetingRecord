@@ -171,6 +171,32 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// 匯率換算（0.4.88）：把用量金額從定價幣別換算成顯示幣別。
+    ///
+    /// <para>
+    /// ⚠️ <c>ExchangeRateCache</c> 必須是 Singleton：背景服務寫、Blazor circuit 與背景工作的
+    /// scope 讀，理由與 <c>AiChatStore</c>、<c>IJobCancellationRegistry</c> 相同。
+    /// 而且它刻意只有同步的欄位讀取——記帳路徑跑在使用者等待中的 AI 呼叫裡，
+    /// <b>不得</b>在那裡 await 任何 HTTP。
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddExchangeRateServices(this IServiceCollection services)
+    {
+        services.AddSingleton<MeetingRecord.Business.Services.AiUsage.ExchangeRateCache>();
+        services.AddScoped<MeetingRecord.Business.Services.AiUsage.ExchangeRateFetcher>();
+        services.AddHostedService<MeetingRecord.Web.BackgroundServices.ExchangeRateBackgroundService>();
+
+        // 與轉錄／生成那兩個相反：這是背景的小請求，逾時要**短**。
+        // 匯率抓不到只是這段期間沒有台幣金額，不值得讓背景軌道卡住好幾分鐘。
+        services.AddHttpClient(MeetingRecord.Business.Services.AiUsage.ExchangeRateFetcher.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+
+        return services;
+    }
+
     public static IServiceCollection AddConfiguredOptions(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<SystemSettings>(configuration.GetSection(nameof(SystemSettings)));

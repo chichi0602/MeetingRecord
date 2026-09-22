@@ -166,5 +166,35 @@ public sealed class AiUsageMetricsTests
         Assert.Equal("2.5 小時", AiUsageMetrics.FormatAudio(9000));
     }
 
+    [Fact]
+    public void FormatConverted_Null_ShouldBeDash()
+    {
+        // 沒單價或沒匯率時是「—」而不是「NT$ 0」——後者與「真的沒花錢」看起來一模一樣。
+        Assert.Equal("—", AiUsageMetrics.FormatConverted(null, "TWD"));
+    }
+
+    [Fact]
+    public void FormatConverted_TinyAmount_ShouldNotCollapseToZero()
+    {
+        // ⭐ 一次 AI 問答大約是 NT$0.0014。用兩位小數會讓整張明細表看起來全部免費。
+        var text = AiUsageMetrics.FormatConverted(0.0014m, "TWD");
+
+        Assert.NotEqual("NT$ 0.00", text);
+        Assert.Contains("0.0014", text);
+    }
+
+    [Fact]
+    public void FormatConverted_LargeAmount_ShouldUseThousandsSeparator()
+    {
+        Assert.Equal("NT$ 1,234.56", AiUsageMetrics.FormatConverted(1234.56m, "TWD"));
+    }
+
+    [Fact]
+    public void FormatConverted_OtherCurrency_ShouldPrintTheCode()
+    {
+        // 台幣用習慣的符號，其他幣別就印代碼——不去猜每一種幣別的符號。
+        Assert.Equal("JPY 1,234.56", AiUsageMetrics.FormatConverted(1234.56m, "JPY"));
+    }
+
     #endregion
 }

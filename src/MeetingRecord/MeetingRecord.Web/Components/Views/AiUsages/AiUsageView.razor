@@ -64,6 +64,10 @@ else
             {
                 <span>尚未記錄到任何 AI 呼叫。這張帳本從 0.4.80 起開始累積，不回填先前的用量。</span>
             }
+            @if (summary.ExchangeRateNote is { } note)
+            {
+                <span>@note</span>
+            }
         </div>
 
         @if (summary.UnpricedCallCount > 0)
@@ -79,6 +83,18 @@ else
             </div>
         }
 
+        @if (summary.NoRateCallCount > 0)
+        {
+            @* 0.4.88 之前的紀錄沒有匯率，抓不到匯率的那段期間也沒有。
+               與上面那條同一個理由：金額是空的而不是 0，但使用者不會知道為什麼。 *@
+            <div class="ai-usage-warning">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+                <span>
+                    有 @summary.NoRateCallCount 次呼叫沒有當時的匯率（多半是 0.4.88 之前的紀錄），金額<b>未</b>納入台幣統計。
+                </span>
+            </div>
+        }
+
         <div class="ai-usage-cards">
             @foreach (var card in summary.Cards)
             {
@@ -86,7 +102,10 @@ else
             }
         </div>
 
-        <LineChart Title="@($"近 {summary.DailyCost.Count} 天每日估算金額")"
+        @* ⚠️ 單位一定要寫在標題裡。LineChart 沒有 ChartSlice 那種 Display 覆寫，
+           資料點提示是把 int（分）原樣印出來——同一個「12」從 USD 0.12 變成 NT$0.12
+           數量級差三十幾倍，畫面上卻沒有任何提示。 *@
+        <LineChart Title="@($"近 {summary.DailyCost.Count} 天每日估算金額（單位：{(summary.ExchangeRateNote is null ? "美分" : "NT$ 分")}）")"
                    Points="summary.DailyCost"
                    SeriesOneLabel="@summary.CostSeriesOneLabel"
                    SeriesTwoLabel="@summary.CostSeriesTwoLabel" />
@@ -138,6 +157,13 @@ else
            這是這個功能唯一站得住腳的講法，而且零成本。 *@
         <div class="ai-usage-footnote">
             金額為<b>估算</b>：依 <code>LlmSettings:Pricing</code> 的單價在呼叫當下換算，改設定不影響既有紀錄。
+            @if (summary.ExchangeRateNote is not null)
+            {
+                <text>
+                    台幣金額以<b>呼叫當下</b>的匯率換算（來源 open.er-api.com，每日更新一次），
+                    因此匯率變動同樣不影響既有紀錄；取不到匯率的那幾筆不換算，顯示「—」且不計入總額。
+                </text>
+            }
             失敗與取消的呼叫沒有用量資料，但串流中斷時供應商仍可能計費，因此本頁的金額是<b>下限</b>，
             實際帳單可能略高。
         </div>

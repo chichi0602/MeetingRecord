@@ -239,6 +239,13 @@ namespace MeetingRecord.Web
                     .Bind(builder.Configuration.GetSection(LlmSettings.SectionName))
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
+
+                // 匯率換算設定（0.4.88）：把用量金額從定價幣別換算成顯示幣別。
+                builder.Services
+                    .AddOptions<ExchangeRateSettings>()
+                    .Bind(builder.Configuration.GetSection(ExchangeRateSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
                 #endregion
 
                 #region 系統使用的目錄準備
@@ -262,6 +269,7 @@ namespace MeetingRecord.Web
                 builder.Services.AddApplicationServices();
                 builder.Services.AddTranscriptionServices();
                 builder.Services.AddTextGenerationServices();
+                builder.Services.AddExchangeRateServices();
                 #endregion
 
                 var app = builder.Build();

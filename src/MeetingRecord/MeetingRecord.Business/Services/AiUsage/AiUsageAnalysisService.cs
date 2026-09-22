@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.Dashboard;
 using MeetingRecord.Share.Enums;
 
@@ -32,13 +34,34 @@ public class AiUsageAnalysisService
     private const int TopCount = 8;
 
     private readonly BackendDBContext context;
+    private readonly ExchangeRateCache exchangeRates;
+    private readonly IOptions<ExchangeRateSettings> exchangeRateSettings;
     private readonly ILogger<AiUsageAnalysisService> logger;
 
-    public AiUsageAnalysisService(BackendDBContext context, ILogger<AiUsageAnalysisService> logger)
+    public AiUsageAnalysisService(
+        BackendDBContext context,
+        ExchangeRateCache exchangeRates,
+        IOptions<ExchangeRateSettings> exchangeRateSettings,
+        ILogger<AiUsageAnalysisService> logger)
     {
         this.context = context;
+        this.exchangeRates = exchangeRates;
+        this.exchangeRateSettings = exchangeRateSettings;
         this.logger = logger;
     }
+
+    /// <summary>
+    /// 這一頁要用哪一種幣別顯示（0.4.88）。
+    ///
+    /// <para>
+    /// ⚠️ 換算關閉時**整頁原樣退回定價幣別**。「有匯率的列顯示台幣、沒有的顯示美金」
+    /// 會讓總額變成兩種幣別相加——那不是降級，是錯的數字。
+    /// </para>
+    /// </summary>
+    private CostView BuildCostView(string sourceCurrency)
+        => exchangeRateSettings.Value.Enabled
+            ? new CostView(true, sourceCurrency, exchangeRateSettings.Value.TargetCurrency)
+            : new CostView(false, sourceCurrency, sourceCurrency);
 
     /// <summary>整頁的摘要。<paramref name="trendDays"/> 是趨勢圖的天數。</summary>
     public async Task<AiUsageSummary> GetSummaryAsync(int trendDays, CancellationToken cancellationToken = default)
@@ -67,7 +90,8 @@ public class AiUsageAnalysisService
                 x.OutputTokens,
                 x.AudioSeconds,
                 x.EstimatedCost,
-                x.Currency))
+                x.Currency,
+                x.ExchangeRate))
             .ToListAsync(cancellationToken);
 
         var currency = facts.Select(x => x.Currency).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "USD";
@@ -77,21 +101,29 @@ public class AiUsageAnalysisService
             .Where(x => x.OccurredAt >= previousFrom && x.OccurredAt < previousToExclusive)
             .ToList();
 
+        var view = BuildCostView(currency);
+
+        // ⭐ 月比月一律用**定價幣別**算，不可以用換算後的金額。
+        //    台幣的月比月 = 用量變化 × 匯率變化，匯率動 2% 會在卡片上顯示成「花費增加 2%」，
+        //    而畫面上沒有任何線索指出那是匯率造成的。比較的必須是實際花掉的錢。
         var thisMonthCost = SumCost(thisMonth);
         var lastMonthCost = SumCost(lastMonthSamePeriod);
 
         return new AiUsageSummary(
             startedAt,
-            BuildCards(thisMonth, thisMonthCost, lastMonthCost, currency),
-            BuildDailyCost(facts, now, trendDays),
-            BuildSlices(thisMonth.GroupBy(x => AiUsageFeatureText.Describe(x.Feature)), currency),
-            BuildSlices(thisMonth.GroupBy(x => string.IsNullOrWhiteSpace(x.Model) ? "（未知）" : x.Model), currency),
-            BuildSlices(thisMonth.GroupBy(x => x.UserName ?? "（未記錄）"), currency),
+            BuildCards(thisMonth, thisMonthCost, lastMonthCost, view),
+            BuildDailyCost(facts, now, trendDays, view),
+            BuildSlices(thisMonth.GroupBy(x => AiUsageFeatureText.Describe(x.Feature)), view),
+            BuildSlices(thisMonth.GroupBy(x => string.IsNullOrWhiteSpace(x.Model) ? "（未知）" : x.Model), view),
+            BuildSlices(thisMonth.GroupBy(x => x.UserName ?? "（未記錄）"), view),
             CostSeriesOneLabel: "文字生成",
             CostSeriesTwoLabel: "語音轉錄",
-            AiUsageMetrics.FormatAmount(thisMonthCost, currency),
+            view.Format(view.Sum(thisMonth)),
             thisMonth.Count(x => x.EstimatedCost is null && x.Outcome == AiUsageOutcome.Succeeded),
-            thisMonth.Count(x => x.Outcome != AiUsageOutcome.Succeeded));
+            thisMonth.Count(x => x.Outcome != AiUsageOutcome.Succeeded),
+            // 有金額卻換不出來的才算——沒單價的那些已經由 UnpricedCallCount 提示過了。
+            view.Convert ? thisMonth.Count(x => x.EstimatedCost is not null && x.ExchangeRate is null) : 0,
+            BuildExchangeRateNote(view));
     }
 
     /// <summary>
@@ -146,9 +178,13 @@ public class AiUsageAnalysisService
                 x.IsAudioDurationEstimated,
                 x.EstimatedCost,
                 x.Currency,
+                x.ExchangeRate,
                 x.ErrorMessage,
             })
             .ToListAsync(cancellationToken);
+
+        var rowView = BuildCostView(
+            rows.Select(x => x.Currency).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "USD");
 
         return new AiUsagePagedResult(
             totalCount,
@@ -163,7 +199,7 @@ public class AiUsageAnalysisService
                 x.UserName,
                 DescribeTarget(x.MeetingId, x.ProjectId),
                 DescribeUsage(x.Feature, x.InputTokens, x.OutputTokens, x.AudioSeconds, x.IsAudioDurationEstimated),
-                AiUsageMetrics.FormatAmount(x.EstimatedCost, x.Currency),
+                rowView.Format(rowView.Of(x.EstimatedCost, x.ExchangeRate)),
                 x.ErrorMessage))]);
     }
 
@@ -200,8 +236,9 @@ public class AiUsageAnalysisService
         IReadOnlyList<UsageFact> thisMonth,
         decimal thisMonthCost,
         decimal lastMonthCost,
-        string currency)
+        CostView view)
     {
+        // ⭐ thisMonthCost／lastMonthCost 是**定價幣別**的金額，刻意不換算——見 GetSummaryAsync 的說明。
         var changeRate = AiUsageMetrics.CalculateChangeRate(thisMonthCost, lastMonthCost);
         var failedCount = thisMonth.Count(x => x.Outcome != AiUsageOutcome.Succeeded);
 
@@ -213,7 +250,7 @@ public class AiUsageAnalysisService
         [
             new StatCardItem(
                 "本月估算金額",
-                AiUsageMetrics.FormatAmount(thisMonthCost, currency),
+                view.Format(view.Sum(thisMonth)),
                 changeRate is { } rate
                     ? $"與上月同期相比 {(rate >= 0 ? "+" : string.Empty)}{rate:0.#}%"
                     : "上月同期無資料",
@@ -238,19 +275,26 @@ public class AiUsageAnalysisService
     }
 
     /// <summary>每日金額趨勢，兩條線分別是文字生成與語音轉錄。</summary>
-    private static IReadOnlyList<TrendPoint> BuildDailyCost(IReadOnlyList<UsageFact> facts, DateTime now, int days)
+    private static IReadOnlyList<TrendPoint> BuildDailyCost(
+        IReadOnlyList<UsageFact> facts,
+        DateTime now,
+        int days,
+        CostView view)
     {
         // ⚠️ 用 DateOnly.FromDateTime 直接取日期，**不套 ToLocalTime()**：
         //    SQLite 讀回來的 Kind 是 Unspecified，套了會整批位移 8 小時
         //    （DashboardMetrics 已經記過這個坑）。
+        // ⚠️ 幾何量仍然用「分」：換成台幣之後金額依然很小（一次問答約 NT$0.0014），
+        //    直接用整數金額會全部捨成 0。折線圖的標題必須寫出單位，
+        //    因為 LineChart 沒有 ChartSlice 那種 Display 覆寫，資料點提示是把 int 原樣印出來。
         var items = facts.Select(x => (
             Day: DateOnly.FromDateTime(x.OccurredAt),
             SeriesOne: AiUsageFeatureText.IsTokenBased(x.Feature)
-                ? AiUsageMetrics.ToChartCents(x.EstimatedCost ?? 0m)
+                ? AiUsageMetrics.ToChartCents(view.Of(x) ?? 0m)
                 : 0,
             SeriesTwo: AiUsageFeatureText.IsTokenBased(x.Feature)
                 ? 0
-                : AiUsageMetrics.ToChartCents(x.EstimatedCost ?? 0m)));
+                : AiUsageMetrics.ToChartCents(view.Of(x) ?? 0m)));
 
         return AiUsageMetrics.BuildDailySeries(items, DateOnly.FromDateTime(now), days);
     }
@@ -260,15 +304,16 @@ public class AiUsageAnalysisService
     /// </summary>
     private static IReadOnlyList<ChartSlice> BuildSlices(
         IEnumerable<IGrouping<string, UsageFact>> groups,
-        string currency)
+        CostView view)
     {
         var ordered = groups
             .Select(group => (
                 Label: group.Key,
-                Cost: SumCost(group),
-                // ⚠️ 整組都沒有單價時，加總會是 0，顯示成「USD 0」——那與「真的沒花錢」
+                Cost: view.Sum(group),
+                // ⚠️ 整組都算不出金額時，加總會是 0，顯示成「NT$ 0」——那與「真的沒花錢」
                 //    看起來一模一樣。這一組要標成「未設定單價」而不是零元。
-                HasPrice: group.Any(x => x.EstimatedCost is not null)))
+                //    0.4.88 起「算不出來」多了一種原因：有單價但沒有匯率。
+                HasPrice: group.Any(x => view.Of(x) is not null)))
             .OrderByDescending(x => x.Cost)
             .ToList();
 
@@ -287,8 +332,43 @@ public class AiUsageAnalysisService
                 x.Label,
                 AiUsageMetrics.ToChartCents(x.Cost),
                 x.HasPrice ? ChartTone.Neutral : ChartTone.Warning,
-                x.HasPrice ? AiUsageMetrics.FormatAmount(x.Cost, currency) : "未設定單價")),
+                x.HasPrice ? view.Format(x.Cost) : "未設定單價或無匯率")),
         ];
+    }
+
+    /// <summary>目前生效的匯率說明，給畫面顯示。未啟用換算或還沒抓到匯率時回 null。</summary>
+    private string? BuildExchangeRateNote(CostView view)
+    {
+        if (!view.Convert || exchangeRates.Current is not { } rate)
+        {
+            return null;
+        }
+
+        return $"匯率 1 {rate.BaseCurrency} = {rate.Rate:0.0000} {rate.TargetCurrency}";
+    }
+
+    /// <summary>
+    /// 這一頁的金額怎麼算、怎麼印（0.4.88）。把「要不要換算」集中在一個地方，
+    /// 免得五個顯示點（卡片、折線、三張分佈圖、明細表）各自判斷而漏掉其中一個。
+    /// </summary>
+    /// <param name="Convert">是否換算成 <paramref name="DisplayCurrency"/>。</param>
+    /// <param name="SourceCurrency">定價幣別（帳本上的 <c>Currency</c>）。</param>
+    /// <param name="DisplayCurrency">實際顯示用的幣別。</param>
+    private sealed record CostView(bool Convert, string SourceCurrency, string DisplayCurrency)
+    {
+        /// <summary>單列的顯示金額。要換算但該列沒有匯率時回 null——不可當成 0 或原值。</summary>
+        public decimal? Of(decimal? estimatedCost, decimal? exchangeRate)
+            => Convert ? AiUsageExchange.ToTargetCurrency(estimatedCost, exchangeRate) : estimatedCost;
+
+        public decimal? Of(UsageFact fact) => Of(fact.EstimatedCost, fact.ExchangeRate);
+
+        /// <summary>在記憶體加總——見類別註解的 SQLite decimal 說明。換不出來的列不計入。</summary>
+        public decimal Sum(IEnumerable<UsageFact> facts) => facts.Sum(x => Of(x) ?? 0m);
+
+        public string Format(decimal? amount)
+            => Convert
+                ? AiUsageMetrics.FormatConverted(amount, DisplayCurrency)
+                : AiUsageMetrics.FormatAmount(amount, SourceCurrency);
     }
 
     /// <summary>查詢投影。撈欄位而不是整個實體——帳本是全系統列數最多的表。</summary>
@@ -302,5 +382,6 @@ public class AiUsageAnalysisService
         int? OutputTokens,
         double? AudioSeconds,
         decimal? EstimatedCost,
-        string? Currency);
+        string? Currency,
+        decimal? ExchangeRate);
 }

@@ -99,7 +99,7 @@ public class AiUsageLog
     /// </summary>
     public decimal? EstimatedCost { get; set; }
 
-    /// <summary>幣別代碼，例如 USD。只用於顯示，不做匯率換算。</summary>
+    /// <summary>估算金額的幣別代碼，例如 USD。這是**定價**幣別，換算後的顯示幣別見 <see cref="ConvertedCurrency"/>。</summary>
     public string? Currency { get; set; }
 
     /// <summary>
@@ -116,6 +116,31 @@ public class AiUsageLog
     public decimal? OutputPricePerMillion { get; set; }
 
     public decimal? AudioPricePerMinute { get; set; }
+
+    /// <summary>
+    /// 呼叫當下的匯率（0.4.88）：1 單位 <see cref="Currency"/> 可換多少 <see cref="ConvertedCurrency"/>。
+    ///
+    /// <para>
+    /// 與單價一樣是**寫入當下的快照**。匯率天天在動，若讀取時才用當天匯率換算，
+    /// 今天匯率一變，去年的帳就整批跟著變——「本月 vs 上月」會失去意義。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 與 <see cref="EstimatedCost"/> 同樣是 SQLite 的 TEXT 欄位：
+    /// **不可在 SQL 端 <c>ORDER BY</c>、比大小或 <c>SUM</c>**，只能 <c>IS NOT NULL</c> 篩選後撈進記憶體算。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ 抓不到匯率時是 null 而不是 1——1 會讓台幣金額少報三十幾倍，而畫面上完全看不出來。
+    /// </para>
+    /// </summary>
+    public decimal? ExchangeRate { get; set; }
+
+    /// <summary>
+    /// 換算目標幣別代碼，例如 TWD（0.4.88）。
+    /// 少了這一欄，<see cref="ExchangeRate"/> 的 31.86 無法自證是換成台幣還是別的幣別。
+    /// </summary>
+    public string? ConvertedCurrency { get; set; }
 
     #endregion
 

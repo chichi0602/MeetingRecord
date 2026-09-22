@@ -541,7 +541,7 @@ public sealed class MeetingDraftJobRunnerTests
                 ProgressNotifier,
                 // 用真的 Recorder 而不是假的：它與 runner 共用同一個 context，
                 // 而「記帳的 SaveChanges 會不會提前提交 runner 的變更」正是要測的事情之一。
-                new AiUsageRecorder(Context, llmSettings, loggerFactory.CreateLogger<AiUsageRecorder>()),
+                new AiUsageRecorder(Context, llmSettings, new ExchangeRateCache(), loggerFactory.CreateLogger<AiUsageRecorder>()),
                 loggerFactory.CreateLogger<MeetingDraftJobRunner>());
         }
 

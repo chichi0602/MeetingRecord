@@ -43,11 +43,12 @@ public sealed class HealthLogReader : IHealthLogReader
 
         try
         {
-            var lines = ReadTail(logFilePath, lineCount);
+            var (lines, errorCount) = ReadTail(logFilePath, lineCount);
             return new HealthLogTail
             {
                 FilePath = logFilePath,
                 Lines = lines,
+                ErrorCount = errorCount,
                 Status = SystemHealthStatus.Healthy,
                 Message = $"已讀取最後 {lines.Count} 筆日誌。"
             };
@@ -77,14 +78,30 @@ public sealed class HealthLogReader : IHealthLogReader
         return Path.Combine(nlogBasePath, $"{baseNamespace}-logfile-{DateTime.Today:yyyy-MM-dd}.log");
     }
 
-    private static IReadOnlyList<string> ReadTail(string filePath, int lineCount)
+    /// <summary>
+    /// 是否為 ERROR／FATAL 等級的日誌列（0.4.93）。nlog.config 的 layout 是
+    /// <c>時間|TraceId|LEVEL|...</c>，等級固定在第三欄；例外堆疊的續行沒有這個欄位，不會被重複計算。
+    /// </summary>
+    public static bool IsErrorLine(string line)
+    {
+        var parts = line.Split('|', 4);
+        return parts.Length >= 3 && parts[2] is "ERROR" or "FATAL";
+    }
+
+    private static (IReadOnlyList<string> Lines, int ErrorCount) ReadTail(string filePath, int lineCount)
     {
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream);
         var queue = new Queue<string>();
+        var errorCount = 0;
 
         while (reader.ReadLine() is { } line)
         {
+            if (IsErrorLine(line))
+            {
+                errorCount++;
+            }
+
             queue.Enqueue(line);
             while (queue.Count > lineCount)
             {
@@ -92,6 +109,6 @@ public sealed class HealthLogReader : IHealthLogReader
             }
         }
 
-        return queue.ToList();
+        return (queue.ToList(), errorCount);
     }
 }

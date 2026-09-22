@@ -57,6 +57,12 @@
         "name": "AI 用量分析",
         "icon": "monetization_on",
         "url": "/ai-usage"
+      },
+      {
+        "id": 34,
+        "name": "系統健康度",
+        "icon": "monitor_heart",
+        "url": "/system-health"
       }
     ]
   },

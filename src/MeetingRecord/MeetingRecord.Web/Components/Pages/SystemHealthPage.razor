@@ -1,13 +1,14 @@
 @page "/system-health"
 @layout MainLayout
 @using MeetingRecord.Web.Health
+@using MeetingRecord.Share.Helpers
 @inject ISystemHealthService SystemHealthService
 @inject MeetingRecord.Business.Services.Other.AuthenticationStateHelper AuthenticationStateHelper
 @inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject ILogger<SystemHealthPage> Logger
 
-<PageTitle>系統健康監控</PageTitle>
+<PageTitle>系統健康度</PageTitle>
 
 @if (!string.IsNullOrWhiteSpace(roleMessage))
 {
@@ -26,20 +27,25 @@ else
             <div class="summary-main">
                 <span class="traffic-light @GetLightClass(report.Light)" aria-hidden="true"></span>
                 <div>
-                    <h1>系統健康監控</h1>
+                    <h1>系統健康度</h1>
                     <p>最後檢查時間：@report.CheckedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</p>
                 </div>
             </div>
-            <div class="summary-score">
-                <strong>@report.Score%</strong>
-                <span>@GetStatusText(report.Status)</span>
+            <div class="summary-actions">
+                <div class="summary-score">
+                    <strong>@report.Score%</strong>
+                    <span>@GetStatusText(report.Status)</span>
+                </div>
+                <Button OnClick="RefreshAsync" Loading="isRefreshing">重新檢查</Button>
             </div>
         </section>
 
+        @foreach (var group in new[] { SystemHealthGroups.Infrastructure, SystemHealthGroups.Features })
+        {
         <section class="system-health-section">
-            <h2>檢查項目</h2>
+            <h2>@group</h2>
             <div class="health-items">
-                @foreach (var item in report.Items)
+                @foreach (var item in report.Items.Where(x => x.Group == group))
                 {
                     <article class="health-item @GetLightClass(item.Light)">
                         <div class="health-item-heading">
@@ -59,7 +65,12 @@ else
                 }
             </div>
         </section>
+        }
 
+        @* 日誌尾端是未遮罩的原始日誌（可能含路徑、帳號、例外內容），
+           頁面權限開給其他角色時也只讓管理員看。 *@
+        @if (isAdmin)
+        {
         <section class="system-health-section">
             <div class="log-heading">
                 <div>
@@ -78,12 +89,15 @@ else
                 <pre class="log-tail">@string.Join(Environment.NewLine, report.LogTail.Lines)</pre>
             }
         </section>
+        }
     </div>
 }
 
 @code {
     private SystemHealthReport? report;
     private string? roleMessage;
+    private bool isAdmin;
+    private bool isRefreshing;
 
     protected override async Task OnInitializedAsync()
     {
@@ -96,14 +110,33 @@ else
             return;
         }
 
-        if (!AuthenticationStateHelper.CheckIsAdmin())
+        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_系統健康度) == false)
         {
-            roleMessage = "您沒有權限檢視系統健康監控。";
-            Logger.LogWarning("System health page denied because current user is not an administrator.");
+            roleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            Logger.LogWarning("System health page denied because current user has not this role permission.");
             return;
         }
 
+        isAdmin = AuthenticationStateHelper.CheckIsAdmin();
         report = await SystemHealthService.GetReportAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (isRefreshing)
+        {
+            return;
+        }
+
+        isRefreshing = true;
+        try
+        {
+            report = await SystemHealthService.GetReportAsync();
+        }
+        finally
+        {
+            isRefreshing = false;
+        }
     }
 
     private static string GetLightClass(SystemHealthLight light)

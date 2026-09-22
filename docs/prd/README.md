@@ -1,10 +1,10 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：維護中
-- 現行系統版本：0.4.83
+- 現行系統版本：0.4.93
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/09/18
+- 最後核對日期：2026/09/22
 
 本目錄是產品需求的單一入口。PRD 以**產品能力**為單位；「已實作／部分實作」描述程式現況，「規劃中」必須獨立分區，不代表系統已提供。本專案自 0.4.25 起由通用 Blazor 腳手架轉為「會議紀錄系統」的開發基底，0.4.26 納入「會議紀錄提示詞」能力，**0.4.27 起實際呼叫 Azure OpenAI 完成影音檔的語音轉文字**（見 [會議紀錄](會議紀錄-prd.md)）。**0.4.31 起完成後半段**：套用提示詞範本、呼叫 Azure OpenAI 產生會議紀錄，並把逐字稿歸屬到專案項目（見 [會議紀錄產生流程](會議紀錄產生流程-prd.md)）。系統仍不含 RAG 能力。PRD 內容一律以程式碼、`Menu.json` 與測試為準。
 
@@ -13,7 +13,7 @@
 | 產品能力 | PRD | 入口／路由 | 主要程式來源 | 狀態 | 核對版本 |
 |----------|-----|-----------|--------------|------|----------|
 | 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`） | `Pages/Home.razor`、`SidebarMenuService`、`Menu.json`、`MainLayout`（含「關於」對話窗） | 已實作 | 0.4.45 |
-| 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Components/Auths/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作 | 0.4.23 |
+| 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Components/Auths/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作 | 0.4.93 |
 | 專案項目 | [專案項目](專案項目-prd.md) | `/projects` | `Pages/Projects/ProjectPage.razor`、`ProjectService`、`ProjectController` | 已實作 | 0.4.23 |
 | 待辦事項 | [待辦事項](待辦事項-prd.md) | `/todos` | `Pages/Todos/TodoPage.razor`、`TodoService`、`TodoController` | 已實作 | 0.4.32 |
 | 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Pages/Admins/MyUserPage.razor`、`MyUserService` | 已實作 | 0.4.23 |

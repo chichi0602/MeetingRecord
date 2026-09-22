@@ -8,8 +8,9 @@ namespace MeetingRecord.Web.Configuration;
 public static class StartupSafetyValidator
 {
     private const string DevelopmentSigningKey = "DevelopmentOnly-ChangeThisJwtSigningKey-AtLeast32Chars";
-    private const string DevelopmentLlmApiKey = "DevelopmentOnly-ChangeThisLlmApiKey";
-    private const string DevelopmentLlmEndpointMarker = "your-resource";
+    // internal：健康檢查（SystemHealthChecks）也要用同一組值判斷「仍是開發預設值」。
+    internal const string DevelopmentLlmApiKey = "DevelopmentOnly-ChangeThisLlmApiKey";
+    internal const string DevelopmentLlmEndpointMarker = "your-resource";
 
     /// <param name="ffmpegExists">
     /// FFmpeg 執行檔是否存在的判斷方式，預設為實際檢查檔案系統與 PATH。

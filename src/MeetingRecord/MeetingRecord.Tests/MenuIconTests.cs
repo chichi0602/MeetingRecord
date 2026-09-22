@@ -36,6 +36,8 @@ public sealed class MenuIconTests
         // Material+Icons+Outlined，用 Material Symbols 專有名稱（monitoring、query_stats）
         // 會渲染成破圖，而這個白名單擋不了那種錯。
         "monetization_on",
+        // 系統健康度（0.4.93）。classic Material Icons 有這個名稱，實跑確認過會正常渲染。
+        "monitor_heart",
     };
 
     [Fact]

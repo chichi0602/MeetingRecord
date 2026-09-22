@@ -40,6 +40,12 @@ public class MagicObjectHelper
     /// 既成事實（「角色管理 」「登出 」），新常數不要跟著加。
     /// </summary>
     public const string 角色_AI用量分析 = "AI 用量分析";
+
+    /// <summary>
+    /// 系統健康度（0.4.93）。同上：與 Menu.json 的 name 一字不差、尾端不加空白。
+    /// ⚠️ 開給非管理員時，頁面下方的「原始日誌」仍然只有管理員看得到。
+    /// </summary>
+    public const string 角色_系統健康度 = "系統健康度";
     public const string 角色_資料定義 = "資料定義管理功能";
     public const string 角色_分類清單 = "分類清單";
     public const string 角色_團隊清單 = "團隊清單";

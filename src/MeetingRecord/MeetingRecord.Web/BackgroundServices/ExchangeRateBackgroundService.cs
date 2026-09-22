@@ -86,6 +86,7 @@ public sealed class ExchangeRateBackgroundService : BackgroundService
             var snapshot = await fetcher.FetchAsync(cancellationToken);
             if (snapshot is null)
             {
+                cache.MarkFailed(DateTime.Now);
                 return false;
             }
 
@@ -101,6 +102,7 @@ public sealed class ExchangeRateBackgroundService : BackgroundService
             // Fetcher 已經吞掉可預期的失敗；能走到這裡的是 DI 解析之類的意外。
             // 背景服務不可以因為一個匯率就死掉。
             logger.LogError(ex, "Exchange rate refresh failed unexpectedly.");
+            cache.MarkFailed(DateTime.Now);
             return false;
         }
     }
@@ -150,7 +152,8 @@ public sealed class ExchangeRateBackgroundService : BackgroundService
                 baseCurrency.Trim().ToUpperInvariant(),
                 options.TargetCurrency.Trim().ToUpperInvariant(),
                 rate,
-                DateTime.Now));
+                DateTime.Now,
+                ExchangeRateSource.Ledger));
 
             logger.LogInformation("Seeded exchange rate from the usage ledger. 1 {Base} = {Rate} {Target}", last.Currency, rate, last.ConvertedCurrency);
         }
@@ -175,7 +178,8 @@ public sealed class ExchangeRateBackgroundService : BackgroundService
             llmSettings.Value.Currency.Trim().ToUpperInvariant(),
             options.TargetCurrency.Trim().ToUpperInvariant(),
             fallback,
-            DateTime.Now));
+            DateTime.Now,
+            ExchangeRateSource.Fallback));
 
         logger.LogWarning("Using the configured fallback exchange rate {Rate}; no live rate is available yet.", fallback);
     }

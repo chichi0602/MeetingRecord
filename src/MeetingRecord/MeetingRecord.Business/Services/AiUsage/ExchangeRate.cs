@@ -6,12 +6,30 @@ namespace MeetingRecord.Business.Services.AiUsage;
 /// <param name="BaseCurrency">來源幣別，必須與 <c>LlmSettings.Currency</c>（定價幣別）相同才會被採用。</param>
 /// <param name="TargetCurrency">換算目標幣別。</param>
 /// <param name="Rate">匯率，一律大於 0（解析端已經擋掉 0 與負數）。</param>
-/// <param name="RetrievedAt">取得時間，只用於 log 與畫面上的說明文字。</param>
+/// <param name="RetrievedAt">放進快取的時間，用於 log、畫面說明文字與健康檢查判斷是否逾期未更新。</param>
+/// <param name="Source">
+/// 這個匯率從哪裡來（0.4.93）。帳本種子與保底值的 <paramref name="RetrievedAt"/> 也是「放進快取的當下」，
+/// 單看時間分不出「剛抓到」還是「剛啟動拿舊值頂著」，健康檢查要靠這個欄位區分。
+/// </param>
 public sealed record ExchangeRateSnapshot(
     string BaseCurrency,
     string TargetCurrency,
     decimal Rate,
-    DateTime RetrievedAt);
+    DateTime RetrievedAt,
+    ExchangeRateSource Source = ExchangeRateSource.Live);
+
+/// <summary>匯率來源（0.4.93）。</summary>
+public enum ExchangeRateSource
+{
+    /// <summary>從匯率服務即時抓到的。</summary>
+    Live = 0,
+
+    /// <summary>啟動時從用量帳本最後一筆已知匯率拿來頂著的。</summary>
+    Ledger = 1,
+
+    /// <summary>設定檔的保底值（<c>ExchangeRateSettings.FallbackRate</c>）。</summary>
+    Fallback = 2,
+}
 
 /// <summary>
 /// 目前生效的匯率。<b>Singleton</b>：背景服務寫、Blazor circuit 與背景工作的 scope 讀，
@@ -44,4 +62,20 @@ public sealed class ExchangeRateCache
         ArgumentNullException.ThrowIfNull(snapshot);
         current = snapshot;
     }
+
+    // DateTime 是 struct，無法 volatile；用 ticks（long）搭配 Volatile 讀寫，0 代表從未失敗。
+    private long lastFailureTicks;
+
+    /// <summary>最近一次抓匯率失敗的時間（0.4.93，健康檢查用）；從未失敗為 null。</summary>
+    public DateTime? LastFailureAt
+    {
+        get
+        {
+            var ticks = Volatile.Read(ref lastFailureTicks);
+            return ticks == 0 ? null : new DateTime(ticks);
+        }
+    }
+
+    /// <summary>記下一次抓取失敗。只有背景服務會呼叫；不影響 <see cref="Current"/>。</summary>
+    public void MarkFailed(DateTime at) => Volatile.Write(ref lastFailureTicks, at.Ticks);
 }

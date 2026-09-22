@@ -19,6 +19,10 @@ public class RolePermissionService
             // ⚠️ 這一頁看得到**全公司**的用量與人名，而且不套團隊過濾。
             //    預設只給管理員；勾給其他角色之前請先確認那是刻意的。
             [MagicObjectHelper.角色_AI用量分析],
+
+            // 系統健康度（0.4.93）。唯讀頁，理由同上用單元素群組。預設只給管理員；
+            // 開給其他角色時，頁面下方未遮罩的原始日誌仍然只有管理員看得到。
+            [MagicObjectHelper.角色_系統健康度],
             [
                 MagicObjectHelper.角色_專案管理,
                 MagicObjectHelper.角色_專案項目,

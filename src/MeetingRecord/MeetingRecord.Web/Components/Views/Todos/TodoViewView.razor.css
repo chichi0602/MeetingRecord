@@ -68,8 +68,11 @@
     color: #bfbfbf;
 }
 
+/* flex（而不是 inline-flex）＋ min-width: 0：讓裡面的 .todo-view-ellipsis 有寬度約束可以省略。
+   inline-flex 會依內容撐開，省略號永遠不會出現，文字直接溢出到隔壁欄。 */
 .todo-view-source {
-    display: inline-flex;
+    display: flex;
+    min-width: 0;
     align-items: center;
     gap: 4px;
     color: var(--oat-ink);
@@ -386,6 +389,51 @@ button.todo-view-pill:focus-visible {
    選擇器從 .todo-view-table-wrap 進去而不是 .todo-view-table：後者是傳給 AntDesign
    Table 的 Class 參數，渲染出來的元素不會帶 scoped CSS 的 scope 屬性，選不到。 */
 .todo-view-table-wrap ::deep .ant-table-tbody > tr > td {
+    white-space: nowrap;
+}
+
+/* ===== 欄位左右留白收窄（0.4.92）=====
+   AntDesign 預設每格左右各 16px，九欄加起來就是 288px 的空白——比好幾個欄位本身還寬。
+   實測內容其實很窄：「完成」只有一個 16px 的勾選框、「操作」是兩個圖示（64px）。
+   左右各收到 8px，搭配 .razor 裡重新依內容實測訂的欄寬，表格最小寬度從 1020 降到 870。
+
+   ⚠️ 這件事不只是好不好看：表格最小寬度（ScrollX）一旦大於容器，表格就會橫向捲動，
+      固定在右側的「操作」欄左緣會出現一條陰影線，「狀態」欄則整個被蓋在操作欄底下。
+      0.4.91 之前 1401～1520px（1440、1470、1512 這些常見筆電寬度）就是這樣：
+      雙欄時右邊 320px 的面板把表格擠到 887～1006px，塞不下 1020px。
+      降到 870 之後雙欄從 1401px 起就塞得下。
+
+   ⚠️ 要加欄位或把欄寬調回去，記得同時檢查 ScrollX 還塞不塞得進雙欄：
+      雙欄時表格容器寬 ≈ 視窗寬 − 514，斷點 1400px ⇒ 最窄是 887px。 */
+.todo-view-table-wrap ::deep .ant-table-thead > tr > th,
+.todo-view-table-wrap ::deep .ant-table-tbody > tr > td {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+/* ===== 寬螢幕多出來的寬度全部交給「待辦事項」欄（0.4.92）=====
+   AntDesign 會替**每一欄**寫上明確寬度——連沒設 Width 的待辦事項欄也會被算成
+   calc(870px − 其他欄合計)——加總剛好 870px。表格被 min-width: 100% 拉寬時，
+   table-layout: fixed 就把多出來的空間**按比例**分給九欄：1920 寬時「完成」從 48 變 78、
+   「負責人」「操作」從 80 變 129，留白又全部回來了。
+
+   把待辦事項欄改回 auto 之後，固定欄維持原寬，剩下的空間全部歸它——
+   這也剛好是最需要空間的一欄（標題長、會被省略）。
+
+   ⚠️ 用 nth-child(2) 是因為 AntDesign 不會把欄位的 Class 帶到 <col> 上。
+      .razor 裡欄位順序若改動（待辦事項不再是第 2 欄），這裡要一起改。
+   ⚠️ 要 !important：AntDesign 把寬度寫在 <col> 的 inline style 上。 */
+.todo-view-table-wrap ::deep colgroup > col:nth-child(2) {
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+/* 單行省略。text-overflow 只對有寬度約束的區塊有效，所以一定要 display: block（或當 flex 子項）。 */
+.todo-view-ellipsis {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 

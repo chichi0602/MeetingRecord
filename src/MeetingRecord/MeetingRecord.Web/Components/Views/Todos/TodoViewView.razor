@@ -90,14 +90,14 @@ else
             <Table @ref="table"
                    TItem="TodoAdapterModel"
                    Class="todo-view-table"
-                   ScrollX="1020px"
+                   ScrollX="870px"
                    RemoteDataSource="true"
                    DataSource="@todoAdapterModels"
                    OnChange="OnTableChange"
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
-                <Column TData="bool" Title="完成" Width="70">
+                <Column TData="bool" Title="完成" Width="48">
                     <Checkbox Checked="@context.IsCompleted"
                               Disabled="@(!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))"
                               CheckedChanged="@(EventCallback.Factory.Create<bool>(this, value => OnCompletedChangedAsync(context, value)))" />
@@ -116,24 +116,29 @@ else
                         }
                     </div>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable Width="140" />
-                <Column TData="string" Title="來源會議紀錄" Width="135">
+                @* 專案名與會議標題都可能很長，一律單行省略、游標移上去看完整名稱（0.4.92）。
+                   欄寬收窄之前它們就已經會溢出——溢出的文字會壓到隔壁欄，看起來像「平台— 手動新增」
+                   黏成一串，只是 0.4.91 之前多半被橫向捲動蓋掉了。 *@
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable Width="120">
+                    <span class="todo-view-ellipsis" title="@context.ProjectTitle">@context.ProjectTitle</span>
+                </Column>
+                <Column TData="string" Title="來源會議紀錄" Width="104">
                     @if (string.IsNullOrWhiteSpace(context.MeetingTitle))
                     {
                         <span class="todo-view-muted">— 手動新增</span>
                     }
                     else
                     {
-                        <span class="todo-view-source">
+                        <span class="todo-view-source" title="@context.MeetingTitle">
                             <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="description" />
-                            @context.MeetingTitle
+                            <span class="todo-view-ellipsis">@context.MeetingTitle</span>
                         </span>
                     }
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable Width="95">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable Width="80">
                     @(string.IsNullOrWhiteSpace(context.Owner) ? "未指定" : context.Owner)
                 </Column>
-                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable Width="165">
+                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable Width="160">
                     @* 日期與逾期天數各自 nowrap：整塊「逾期 N 天」最差只會掉到第二行，不會斷在「逾期 1」「天」中間。 *@
                     <span class="todo-view-due">
                         <span class="@(context.IsOverdue ? "todo-view-overdue" : string.Empty)">@context.DueDateOnlyText</span>
@@ -143,13 +148,13 @@ else
                         }
                     </span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable Width="85">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable Width="78">
                     <span class="todo-view-pill @PriorityCssClass(context.Priority)">@context.Priority</span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable Width="95">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable Width="76">
                     <span class="todo-view-pill @StatusCssClass(context.Status)">@context.Status</span>
                 </Column>
-                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="90">
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="80">
                     <Space>
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))
                         {

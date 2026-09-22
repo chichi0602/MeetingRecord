@@ -48,6 +48,10 @@ public partial class AiUsageView : ComponentBase
     private AiUsageSummary? summary;
     private IReadOnlyList<AiUsageRow> rows = [];
 
+    /// <summary>
+    /// 明細表的期間（最近 N 天）。0.4.91 起**只影響明細表**：曲線改成本月累計之後，
+    /// 摘要（卡片、曲線、分佈）一律是本月至今，不再依賴這個值。
+    /// </summary>
     private int trendDays = 30;
     private string featureFilter = AllFeatures;
 
@@ -94,7 +98,7 @@ public partial class AiUsageView : ComponentBase
 
         try
         {
-            summary = await AiUsageAnalysisService.GetSummaryAsync(trendDays);
+            summary = await AiUsageAnalysisService.GetSummaryAsync(ParseFeature(featureFilter));
             pageIndex = 1;
             await LoadRowsAsync();
         }
@@ -128,10 +132,36 @@ public partial class AiUsageView : ComponentBase
     private static AiUsageFeature? ParseFeature(string value)
         => Enum.TryParse<AiUsageFeature>(value, out var feature) ? feature : null;
 
+    /// <summary>是否為「全部功能」。選了特定功能時功能別圓餅只剩一片 100%，畫面上就不渲染。</summary>
+    private bool IsAllFeatures => ParseFeature(featureFilter) is null;
+
+    /// <summary>
+    /// 換期間。**只重載明細表**，不重算整頁摘要——期間已經不影響摘要了（見 <see cref="trendDays"/>）。
+    /// 回到第一頁：換了期間之後，原本的頁碼很可能已經超出範圍。
+    /// </summary>
     private async Task OnTrendDaysChangedAsync(int value)
     {
+        if (isLoading)
+        {
+            return;
+        }
+
         trendDays = value;
-        await ReloadAsync();
+        isLoading = true;
+        try
+        {
+            pageIndex = 1;
+            await LoadRowsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Loading AI usage rows failed.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task OnFeatureChangedAsync(string value)

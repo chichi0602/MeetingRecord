@@ -22,18 +22,20 @@ namespace MeetingRecord.Business.Services.AiUsage;
 /// 典型來源是 0.4.88 之前的舊紀錄，或抓不到匯率的那段期間。
 /// **大於 0 時畫面一定要提示**，理由與 <paramref name="UnpricedCallCount"/> 相同。
 /// </param>
+/// <param name="CumulativeCost">
+/// 本月 1 日到今天的累計金額（分），兩條線是「本月」與「上月同期」（0.4.91）。
+/// 最後一點就是卡片上「本月估算金額」與它比較的上月同期金額。
+/// </param>
 /// <param name="ExchangeRateNote">
 /// 目前生效的匯率說明，例如「匯率 1 USD = 31.8636 TWD」。未啟用換算或沒有匯率時為 null。
 /// </param>
 public sealed record AiUsageSummary(
     DateTime? StartedAt,
     IReadOnlyList<StatCardItem> Cards,
-    IReadOnlyList<TrendPoint> DailyCost,
+    IReadOnlyList<TrendPoint> CumulativeCost,
     IReadOnlyList<ChartSlice> ByFeature,
     IReadOnlyList<ChartSlice> ByModel,
     IReadOnlyList<ChartSlice> ByUser,
-    string CostSeriesOneLabel,
-    string CostSeriesTwoLabel,
     string TotalCostDisplay,
     int UnpricedCallCount,
     int FailedCallCount,

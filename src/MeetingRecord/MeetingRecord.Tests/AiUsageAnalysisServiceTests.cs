@@ -110,7 +110,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 9m);
         await AddAsync(cost: 10m);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         // 9 + 10 = 19。字典序會讓 "10" < "9"，若在 SQL 端排序取值就會拿到錯的東西。
         Assert.Contains("19", summary.Cards[0].Value);
@@ -125,7 +125,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: null);
         await AddAsync(cost: null);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.Equal(2, summary.UnpricedCallCount);
     }
@@ -137,7 +137,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: null, outcome: AiUsageOutcome.Failed);
         await AddAsync(cost: null, outcome: AiUsageOutcome.Cancelled);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.Equal(2, summary.FailedCallCount);
 
@@ -152,7 +152,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
     [Fact]
     public async Task Summary_ShouldReportNoStartDate_WhenLedgerIsEmpty()
     {
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.Null(summary.StartedAt);
         Assert.Equal(4, summary.Cards.Count);
@@ -165,7 +165,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 1m, occurredAt: DateTime.Now.AddDays(-3));
         await AddAsync(cost: 1m, occurredAt: DateTime.Now.AddDays(-1));
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.NotNull(summary.StartedAt);
         Assert.Equal(DateTime.Now.AddDays(-3).Date, summary.StartedAt.Value.Date);
@@ -182,7 +182,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         // 否則畫面上會出現「1234567」這種數字。
         await AddAsync(cost: 12.34m, feature: AiUsageFeature.AiChat);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         var slice = Assert.Single(summary.ByFeature);
         Assert.Equal(1234, slice.Value);
@@ -196,7 +196,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         // 看起來一模一樣。這一組必須被標示出來。0.4.88 起「算不出來」多了一種原因：有單價但沒匯率。
         await AddAsync(cost: null, feature: AiUsageFeature.AiChat);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         var slice = Assert.Single(summary.ByFeature);
         Assert.Equal("未設定單價或無匯率", slice.DisplayText);
@@ -210,10 +210,119 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 1m, userName: "王小明");
         await AddAsync(cost: 1m, userName: null);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.Contains(summary.ByUser, x => x.Label == "王小明");
         Assert.Contains(summary.ByUser, x => x.Label == "（未記錄）");
+    }
+
+    #endregion
+
+    #region 功能篩選（0.4.91）
+
+    [Fact]
+    public async Task Summary_WithFeature_CardsShouldOnlyCountThatFeature()
+    {
+        // ⭐ 0.4.91 之前功能下拉只接到明細表，卡片永遠是全部功能——選了下拉，上面一個數字都不會動。
+        await AddAsync(cost: 2m, feature: AiUsageFeature.AiChat);
+        await AddAsync(cost: 3m, feature: AiUsageFeature.AiChat);
+        await AddAsync(cost: 50m, feature: AiUsageFeature.MeetingDraft);
+
+        var all = await service.GetSummaryAsync();
+        var chat = await service.GetSummaryAsync(AiUsageFeature.AiChat);
+
+        Assert.Contains("55", all.Cards[0].Value);
+        Assert.Contains("5", chat.Cards[0].Value);
+        Assert.DoesNotContain("55", chat.Cards[0].Value);
+
+        // 呼叫次數卡片
+        Assert.Equal("3", all.Cards[3].Value);
+        Assert.Equal("2", chat.Cards[3].Value);
+    }
+
+    [Fact]
+    public async Task Summary_WithFeature_DistributionsShouldOnlyCountThatFeature()
+    {
+        await AddAsync(cost: 1m, feature: AiUsageFeature.AiChat, userName: "問答的人");
+        await AddAsync(cost: 1m, feature: AiUsageFeature.MeetingDraft, userName: "生成的人");
+
+        var chat = await service.GetSummaryAsync(AiUsageFeature.AiChat);
+
+        Assert.Equal("問答的人", Assert.Single(chat.ByUser).Label);
+    }
+
+    [Fact]
+    public async Task Summary_WithFeature_WarningCountsShouldOnlyCountThatFeature()
+    {
+        // 提示條講的是「你正在看的這個功能」有幾筆沒算進去，不是全站。
+        await AddAsync(cost: null, feature: AiUsageFeature.AiChat);
+        await AddAsync(cost: null, feature: AiUsageFeature.MeetingDraft);
+        await AddAsync(cost: null, feature: AiUsageFeature.MeetingDraft);
+
+        var chat = await service.GetSummaryAsync(AiUsageFeature.AiChat);
+
+        Assert.Equal(1, chat.UnpricedCallCount);
+    }
+
+    [Fact]
+    public async Task Summary_WithFeature_ShouldKeepTheLedgerStartDate()
+    {
+        // ⭐ 統計起始日講的是「帳本從哪天開始記」，不是「這個功能第一次被用是哪天」。
+        // 套了篩選的話選待辦擷取會顯示比較晚的日期，使用者會以為之前的紀錄遺失了。
+        await AddAsync(cost: 1m, feature: AiUsageFeature.MeetingDraft, occurredAt: DateTime.Now.AddDays(-5));
+        await AddAsync(cost: 1m, feature: AiUsageFeature.TodoExtraction, occurredAt: DateTime.Now.AddDays(-1));
+
+        var todo = await service.GetSummaryAsync(AiUsageFeature.TodoExtraction);
+
+        Assert.Equal(DateTime.Now.AddDays(-5).Date, todo.StartedAt?.Date);
+    }
+
+    [Fact]
+    public async Task Summary_Transcription_TokenCardShouldBeDash()
+    {
+        // 「語音轉錄的 token 0 / 0」數字沒錯，但會讓人以為這個月沒用——其實是不以 token 計費。
+        await AddAsync(cost: 1m, feature: AiUsageFeature.Transcription);
+
+        var summary = await service.GetSummaryAsync(AiUsageFeature.Transcription);
+
+        Assert.Equal("—", summary.Cards[1].Value);
+        Assert.NotEqual("—", summary.Cards[2].Value);
+    }
+
+    [Fact]
+    public async Task Summary_TokenFeature_AudioCardShouldBeDash()
+    {
+        await AddAsync(cost: 1m, feature: AiUsageFeature.AiChat);
+
+        var summary = await service.GetSummaryAsync(AiUsageFeature.AiChat);
+
+        Assert.Equal("—", summary.Cards[2].Value);
+        Assert.NotEqual("—", summary.Cards[1].Value);
+    }
+
+    [Fact]
+    public async Task Summary_AllFeatures_ShouldShowBothUnitCards()
+    {
+        // 全部功能時兩張卡都要有數字，不可以因為上面那條規則誤傷。
+        await AddAsync(cost: 1m, feature: AiUsageFeature.AiChat);
+
+        var summary = await service.GetSummaryAsync();
+
+        Assert.NotEqual("—", summary.Cards[1].Value);
+        Assert.NotEqual("—", summary.Cards[2].Value);
+    }
+
+    [Fact]
+    public async Task Summary_CumulativeLastPoint_ShouldMatchTheMonthCard()
+    {
+        // 曲線是第一張卡的趨勢版：最後一點的金額（分）必須等於卡片上的本月金額。
+        await AddAsync(cost: 1m, exchangeRate: 30m);
+        await AddAsync(cost: 2m, exchangeRate: 30m);
+
+        var summary = await service.GetSummaryAsync();
+
+        Assert.Equal(9000, summary.CumulativeCost[^1].Created);   // (1+2) × 30 = NT$90 → 9000 分
+        Assert.Contains("90", summary.Cards[0].Value);
     }
 
     #endregion
@@ -229,7 +338,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 1m, exchangeRate: 30m);
         await AddAsync(cost: 1m, exchangeRate: 32m);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.Contains("62", summary.Cards[0].Value);
         Assert.Contains("NT$", summary.Cards[0].Value);
@@ -243,7 +352,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 2m, exchangeRate: 30m);
         await AddAsync(cost: 5m, exchangeRate: null);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.Contains("60", summary.Cards[0].Value);
         Assert.Equal(1, summary.NoRateCallCount);
@@ -265,7 +374,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 1m, exchangeRate: 30m, occurredAt: currentFrom.AddTicks((now - currentFrom).Ticks / 2));
         await AddAsync(cost: 1m, exchangeRate: 33m, occurredAt: lastMonthMidpoint);
 
-        var summary = await service.GetSummaryAsync(trendDays: 60);
+        var summary = await service.GetSummaryAsync();
 
         // 美金花費一模一樣 ⇒ 變化率必須是 0%，不可以因為匯率差 10% 而變成 -10%。
         Assert.Contains("0%", summary.Cards[0].Caption);
@@ -280,7 +389,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await AddAsync(cost: 10m, exchangeRate: null);
 
         var disabled = BuildService(new ExchangeRateSettings { Enabled = false });
-        var summary = await disabled.GetSummaryAsync(trendDays: 30);
+        var summary = await disabled.GetSummaryAsync();
 
         Assert.Contains("19", summary.Cards[0].Value);
         Assert.Contains("USD", summary.Cards[0].Value);
@@ -296,7 +405,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         exchangeRates.Set(new ExchangeRateSnapshot("USD", "TWD", 31.863639m, DateTime.Now));
         await AddAsync(cost: 1m, exchangeRate: 31.863639m);
 
-        var summary = await service.GetSummaryAsync(trendDays: 30);
+        var summary = await service.GetSummaryAsync();
 
         Assert.NotNull(summary.ExchangeRateNote);
         Assert.Contains("31.8636", summary.ExchangeRateNote);

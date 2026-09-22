@@ -19,19 +19,9 @@ else
         </div>
 
         <div class="ai-usage-toolbar-right">
-            @* 整頁共用同一個期間：圖表一個範圍、表格另一個範圍，必然會出現
-               「圖說 1,200 次、表格只有 80 筆」這種看起來像 bug 的畫面。 *@
-            <Select TItem="int" TItemValue="int"
-                    Value="@trendDays"
-                    ValueChanged="OnTrendDaysChangedAsync"
-                    Disabled="@isLoading"
-                    Style="min-width: 130px;">
-                @foreach (var days in TrendDayOptions)
-                {
-                    <SelectOption TItem="int" TItemValue="int" Value="@days">@($"最近 {days} 天")</SelectOption>
-                }
-            </Select>
-
+            @* 功能下拉影響整頁：卡片、曲線、模型與使用者分佈、明細表（0.4.91 起）。
+               在那之前它只接到最下面的明細表，選了之後上面的數字一個都不會動。
+               期間下拉不在這裡——見明細表那一區的說明。 *@
             <Select TItem="string" TItemValue="string"
                     Value="@featureFilter"
                     ValueChanged="OnFeatureChangedAsync"
@@ -105,20 +95,42 @@ else
         @* ⚠️ 單位一定要寫在標題裡。LineChart 沒有 ChartSlice 那種 Display 覆寫，
            資料點提示是把 int（分）原樣印出來——同一個「12」從 USD 0.12 變成 NT$0.12
            數量級差三十幾倍，畫面上卻沒有任何提示。 *@
-        <LineChart Title="@($"近 {summary.DailyCost.Count} 天每日估算金額（單位：{(summary.ExchangeRateNote is null ? "美分" : "NT$ 分")}）")"
-                   Points="summary.DailyCost"
-                   SeriesOneLabel="@summary.CostSeriesOneLabel"
-                   SeriesTwoLabel="@summary.CostSeriesTwoLabel" />
+        @* 本月累計對上月同期累計（0.4.91）。最後一點就是第一張卡片的那兩個數字，
+           這條曲線是那張卡的趨勢版：看得出這個月是不是花得比上個月快。
+           ⚠️ 單位要寫在標題裡：LineChart 沒有 Display 覆寫，資料點提示是把「分」原樣印出來。 *@
+        <LineChart Title="@($"本月累計估算金額（單位：{(summary.ExchangeRateNote is null ? "美分" : "NT$ 分")}）")"
+                   Points="summary.CumulativeCost"
+                   SeriesOneLabel="本月"
+                   SeriesTwoLabel="上月同期" />
 
+        @* 選了特定功能時功能別圓餅只剩一片 100%，沒有任何資訊，所以不渲染。
+           .ai-usage-grid 是 auto-fit，剩下模型長條一張時會自動撐滿整列。 *@
         <div class="ai-usage-grid">
-            <PieChart Title="本月依功能別" Slices="summary.ByFeature" TotalDisplay="@summary.TotalCostDisplay" />
+            @if (IsAllFeatures)
+            {
+                <PieChart Title="本月依功能別" Slices="summary.ByFeature" TotalDisplay="@summary.TotalCostDisplay" />
+            }
             <BarChart Title="本月依模型" Items="summary.ByModel" />
         </div>
 
         <BarChart Title="本月依使用者" Items="summary.ByUser" />
 
         <div class="ai-usage-table">
-            <div class="ai-usage-table-title">最近呼叫明細</div>
+            @* 期間下拉放在這裡而不是右上角（0.4.91）：曲線改成本月累計之後，
+               「最近 N 天」只剩明細表在用。留在右上角就會變成又一個「選了上面沒反應」的下拉。 *@
+            <div class="ai-usage-table-head">
+                <div class="ai-usage-table-title">最近呼叫明細</div>
+                <Select TItem="int" TItemValue="int"
+                        Value="@trendDays"
+                        ValueChanged="OnTrendDaysChangedAsync"
+                        Disabled="@isLoading"
+                        Style="min-width: 130px;">
+                    @foreach (var days in TrendDayOptions)
+                    {
+                        <SelectOption TItem="int" TItemValue="int" Value="@days">@($"最近 {days} 天")</SelectOption>
+                    }
+                </Select>
+            </div>
 
             <Table @ref="table"
                    TItem="AiUsageRow"

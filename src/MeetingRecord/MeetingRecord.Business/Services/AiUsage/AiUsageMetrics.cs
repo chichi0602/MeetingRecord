@@ -19,38 +19,78 @@ public static class AiUsageMetrics
     private const decimal CentsPerUnit = 100m;
 
     /// <summary>
-    /// 把每日兩組數列攤成稠密的 <see cref="TrendPoint"/>。
+    /// 「本月累計 vs 上月同期累計」的雙線（0.4.91）。X 軸是本月 1 日到今天，每一點是到當天為止的累計，
+    /// 所以**最後一點就是卡片上「本月估算金額」與它比較的那個上月同期金額**——這條曲線是那張卡的趨勢版。
     ///
     /// <para>
-    /// ⚠️ 迭代的是**桶**而不是**有資料的日子**：沒有任何呼叫的那一天也必須在圖上佔一格，
-    /// 否則折線會把兩個相隔一週的點畫成相鄰，看起來像是天天都在花錢。
+    /// ⚠️ **累加的是原始金額，最後才換成「分」。** 每筆先換成分再加會把小額呼叫全部吃掉：
+    /// 一次 AI 問答大約 NT$0.0014，換成分是 0.14、四捨五入成 0——一百次問答加起來仍然是 0。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ **上個月比較短時延續月底值。** 3/31 對上 2 月時，2 月只有 28 天，第 29～31 天的
+    /// 「上月同期」維持 2/28 的累計，而不是掉回 0。這與 <see cref="BuildMonthToDateRanges"/>
+    /// 把上月迄日夾到最後一天的規則一致，兩邊必須對得上，否則曲線最後一點會與卡片數字不符。
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ **只畫到今天、不畫到月底。** 今天之後沒有資料，畫出來不是「看起來停止花錢」（延續）
+    /// 就是「看起來掉到 0」（補零），兩種都是錯的。
     /// </para>
     /// </summary>
-    /// <param name="items">每一筆的發生日與兩條線各自的量。</param>
-    public static IReadOnlyList<TrendPoint> BuildDailySeries(
-        IEnumerable<(DateOnly Day, int SeriesOne, int SeriesTwo)> items,
-        DateOnly today,
-        int days)
+    /// <param name="thisMonth">本月每一筆的發生日與顯示金額（尚未換成分）。</param>
+    /// <param name="lastMonth">上月同期每一筆的發生日與顯示金額。</param>
+    /// <param name="today">今天。決定點數（＝今天是幾號）。</param>
+    public static IReadOnlyList<TrendPoint> BuildMonthToDateCumulative(
+        IEnumerable<(DateOnly Day, decimal Amount)> thisMonth,
+        IEnumerable<(DateOnly Day, decimal Amount)> lastMonth,
+        DateOnly today)
     {
-        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(thisMonth);
+        ArgumentNullException.ThrowIfNull(lastMonth);
 
-        var buckets = DashboardMetrics.BuildDayBuckets(today, days);
+        // 本月 1 日 ～ 今天。沿用 DashboardMetrics 的分桶與軸標籤稀疏化，理由見類別註解。
+        var buckets = DashboardMetrics.BuildDayBuckets(today, today.Day);
         var labels = DashboardMetrics.BuildDayLabels(buckets);
 
-        var one = new Dictionary<DateOnly, int>();
-        var two = new Dictionary<DateOnly, int>();
+        // DateOnly.AddMonths 會把日期夾到上月最後一天（3/31 → 2/28），年月正是我們要的。
+        var previous = today.AddMonths(-1);
+        var daysInPrevious = DateTime.DaysInMonth(previous.Year, previous.Month);
 
-        foreach (var (day, seriesOne, seriesTwo) in items)
+        var thisByDay = new decimal[today.Day + 1];
+        foreach (var (day, amount) in thisMonth)
         {
-            one[day] = one.GetValueOrDefault(day) + seriesOne;
-            two[day] = two.GetValueOrDefault(day) + seriesTwo;
+            // 不在本月 1 日～今天的一律忽略，不要讓呼叫端傳錯範圍時畫出超出今天的點。
+            if (day.Year == today.Year && day.Month == today.Month && day.Day <= today.Day)
+            {
+                thisByDay[day.Day] += amount;
+            }
+        }
+
+        var lastByDay = new decimal[daysInPrevious + 1];
+        foreach (var (day, amount) in lastMonth)
+        {
+            if (day.Year == previous.Year && day.Month == previous.Month)
+            {
+                lastByDay[day.Day] += amount;
+            }
         }
 
         var points = new List<TrendPoint>(buckets.Count);
-        for (var index = 0; index < buckets.Count; index++)
+        var thisRunning = 0m;
+        var lastRunning = 0m;
+
+        for (var dayOfMonth = 1; dayOfMonth <= today.Day; dayOfMonth++)
         {
-            var day = buckets[index];
-            points.Add(new TrendPoint(labels[index], one.GetValueOrDefault(day), two.GetValueOrDefault(day)));
+            thisRunning += thisByDay[dayOfMonth];
+
+            // 上個月沒有這一天時不再累加，維持月底值（見方法註解）。
+            if (dayOfMonth <= daysInPrevious)
+            {
+                lastRunning += lastByDay[dayOfMonth];
+            }
+
+            points.Add(new TrendPoint(labels[dayOfMonth - 1], ToChartCents(thisRunning), ToChartCents(lastRunning)));
         }
 
         return points;

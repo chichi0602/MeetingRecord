@@ -78,42 +78,103 @@ public sealed class AiUsageMetricsTests
 
     #endregion
 
-    #region 每日數列
+    #region 本月累計（0.4.91）
+
+    private static (DateOnly, decimal) At(int year, int month, int day, decimal amount)
+        => (new DateOnly(year, month, day), amount);
 
     [Fact]
-    public void BuildDailySeries_ShouldIncludeDaysWithoutData()
+    public void Cumulative_ShouldHaveOnePointPerDayUpToToday()
     {
-        // ⚠️ 沒有任何呼叫的那一天也必須在圖上佔一格。迭代「有資料的日子」的話，
-        // 折線會把相隔一週的兩個點畫成相鄰，看起來像天天都在花錢。
-        var today = new DateOnly(2026, 9, 17);
-        var items = new[]
-        {
-            (Day: new DateOnly(2026, 9, 11), SeriesOne: 100, SeriesTwo: 0),
-            (Day: new DateOnly(2026, 9, 17), SeriesOne: 0, SeriesTwo: 200),
-        };
+        // X 軸是本月 1 日到今天——不畫到月底，今天之後沒有資料。
+        var today = new DateOnly(2026, 9, 22);
 
-        var points = AiUsageMetrics.BuildDailySeries(items, today, days: 7);
+        var points = AiUsageMetrics.BuildMonthToDateCumulative([], [], today);
 
-        Assert.Equal(7, points.Count);
-        Assert.Equal(100, points[0].Created);
-        Assert.Equal(200, points[6].Completed);
-        Assert.All(points.Skip(1).Take(5), p => Assert.Equal(0, p.Created + p.Completed));
+        Assert.Equal(22, points.Count);
     }
 
     [Fact]
-    public void BuildDailySeries_ShouldSumMultipleCallsOnTheSameDay()
+    public void Cumulative_LastPoint_ShouldEqualTheMonthTotal()
     {
-        var today = new DateOnly(2026, 9, 17);
-        var items = new[]
+        // ⭐ 最後一點就是卡片上「本月估算金額」——曲線是那張卡的趨勢版，兩邊必須對得上。
+        var today = new DateOnly(2026, 9, 22);
+        var thisMonth = new[] { At(2026, 9, 3, 1.5m), At(2026, 9, 10, 2m), At(2026, 9, 22, 0.25m) };
+        var lastMonth = new[] { At(2026, 8, 5, 4m), At(2026, 8, 20, 1m) };
+
+        var points = AiUsageMetrics.BuildMonthToDateCumulative(thisMonth, lastMonth, today);
+
+        Assert.Equal(375, points[^1].Created);    // 3.75 → 375 分
+        Assert.Equal(500, points[^1].Completed);  // 5.00 → 500 分
+    }
+
+    [Fact]
+    public void Cumulative_ShouldNeverGoDown()
+    {
+        // 累計不可能往下掉。會往下掉的話，就是有哪一天被重設成 0 了。
+        var today = new DateOnly(2026, 9, 22);
+        var thisMonth = new[] { At(2026, 9, 1, 1m), At(2026, 9, 15, 2m) };
+        var lastMonth = new[] { At(2026, 8, 2, 3m), At(2026, 8, 21, 1m) };
+
+        var points = AiUsageMetrics.BuildMonthToDateCumulative(thisMonth, lastMonth, today);
+
+        for (var i = 1; i < points.Count; i++)
         {
-            (Day: today, SeriesOne: 10, SeriesTwo: 1),
-            (Day: today, SeriesOne: 20, SeriesTwo: 2),
-        };
+            Assert.True(points[i].Created >= points[i - 1].Created, $"本月第 {i + 1} 天往下掉了。");
+            Assert.True(points[i].Completed >= points[i - 1].Completed, $"上月第 {i + 1} 天往下掉了。");
+        }
+    }
 
-        var points = AiUsageMetrics.BuildDailySeries(items, today, days: 7);
+    [Fact]
+    public void Cumulative_ShorterPreviousMonth_ShouldCarryTheMonthEndValue()
+    {
+        // ⭐ 3/31 對上 2 月：2 月只有 28 天，第 29～31 天的上月值要維持 2/28 的累計，不可以掉回 0。
+        // 這與 BuildMonthToDateRanges 把上月迄日夾到最後一天的規則一致——兩邊對不上的話，
+        // 月底那幾天曲線的最後一點會與卡片數字不符。
+        var today = new DateOnly(2026, 3, 31);
+        var lastMonth = new[] { At(2026, 2, 10, 1m), At(2026, 2, 28, 2m) };
 
-        Assert.Equal(30, points[^1].Created);
-        Assert.Equal(3, points[^1].Completed);
+        var points = AiUsageMetrics.BuildMonthToDateCumulative([], lastMonth, today);
+
+        Assert.Equal(31, points.Count);
+        Assert.Equal(300, points[27].Completed);  // 第 28 天
+        Assert.Equal(300, points[28].Completed);  // 第 29 天：上月沒有這一天
+        Assert.Equal(300, points[30].Completed);  // 第 31 天
+    }
+
+    [Fact]
+    public void Cumulative_ShouldAccumulateBeforeRoundingToCents()
+    {
+        // ⭐ 一次 AI 問答大約 NT$0.0014，換成「分」是 0.14、四捨五入成 0。
+        // 每筆先換成分再加的話，一千次問答加起來仍然是 0——曲線會是一條平的線。
+        var today = new DateOnly(2026, 9, 22);
+        var tiny = Enumerable.Range(0, 1000).Select(_ => At(2026, 9, 5, 0.0014m));
+
+        var points = AiUsageMetrics.BuildMonthToDateCumulative(tiny, [], today);
+
+        Assert.Equal(140, points[^1].Created);  // 1.4 → 140 分
+    }
+
+    [Fact]
+    public void Cumulative_ShouldIgnoreRowsOutsideTheRange()
+    {
+        // 呼叫端傳錯範圍時，不可以畫出超出今天的點或把別的月份算進來。
+        var today = new DateOnly(2026, 9, 22);
+        var thisMonth = new[] { At(2026, 9, 25, 9m), At(2026, 7, 1, 9m), At(2026, 9, 1, 1m) };
+
+        var points = AiUsageMetrics.BuildMonthToDateCumulative(thisMonth, [], today);
+
+        Assert.Equal(100, points[^1].Created);
+    }
+
+    [Fact]
+    public void Cumulative_Empty_ShouldBeAllZeros()
+    {
+        var points = AiUsageMetrics.BuildMonthToDateCumulative([], [], new DateOnly(2026, 9, 1));
+
+        var point = Assert.Single(points);
+        Assert.Equal(0, point.Created);
+        Assert.Equal(0, point.Completed);
     }
 
     #endregion

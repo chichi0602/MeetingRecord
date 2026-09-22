@@ -63,23 +63,47 @@ public class AiUsageAnalysisService
             ? new CostView(true, sourceCurrency, exchangeRateSettings.Value.TargetCurrency)
             : new CostView(false, sourceCurrency, sourceCurrency);
 
-    /// <summary>整頁的摘要。<paramref name="trendDays"/> 是趨勢圖的天數。</summary>
-    public async Task<AiUsageSummary> GetSummaryAsync(int trendDays, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 整頁的摘要（本月至今）。
+    ///
+    /// <para>
+    /// <paramref name="feature"/> 不為 null 時，卡片、曲線、模型與使用者分佈、各種提示筆數
+    /// **全部只算這一個功能**（0.4.91）。在那之前這個下拉只接到明細表，
+    /// 卡片永遠是全部功能——使用者選了下拉卻看不到任何數字變化。
+    /// </para>
+    ///
+    /// <para>
+    /// 0.4.91 之前還收一個 <c>trendDays</c>：舊的曲線是「最近 N 天」。曲線改成本月累計之後，
+    /// 摘要已經沒有任何東西依賴期間，那個參數只剩明細表在用。
+    /// </para>
+    /// </summary>
+    public async Task<AiUsageSummary> GetSummaryAsync(
+        AiUsageFeature? feature = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.Now;
         var (currentFrom, previousFrom, previousToExclusive) = AiUsageMetrics.BuildMonthToDateRanges(now);
 
+        // ⚠️ 統計起始日刻意**不套功能篩選**：它講的是「帳本從哪天開始記」，
+        //    不是「這個功能第一次被用是哪天」。套了的話選「待辦擷取」會顯示一個比較晚的起始日，
+        //    使用者會以為在那之前的紀錄遺失了。
         var startedAt = await context.AiUsageLog.AsNoTracking()
             .OrderBy(x => x.OccurredAt)
             .Select(x => (DateTime?)x.OccurredAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // 趨勢圖與「上月同期」都要涵蓋，所以一次撈到兩者較早的那個起點。
-        var trendFrom = now.Date.AddDays(-(trendDays - 1));
-        var from = previousFrom < trendFrom ? previousFrom : trendFrom;
+        // 卡片、分佈與曲線都是「本月至今」對「上月同期」，上月起點就是需要的最早資料。
+        var source = context.AiUsageLog.AsNoTracking()
+            .Where(x => x.OccurredAt >= previousFrom);
 
-        var facts = await context.AiUsageLog.AsNoTracking()
-            .Where(x => x.OccurredAt >= from)
+        // Feature 是 int 列舉欄位，在 SQL 端比對是安全的——
+        // 與 EstimatedCost／ExchangeRate 那種存成 TEXT 的 decimal 不同。
+        if (feature is { } selected)
+        {
+            source = source.Where(x => x.Feature == selected);
+        }
+
+        var facts = await source
             .Select(x => new UsageFact(
                 x.OccurredAt,
                 x.Feature,
@@ -111,13 +135,11 @@ public class AiUsageAnalysisService
 
         return new AiUsageSummary(
             startedAt,
-            BuildCards(thisMonth, thisMonthCost, lastMonthCost, view),
-            BuildDailyCost(facts, now, trendDays, view),
+            BuildCards(thisMonth, thisMonthCost, lastMonthCost, view, feature),
+            BuildCumulativeCost(thisMonth, lastMonthSamePeriod, now, view),
             BuildSlices(thisMonth.GroupBy(x => AiUsageFeatureText.Describe(x.Feature)), view),
             BuildSlices(thisMonth.GroupBy(x => string.IsNullOrWhiteSpace(x.Model) ? "（未知）" : x.Model), view),
             BuildSlices(thisMonth.GroupBy(x => x.UserName ?? "（未記錄）"), view),
-            CostSeriesOneLabel: "文字生成",
-            CostSeriesTwoLabel: "語音轉錄",
             view.Format(view.Sum(thisMonth)),
             thisMonth.Count(x => x.EstimatedCost is null && x.Outcome == AiUsageOutcome.Succeeded),
             thisMonth.Count(x => x.Outcome != AiUsageOutcome.Succeeded),
@@ -236,7 +258,8 @@ public class AiUsageAnalysisService
         IReadOnlyList<UsageFact> thisMonth,
         decimal thisMonthCost,
         decimal lastMonthCost,
-        CostView view)
+        CostView view,
+        AiUsageFeature? feature)
     {
         // ⭐ thisMonthCost／lastMonthCost 是**定價幣別**的金額，刻意不換算——見 GetSummaryAsync 的說明。
         var changeRate = AiUsageMetrics.CalculateChangeRate(thisMonthCost, lastMonthCost);
@@ -256,15 +279,22 @@ public class AiUsageAnalysisService
                     : "上月同期無資料",
                 changeRate > 0 ? ChartTone.Warning : ChartTone.Neutral),
 
-            new StatCardItem(
-                "本月 token",
-                $"{AiUsageMetrics.FormatTokens(inputTokens)} / {AiUsageMetrics.FormatTokens(outputTokens)}",
-                "輸入 / 輸出"),
+            // ⚠️ 選了特定功能時，不用那個單位計費的卡片顯示「—」而不是 0。
+            //    「語音轉錄的 token 0 / 0」數字沒錯，但會讓人以為這個月沒用，
+            //    其實是這個功能根本不以 token 計費（沿用本專案「算不出來不顯示 0」的慣例）。
+            feature is { } tokenCheck && !AiUsageFeatureText.IsTokenBased(tokenCheck)
+                ? new StatCardItem("本月 token", "—", "語音轉錄以音訊時長計費")
+                : new StatCardItem(
+                    "本月 token",
+                    $"{AiUsageMetrics.FormatTokens(inputTokens)} / {AiUsageMetrics.FormatTokens(outputTokens)}",
+                    "輸入 / 輸出"),
 
-            new StatCardItem(
-                "本月轉錄時長",
-                AiUsageMetrics.FormatAudio(audioSeconds),
-                "送進語音辨識的音訊"),
+            feature is { } audioCheck && AiUsageFeatureText.IsTokenBased(audioCheck)
+                ? new StatCardItem("本月轉錄時長", "—", "這個功能以 token 計費")
+                : new StatCardItem(
+                    "本月轉錄時長",
+                    AiUsageMetrics.FormatAudio(audioSeconds),
+                    "送進語音辨識的音訊"),
 
             new StatCardItem(
                 "本月呼叫次數",
@@ -274,29 +304,30 @@ public class AiUsageAnalysisService
         ];
     }
 
-    /// <summary>每日金額趨勢，兩條線分別是文字生成與語音轉錄。</summary>
-    private static IReadOnlyList<TrendPoint> BuildDailyCost(
-        IReadOnlyList<UsageFact> facts,
+    /// <summary>
+    /// 「本月累計 vs 上月同期累計」（0.4.91）。取代舊的「文字生成 vs 語音轉錄每日金額」——
+    /// 那個二分法跟功能下拉、功能別圓餅講的是同一件事，而且資料少時整條幾乎都是 0。
+    ///
+    /// <para>
+    /// 金額用**顯示幣別**（跟整頁其他地方一樣）。卡片上的月比月百分比則刻意用定價幣別算，
+    /// 所以兩條線最後一點的比例與卡片百分比可能差匯率那 1～2%，這是刻意的，見 GetSummaryAsync。
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<TrendPoint> BuildCumulativeCost(
+        IReadOnlyList<UsageFact> thisMonth,
+        IReadOnlyList<UsageFact> lastMonthSamePeriod,
         DateTime now,
-        int days,
         CostView view)
     {
         // ⚠️ 用 DateOnly.FromDateTime 直接取日期，**不套 ToLocalTime()**：
         //    SQLite 讀回來的 Kind 是 Unspecified，套了會整批位移 8 小時
         //    （DashboardMetrics 已經記過這個坑）。
-        // ⚠️ 幾何量仍然用「分」：換成台幣之後金額依然很小（一次問答約 NT$0.0014），
-        //    直接用整數金額會全部捨成 0。折線圖的標題必須寫出單位，
-        //    因為 LineChart 沒有 ChartSlice 那種 Display 覆寫，資料點提示是把 int 原樣印出來。
-        var items = facts.Select(x => (
-            Day: DateOnly.FromDateTime(x.OccurredAt),
-            SeriesOne: AiUsageFeatureText.IsTokenBased(x.Feature)
-                ? AiUsageMetrics.ToChartCents(view.Of(x) ?? 0m)
-                : 0,
-            SeriesTwo: AiUsageFeatureText.IsTokenBased(x.Feature)
-                ? 0
-                : AiUsageMetrics.ToChartCents(view.Of(x) ?? 0m)));
-
-        return AiUsageMetrics.BuildDailySeries(items, DateOnly.FromDateTime(now), days);
+        // 算不出金額的列（沒單價或沒匯率）當 0 計入——與卡片總額的加總規則一致，
+        // 曲線最後一點才會等於卡片上的數字。
+        return AiUsageMetrics.BuildMonthToDateCumulative(
+            thisMonth.Select(x => (DateOnly.FromDateTime(x.OccurredAt), view.Of(x) ?? 0m)),
+            lastMonthSamePeriod.Select(x => (DateOnly.FromDateTime(x.OccurredAt), view.Of(x) ?? 0m)),
+            DateOnly.FromDateTime(now));
     }
 
     /// <summary>

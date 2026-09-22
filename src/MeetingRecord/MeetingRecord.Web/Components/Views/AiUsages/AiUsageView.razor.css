@@ -84,8 +84,17 @@
     border-radius: 16px;
 }
 
-.ai-usage-table-title {
+/* 明細表標題列：左邊標題、右邊期間下拉（0.4.91）。 */
+.ai-usage-table-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     margin-bottom: 12px;
+}
+
+.ai-usage-table-title {
     color: var(--oat-ink);
     font-size: 0.9rem;
     font-weight: 700;

@@ -117,6 +117,38 @@ public sealed class DashboardMetricsTests
 
     #endregion
 
+    #region 會議時長
+
+    [Fact]
+    public void SumLatestRunAudioSeconds_ShouldIgnoreEarlierRuns()
+    {
+        var latestStart = new DateTime(2026, 9, 20, 10, 0, 0);
+        (int, DateTime, double)[] usages =
+        [
+            (1, latestStart.AddDays(-1), 1800),   // 上一輪：重轉錄前寫下的，不能再算一次
+            (1, latestStart, 1800),               // 剛好在開始時間也算（>=）
+            (1, latestStart.AddMinutes(3), 600),
+        ];
+
+        var seconds = DashboardMetrics.SumLatestRunAudioSeconds(
+            usages, new Dictionary<int, DateTime> { [1] = latestStart });
+
+        Assert.Equal(2400d, seconds[1]);
+    }
+
+    [Fact]
+    public void SumLatestRunAudioSeconds_ShouldIgnoreMeetingsNotInLookup()
+    {
+        // 會議已刪除（帳本刻意沒有外鍵）、或呼叫端只放轉錄完成的會議，都會出現查不到的 Id。
+        (int, DateTime, double)[] usages = [(99, new DateTime(2026, 9, 20), 600)];
+
+        var seconds = DashboardMetrics.SumLatestRunAudioSeconds(usages, new Dictionary<int, DateTime>());
+
+        Assert.Empty(seconds);
+    }
+
+    #endregion
+
     #region 百分比
 
     [Fact]

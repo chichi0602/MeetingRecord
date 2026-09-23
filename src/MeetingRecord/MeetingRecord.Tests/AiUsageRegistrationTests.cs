@@ -25,7 +25,7 @@ public sealed class AiUsageRegistrationTests
     [Fact]
     public void RolePermissionCatalog_ShouldExposeAiUsageAsASingleSwitch()
     {
-        // 純閱讀頁用單元素群組（比照儀表板、使用說明）。
+        // 純閱讀頁用單元素群組（比照使用說明）。
         // 塞進「系統管理」那一組的話，Skip(1) 的成員會長出 create/edit/delete/export
         // 勾選欄，對一個只能看的頁面沒有意義。
         var service = new RolePermissionService();

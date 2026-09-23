@@ -17,9 +17,9 @@ namespace MeetingRecord.Business.Services.Dashboard;
 /// 儀表板的統計聚合。
 ///
 /// <para>
-/// **資料範圍沿用各頁既有的規則**：會議與待辦套團隊過濾（<c>MeetingService</c>／
-/// <c>TodoService</c> 本來就這樣做），專案不套（0.4.39 已移除專案的列級權控）。
-/// 否則會出現「儀表板說有 10 場會議、點進去只看得到 6 場」這種對不起來的狀況。
+/// **0.4.97 起一律是全公司的數字，刻意不套團隊過濾**——與會議、提示詞範本頁不同。
+/// 儀表板登入即可看、所有人看到同一份，所以只能放彙總數字與圖表，**不可加入任何明細清單**，
+/// 否則會把別的團隊看不到的會議內容露出來。
 /// </para>
 ///
 /// <para>
@@ -34,20 +34,17 @@ public class DashboardService
     private const string UnassignedProjectLabel = "未歸屬";
 
     private readonly BackendDBContext context;
-    private readonly IRecordAccessScopeProvider accessScope;
     private readonly AiChatStore chatStore;
     private readonly string transcriptRootPath;
     private readonly ILogger<DashboardService> logger;
 
     public DashboardService(
         BackendDBContext context,
-        IRecordAccessScopeProvider accessScope,
         AiChatStore chatStore,
         IOptions<SystemSettings> systemSettings,
         ILogger<DashboardService> logger)
     {
         this.context = context;
-        this.accessScope = accessScope;
         this.chatStore = chatStore;
         // 根目錄一律取自 SystemSettings.ExternalFileSystem，比照 MeetingFileStore／AiChatStore。
         transcriptRootPath = systemSettings.Value.ExternalFileSystem.MeetingTranscriptPath;
@@ -56,17 +53,14 @@ public class DashboardService
 
     public async Task<DashboardSummary> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
-        var scope = await accessScope.GetAsync();
         var today = DateTime.Today;
         var monthStart = new DateTime(today.Year, today.Month, 1);
 
-        var meetings = BuildMeetingQuery(scope);
-        var todos = BuildTodoQuery();
-
         // 一次把需要的欄位取回來再於記憶體分組：資料量在這個系統的量級很小，
         // 而分成十幾條 GroupBy 查詢反而更慢，也更難讀。
-        var meetingFacts = await meetings
+        var meetingFacts = await context.Meeting.AsNoTracking()
             .Select(x => new MeetingFact(
+                x.Id,
                 x.TranscriptionStatus,
                 x.DraftStatus,
                 x.CreatedAt,
@@ -81,15 +75,24 @@ public class DashboardService
             .ToListAsync(cancellationToken);
 
         var projects = await context.Project.AsNoTracking()
-            .Select(x => new { x.Status })
+            .Select(x => new ProjectFact(x.Status, x.EndDate, x.CompletionPercentage))
             .ToListAsync(cancellationToken);
 
-        var todoFacts = await todos
-            .Select(x => new { x.Status, x.DueDate })
+        var todoFacts = await context.Todo.AsNoTracking()
+            .Select(x => new TodoFact(x.Status, x.DueDate, x.Priority, x.MeetingId))
             .ToListAsync(cancellationToken);
 
-        var promptTemplateFacts = await BuildPromptTemplateQuery(scope)
+        var promptTemplateFacts = await context.PromptTemplate.AsNoTracking()
             .Select(x => new PromptTemplateFact(x.Name, x.IsEnabled))
+            .ToListAsync(cancellationToken);
+
+        // AudioSeconds 是 REAL 不是 decimal，在 SQL 端篩選沒有 TEXT 比較的問題。
+        var transcriptionUsages = await context.AiUsageLog.AsNoTracking()
+            .Where(x => x.Feature == AiUsageFeature.Transcription
+                && x.Outcome == AiUsageOutcome.Succeeded
+                && x.MeetingId != null
+                && x.AudioSeconds != null)
+            .Select(x => new { MeetingId = x.MeetingId!.Value, x.OccurredAt, Seconds = x.AudioSeconds!.Value })
             .ToListAsync(cancellationToken);
 
         var attachmentBytes = await context.ProjectFile.AsNoTracking()
@@ -122,43 +125,88 @@ public class DashboardService
             BuildDraftStatus(meetingFacts),
             BuildMeetingsPerProject(meetingFacts),
             BuildPromptTemplateUsage(meetingFacts),
+            BuildOpenTodoPriority(todoFacts),
             BuildPerformance(meetingFacts),
             BuildPromptTemplates(promptTemplateFacts, meetingFacts),
-            storage);
+            storage,
+            BuildTodoOverview(todoFacts, today),
+            BuildProjectOverview(projects, today),
+            BuildMeetingHours(
+                meetingFacts,
+                transcriptionUsages.Select(x => (x.MeetingId, x.OccurredAt, x.Seconds)),
+                monthStart));
     }
 
-    #region 查詢範圍
+    #region 概況指標
 
-    private IQueryable<Meeting> BuildMeetingQuery(RecordAccessScope scope)
+    /// <summary>「7 天內到期」的天數（含今天）。</summary>
+    private const int TodoDueSoonDays = 7;
+
+    /// <summary>專案「即將到期」的天數（含今天）。專案週期比待辦長，所以看得比較遠。</summary>
+    private const int ProjectDueSoonDays = 14;
+
+    private static TodoOverview BuildTodoOverview(IReadOnlyList<TodoFact> todos, DateTime today)
     {
-        IQueryable<Meeting> query = context.Meeting.AsNoTracking().Include(x => x.Project);
+        var open = todos.Where(x => !IsTodoDone(x.Status)).ToList();
+        var dueSoonEnd = today.AddDays(TodoDueSoonDays);
 
-        return scope.IsAdmin
-            ? query
-            : query.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
+        return new TodoOverview(
+            open.Count(x => x.DueDate is not null && x.DueDate.Value.Date < today),
+            open.Count(x => x.DueDate is not null && x.DueDate.Value.Date >= today && x.DueDate.Value.Date <= dueSoonEnd),
+            todos.Count(x => x.Status == TodoInProgressStatus),
+            // 沒有任何待辦時回 null 讓畫面顯示「—」：0% 會被讀成「都是手動建立的」。
+            todos.Count == 0 ? null : todos.Count(x => x.MeetingId is not null) * 100d / todos.Count);
+    }
+
+    private static ProjectOverview BuildProjectOverview(IReadOnlyList<ProjectFact> projects, DateTime today)
+    {
+        var inProgress = projects.Where(x => x.Status == ProjectInProgressStatus).ToList();
+        var unfinished = projects.Where(x => x.Status != ProjectCompletedStatus).ToList();
+        var dueSoonEnd = today.AddDays(ProjectDueSoonDays);
+
+        return new ProjectOverview(
+            inProgress.Count == 0 ? null : inProgress.Average(x => (double)x.CompletionPercentage),
+            unfinished.Count(x => x.EndDate is not null && x.EndDate.Value.Date < today),
+            unfinished.Count(x => x.EndDate is not null && x.EndDate.Value.Date >= today && x.EndDate.Value.Date <= dueSoonEnd),
+            projects.Count(x => x.Status is "暫緩" or "等待"));
     }
 
     /// <summary>
-    /// 待辦查詢。0.4.66 起不做團隊過濾——Todo 的 Teams 欄位已徹底移除，
-    /// 所有待辦對所有使用者可見（會議那支仍有列級權控，兩者刻意不同）。
+    /// 會議時數。只看**轉錄完成**的會議：還在跑或失敗的那一輪是不完整的分段，
+    /// 算進去會讓會議看起來比實際短。
     /// </summary>
-    private IQueryable<Todo> BuildTodoQuery()
+    private static MeetingHoursSummary BuildMeetingHours(
+        IReadOnlyList<MeetingFact> meetings,
+        IEnumerable<(int MeetingId, DateTime OccurredAt, double Seconds)> usages,
+        DateTime monthStart)
     {
-        return context.Todo.AsNoTracking();
+        var transcribed = meetings
+            .Where(x => x.TranscriptionStatus == TranscriptionStatus.Completed)
+            .ToList();
+
+        var seconds = DashboardMetrics.SumLatestRunAudioSeconds(
+            usages,
+            transcribed
+                .Where(x => x.TranscriptionStartedAt is not null)
+                .ToDictionary(x => x.Id, x => x.TranscriptionStartedAt!.Value));
+
+        var thisMonthIds = transcribed
+            .Where(x => x.CreatedAt >= monthStart)
+            .Select(x => x.Id)
+            .ToHashSet();
+
+        var total = seconds.Values.Sum();
+
+        return new MeetingHoursSummary(
+            DescribeSeconds(seconds.Count == 0 ? null : total),
+            DescribeSeconds(seconds.Count == 0 ? null : seconds.Where(x => thisMonthIds.Contains(x.Key)).Sum(x => x.Value)),
+            DescribeSeconds(seconds.Count == 0 ? null : total / seconds.Count),
+            seconds.Count,
+            transcribed.Count);
     }
 
-    /// <summary>
-    /// 提示詞範本查詢。**套團隊過濾**——<c>PromptTemplateService.GetAsync</c> 對非管理員
-    /// 就是這樣查的，這裡不跟著做就會出現「儀表板說有 10 個範本、點進去只看得到 6 個」。
-    /// </summary>
-    private IQueryable<PromptTemplate> BuildPromptTemplateQuery(RecordAccessScope scope)
-    {
-        IQueryable<PromptTemplate> query = context.PromptTemplate.AsNoTracking();
-
-        return scope.IsAdmin
-            ? query
-            : query.Where(TagStringHelper.BuildTeamAccessPredicate<PromptTemplate>(x => x.Teams, scope.Teams));
-    }
+    private static string DescribeSeconds(double? seconds)
+        => DashboardMetrics.DescribeDuration(seconds is null ? null : TimeSpan.FromSeconds(seconds.Value));
 
     #endregion
 
@@ -197,6 +245,10 @@ public class DashboardService
         ];
     }
 
+    private const string TodoInProgressStatus = "進行中";
+    private const string ProjectInProgressStatus = "進行中";
+    private const string ProjectCompletedStatus = "已完成";
+
     /// <summary>待辦的完成判斷只看 Status 一個欄位（見待辦事項 PRD 的設計決策）。</summary>
     private static bool IsTodoDone(string? status) => status == "已完成";
 
@@ -234,6 +286,25 @@ public class DashboardService
                 ToneForStatus(status == DraftStatus.Completed, status == DraftStatus.Failed,
                     status is DraftStatus.Pending or DraftStatus.Processing)))
             .Where(slice => slice.Value > 0)];
+
+    /// <summary>未完成待辦的優先度分布。由高到低排，讓紅色切片從 12 點鐘方向開始。</summary>
+    private static IReadOnlyList<ChartSlice> BuildOpenTodoPriority(IReadOnlyList<TodoFact> todos)
+    {
+        var open = todos.Where(x => !IsTodoDone(x.Status)).ToList();
+
+        return [.. TodoAdapterModel.PriorityOptions
+            .Reverse()
+            .Select(option => new ChartSlice(
+                option,
+                open.Count(x => x.Priority == option),
+                option switch
+                {
+                    "高" => ChartTone.Danger,
+                    "中" => ChartTone.Warning,
+                    _ => ChartTone.Neutral,
+                }))
+            .Where(slice => slice.Value > 0)];
+    }
 
     private static ChartTone ToneForStatus(bool isCompleted, bool isFailed, bool isRunning)
         => isFailed ? ChartTone.Danger
@@ -318,6 +389,7 @@ public class DashboardService
 
     /// <summary>從資料庫取回的會議欄位投影，避免把整個 Meeting 實體撈進記憶體。</summary>
     private sealed record MeetingFact(
+        int Id,
         TranscriptionStatus TranscriptionStatus,
         DraftStatus DraftStatus,
         DateTime CreatedAt,
@@ -332,4 +404,8 @@ public class DashboardService
 
     /// <summary>提示詞範本的投影。只需要名稱（比對使用情形）與啟用狀態。</summary>
     private sealed record PromptTemplateFact(string Name, bool IsEnabled);
+
+    private sealed record ProjectFact(string Status, DateTime? EndDate, int CompletionPercentage);
+
+    private sealed record TodoFact(string Status, DateTime? DueDate, string Priority, int? MeetingId);
 }

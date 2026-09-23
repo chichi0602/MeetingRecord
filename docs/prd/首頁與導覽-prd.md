@@ -2,9 +2,9 @@
 
 - 文件版本：1.8
 - 文件狀態：已實作
-- 現行系統版本：0.4.50
+- 現行系統版本：0.4.97
 - 首次實作版本：既有腳手架核心功能（「關於」對話窗為 0.4.24 新增）
-- 最後核對日期：2026/09/04
+- 最後核對日期：2026/09/23
 
 ## 一、目標與範圍
 
@@ -20,7 +20,7 @@
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
 | `/` | 非選單（landing） | 無（`EmptyLayout`，任何人） | 未登入訪客 |
-| `/dashboard` | 選單 id=11「儀表板」 | 頁面鍵「儀表板」（管理員豁免） | 已登入使用者（0.4.54 新增） |
+| `/dashboard` | 選單 id=11「儀表板」 | 無，登入即可看（0.4.97 起；列在 `PublicMenuIds`） | 已登入使用者（0.4.54 新增） |
 | `/meetings` | 選單 id=61「會議紀錄」 | 頁面鍵「會議紀錄」（管理員豁免） | 已登入使用者（0.4.45 起的登入降落點） |
 | 側邊選單 | — | 各項目依 `MenuPermissionMap` 對應之權限鍵過濾 | 已登入使用者 |
 
@@ -54,7 +54,7 @@
 1. `SidebarMenuService.LoadAuthorizedMenuItemsAsync` 讀取選單並過濾：
    - `ReadMenuItemsFromDisk` 由 `MagicObjectHelper.Menu結構定義`（`Datas/Menu.json`）反序列化，經 `ICacheService` 快取（key `sidebar:menu:raw`）。
    - `ApplyPermissionStructure` 依每項唯一 `id` 從 `MenuPermissionMap`（id→權限鍵）填入 `PermissionName`；找不到對應時退回以 `Name` 為權限名。
-   - `FilterAuthorizedMenuItems` 遞迴過濾：項目自身權限（`Name` 或 `PermissionName` 任一）通過，或其子項尚有可見項目時保留。
+   - `FilterAuthorizedMenuItems` 遞迴過濾：項目 id 列在 `PublicMenuIds`（免權限，0.4.97 起只有儀表板）、項目自身權限（`Name` 或 `PermissionName` 任一）通過，或其子項尚有可見項目時保留。
 2. 權限判定唯一來源為 `AuthenticationStateHelper.CheckAccessPage(name)`：比對 `CurrentUser.RoleList`（由 `IPermissionChecker.GetEffectivePermissionKeysAsync` 供給的 RBAC 有效權限鍵集合）；管理員短路一律通過。
 3. `Menu.json` 以 `id` 對應權限鍵，重排選單順序不會錯位（已移除舊「位置索引三處同步」耦合）。
 4. 「關於」對話窗由 `MainLayout.OnAboutClick` 於**點擊當下**組出資料列：注入 `IOptions<SystemSettings>`、`IWebHostEnvironment` 與 Singleton `SystemStartupState`。已運作時間必須在開啟當下計算並存成欄位，否則 Blazor Server 不會自動刷新而顯示過期值。
@@ -62,7 +62,8 @@
 ## 五、權限與安全
 
 - 頁面權限採宣告式三件組：`Menu.json`（每項唯一 `id`）＋ `SidebarMenuService.MenuPermissionMap`（id→權限鍵）＋ `MagicObjectHelper` 權限鍵常數。
-- id→權限鍵對應（節錄）：11→`角色_儀表板`「儀表板」、21→`角色_專案項目`「專案項目」、22→`角色_待辦事項`「待辦事項」、61→`角色_會議紀錄`「會議紀錄」、3→`角色_系統管理`「系統管理功能」、31→`角色_使用者管理`「使用者管理」、32→`角色_角色管理`「角色管理」、5→`角色_資料定義`「資料定義管理功能」、51→`角色_分類清單`「分類清單」、52→`角色_團隊清單`「團隊清單」、53→`角色_提示詞清單`「提示詞清單」、4→`角色_登出`「登出」。
+- 免權限頁面：`SidebarMenuService.PublicMenuIds`（目前只有 11「儀表板」，0.4.97 起）。這類頁面不放進 `MenuPermissionMap`，也不列在角色管理的權限矩陣。
+- id→權限鍵對應（節錄）：21→`角色_專案項目`「專案項目」、22→`角色_待辦事項`「待辦事項」、61→`角色_會議紀錄`「會議紀錄」、3→`角色_系統管理`「系統管理功能」、31→`角色_使用者管理`「使用者管理」、32→`角色_角色管理`「角色管理」、5→`角色_資料定義`「資料定義管理功能」、51→`角色_分類清單`「分類清單」、52→`角色_團隊清單`「團隊清單」、53→`角色_提示詞清單`「提示詞清單」、4→`角色_登出`「登出」。
 - 選單過濾僅隱藏無權項目，並非授權邊界；實際資料存取由 API 端 `[HasPermission]` 與團隊權控把關（見「紀錄分類與團隊權控 PRD」）。
 - 管理員（`IsAdmin`）於 `CheckAccessPage` 短路，選單全可見。
 - 右上角使用者選單與「關於」對話窗不做權限過濾：任何已登入者皆可開啟；內容僅為系統識別資訊，不含連線字串、金鑰或其他機敏設定。
@@ -91,5 +92,5 @@
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor.cs:1`（`OnAboutClick`）
 - `src/MeetingRecord/MeetingRecord.Web/Health/SystemStartupState.cs:1`（啟動時間來源）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:179`（`CheckAccessPage`）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:28`（角色權限鍵常數）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:27`（角色權限鍵常數）
 - 交叉連結：[紀錄分類與團隊權控 PRD](紀錄分類與團隊權控-prd.md)、[認證授權與權限機制](../security/認證授權與權限機制.md)

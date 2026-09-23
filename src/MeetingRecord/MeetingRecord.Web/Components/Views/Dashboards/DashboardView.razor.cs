@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using MeetingRecord.Business.Services.Dashboard;
 using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Components.Views.Dashboards;
 
@@ -32,7 +31,6 @@ public partial class DashboardView : ComponentBase
 
     private DashboardSummary? summary;
     private bool isLoading;
-    private string RoleMessage = string.Empty;
 
     private bool IsFailureRateHigh =>
         summary?.Performance.TranscriptionFailureRate is { } rate && rate > FailureRateWarningThreshold;
@@ -48,13 +46,7 @@ public partial class DashboardView : ComponentBase
             return;
         }
 
-        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_儀表板) == false)
-        {
-            RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            Logger.LogWarning("Dashboard denied because current user has not this role permission.");
-            return;
-        }
-
+        // 0.4.97 起登入即可看，不檢查頁面權限：儀表板只放全公司的彙總數字，不含任何明細。
         await ReloadAsync();
     }
 
@@ -88,7 +80,11 @@ public partial class DashboardView : ComponentBase
     /// 0% 會被讀成「成功率 100%」，但實際上只是還沒有資料。
     /// </summary>
     private string FormatFailureRate()
-        => summary?.Performance.TranscriptionFailureRate is { } rate
+        => FormatPercent(summary?.Performance.TranscriptionFailureRate);
+
+    /// <summary>百分比；沒有資料（null）時顯示「—」，理由同失敗率。</summary>
+    private static string FormatPercent(double? value)
+        => value is { } rate
             ? rate.ToString("0.#", CultureInfo.InvariantCulture) + "%"
             : "—";
 }

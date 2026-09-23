@@ -75,11 +75,6 @@ public static class DashboardMetrics
     /// 舊紀錄記的是舊名，這個範本會被算成「從沒用過」</b>。這是快照設計的必然結果，不是 bug。
     /// </para>
     ///
-    /// <para>
-    /// ⚠️ 分母是呼叫端傳進來的會議清單，而那份清單**已經過團隊過濾**。
-    /// 所以非管理員看到的數字會偏高——別的團隊用過但他看不到。
-    /// 這與「提示詞範本使用次數」長條圖是同一個性質，刻意維持一致。
-    /// </para>
     /// </summary>
     public static int CountUnusedEnabledTemplates(
         IEnumerable<(string Name, bool IsEnabled)> templates,
@@ -195,6 +190,33 @@ public static class DashboardMetrics
             .ToList();
 
         return ticks.Count == 0 ? null : TimeSpan.FromTicks((long)ticks.Average());
+    }
+
+    /// <summary>
+    /// 每場會議「最後一輪轉錄」送出的音訊秒數合計，當作會議時長。
+    ///
+    /// <para>
+    /// 帳本一段音訊一列，而且**重轉錄會再寫一整輪**——全部加總會把重轉錄過的會議算成兩倍長。
+    /// 每輪開始時 <c>TranscriptionStartedAt</c> 會被重設，所以只取
+    /// <c>OccurredAt &gt;= 最後一輪開始時間</c> 的列，剛好就是最後一輪的所有分段。
+    /// </para>
+    /// <para>
+    /// <paramref name="latestRunStartedAt"/> 裡沒有的會議（已刪除、沒有開始時間、
+    /// 或呼叫端只放轉錄完成的會議而它還沒完成）一律不計。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, double> SumLatestRunAudioSeconds(
+        IEnumerable<(int MeetingId, DateTime OccurredAt, double Seconds)> usages,
+        IReadOnlyDictionary<int, DateTime> latestRunStartedAt)
+    {
+        ArgumentNullException.ThrowIfNull(usages);
+        ArgumentNullException.ThrowIfNull(latestRunStartedAt);
+
+        return usages
+            .Where(usage => latestRunStartedAt.TryGetValue(usage.MeetingId, out var startedAt)
+                && usage.OccurredAt >= startedAt)
+            .GroupBy(usage => usage.MeetingId)
+            .ToDictionary(group => group.Key, group => group.Sum(usage => usage.Seconds));
     }
 
     private static string PointOnCircle(double centerX, double centerY, double radius, double degrees)

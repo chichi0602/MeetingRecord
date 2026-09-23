@@ -15,7 +15,6 @@ public sealed class SidebarMenuService
     /// </summary>
     private static readonly IReadOnlyDictionary<int, string> MenuPermissionMap = new Dictionary<int, string>
     {
-        [11] = MagicObjectHelper.角色_儀表板,
         [12] = MagicObjectHelper.角色_使用說明,
         [21] = MagicObjectHelper.角色_專案項目,
         [22] = MagicObjectHelper.角色_待辦事項,
@@ -31,6 +30,13 @@ public sealed class SidebarMenuService
         [53] = MagicObjectHelper.角色_提示詞清單,
         [4] = MagicObjectHelper.角色_登出,
     };
+
+    /// <summary>
+    /// 登入即可看、不必設權限的選單項目 Id（0.4.97：儀表板）。
+    /// ⚠️ 不能靠「不放進 <see cref="MenuPermissionMap"/>」達成——沒對應的項目會退回用 Name 當權限鍵，
+    /// 角色沒有同名權限時照樣被藏起來。
+    /// </summary>
+    private static readonly IReadOnlySet<int> PublicMenuIds = new HashSet<int> { 11 };
 
     private readonly IWebHostEnvironment environment;
     private readonly ILogger<SidebarMenuService> logger;
@@ -115,7 +121,8 @@ public sealed class SidebarMenuService
                 : [];
 
             var permissionNames = GetPermissionNames(item);
-            var hasPermission = permissionNames.Count == 0
+            var hasPermission = PublicMenuIds.Contains(item.Id)
+                || permissionNames.Count == 0
                 || permissionNames.Any(authenticationStateHelper.CheckAccessPage);
 
             if (!hasPermission && filteredChildren.Count == 0)

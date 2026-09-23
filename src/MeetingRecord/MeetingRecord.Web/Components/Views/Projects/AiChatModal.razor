@@ -1,8 +1,9 @@
 @using MeetingRecord.Business.Helpers
+@using MeetingRecord.Business.Services.AiChat
 
 @* 專案層級與單一會議共用同一個問答視窗，差別只在 Scope 與 TargetId。 *@
 <Modal Title="@Title"
-       Class="form-modal-wide"
+       Class="meeting-view-modal ai-chat-modal"
        Visible="@Visible"
        Keyboard="true"
        MaskClosable="false"
@@ -68,7 +69,9 @@
         </div>
     </aside>
 
-    <div class="ai-chat">
+    @* @ref：貼上與拖放由 chat-attach.js 掛在這一整塊上（0.4.95），
+       拖到訊息區或輸入框都收得到，貼上則是從輸入框冒泡上來。 *@
+    <div class="ai-chat" @ref="chatArea">
         @if (!string.IsNullOrWhiteSpace(sourceNotice))
         {
             <div class="ai-chat-notice">
@@ -159,6 +162,33 @@
                     {
                         @* 提問是使用者自己打的純文字，維持 pre-wrap 保留斷行。 *@
                         <div class="ai-chat-bubble ai-chat-bubble-plain">@message.Content</div>
+
+                        @if (message.AttachmentList.Count > 0)
+                        {
+                            @* 圖片點一下在下方展開預覽、再點收起；文件點一下下載。
+                               預覽圖是點了才讀檔，不在載入歷史時就把每張圖塞進畫面。 *@
+                            <div class="ai-chat-attachments">
+                                @foreach (var attachment in message.AttachmentList)
+                                {
+                                    var current = attachment;
+                                    var isImage = current.Kind == AiChatAttachmentKind.Image;
+
+                                    <button type="button"
+                                            class="ai-chat-attachment @(previewStoredName == current.StoredName ? "ai-chat-attachment-on" : string.Empty)"
+                                            title="@(isImage ? "點一下預覽" : "點一下下載")"
+                                            disabled="@(IsBusy || string.IsNullOrEmpty(current.StoredName))"
+                                            @onclick="@(() => OnOpenAttachmentAsync(current))">
+                                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="@(isImage ? "image" : "description")" />
+                                        <span class="ai-chat-attachment-name">@current.FileName</span>
+                                    </button>
+                                }
+                            </div>
+
+                            @if (previewDataUrl is not null && message.AttachmentList.Any(x => x.StoredName == previewStoredName))
+                            {
+                                <img class="ai-chat-attachment-preview" src="@previewDataUrl" alt="附件預覽" />
+                            }
+                        }
                     }
                     else
                     {
@@ -200,8 +230,35 @@
            每句都跳確認會讓功能不能用。改成常駐提示，放在輸入框旁邊——錢是在這裡花的。 *@
         <div class="ai-chat-cost-hint">
             <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
-            <span>每次送出都會呼叫 Azure OpenAI 並產生費用（一次提問一次呼叫）。</span>
+            <span>每次送出都會呼叫 Azure OpenAI 並產生費用（一次提問一次呼叫）。附上的圖片與檔案也會計費，檔案越大越貴。</span>
         </div>
+
+        @if (pendingAttachments.Count > 0)
+        {
+            <div class="ai-chat-pending">
+                @for (var pendingIndex = 0; pendingIndex < pendingAttachments.Count; pendingIndex++)
+                {
+                    var removeIndex = pendingIndex;
+                    var pending = pendingAttachments[removeIndex];
+
+                    <div class="ai-chat-pending-item">
+                        @if (pending.ThumbnailUrl is not null)
+                        {
+                            <img class="ai-chat-pending-thumb" src="@pending.ThumbnailUrl" alt="" />
+                        }
+                        else
+                        {
+                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="@(pending.IsImage ? "image" : "description")" />
+                        }
+                        <span class="ai-chat-attachment-name" title="@pending.Item.FileName">@pending.Item.FileName</span>
+                        <span class="ai-chat-pending-size">@FormatSize(pending.Item.Content.LongLength)</span>
+                        <CrudActionButton Title="移除" Icon="close" Disabled="@IsBusy"
+                                          OnClick="@(() => OnRemovePending(removeIndex))" />
+                    </div>
+                }
+            </div>
+        }
+
         <div class="ai-chat-input">
             @* Enter 送出、Shift+Enter 換行，是聊天介面的通用預期。
 
@@ -215,10 +272,26 @@
             <TextArea @bind-Value="question"
                       BindOnInput="true"
                       DebounceMilliseconds="0"
-                      Placeholder="輸入問題後按 Enter 送出（Shift+Enter 換行）"
+                      Placeholder="輸入問題後按 Enter 送出（Shift+Enter 換行）。可以直接貼上圖片，或把檔案拖進來"
                       Rows="2"
                       Disabled="@IsBusy"
                       OnkeyDown="OnKeyDownAsync" />
+
+            @* 迴紋針：label 包住隱藏的 InputFile，點 label 就開檔案挑選對話框。
+               貼上與拖放（chat-attach.js）也是把檔案塞進這同一個 input，三條路共用 OnAttachmentsSelectedAsync。
+               @key 只在讀完檔案之後才換（理由見 FileDropZone：太早換會讓 IBrowserFile 讀不到）。 *@
+            <Tooltip Title="@($"附加圖片或檔案（最多 {AiChatAttachmentPolicy.MaxAttachmentsPerQuestion} 個）")">
+                <label class="ai-chat-attach @(IsBusy ? "ai-chat-attach-disabled" : string.Empty)">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="attach_file" />
+                    <InputFile @key="attachInputKey"
+                               OnChange="OnAttachmentsSelectedAsync"
+                               multiple
+                               accept="@AiChatAttachmentPolicy.AcceptAttribute"
+                               disabled="@IsBusy"
+                               class="ai-chat-attach-input" />
+                </label>
+            </Tooltip>
+
             <Button Type="ButtonType.Primary"
                     Loading="@isAsking"
                     Disabled="@(IsBusy || string.IsNullOrWhiteSpace(question))"

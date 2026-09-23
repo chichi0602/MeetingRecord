@@ -65,13 +65,18 @@ public class AttachmentTextExtractor
     /// </para>
     /// </summary>
     public string? TryExtract(string relativePath, string originalFileName)
+        => TryExtractFromFullPath(ResolveFullPath(relativePath), originalFileName);
+
+    /// <summary>
+    /// 同 <see cref="TryExtract"/>，但直接吃完整路徑。AI 問答的附件（0.4.95）存在對話資料夾，
+    /// 不在專案附件根目錄底下。
+    /// </summary>
+    public string? TryExtractFromFullPath(string fullPath, string originalFileName)
     {
         if (!IsSupported(originalFileName))
         {
             return null;
         }
-
-        var fullPath = ResolveFullPath(relativePath);
 
         if (!File.Exists(fullPath))
         {

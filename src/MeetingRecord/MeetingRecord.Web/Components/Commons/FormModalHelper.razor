@@ -21,9 +21,8 @@
 
         .form-modal-compact   680px    3～4 個欄位、唯讀短清單
         .form-modal-standard  880px    5～8 個欄位、清單型
-        .form-modal-wide      1080px   左右分欄的對話式內容
         .form-modal-large     90vw     欄位多、或內含矩陣與檔案清單
-        .meeting-view-modal   96vw     含影音上傳這類真的需要整個螢幕的
+        .meeting-view-modal   96vw     含影音上傳、AI 問答這類真的需要整個螢幕的
 
     ⚠️ 掛了尺寸 class 就**不要再設 `Width`**。這裡的 `width` 是 author-important，
     依 CSS 串聯順序贏過 `Width` 產生的 inline style——參數會靜默失效，
@@ -121,15 +120,6 @@
         margin: 0 auto !important;
     }
 
-    /* 對話式的內容用固定寬度，不用 vw。
-       AI 問答如果吃 .form-modal-large（90vw），在 1920 的螢幕上是 1728px，
-       扣掉側欄之後單行會逼近 1200px——一行太長，眼睛從行尾跳回行首會找不到位置，
-       可讀性反而比 1080 差。文件類內容「愈寬愈好」是不成立的。 */
-    .form-modal-wide {
-        width: 1080px !important;
-        margin: 0 auto !important;
-    }
-
     .form-modal-large {
         width: 90vw !important;
         max-width: 90vw !important;
@@ -145,6 +135,14 @@
 
     .meeting-view-modal .ant-modal-content {
         max-height: 96vh !important;
+    }
+
+    /* AI 問答（0.4.94）：唯一**固定高度**的對話框。聊天視窗吃滿整個螢幕才正常——
+       0.4.93 之前是 1080px 寬、高度隨內容縮，剛開新對話時只有四百多 px 高，
+       四周空一大圈（使用者回報「很醜」）。訊息區、清單、輸入框都已經是「吃剩餘空間再自己捲」，
+       高度固定之後會自動長滿。行太長的顧慮改由訊息氣泡的最大寬度處理（見 AiChatModal.razor.css）。 */
+    .ai-chat-modal .ant-modal-content {
+        height: 96vh !important;
     }
 
     /* 「標題與按鈕固定、只有內容區捲動」現在由上面的基準線負責，

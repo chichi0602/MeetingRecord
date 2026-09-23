@@ -26,7 +26,6 @@ public sealed class ModalSizeClassTests
     [
         "form-modal-compact",
         "form-modal-standard",
-        "form-modal-wide",
         "form-modal-large",
         "meeting-view-modal",
     ];

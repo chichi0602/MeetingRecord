@@ -10,7 +10,7 @@
     min-height: 0;
 }
 
-/* 視窗本身是 1080px，但小螢幕上 AntDesign 會自己縮。清單退到上方變成橫向一排，
+/* 視窗是 96vw（0.4.94 前是 1080px），窄螢幕上一樣會很窄。清單退到上方變成橫向一排，
    比照待辦頁「負責人面板」在窄版退成單欄的既有作法。 */
 @media (max-width: 900px) {
     .ai-chat-shell {
@@ -191,7 +191,10 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    max-width: 82%;
+    /* 0.4.94 視窗改成滿版（96vw）後，1920 螢幕上訊息區寬近 1500px。
+       只寫 82% 的話一行會拉到一千多 px，眼睛從行尾跳回行首會找不到位置；
+       加一個上限讓視窗滿版、但文字行寬維持好讀。 */
+    max-width: min(82%, 960px);
 }
 
 .ai-chat-row-user {
@@ -409,6 +412,135 @@
     display: flex;
     align-items: flex-end;
     gap: 10px;
+}
+
+/* ===== 附件（0.4.95）===== */
+
+/* 提問下方的附件列，靠右對齊提問氣泡。 */
+.ai-chat-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.ai-chat-attachment,
+.ai-chat-pending-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 260px;
+    padding: 2px 8px;
+    border: 1px solid var(--oat-300);
+    border-radius: 999px;
+    background: var(--oat-surface);
+    color: var(--oat-ink);
+    font-size: 0.78rem;
+}
+
+.ai-chat-attachment {
+    cursor: pointer;
+}
+
+.ai-chat-attachment:hover:not(:disabled),
+.ai-chat-attachment-on {
+    border-color: var(--oat-500);
+    background: var(--oat-100);
+}
+
+.ai-chat-attachment:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.ai-chat-attachment ::deep .material-icons-outlined,
+.ai-chat-pending-item ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.ai-chat-attachment-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 展開的圖片預覽：寬度跟著訊息列（最寬 960px），太高的截圖限制在 60vh 內。 */
+.ai-chat-attachment-preview {
+    max-width: 100%;
+    max-height: 60vh;
+    border: 1px solid var(--oat-300);
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+/* 輸入框上方：還沒送出的附件。 */
+.ai-chat-pending {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ai-chat-pending-item {
+    border-radius: 8px;
+    padding: 4px 4px 4px 6px;
+}
+
+.ai-chat-pending-thumb {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.ai-chat-pending-size {
+    flex: 0 0 auto;
+    color: var(--oat-ink-mid);
+    font-size: 0.72rem;
+}
+
+/* 迴紋針：label 包住隱藏的 InputFile，點 label 就開檔案挑選對話框。 */
+.ai-chat-attach {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    margin: 0;
+    border: 1px solid var(--oat-300);
+    border-radius: 6px;
+    background: var(--oat-surface);
+    color: var(--oat-ink-mid);
+    cursor: pointer;
+}
+
+.ai-chat-attach:hover {
+    border-color: var(--oat-500);
+    color: var(--oat-ink);
+}
+
+.ai-chat-attach-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.ai-chat-attach ::deep .material-icons-outlined {
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+/* 不能用 display: none——貼上與拖放要靠 querySelector 找到它再塞檔案（display:none 仍找得到，
+   但部分瀏覽器對 display:none 的 file input 不觸發 label 點擊）。改成看不見但仍在版面外。 */
+.ai-chat-attach ::deep .ai-chat-attach-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .ai-chat-input ::deep .ant-input {

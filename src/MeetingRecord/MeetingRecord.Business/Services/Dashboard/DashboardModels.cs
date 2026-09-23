@@ -110,7 +110,6 @@ public sealed record DashboardSummary(
     IReadOnlyList<ChartSlice> DraftStatus,
     IReadOnlyList<ChartSlice> MeetingsPerProject,
     IReadOnlyList<ChartSlice> PromptTemplateUsage,
-    IReadOnlyList<TrendPoint> Trend,
     PerformanceSummary Performance,
     PromptTemplateSummary PromptTemplates,
     StorageSummary Storage);

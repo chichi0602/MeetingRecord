@@ -52,9 +52,19 @@ public interface ITextGenerationProvider
     /// 但這裡的呼叫端在背景執行緒、接收端本身就是 thread-safe，同步呼叫即可。
     /// </para>
     /// </param>
+    /// <param name="images">
+    /// 隨使用者訊息一起送的圖片（0.4.95，AI 問答附件）。null 或空＝純文字請求，與之前完全相同。
+    /// ⚠️ 需要支援影像輸入的模型；不支援的 deployment 會由供應商回 400，錯誤照常往上拋。
+    /// </param>
     Task<TextGenerationResult> GenerateAsync(
         string systemPrompt,
         string userPrompt,
         Action<string>? onDelta,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyList<PromptImage>? images = null);
 }
+
+/// <summary>送進模型的一張圖片。</summary>
+/// <param name="MediaType">MIME 類型，例如 <c>image/png</c>。</param>
+/// <param name="Content">圖片的原始位元組。</param>
+public sealed record PromptImage(string MediaType, byte[] Content);

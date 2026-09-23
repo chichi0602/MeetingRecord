@@ -40,6 +40,7 @@ public static class AiChatDocumentExporter
             break-after: avoid;
         }
         .chat-time { font-weight: 400; }
+        .chat-attachments { margin-top: 6px; color: #5c6670; font-size: 0.85em; }
         .chat-content > :first-child { margin-top: 0; }
         .chat-content > :last-child { margin-bottom: 0; }
         """;
@@ -184,6 +185,15 @@ public static class AiChatDocumentExporter
         builder.AppendLine("<div class=\"chat-content\">");
         builder.AppendLine(MarkdownRenderer.ToHtml(message.Content).TrimEnd());
         builder.AppendLine("</div>");
+
+        // 0.4.95：只列檔名，不把圖片嵌進 PDF。沒有這一行的話，讀 PDF 的人看到
+        // 「這張圖是什麼？」會完全不知道當時附了什麼。
+        if (message.AttachmentList.Count > 0)
+        {
+            builder.AppendLine(
+                $"<div class=\"chat-attachments\">附件：{Escape(string.Join("、", message.AttachmentList.Select(x => x.FileName)))}</div>");
+        }
+
         builder.AppendLine("</section>");
     }
 

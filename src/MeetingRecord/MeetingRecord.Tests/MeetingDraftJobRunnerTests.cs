@@ -444,7 +444,8 @@ public sealed class MeetingDraftJobRunnerTests
             string systemPrompt,
             string userPrompt,
             Action<string>? onDelta,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IReadOnlyList<PromptImage>? images = null)
         {
             Calls.Add(new GenerateCall(systemPrompt, userPrompt));
 

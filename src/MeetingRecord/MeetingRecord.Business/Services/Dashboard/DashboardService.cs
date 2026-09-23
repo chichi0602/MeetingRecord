@@ -28,9 +28,6 @@ namespace MeetingRecord.Business.Services.Dashboard;
 /// </summary>
 public class DashboardService
 {
-    /// <summary>趨勢圖預設顯示的天數；畫面可切換 7／14／30／90。</summary>
-    private const int DefaultTrendDays = 30;
-
     /// <summary>長條圖最多列出幾個專案，超過的併不進來——排名圖列太多就失去重點。</summary>
     private const int TopProjectCount = 8;
 
@@ -57,7 +54,7 @@ public class DashboardService
         this.logger = logger;
     }
 
-    public async Task<DashboardSummary> GetSummaryAsync(int trendDays = DefaultTrendDays, CancellationToken cancellationToken = default)
+    public async Task<DashboardSummary> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
         var scope = await accessScope.GetAsync();
         var today = DateTime.Today;
@@ -125,10 +122,6 @@ public class DashboardService
             BuildDraftStatus(meetingFacts),
             BuildMeetingsPerProject(meetingFacts),
             BuildPromptTemplateUsage(meetingFacts),
-            DashboardMetrics.BuildDailyTrend(
-                meetingFacts.Select(x => (x.CreatedAt, x.DraftCompletedAt)),
-                DateOnly.FromDateTime(today),
-                trendDays),
             BuildPerformance(meetingFacts),
             BuildPromptTemplates(promptTemplateFacts, meetingFacts),
             storage);

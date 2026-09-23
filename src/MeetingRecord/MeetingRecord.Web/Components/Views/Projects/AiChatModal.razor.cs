@@ -1,6 +1,8 @@
 using AntDesign;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Web.Services;
@@ -38,6 +40,24 @@ public partial class AiChatModal : ComponentBase
 
     [Inject]
     private ILogger<AiChatModal> Logger { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    /// <summary>待送出的附件在畫面上的樣子。縮圖只給小圖——大圖轉成 data URL 會整份經過 SignalR 送到瀏覽器。</summary>
+    private sealed record PendingView(PendingAttachment Item, bool IsImage, string? ThumbnailUrl);
+
+    /// <summary>超過這個大小的圖片不做縮圖，只顯示圖示（一般截圖遠小於此）。</summary>
+    private const long MaxThumbnailBytes = 2L * 1024 * 1024;
+
+    private readonly List<PendingView> pendingAttachments = [];
+    private ElementReference chatArea;
+    private int attachInputKey;
+    private bool isReadingAttachments;
+
+    /// <summary>目前展開預覽的歷史附件（StoredName）與它的 data URL。一次只展開一張。</summary>
+    private string? previewStoredName;
+    private string? previewDataUrl;
 
     [Parameter]
     public bool Visible { get; set; }
@@ -109,7 +129,31 @@ public partial class AiChatModal : ComponentBase
     /// 匯出 PDF 要起無頭瀏覽器（數秒、上百 MB），連點會把伺服器打爛。
     /// </summary>
     private bool IsBusy =>
-        isAsking || isSavingEdit || isRegenerating || isDownloadingConversation || downloadingIndex >= 0;
+        isAsking || isSavingEdit || isRegenerating || isDownloadingConversation || downloadingIndex >= 0
+        || isReadingAttachments;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 視窗內容可能隨開關被重建，所以每次畫完都掛一次；JS 端以旗標擋掉重複掛載。
+        if (!Visible || chatArea.Context is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("meetingRecordChatAttach.attach", chatArea);
+        }
+        catch (JSException ex)
+        {
+            // 掛不上只是少了貼上與拖放，迴紋針仍然可用，不該讓整個視窗壞掉。
+            Logger.LogWarning(ex, "Failed to attach AI chat paste/drop handlers.");
+        }
+        catch (JSDisconnectedException)
+        {
+            // 使用者已經離開頁面，沒有東西可掛。
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -348,6 +392,9 @@ public partial class AiChatModal : ComponentBase
         // 別人清空對話之後那個索引就不存在了，留著會讓編輯框停在空氣上。
         CancelEditState();
 
+        // 預覽綁的是某一段對話裡的附件，換段或重載後就不該再掛著。
+        ClosePreview();
+
         try
         {
             messages.AddRange(await AiChatService.GetHistoryAsync(Scope, TargetId, currentConversationId));
@@ -382,18 +429,33 @@ public partial class AiChatModal : ComponentBase
         }
 
         var asked = question.Trim();
+        var attachments = pendingAttachments.Select(x => x.Item).ToList();
         question = string.Empty;
         streamingAnswer = string.Empty;
         errorMessage = null;
         isAsking = true;
 
         // 先把提問放進畫面，使用者才不會覺得按了沒反應。實際落庫在服務層與回答一起做。
-        messages.Add(new AiChatMessageItem(AiChatService.UserRole, asked, null, DateTime.Now));
+        // 附件在這裡只是顯示用的空殼（StoredName 空白＝還不能點），落庫後重載歷史就換成真的。
+        messages.Add(new AiChatMessageItem(
+            AiChatService.UserRole,
+            asked,
+            null,
+            DateTime.Now,
+            [.. attachments.Select(x => new AiChatAttachment(
+                x.FileName,
+                string.Empty,
+                AiChatAttachmentPolicy.Classify(x.FileName) ?? AiChatAttachmentKind.Document,
+                x.Content.LongLength))]));
         StateHasChanged();
 
         try
         {
-            var answer = await AiChatService.AskAsync(Scope, TargetId, currentConversationId, asked, OnDelta);
+            var answer = await AiChatService.AskAsync(
+                Scope, TargetId, currentConversationId, asked, OnDelta, attachments: attachments);
+
+            // 成功才清掉待送附件；失敗時留著，使用者改一下問題就能重送，不必重新挑檔案。
+            pendingAttachments.Clear();
 
             // 用服務層回傳的內容重建整段歷史，順便把提問者名稱與落庫時間補正。
             await LoadHistoryAsync();
@@ -450,6 +512,119 @@ public partial class AiChatModal : ComponentBase
 
         return string.Join("；", parts) + "。";
     }
+
+    #region 附件（0.4.95）
+
+    /// <summary>
+    /// 迴紋針挑選、貼上、拖放三條路共用的入口（後兩者由 chat-attach.js 把檔案塞進同一個 InputFile）。
+    /// 不合規則的檔案逐一跳提示後略過，其餘照收。
+    /// </summary>
+    private async Task OnAttachmentsSelectedAsync(InputFileChangeEventArgs args)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        isReadingAttachments = true;
+        try
+        {
+            foreach (var file in args.GetMultipleFiles(args.FileCount))
+            {
+                if (pendingAttachments.Count >= AiChatAttachmentPolicy.MaxAttachmentsPerQuestion)
+                {
+                    _ = MessageService.WarningAsync($"一次最多附上 {AiChatAttachmentPolicy.MaxAttachmentsPerQuestion} 個檔案，其餘已略過。");
+                    break;
+                }
+
+                if (AiChatAttachmentPolicy.Validate(file.Name, file.Size) is { } error)
+                {
+                    _ = MessageService.WarningAsync(error);
+                    continue;
+                }
+
+                var kind = AiChatAttachmentPolicy.Classify(file.Name);
+                var limit = kind == AiChatAttachmentKind.Image
+                    ? AiChatAttachmentPolicy.MaxImageBytes
+                    : AiChatAttachmentPolicy.MaxDocumentBytes;
+
+                await using var stream = file.OpenReadStream(limit);
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                var content = buffer.ToArray();
+
+                var isImage = kind == AiChatAttachmentKind.Image;
+                var thumbnail = isImage && content.LongLength <= MaxThumbnailBytes
+                    ? $"data:{AiChatAttachmentPolicy.GetImageMediaType(file.Name)};base64,{Convert.ToBase64String(content)}"
+                    : null;
+
+                pendingAttachments.Add(new PendingView(new PendingAttachment(file.Name, content), isImage, thumbnail));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to read AI chat attachments.");
+            _ = MessageService.ErrorAsync("讀取附件失敗，請再試一次。");
+        }
+        finally
+        {
+            isReadingAttachments = false;
+
+            // 讀完才換 key 重建 input（理由見 FileDropZone）：否則下次選同一個檔案不會觸發 change。
+            attachInputKey++;
+            StateHasChanged();
+        }
+    }
+
+    private void OnRemovePending(int index)
+    {
+        if (index >= 0 && index < pendingAttachments.Count)
+        {
+            pendingAttachments.RemoveAt(index);
+        }
+    }
+
+    /// <summary>圖片：在訊息下方展開／收起預覽。文件：直接下載。</summary>
+    private async Task OnOpenAttachmentAsync(AiChatAttachment attachment)
+    {
+        if (IsBusy || string.IsNullOrEmpty(attachment.StoredName))
+        {
+            return;
+        }
+
+        if (attachment.Kind == AiChatAttachmentKind.Image && previewStoredName == attachment.StoredName)
+        {
+            ClosePreview();
+            return;
+        }
+
+        var content = await AiChatService.ReadAttachmentAsync(Scope, TargetId, currentConversationId, attachment);
+        if (content is null)
+        {
+            _ = MessageService.WarningAsync($"找不到附件「{attachment.FileName}」，可能已被刪除。");
+            return;
+        }
+
+        if (attachment.Kind == AiChatAttachmentKind.Image)
+        {
+            previewStoredName = attachment.StoredName;
+            previewDataUrl = $"data:{AiChatAttachmentPolicy.GetImageMediaType(attachment.FileName)};base64,{Convert.ToBase64String(content)}";
+            return;
+        }
+
+        await FileDownloadInterop.SaveBytesAsync(attachment.FileName, content, "application/octet-stream");
+    }
+
+    private void ClosePreview()
+    {
+        previewStoredName = null;
+        previewDataUrl = null;
+    }
+
+    private static string FormatSize(long bytes)
+        => bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024d:0.#} MB" : $"{Math.Max(1, bytes / 1024)} KB";
+
+    #endregion
 
     #region 複製
 
@@ -741,6 +916,10 @@ public partial class AiChatModal : ComponentBase
         // 讓下次開啟時重新載入（可能是另一個對象，或期間有人問了新問題）。
         loadedTarget = null;
         CancelEditState();
+
+        // 待送附件不留到下次開啟：下次可能是另一個專案，帶著上一個專案的檔案去問是錯的。
+        pendingAttachments.Clear();
+        ClosePreview();
         await VisibleChanged.InvokeAsync(false);
     }
 }

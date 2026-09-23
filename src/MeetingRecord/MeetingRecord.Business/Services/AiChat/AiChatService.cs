@@ -23,9 +23,17 @@ public enum AiChatScope
 }
 
 /// <summary>畫面用的一則對話訊息。</summary>
-public sealed record AiChatMessageItem(string Role, string Content, string? AskedBy, DateTime CreatedAt)
+public sealed record AiChatMessageItem(
+    string Role,
+    string Content,
+    string? AskedBy,
+    DateTime CreatedAt,
+    IReadOnlyList<AiChatAttachment>? Attachments = null)
 {
     public bool IsUser => string.Equals(Role, AiChatService.UserRole, StringComparison.Ordinal);
+
+    /// <summary>這則提問附上的圖片與文件（0.4.95）。回答與舊訊息一律是空清單。</summary>
+    public IReadOnlyList<AiChatAttachment> AttachmentList => Attachments ?? [];
 }
 
 /// <summary>一次提問的結果：回答本身，以及這次實際讀到了什麼。</summary>
@@ -58,7 +66,7 @@ public class AiChatService
 
     private const string SystemPrompt =
         "你是會議資料的問答助理。請全程使用繁體中文（台灣用語）回答，不要使用簡體字或中國大陸用語。" +
-        "只根據提供的『參考資料』回答問題；資料中找不到答案時，直接說明找不到，" +
+        "只根據提供的『參考資料』（包含使用者附上的檔案與圖片）回答問題；資料中找不到答案時，直接說明找不到，" +
         "**不要臆測、不要引用參考資料以外的知識**。回答時盡量指出資訊來自哪一份資料。";
 
     private readonly BackendDBContext context;
@@ -150,15 +158,35 @@ public class AiChatService
         string conversationId,
         string question,
         Action<string>? onDelta = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<PendingAttachment>? attachments = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(question);
 
-        var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
-        var (answer, contextResult) = await GenerateAnswerAsync(
-            scope, targetId, question, history, onDelta, cancellationToken);
+        var pending = attachments ?? [];
+        ValidateAttachments(pending);
 
-        await SaveTurnAsync(scope, targetId, conversationId, question, answer, cancellationToken);
+        var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
+
+        // 附件先落地再生成：文件要從檔案擷取文字，而且「這次的」與「歷史的」附件走同一條讀取路徑。
+        // 生成或寫入失敗時一定要刪掉，否則沒寫進對話的附件會變成硬碟上的孤兒。
+        var saved = await chatStore.SaveAttachmentsAsync(scope, targetId, conversationId, pending, cancellationToken);
+
+        string answer;
+        ChatContextResult contextResult;
+        try
+        {
+            (answer, contextResult) = await GenerateAnswerAsync(
+                scope, targetId, conversationId, question, history, saved, onDelta, cancellationToken);
+
+            await chatStore.AppendTurnAsync(
+                scope, targetId, conversationId, question, ResolveCurrentUserName(), answer, cancellationToken, saved);
+        }
+        catch
+        {
+            chatStore.TryDeleteAttachments(scope, targetId, conversationId, saved);
+            throw;
+        }
 
         logger.LogInformation(
             "AI chat answered. Scope={Scope}, TargetId={TargetId}, ContextLength={ContextLength}, AnswerLength={AnswerLength}",
@@ -240,11 +268,16 @@ public class AiChatService
         }
 
         var trimmed = newQuestion.Trim();
+
+        // 改寫的是原本那一則提問，所以它當時附上的檔案仍然算「這次的附件」（0.4.95）。
+        // 附件本身不動——UpdateMessagesAsync 只改文字，附件欄位原樣保留。
         var (answer, contextResult) = await GenerateAnswerAsync(
             scope,
             targetId,
+            conversationId,
             trimmed,
             TakeHistoryBefore(history, questionIndex),
+            history[questionIndex].AttachmentList,
             onDelta,
             cancellationToken);
 
@@ -326,16 +359,41 @@ public class AiChatService
     private async Task<(string Answer, ChatContextResult Context)> GenerateAnswerAsync(
         AiChatScope scope,
         int targetId,
+        string conversationId,
         string question,
         IReadOnlyList<AiChatMessageItem> history,
+        IReadOnlyList<AiChatAttachment> currentAttachments,
         Action<string>? onDelta,
         CancellationToken cancellationToken)
     {
         var provider = ResolveProvider();
 
-        var contextResult = scope == AiChatScope.Project
-            ? await BuildProjectContextAsync(targetId, cancellationToken)
-            : await BuildMeetingContextAsync(targetId, cancellationToken);
+        var baseSources = scope == AiChatScope.Project
+            ? await BuildProjectSourcesAsync(targetId, cancellationToken)
+            : await BuildMeetingSourcesAsync(targetId, cancellationToken);
+
+        // 使用者附上的檔案（這次的＋最近幾輪的）放在最前面：順序就是優先權，
+        // 使用者特地附上的東西被截掉，比會議紀錄被截掉更說不過去。
+        var attachments = CollectAttachments(history, currentAttachments, MaxHistoryTurns);
+
+        var attachmentSources = attachments
+            .Where(x => x.Kind == AiChatAttachmentKind.Document)
+            .Select(x => new ChatSource(
+                $"使用者附件：{x.FileName}",
+                attachmentTextExtractor.TryExtractFromFullPath(
+                    chatStore.GetAttachmentFullPath(scope, targetId, conversationId, x.StoredName),
+                    x.FileName)));
+
+        var contextResult = ChatContextBuilder.Build(attachmentSources.Concat(baseSources));
+
+        var (images, imageLabels, skippedImages) = await LoadImagesAsync(
+            scope, targetId, conversationId, SelectImages(attachments, AiChatAttachmentPolicy.MaxImagesPerRequest), cancellationToken);
+
+        contextResult = contextResult with
+        {
+            UsedLabels = [.. contextResult.UsedLabels, .. imageLabels],
+            SkippedLabels = [.. contextResult.SkippedLabels, .. skippedImages],
+        };
 
         if (!contextResult.HasContent)
         {
@@ -345,7 +403,7 @@ public class AiChatService
                     : "這場會議目前沒有可供查詢的資料：尚未產生會議紀錄，也沒有逐字稿。");
         }
 
-        var userPrompt = BuildUserPrompt(contextResult.Context, history, question);
+        var userPrompt = BuildUserPrompt(contextResult.Context, history, question, currentAttachments);
 
         // 記帳放在這裡而不是 AskAsync／RegenerateAsync，是因為這一支是兩條路徑共用的唯一出口。
         // ⚠️ 特別重要的是 RegenerateAsync：它在模型呼叫**成功之後**還可能因為樂觀鎖失敗而拋例外，
@@ -353,7 +411,7 @@ public class AiChatService
         TextGenerationResult generated;
         try
         {
-            generated = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken);
+            generated = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken, images);
         }
         catch (Exception ex)
         {
@@ -413,7 +471,8 @@ public class AiChatService
     internal static string BuildUserPrompt(
         string contextText,
         IReadOnlyList<AiChatMessageItem> history,
-        string question)
+        string question,
+        IReadOnlyList<AiChatAttachment>? currentAttachments = null)
     {
         var builder = new StringBuilder();
 
@@ -429,15 +488,109 @@ public class AiChatService
             builder.AppendLine("先前的對話（供理解代名詞與追問脈絡）：");
             foreach (var message in recent)
             {
-                builder.AppendLine($"{(message.IsUser ? "使用者" : "助理")}：{message.Content}");
+                builder.AppendLine($"{(message.IsUser ? "使用者" : "助理")}：{message.Content}{DescribeAttachments(message.AttachmentList)}");
             }
         }
 
         builder.AppendLine();
         builder.AppendLine("---");
-        builder.AppendLine($"問題：{question.Trim()}");
+        builder.AppendLine($"問題：{question.Trim()}{DescribeAttachments(currentAttachments ?? [])}");
 
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// 在提問後面標註附了哪些檔案，讓模型知道「這張圖」「這份文件」指的是哪一個。
+    /// 文件內容在參考資料裡（標題是「使用者附件：檔名」），圖片隨訊息附上。
+    /// </summary>
+    private static string DescribeAttachments(IReadOnlyList<AiChatAttachment> attachments)
+        => attachments.Count == 0
+            ? string.Empty
+            : $"（附件：{string.Join("、", attachments.Select(x => x.Kind == AiChatAttachmentKind.Image ? $"圖片 {x.FileName}" : x.FileName))}）";
+
+    /// <summary>
+    /// 這次要一起送的附件：這次的排最前面，再來是最近 <paramref name="maxTurns"/> 輪提問的附件（新的在前）。
+    /// 視窗與文字歷史相同——追問「那張圖第二行是什麼」時模型才看得到那張圖，
+    /// 但更早的附件不再重送，每次追問的費用才不會無限累積。
+    /// </summary>
+    internal static IReadOnlyList<AiChatAttachment> CollectAttachments(
+        IReadOnlyList<AiChatMessageItem> history,
+        IReadOnlyList<AiChatAttachment> currentAttachments,
+        int maxTurns)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+        ArgumentNullException.ThrowIfNull(currentAttachments);
+
+        var recentFromHistory = TakeRecentHistory(history, maxTurns)
+            .Where(x => x.IsUser)
+            .Reverse()
+            .SelectMany(x => x.AttachmentList);
+
+        return [.. currentAttachments, .. recentFromHistory];
+    }
+
+    /// <summary>挑出要送的圖片：依 <see cref="CollectAttachments"/> 的順序（新的在前）取前 <paramref name="max"/> 張。</summary>
+    internal static IReadOnlyList<AiChatAttachment> SelectImages(IReadOnlyList<AiChatAttachment> attachments, int max)
+        => [.. attachments.Where(x => x.Kind == AiChatAttachmentKind.Image).Take(max)];
+
+    /// <summary>服務層再擋一次：畫面擋得住挑選與貼上，但擋不住直接呼叫這支服務的程式碼。</summary>
+    private static void ValidateAttachments(IReadOnlyList<PendingAttachment> attachments)
+    {
+        if (attachments.Count > AiChatAttachmentPolicy.MaxAttachmentsPerQuestion)
+        {
+            throw new InvalidOperationException($"一次最多附上 {AiChatAttachmentPolicy.MaxAttachmentsPerQuestion} 個檔案。");
+        }
+
+        foreach (var attachment in attachments)
+        {
+            if (AiChatAttachmentPolicy.Validate(attachment.FileName, attachment.Content.LongLength) is { } error)
+            {
+                throw new InvalidOperationException(error);
+            }
+        }
+    }
+
+    /// <summary>讀出要送的圖片。檔案不見（被手動刪掉）時列進「無法讀取」，不讓整個提問失敗。</summary>
+    private async Task<(List<PromptImage> Images, List<string> UsedLabels, List<string> SkippedLabels)> LoadImagesAsync(
+        AiChatScope scope,
+        int targetId,
+        string conversationId,
+        IReadOnlyList<AiChatAttachment> images,
+        CancellationToken cancellationToken)
+    {
+        var loaded = new List<PromptImage>();
+        var used = new List<string>();
+        var skipped = new List<string>();
+
+        foreach (var image in images)
+        {
+            var label = $"使用者圖片：{image.FileName}";
+            var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, image.StoredName);
+            var mediaType = AiChatAttachmentPolicy.GetImageMediaType(image.FileName);
+
+            if (mediaType is null || !File.Exists(fullPath))
+            {
+                skipped.Add(label);
+                continue;
+            }
+
+            loaded.Add(new PromptImage(mediaType, await File.ReadAllBytesAsync(fullPath, cancellationToken)));
+            used.Add(label);
+        }
+
+        return (loaded, used, skipped);
+    }
+
+    /// <summary>讀出一個附件的內容（畫面預覽圖片、下載文件用）。找不到時回傳 null。</summary>
+    public async Task<byte[]?> ReadAttachmentAsync(
+        AiChatScope scope,
+        int targetId,
+        string conversationId,
+        AiChatAttachment attachment,
+        CancellationToken cancellationToken = default)
+    {
+        var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, attachment.StoredName);
+        return File.Exists(fullPath) ? await File.ReadAllBytesAsync(fullPath, cancellationToken) : null;
     }
 
     /// <summary>
@@ -461,8 +614,8 @@ public class AiChatService
         return [.. history.Skip(history.Count - maxMessages)];
     }
 
-    /// <summary>專案層級的脈絡：先放各份會議紀錄（短且已整理過），再放附件全文。</summary>
-    private async Task<ChatContextResult> BuildProjectContextAsync(int projectId, CancellationToken cancellationToken)
+    /// <summary>專案層級的脈絡來源：先放各份會議紀錄（短且已整理過），再放附件全文。</summary>
+    private async Task<List<ChatSource>> BuildProjectSourcesAsync(int projectId, CancellationToken cancellationToken)
     {
         var meetings = await context.Meeting.AsNoTracking()
             .Where(x => x.ProjectId == projectId)
@@ -493,11 +646,11 @@ public class AiChatService
             sources.Add(new ChatSource($"附件：{file.OriginalFileName}", text));
         }
 
-        return ChatContextBuilder.Build(sources);
+        return sources;
     }
 
-    /// <summary>單一會議的脈絡：會議紀錄優先（摘要），再放逐字稿（長，可能被截）。</summary>
-    private async Task<ChatContextResult> BuildMeetingContextAsync(int meetingId, CancellationToken cancellationToken)
+    /// <summary>單一會議的脈絡來源：會議紀錄優先（摘要），再放逐字稿（長，可能被截）。</summary>
+    private async Task<List<ChatSource>> BuildMeetingSourcesAsync(int meetingId, CancellationToken cancellationToken)
     {
         var meeting = await context.Meeting.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken)
@@ -511,18 +664,8 @@ public class AiChatService
             new($"逐字稿：{meeting.Title}", transcript),
         };
 
-        return ChatContextBuilder.Build(sources);
+        return sources;
     }
-
-    private Task SaveTurnAsync(
-        AiChatScope scope,
-        int targetId,
-        string conversationId,
-        string question,
-        string answer,
-        CancellationToken cancellationToken)
-        => chatStore.AppendTurnAsync(
-            scope, targetId, conversationId, question, ResolveCurrentUserName(), answer, cancellationToken);
 
     private string? ResolveCurrentUserName()
     {

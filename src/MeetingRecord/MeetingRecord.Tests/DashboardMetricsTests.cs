@@ -117,69 +117,6 @@ public sealed class DashboardMetricsTests
 
     #endregion
 
-    #region 日趨勢
-
-    [Fact]
-    public void BuildDailyTrend_ShouldPlaceEventsIntoTheirOwnDay()
-    {
-        // 一天的頭尾兩個極端時間：時間部分不能讓事件落到前一天或隔天。
-        // 這裡若誤加 ToLocalTime()（欄位是 DateTime.Now 寫入、Kind 為 Unspecified），
-        // 整批會位移 8 小時，23:59 那筆就會跑到 9/7。
-        (DateTime, DateTime?)[] meetings =
-        [
-            (new DateTime(2026, 9, 6, 23, 59, 0), new DateTime(2026, 9, 8, 0, 1, 0)),
-        ];
-
-        var points = DashboardMetrics.BuildDailyTrend(meetings, new DateOnly(2026, 9, 8), 7);
-
-        Assert.Equal(7, points.Count);
-        Assert.Equal(1, points[4].Created);     // 9/6
-        Assert.Equal(1, points[^1].Completed);  // 9/8
-        Assert.Equal(1, points.Sum(point => point.Created));
-        Assert.Equal(1, points.Sum(point => point.Completed));
-    }
-
-    [Fact]
-    public void BuildDailyTrend_ShouldIgnoreMeetingsOutsideTheWindow()
-    {
-        (DateTime, DateTime?)[] meetings = [(new DateTime(2026, 8, 1), null)];
-
-        var points = DashboardMetrics.BuildDailyTrend(meetings, new DateOnly(2026, 9, 8), 7);
-
-        // 窗外的舊資料不能被堆到第一個桶——迭代分組結果而不是迭代日期桶就會犯這個錯。
-        Assert.Equal(0, points.Sum(point => point.Created));
-    }
-
-    [Fact]
-    public void BuildDailyTrend_ShouldIgnoreNullDraftCompletedAt()
-    {
-        (DateTime, DateTime?)[] meetings = [(new DateTime(2026, 9, 8, 10, 0, 0), null)];
-
-        var points = DashboardMetrics.BuildDailyTrend(meetings, new DateOnly(2026, 9, 8), 7);
-
-        // 「新增了會議」與「完成了紀錄」是兩條獨立的線，還沒生成不能算成已完成。
-        Assert.Equal(1, points[^1].Created);
-        Assert.Equal(0, points[^1].Completed);
-    }
-
-    [Fact]
-    public void BuildDailyTrend_ShouldReturnZeroFilledPointsWhenNoMeetings()
-    {
-        var points = DashboardMetrics.BuildDailyTrend([], new DateOnly(2026, 9, 8), 30);
-
-        // 完全沒有資料時要回 30 個零點而不是空集合：畫面的空狀態文案是靠
-        // 「最大值為 0」判斷的，回空集合會變成另一個分支（「尚無資料」）。
-        Assert.Equal(30, points.Count);
-        Assert.All(points, point =>
-        {
-            Assert.Equal(0, point.Created);
-            Assert.Equal(0, point.Completed);
-            Assert.NotNull(point.Label);
-        });
-    }
-
-    #endregion
-
     #region 百分比
 
     [Fact]

@@ -61,7 +61,8 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
         string systemPrompt,
         string userPrompt,
         Action<string>? onDelta,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<PromptImage>? images = null)
     {
         var settings = llmSettings.Value;
         var provider = settings.GetDefaultProvider()
@@ -89,7 +90,7 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
             Messages =
             [
                 new ChatMessage { Role = "system", Content = systemPrompt },
-                new ChatMessage { Role = "user", Content = userPrompt },
+                new ChatMessage { Role = "user", Content = BuildUserContent(userPrompt, images) },
             ],
         };
 
@@ -272,6 +273,32 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
         return string.Concat(value.AsSpan(0, maxLength), "…");
     }
 
+    /// <summary>
+    /// 使用者訊息的 content。沒有圖片時維持**純字串**——與 0.4.94 之前送出的內容逐位元組相同，
+    /// 會議紀錄生成、抽出待辦這些不帶圖的呼叫完全不受影響。
+    /// 有圖片時改成 content parts：文字一段，每張圖一段 base64 data URL。
+    /// </summary>
+    private static object BuildUserContent(string userPrompt, IReadOnlyList<PromptImage>? images)
+    {
+        if (images is not { Count: > 0 })
+        {
+            return userPrompt;
+        }
+
+        var parts = new List<ContentPart> { new() { Type = "text", Text = userPrompt } };
+        parts.AddRange(images.Select(image => new ContentPart
+        {
+            Type = "image_url",
+            ImageUrl = new ImageUrlPart { Url = $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Content)}" },
+        }));
+
+        return parts;
+    }
+
+    /// <summary><see cref="BuildUserContent"/> 序列化後的 JSON，供單元測試檢查送出的形狀。</summary>
+    internal static string SerializeUserContent(string userPrompt, IReadOnlyList<PromptImage>? images)
+        => JsonSerializer.Serialize(BuildUserContent(userPrompt, images), SerializerOptions);
+
     #region 請求／回應的 JSON 形狀（僅取用到的欄位）
 
     private sealed class ChatCompletionRequest
@@ -301,8 +328,30 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
         [JsonPropertyName("role")]
         public string Role { get; set; } = string.Empty;
 
+        /// <summary>
+        /// 純文字時是字串；帶圖片時是 content parts 陣列（見 <see cref="BuildUserContent"/>）。
+        /// 宣告成 object，序列化會依執行期型別輸出。
+        /// </summary>
         [JsonPropertyName("content")]
-        public string Content { get; set; } = string.Empty;
+        public object Content { get; set; } = string.Empty;
+    }
+
+    private sealed class ContentPart
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = string.Empty;
+
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+
+        [JsonPropertyName("image_url")]
+        public ImageUrlPart? ImageUrl { get; set; }
+    }
+
+    private sealed class ImageUrlPart
+    {
+        [JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
     }
 
     private sealed class ChatCompletionChunk

@@ -67,43 +67,6 @@ public static class DashboardMetrics
     }
 
     /// <summary>
-    /// 「最近 N 天」的雙線趨勢：每天新增幾場會議、完成幾份會議紀錄。
-    /// </summary>
-    public static IReadOnlyList<TrendPoint> BuildDailyTrend(
-        IEnumerable<(DateTime Created, DateTime? DraftCompleted)> meetings,
-        DateOnly today,
-        int days)
-    {
-        ArgumentNullException.ThrowIfNull(meetings);
-
-        var buckets = BuildDayBuckets(today, days);
-        var labels = BuildDayLabels(buckets);
-
-        // 先分組成字典再逐桶查表；逐桶 Count 等於把同一份清單掃 2N 遍。
-        //
-        // 時間戳一律當本地時間直接取日期部分——這些欄位都是 DateTime.Now 寫入的，
-        // 從 SQLite 讀回來 Kind 是 Unspecified，套 ToLocalTime() 會被當成 UTC
-        // 而整批位移 8 小時，把下午建立的會議算到隔天。
-        var items = meetings.ToList();
-
-        var created = items
-            .GroupBy(x => DateOnly.FromDateTime(x.Created))
-            .ToDictionary(group => group.Key, group => group.Count());
-
-        var completed = items
-            .Where(x => x.DraftCompleted is not null)
-            .GroupBy(x => DateOnly.FromDateTime(x.DraftCompleted!.Value))
-            .ToDictionary(group => group.Key, group => group.Count());
-
-        // 迭代 buckets 而不是迭代 groups：稠密性（沒資料的日子也要在）與
-        // 「窗外的舊資料不被堆到第 0 桶」兩件事，都由這個方向自動成立。
-        return [.. buckets.Select((day, index) => new TrendPoint(
-            labels[index],
-            created.GetValueOrDefault(day),
-            completed.GetValueOrDefault(day)))];
-    }
-
-    /// <summary>
     /// 啟用中、但沒有任何會議紀錄用過的範本數。
     ///
     /// <para>

@@ -94,7 +94,22 @@ public class AiChatStore
         [property: JsonPropertyName("role")] string Role,
         [property: JsonPropertyName("content")] string Content,
         [property: JsonPropertyName("askedBy")] string? AskedBy,
-        [property: JsonPropertyName("createdAt")] DateTime CreatedAt);
+        [property: JsonPropertyName("createdAt")] DateTime CreatedAt,
+        // 0.4.95 新增。WhenWritingNull：沒附件的訊息不會多出這個欄位，舊檔案也照讀。
+        [property: JsonPropertyName("attachments")] List<StoredAttachment>? Attachments = null);
+
+    private sealed record StoredAttachment(
+        [property: JsonPropertyName("fileName")] string FileName,
+        [property: JsonPropertyName("storedName")] string StoredName,
+        [property: JsonPropertyName("kind")] AiChatAttachmentKind Kind,
+        [property: JsonPropertyName("size")] long Size);
+
+    /// <summary>
+    /// 附件資料夾的後綴：<c>project/3/&lt;對話 Id&gt;.files/</c>，與對話檔並排。
+    /// 放在對話檔旁邊而不是另開根目錄，刪一段對話時一眼就知道要連哪個資料夾一起刪。
+    /// 列清單只列 <c>*.jsonl</c>，所以資料夾不會被誤當成對話。
+    /// </summary>
+    private const string AttachmentFolderSuffix = ".files";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -456,7 +471,7 @@ public class AiChatStore
         }
     }
 
-    /// <summary>刪掉其中一段對話。其他段不受影響。</summary>
+    /// <summary>刪掉其中一段對話（連同它的附件）。其他段不受影響。</summary>
     public void TryDeleteConversation(AiChatScope scope, int targetId, string conversationId)
     {
         var fullPath = GetFullPath(scope, targetId, conversationId);
@@ -477,6 +492,77 @@ public class AiChatStore
         {
             logger.LogWarning(ex, "Failed to delete AI chat conversation. FullPath={FullPath}", fullPath);
         }
+
+        // ⚠️ 附件資料夾要一起刪，否則刪掉的對話會在硬碟上留下永遠沒人引用的圖片與文件。
+        var attachmentDirectory = GetAttachmentDirectory(scope, targetId, conversationId);
+        try
+        {
+            if (Directory.Exists(attachmentDirectory))
+            {
+                Directory.Delete(attachmentDirectory, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to delete AI chat attachments. Directory={Directory}", attachmentDirectory);
+        }
+    }
+
+    /// <summary>某段對話的附件資料夾。</summary>
+    private string GetAttachmentDirectory(AiChatScope scope, int targetId, string conversationId)
+        => Path.Combine(
+            GetConversationDirectory(scope, targetId),
+            SanitizeConversationId(conversationId) + AttachmentFolderSuffix);
+
+    /// <summary>
+    /// 附件的完整路徑。
+    /// ⚠️ <paramref name="storedName"/> 來自對話檔，而對話檔是可以被手動編輯的純文字，
+    /// 一律只取檔名部分，擋掉 <c>..\..\</c> 這類路徑跳脫。
+    /// </summary>
+    public string GetAttachmentFullPath(AiChatScope scope, int targetId, string conversationId, string storedName)
+        => Path.Combine(GetAttachmentDirectory(scope, targetId, conversationId), Path.GetFileName(storedName));
+
+    /// <summary>
+    /// 把附件寫進對話的附件資料夾，回傳登錄資訊（0.4.95）。
+    /// 磁碟檔名一律隨機產生，只保留副檔名——使用者的檔名可能有任何字元，也可能重複。
+    /// </summary>
+    public async Task<IReadOnlyList<AiChatAttachment>> SaveAttachmentsAsync(
+        AiChatScope scope,
+        int targetId,
+        string conversationId,
+        IReadOnlyList<PendingAttachment> attachments,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(attachments);
+        if (attachments.Count == 0)
+        {
+            return [];
+        }
+
+        var directory = GetAttachmentDirectory(scope, targetId, conversationId);
+        Directory.CreateDirectory(directory);
+
+        var saved = new List<AiChatAttachment>(attachments.Count);
+        foreach (var attachment in attachments)
+        {
+            var kind = AiChatAttachmentPolicy.Classify(attachment.FileName)
+                ?? throw new InvalidOperationException($"「{attachment.FileName}」的格式不支援。");
+
+            var storedName = $"{Guid.NewGuid():N}{Path.GetExtension(attachment.FileName).ToLowerInvariant()}";
+            await File.WriteAllBytesAsync(Path.Combine(directory, storedName), attachment.Content, cancellationToken);
+            saved.Add(new AiChatAttachment(attachment.FileName, storedName, kind, attachment.Content.LongLength));
+        }
+
+        return saved;
+    }
+
+    /// <summary>刪掉剛存的附件。提問失敗時用，否則沒寫進對話的附件會變成孤兒。</summary>
+    public void TryDeleteAttachments(AiChatScope scope, int targetId, string conversationId, IEnumerable<AiChatAttachment> attachments)
+    {
+        foreach (var attachment in attachments)
+        {
+            TryDeleteFile(GetAttachmentFullPath(scope, targetId, conversationId, attachment.StoredName));
+        }
     }
 
     /// <summary>把一輪問答（兩則訊息）接到對話尾端。</summary>
@@ -487,13 +573,18 @@ public class AiChatStore
         string question,
         string? askedBy,
         string answer,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<AiChatAttachment>? attachments = null)
     {
         var now = DateTime.Now;
         var lines = new StringBuilder();
 
+        var storedAttachments = attachments is { Count: > 0 }
+            ? attachments.Select(x => new StoredAttachment(x.FileName, x.StoredName, x.Kind, x.Size)).ToList()
+            : null;
+
         lines.AppendLine(JsonSerializer.Serialize(
-            new StoredMessage(AiChatService.UserRole, question.Trim(), askedBy, now), SerializerOptions));
+            new StoredMessage(AiChatService.UserRole, question.Trim(), askedBy, now, storedAttachments), SerializerOptions));
         lines.AppendLine(JsonSerializer.Serialize(
             new StoredMessage(AiChatService.AssistantRole, answer, null, now), SerializerOptions));
 
@@ -770,7 +861,12 @@ public class AiChatStore
         // 發話者是「AI 助理」的空氣訊息（role 不是 user 就會被當成回答）。
         return stored is null || IsMeta(stored)
             ? null
-            : new AiChatMessageItem(stored.Role, stored.Content, stored.AskedBy, stored.CreatedAt);
+            : new AiChatMessageItem(
+                stored.Role,
+                stored.Content,
+                stored.AskedBy,
+                stored.CreatedAt,
+                stored.Attachments?.Select(x => new AiChatAttachment(x.FileName, x.StoredName, x.Kind, x.Size)).ToList());
     }
 
     private static bool IsMeta(StoredMessage stored)

@@ -129,7 +129,7 @@ public class MyUserService
                         ? dataSource.OrderBy(x => x.Status).ThenBy(x => x.Id)
                         : dataSource;
             }
-            else if (dataRequest.SortField == nameof(MyUserAdapterModel.IsAdminText))
+            else if (dataRequest.SortField == nameof(MyUserAdapterModel.RoleText))
             {
                 dataSource = dataRequest.SortDescending == true
                     ? dataSource.OrderByDescending(x => x.IsAdmin).ThenByDescending(x => x.Id)
@@ -194,18 +194,6 @@ public class MyUserService
         return result;
     }
 
-    public async Task<List<RoleViewAdapterModel>> GetRoleViewsAsync()
-    {
-        Logger.LogDebug("Loading role views for user maintenance.");
-
-        List<RoleView> roleViews = await context.RoleView
-            .AsNoTracking()
-            .OrderBy(x => x.Name)
-            .ToListAsync();
-
-        Logger.LogDebug("Loaded role views successfully. Count={Count}", roleViews.Count);
-        return Mapper.Map<List<RoleViewAdapterModel>>(roleViews);
-    }
 
     public async Task<VerifyRecordResult> AddAsync(MyUserAdapterModel paraObject)
     {
@@ -229,6 +217,7 @@ public class MyUserService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<MyUser>(context);
 
+            paraObject.Id = itemParameter.Id;
             await SyncAssignmentsAsync(itemParameter.Id, paraObject);
 
             var (actorUserId, actorAccount) = ResolveActor();

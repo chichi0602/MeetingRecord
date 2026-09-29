@@ -74,6 +74,13 @@ public class Meeting
 
     public Project? Project { get; set; }
 
+    /// <summary>
+    /// 上傳者（0.4.99）。**還沒歸屬專案時，只有上傳者與管理者看得到這筆會議**。
+    /// 刻意不設外鍵：刪除帳號不該被擋，也不該連帶刪掉會議；Id 對不到人時就只剩管理者看得到。
+    /// 0.4.80 以前的會議由啟動回填從 AI 用量帳本推回，推不到的維持 null。
+    /// </summary>
+    public int? CreatedByUserId { get; set; }
+
     #endregion
 
     #region AI 會議紀錄草稿

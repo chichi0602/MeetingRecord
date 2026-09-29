@@ -1,0 +1,83 @@
+@using MeetingRecord.Business.Services.DataAccess
+@using MeetingRecord.Share.Enums
+@* 專案成員（0.4.99）。負責人與管理者可以加減協作者；只有管理者能轉移負責人。協作者看到的是唯讀名單。 *@
+<Modal Title="@($"專案成員 — {ProjectTitle}")"
+       Class="form-modal-standard"
+       Visible="@Visible"
+       Keyboard="true"
+       Footer="null"
+       OnCancel="CloseAsync">
+    <div class="project-member">
+        @if (CanManage)
+        {
+            <div class="project-member-add">
+                <Select TItem="AssignableUser" TItemValue="int"
+                        DataSource="@candidates"
+                        @bind-Value="@selectedUserId"
+                        LabelName="@nameof(AssignableUser.Name)"
+                        ValueName="@nameof(AssignableUser.Id)"
+                        Placeholder="選擇要加入的協作者"
+                        EnableSearch
+                        AllowClear
+                        Class="project-member-add-select" />
+                <Button Type="ButtonType.Primary"
+                        Disabled="@(selectedUserId == 0 || isBusy)"
+                        Loading="@isBusy"
+                        OnClick="AddAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="person_add" /><span>加入</span></span>
+                </Button>
+            </div>
+        }
+        else
+        {
+            <div class="project-member-hint">只有專案負責人或管理者可以調整成員。</div>
+        }
+
+        @if (members.Count == 0)
+        {
+            <div class="project-member-hint">
+                這個專案還沒有成員，目前只有管理者看得到。
+            </div>
+        }
+        else
+        {
+            <ul class="project-member-list">
+                @foreach (var member in members)
+                {
+                    <li class="project-member-row" @key="member.UserId">
+                        <div class="project-member-main">
+                            <span class="project-member-name">@member.Name</span>
+                            <span class="project-member-account">@member.Account</span>
+                        </div>
+                        <Tag Color="@(member.Role == ProjectMemberRole.Owner ? "gold" : "default")">@member.RoleText</Tag>
+
+                        @if (member.Role == ProjectMemberRole.Collaborator)
+                        {
+                            @if (IsAdmin)
+                            {
+                                <Tooltip Title="把負責人轉給這個人，原負責人會變成協作者">
+                                    <Button Type="ButtonType.Default"
+                                            Disabled="@isBusy"
+                                            OnClick="@(async () => await SetOwnerAsync(member))">
+                                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="workspace_premium" /><span>設為負責人</span></span>
+                                    </Button>
+                                </Tooltip>
+                            }
+                            @if (CanManage)
+                            {
+                                <Tooltip Title="移除這位協作者，他將看不到這個專案">
+                                    <Button Type="ButtonType.Default"
+                                            Danger
+                                            Disabled="@isBusy"
+                                            OnClick="@(async () => await RemoveAsync(member))">
+                                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="person_remove" /><span>移除</span></span>
+                                    </Button>
+                                </Tooltip>
+                            }
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</Modal>

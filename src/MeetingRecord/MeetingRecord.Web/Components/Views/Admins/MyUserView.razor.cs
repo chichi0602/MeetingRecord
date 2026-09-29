@@ -21,8 +21,15 @@ namespace MeetingRecord.Web.Components.Views.Admins
         private readonly ModalService modalService;
         private readonly MessageService messageService;
         private readonly NotificationService notificationService;
-        private readonly TeamService teamService;
-        List<string> availableTeams = new();
+        private readonly ProjectService projectService;
+        private readonly ProjectMemberService projectMemberService;
+        List<ProjectAdapterModel> availableProjects = new();
+
+        /// <summary>表單上勾選的專案（負責人的專案也在裡面，但選項是鎖住的）。</summary>
+        List<int> selectedProjectIds = new();
+
+        /// <summary>這個人擔任負責人的專案。存檔時不會被移除，只能在專案頁轉移。</summary>
+        HashSet<int> ownedProjectIds = new();
         ITable? table;
         int _pageIndex = 1;
         int _pageSize = MagicObjectHelper.PageSize;
@@ -32,7 +39,6 @@ namespace MeetingRecord.Web.Components.Views.Admins
         string sortDirection = "None";
 
         List<MyUserAdapterModel> myUserAdapterModels = new();
-        List<RoleViewAdapterModel> roleViewAdapterModels = new();
 
         string modalTitle = "使用者維護";
         bool modalVisible = false;
@@ -65,7 +71,8 @@ namespace MeetingRecord.Web.Components.Views.Admins
             ModalService modalService,
             MessageService messageService,
             NotificationService notificationService,
-            TeamService teamService)
+            ProjectService projectService,
+            ProjectMemberService projectMemberService)
         {
             this.logger = logger;
             this.myUserService = myUserService;
@@ -73,7 +80,8 @@ namespace MeetingRecord.Web.Components.Views.Admins
             this.modalService = modalService;
             this.messageService = messageService;
             this.notificationService = notificationService;
-            this.teamService = teamService;
+            this.projectService = projectService;
+            this.projectMemberService = projectMemberService;
         }
 
         protected override async Task OnInitializedAsync()
@@ -93,7 +101,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 return;
             }
 
-            availableTeams = await teamService.GetAllEnabledNamesAsync();
+            availableProjects = await projectService.GetSelectableAsync();
 
             await ReloadAsync();
         }
@@ -203,14 +211,15 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
         async Task OnEditAsync(MyUserAdapterModel myUserAdapterModel)
         {
-            await LoadRoleViewsAsync();
-
             isNewRecordMode = false;
             modalTitle = "修改使用者";
             CurrentRecord = (await myUserService.GetAsync(myUserAdapterModel.Id)).Clone();
-            var (additionalRoleIds, teamNames) = await myUserService.GetUserAssignmentsAsync(myUserAdapterModel.Id);
-            CurrentRecord.AdditionalRoleIds = additionalRoleIds;
+            var (_, teamNames) = await myUserService.GetUserAssignmentsAsync(myUserAdapterModel.Id);
             CurrentRecord.TeamNames = teamNames;
+            await ApplyGeneralRoleAsync();
+            availableProjects = await projectService.GetSelectableAsync();
+            selectedProjectIds = await projectMemberService.GetUserProjectIdsAsync(myUserAdapterModel.Id);
+            ownedProjectIds = [.. await projectMemberService.GetUserOwnedProjectIdsAsync(myUserAdapterModel.Id)];
             formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened edit modal for user. UserId={UserId}, Account={Account}", myUserAdapterModel.Id, myUserAdapterModel.Account);
@@ -252,27 +261,11 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
         async Task OnAddAsync(bool continueOnCapturedContext)
         {
-            await LoadRoleViewsAsync();
-
             CurrentRecord = new();
-            RoleViewAdapterModel? defaultRole = null;
-            try
-            {
-                defaultRole = await roleViewService.Get預設新建帳號角色Async();
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to load default role for new user creation.");
-            }
-
-            if (defaultRole is not null && defaultRole.Id != 0)
-            {
-                CurrentRecord.RoleViewId = defaultRole.Id;
-            }
-            else if (roleViewAdapterModels.Any())
-            {
-                CurrentRecord.RoleViewId = roleViewAdapterModels.First().Id;
-            }
+            await ApplyGeneralRoleAsync();
+            availableProjects = await projectService.GetSelectableAsync();
+            selectedProjectIds = new();
+            ownedProjectIds = new();
 
             isNewRecordMode = true;
             modalTitle = "新增使用者";
@@ -342,6 +335,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 CurrentRecord.UpdateAt = DateTime.Now;
 
                 await myUserService.AddAsync(CurrentRecord);
+                await SaveProjectsAsync(CurrentRecord.Id);
                 logger.LogInformation("User create submitted. Account={Account}", CurrentRecord.Account);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -375,6 +369,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 CurrentRecord.UpdateAt = DateTime.Now;
 
                 await myUserService.UpdateAsync(CurrentRecord);
+                await SaveProjectsAsync(CurrentRecord.Id);
                 logger.LogInformation("User update submitted. UserId={UserId}, Account={Account}", CurrentRecord.Id, CurrentRecord.Account);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -445,20 +440,55 @@ namespace MeetingRecord.Web.Components.Views.Admins
             LocalEditContext = context;
         }
 
-        private void OnAdditionalRolesChanged(IEnumerable<int> values)
+        private void OnUserProjectsChanged(IEnumerable<int> values)
         {
-            CurrentRecord.AdditionalRoleIds = values?.ToList() ?? new List<int>();
+            selectedProjectIds = values?.ToList() ?? new List<int>();
         }
 
-        private void OnUserTeamsChanged(IEnumerable<string> values)
+        /// <summary>
+        /// 把勾選的專案存成協作者身分。帳號本身已經存好了才呼叫——新增時要等 AddAsync 回填 Id。
+        /// </summary>
+        private async Task SaveProjectsAsync(int userId)
         {
-            CurrentRecord.TeamNames = values?.ToList() ?? new List<string>();
+            if (userId == 0)
+            {
+                return;
+            }
+
+            var result = await projectMemberService.SyncUserCollaborationsAsync(userId, selectedProjectIds);
+            if (!result.Success)
+            {
+                logger.LogWarning("Saving user projects failed. UserId={UserId}, Message={Message}", userId, result.Message);
+                _ = notificationService.Open(new NotificationConfig()
+                {
+                    Message = "系統訊息",
+                    Description = result.Message,
+                    NotificationType = NotificationType.Error,
+                    Placement = NotificationPlacement.BottomRight
+                });
+            }
         }
 
-        private async Task LoadRoleViewsAsync()
+        /// <summary>
+        /// 角色一律是「一般使用者」（0.4.98 起沒有角色選單）。額外角色清空，
+        /// 否則舊帳號編輯後存檔會把殘留的多角色再寫回 UserRole。
+        /// </summary>
+        private async Task ApplyGeneralRoleAsync()
         {
-            roleViewAdapterModels = await myUserService.GetRoleViewsAsync();
-            logger.LogDebug("Loaded role views for user view. Count={Count}", roleViewAdapterModels.Count);
+            CurrentRecord.AdditionalRoleIds = new List<int>();
+
+            try
+            {
+                var generalRole = await roleViewService.Get預設新建帳號角色Async();
+                if (generalRole is not null && generalRole.Id != 0)
+                {
+                    CurrentRecord.RoleViewId = generalRole.Id;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to load general user role for user form.");
+            }
         }
     }
 }

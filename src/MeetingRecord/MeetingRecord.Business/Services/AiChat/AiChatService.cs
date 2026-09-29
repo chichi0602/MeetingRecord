@@ -78,6 +78,7 @@ public class AiChatService
     private readonly IOptions<LlmSettings> llmSettings;
     private readonly AiUsageRecorder usageRecorder;
     private readonly ILogger<AiChatService> logger;
+    private readonly ProjectAccessService projectAccess;
 
     public AiChatService(
         BackendDBContext context,
@@ -88,7 +89,8 @@ public class AiChatService
         CurrentUserService currentUserService,
         IOptions<LlmSettings> llmSettings,
         AiUsageRecorder usageRecorder,
-        ILogger<AiChatService> logger)
+        ILogger<AiChatService> logger,
+        ProjectAccessService projectAccess)
     {
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
@@ -99,54 +101,101 @@ public class AiChatService
         this.llmSettings = llmSettings;
         this.usageRecorder = usageRecorder;
         this.logger = logger;
+        this.projectAccess = projectAccess;
+    }
+
+    /// <summary>
+    /// 對話範圍的權限（0.4.99）：專案問答要是專案成員，會議問答要看得到那場會議。
+    /// **每個公開方法第一行都要呼叫**——對話檔與附件在檔案系統上，路徑由範圍＋對象 Id 直接算出來，
+    /// 沒擋的話知道 Id 就讀得到別人的對話。看不到時當成不存在。
+    /// </summary>
+    private async Task EnsureAccessAsync(AiChatScope scope, int targetId, CancellationToken cancellationToken)
+    {
+        var access = await projectAccess.GetAsync();
+        if (access.IsAdmin)
+        {
+            return;
+        }
+
+        bool allowed;
+        if (scope == AiChatScope.Project)
+        {
+            allowed = access.CanViewProject(targetId);
+        }
+        else
+        {
+            var meeting = await context.Meeting.AsNoTracking()
+                .Where(x => x.Id == targetId)
+                .Select(x => new { x.ProjectId, x.CreatedByUserId })
+                .FirstOrDefaultAsync(cancellationToken);
+            allowed = meeting is not null && access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId);
+        }
+
+        if (!allowed)
+        {
+            logger.LogWarning("AI chat access denied. Scope={Scope}, TargetId={TargetId}", scope, targetId);
+            throw new InvalidOperationException("找不到這個專案或會議，可能已被刪除或沒有權限。");
+        }
     }
 
     /// <summary>
     /// 列出這個對象底下的所有對話，最近更新的排最前面。
     /// 會順帶把 0.4.79 之前的單檔對話搬進新結構。
     /// </summary>
-    public Task<IReadOnlyList<AiChatConversationInfo>> ListConversationsAsync(
+    public async Task<IReadOnlyList<AiChatConversationInfo>> ListConversationsAsync(
         AiChatScope scope,
         int targetId,
         CancellationToken cancellationToken = default)
-        => chatStore.ListConversationsAsync(scope, targetId, cancellationToken);
+    {
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        return await chatStore.ListConversationsAsync(scope, targetId, cancellationToken);
+    }
 
     /// <summary>開一段新對話，回傳它的 Id。建立者記的是現在這個人。</summary>
-    public Task<string> CreateConversationAsync(
+    public async Task<string> CreateConversationAsync(
         AiChatScope scope,
         int targetId,
         CancellationToken cancellationToken = default)
-        => chatStore.CreateConversationAsync(scope, targetId, ResolveCurrentUserName(), cancellationToken);
+    {
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        return await chatStore.CreateConversationAsync(scope, targetId, ResolveCurrentUserName(), cancellationToken);
+    }
 
     /// <summary>
     /// 改這段對話的名字。<b>不呼叫模型，不會產生費用。</b>
     /// 沒改過名的對話標題會自動取第一句提問，改過之後就固定用改的。
     /// </summary>
-    public Task<UpdateOutcome> RenameConversationAsync(
+    public async Task<UpdateOutcome> RenameConversationAsync(
         AiChatScope scope,
         int targetId,
         string conversationId,
         string title,
         CancellationToken cancellationToken = default)
-        => chatStore.RenameConversationAsync(scope, targetId, conversationId, title, cancellationToken);
+    {
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        return await chatStore.RenameConversationAsync(scope, targetId, conversationId, title, cancellationToken);
+    }
 
     /// <summary>取出這段對話的完整歷史（依時間由舊到新）。</summary>
-    public Task<List<AiChatMessageItem>> GetHistoryAsync(
-        AiChatScope scope,
-        int targetId,
-        string conversationId,
-        CancellationToken cancellationToken = default)
-        => chatStore.ReadHistoryAsync(scope, targetId, conversationId, cancellationToken);
-
-    /// <summary>刪掉這一段對話（同一個對象底下的其他段不受影響）。</summary>
-    public Task ClearHistoryAsync(
+    public async Task<List<AiChatMessageItem>> GetHistoryAsync(
         AiChatScope scope,
         int targetId,
         string conversationId,
         CancellationToken cancellationToken = default)
     {
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        return await chatStore.ReadHistoryAsync(scope, targetId, conversationId, cancellationToken);
+    }
+
+    /// <summary>刪掉這一段對話（同一個對象底下的其他段不受影響）。</summary>
+    public async Task ClearHistoryAsync(
+        AiChatScope scope,
+        int targetId,
+        string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
         chatStore.TryDeleteConversation(scope, targetId, conversationId);
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -162,6 +211,7 @@ public class AiChatService
         IReadOnlyList<PendingAttachment>? attachments = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(question);
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
 
         var pending = attachments ?? [];
         ValidateAttachments(pending);
@@ -209,7 +259,7 @@ public class AiChatService
     /// 傳整個 <paramref name="original"/> 而不只傳內容：對話是同專案／會議底下所有人共用的，
     /// 角色與原內容要一起當樂觀鎖，才擋得掉「兩個人同時編輯、後寫的默默蓋掉前者」。
     /// </summary>
-    public Task<UpdateOutcome> UpdateMessageAsync(
+    public async Task<UpdateOutcome> UpdateMessageAsync(
         AiChatScope scope,
         int targetId,
         string conversationId,
@@ -219,8 +269,9 @@ public class AiChatService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(original);
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
 
-        return chatStore.UpdateMessagesAsync(
+        return await chatStore.UpdateMessagesAsync(
             scope,
             targetId,
             conversationId,
@@ -247,6 +298,7 @@ public class AiChatService
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newQuestion);
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
 
         var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
 
@@ -565,7 +617,8 @@ public class AiChatService
         foreach (var image in images)
         {
             var label = $"使用者圖片：{image.FileName}";
-            var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, image.StoredName);
+            await EnsureAccessAsync(scope, targetId, cancellationToken);
+        var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, image.StoredName);
             var mediaType = AiChatAttachmentPolicy.GetImageMediaType(image.FileName);
 
             if (mediaType is null || !File.Exists(fullPath))

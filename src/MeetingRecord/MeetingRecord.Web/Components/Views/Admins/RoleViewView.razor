@@ -88,17 +88,8 @@ else
                             <ValidationMessage For="() => CurrentRecord.Name" />
                         </FormItem>
 
-                        <FormItem Label="預設團隊">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.DefaultTeams" OnSelectedItemsChanged="OnRoleTeamsChanged"
-                                    Placeholder="選擇此角色可瀏覽的團隊（不設定表示僅能看到無團隊的公開紀錄）"
-                                    AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var t in availableTeams)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                                }
-                            </Select>
-                        </FormItem>
+                        @* 0.4.99 起角色只管「能用哪些功能」，看得到哪些專案改在使用者管理逐人設定，
+                           所以拿掉「預設團隊」。DefaultTeamsJson 欄位保留、存檔時原值帶回，不會被清掉。 *@
 
                         @* 權限矩陣跨整列：54 個核取方塊壓成半欄會擠成一團。 *@
                         <FormItem Label="角色項目" Class="form-modal-full">

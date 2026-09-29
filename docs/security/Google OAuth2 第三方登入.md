@@ -20,7 +20,7 @@
 |------|------|
 | 帳號開通 | 首次以 Google 登入時，**自動建立**本地使用者，以 Google 的 Email 作為帳號名稱（`Account`） |
 | 網域限制 | **不限制**，任何 Google 帳號皆可進行驗證 |
-| 預設角色 | 自動建立的帳號套用設定中的 `DefaultRoleName`（預設「預設角色」） |
+| 預設角色 | 自動建立的帳號套用設定中的 `DefaultRoleName`（預設「一般使用者」） |
 | 資安閘門 | 新帳號預設 `Status = false`（**停用**），需由管理者於「使用者管理」**啟用並確認角色**後才能登入 |
 | Email 連結 | 若已存在相同 Email 的本地帳號，**自動連結**（寫入 GoogleId，不重建、不覆寫狀態與權限） |
 | 網頁登入 | 純 Google 單一登入（SSO），**不需設定密碼** |
@@ -54,7 +54,7 @@
   "Enabled": false,
   "ClientId": "",
   "ClientSecret": "",
-  "DefaultRoleName": "預設角色"
+  "DefaultRoleName": "一般使用者"
 }
 ```
 
@@ -63,11 +63,11 @@
 | `Enabled` | 是否啟用 Google 登入。要用就設 `true`；`false` 時不註冊 Google 驗證，登入頁也不顯示按鈕 | `true` |
 | `ClientId` | Google Cloud Console 產生的「用戶端 ID」 | `123456789-abc123.apps.googleusercontent.com` |
 | `ClientSecret` | Google Cloud Console 產生的「用戶端密鑰」 | `GOCSPX-xxxxxxxxxxxxxxxxxxxx` |
-| `DefaultRoleName` | 新帳號自動套用的角色名稱，**保持 `預設角色` 即可**（對應系統 seeding 出來的角色） | `預設角色` |
+| `DefaultRoleName` | 新帳號自動套用的角色名稱，**保持 `一般使用者` 即可**（對應系統 seeding 出來的角色） | `一般使用者` |
 
 > ⚠️ **`ClientId` 與 `ClientSecret` 不是自己輸入任意字串，必須先到 Google Cloud Console 申請**（見上方「一、在 Google Cloud Console 建立 OAuth 用戶端」）。未申請或填錯，Google 會在登入時拒絕。
 
-啟用步驟：將 `Enabled` 設為 `true`，並填入向 Google 申請到的 `ClientId` 與 `ClientSecret`。`DefaultRoleName` 一般維持 `預設角色`。
+啟用步驟：將 `Enabled` 設為 `true`，並填入向 Google 申請到的 `ClientId` 與 `ClientSecret`。`DefaultRoleName` 一般維持 `一般使用者`。
 
 ### 填入方式（擇一）
 
@@ -101,7 +101,7 @@ GoogleOAuthSettings__ClientSecret=你的用戶端密鑰
   "Enabled": true,
   "ClientId": "123456789-abc123.apps.googleusercontent.com",
   "ClientSecret": "GOCSPX-xxxxxxxxxxxxxxxxxxxx",
-  "DefaultRoleName": "預設角色"
+  "DefaultRoleName": "一般使用者"
 }
 ```
 
@@ -135,7 +135,7 @@ GoogleOAuthSettings__ClientSecret=你的用戶端密鑰
 4. Callback 讀取外部 Cookie 的 Email、Name、`sub`，呼叫 `ExternalLoginService.FindOrCreateAsync(...)`：
    - 先以 **GoogleId** 比對既有連結；
    - 否則以 **Email** 連結既有本地帳號（寫入 GoogleId，不改狀態與權限）；
-   - 都沒有則 **自動建立**新帳號（`Status = false`、套用預設角色、無密碼）。
+   - 都沒有則 **自動建立**新帳號（`Status = false`、套用一般使用者角色、無密碼）。
 5. 清除外部暫存 Cookie。
 6. 若 `Status = false` → 導向 `/Auths/Pending`（帳號待審核頁，**不**登入）。
 7. 若 `Status = true` → 比照帳密登入建立 Claims（`Role`、`Name`、`NameIdentifier`、`Sid`），以主 Cookie scheme 完成登入並導向 `returnUrl`（預設 `/App`）。
@@ -204,6 +204,6 @@ Google 使用者預設無本地密碼，因此無法直接用 `/api/v1/auth/logi
 ## 七、安全考量與限制
 
 - **開放註冊風險**：目前為「任何 Google 帳號皆可驗證並自動建帳」。資安閘門是 `Status = false` 預設停用 + 管理者人工審核，請務必落實審核流程。若要更嚴格，可改為限制特定網域或關閉自動建帳。
-- 自動建立的帳號雖套用「預設角色」，但在管理者啟用前無法登入。
+- 自動建立的帳號雖套用「一般使用者」角色，但在管理者啟用前無法登入。
 - `ClientSecret` 請勿進版控；正式環境一律用 user-secrets / 環境變數。
 - 回呼 URI（`/signin-google`）必須與 Google Console 設定完全一致，否則 Google 會拒絕。

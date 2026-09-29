@@ -79,7 +79,7 @@ public sealed class TranscriptionProgressNotifierTests
     {
         var notifier = new TranscriptionProgressNotifier();
 
-        notifier.Enqueued(7, "季度檢討會議", teams: null);
+        notifier.Enqueued(7, "季度檢討會議", projectId: null, createdByUserId: null);
         Assert.Equal(TranscriptionPhase.Queued, notifier.Find(7)!.Phase);
         Assert.True(notifier.Find(7)!.IsRunning);
 
@@ -104,7 +104,7 @@ public sealed class TranscriptionProgressNotifierTests
     public void ReportFailed_ShouldKeepMessageAndStopRunning()
     {
         var notifier = new TranscriptionProgressNotifier();
-        notifier.Enqueued(3, "失敗的會議", teams: null);
+        notifier.Enqueued(3, "失敗的會議", projectId: null, createdByUserId: null);
         notifier.ReportSegment(3, 2, 5);
 
         notifier.ReportFailed(3, "找不到 ffmpeg。");
@@ -120,10 +120,10 @@ public sealed class TranscriptionProgressNotifierTests
     {
         // 重新轉錄會用同一個 Id 再入列一次，不該留下上一輪的完成狀態。
         var notifier = new TranscriptionProgressNotifier();
-        notifier.Enqueued(5, "舊標題", teams: null);
+        notifier.Enqueued(5, "舊標題", projectId: null, createdByUserId: null);
         notifier.ReportCompleted(5);
 
-        notifier.Enqueued(5, "新標題", teams: null);
+        notifier.Enqueued(5, "新標題", projectId: null, createdByUserId: null);
 
         var item = notifier.Find(5)!;
         Assert.Equal(TranscriptionPhase.Queued, item.Phase);
@@ -137,8 +137,8 @@ public sealed class TranscriptionProgressNotifierTests
     public void Dismiss_ShouldRemoveFromSnapshot()
     {
         var notifier = new TranscriptionProgressNotifier();
-        notifier.Enqueued(1, "甲會議", teams: null);
-        notifier.Enqueued(2, "乙會議", teams: null);
+        notifier.Enqueued(1, "甲會議", projectId: null, createdByUserId: null);
+        notifier.Enqueued(2, "乙會議", projectId: null, createdByUserId: null);
 
         notifier.Dismiss(1);
 
@@ -160,14 +160,15 @@ public sealed class TranscriptionProgressNotifierTests
     }
 
     [Fact]
-    public void Enqueued_ShouldKeepTeamsForVisibilityFiltering()
+    public void Enqueued_ShouldKeepProjectAndCreatorForVisibilityFiltering()
     {
-        // 面板要靠這個欄位過濾，不然會把受團隊限制的會議標題顯示給無權的人。
+        // 面板要靠這兩個欄位過濾（0.4.99 起取代團隊），不然會把別人專案的會議標題顯示給無權的人。
         var notifier = new TranscriptionProgressNotifier();
 
-        notifier.Enqueued(4, "機密會議", teams: "\n團隊A\n");
+        notifier.Enqueued(4, "機密會議", projectId: 12, createdByUserId: 34);
 
-        Assert.Equal("\n團隊A\n", notifier.Find(4)!.Teams);
+        Assert.Equal(12, notifier.Find(4)!.ProjectId);
+        Assert.Equal(34, notifier.Find(4)!.CreatedByUserId);
     }
 
     #endregion
@@ -181,7 +182,7 @@ public sealed class TranscriptionProgressNotifierTests
         var count = 0;
         notifier.Changed += () => count++;
 
-        notifier.Enqueued(1, "會議", teams: null);
+        notifier.Enqueued(1, "會議", projectId: null, createdByUserId: null);
         notifier.ReportConverting(1);
         notifier.ReportSegment(1, 1, 2);
         notifier.ReportSegment(1, 2, 2);

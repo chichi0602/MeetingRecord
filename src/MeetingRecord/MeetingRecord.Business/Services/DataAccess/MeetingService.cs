@@ -17,7 +17,8 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Business.Services.DataAccess;
 
 /// <summary>
-/// 會議紀錄的 Blazor 服務層。CRUD 骨架與團隊列級權控比照 <see cref="PromptTemplateService"/>；
+/// 會議紀錄的 Blazor 服務層。CRUD 骨架比照 <see cref="PromptTemplateService"/>；
+/// 資料權限 0.4.99 起改走專案成員（<see cref="ProjectAccessService"/>），取代原本的團隊標籤；
 /// 影音檔與逐字稿的實體檔案操作一律委派給 <see cref="MeetingFileStore"/>。
 /// </summary>
 public class MeetingService
@@ -29,7 +30,7 @@ public class MeetingService
     private const int MaxDraftAttendees = 50;
 
     private readonly BackendDBContext context;
-    private readonly IRecordAccessScopeProvider accessScope;
+    private readonly ProjectAccessService projectAccess;
     private readonly MeetingFileStore fileStore;
     private readonly AiChatStore chatStore;
     private readonly ITranscriptionQueue transcriptionQueue;
@@ -45,7 +46,7 @@ public class MeetingService
         BackendDBContext context,
         IMapper mapper,
         ILogger<MeetingService> logger,
-        IRecordAccessScopeProvider accessScope,
+        ProjectAccessService projectAccess,
         MeetingFileStore fileStore,
         AiChatStore chatStore,
         ITranscriptionQueue transcriptionQueue,
@@ -57,7 +58,7 @@ public class MeetingService
         this.context = context;
         Mapper = mapper;
         Logger = logger;
-        this.accessScope = accessScope;
+        this.projectAccess = projectAccess;
         this.fileStore = fileStore;
         this.chatStore = chatStore;
         this.transcriptionQueue = transcriptionQueue;
@@ -121,11 +122,7 @@ public class MeetingService
             dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<Meeting>(x => x.Teams, dataRequest.TeamFilters));
         }
 
-        var scope = await accessScope.GetAsync();
-        if (!scope.IsAdmin)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
-        }
+        dataSource = (await projectAccess.GetAsync()).Filter(dataSource);
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
         {
@@ -202,10 +199,10 @@ public class MeetingService
             return new MeetingAdapterModel();
         }
 
-        var scope = await accessScope.GetAsync();
-        if (!TagStringHelper.IsTeamAccessible(item.Teams, scope.Teams, scope.IsAdmin))
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewMeeting(item.ProjectId, item.CreatedByUserId))
         {
-            Logger.LogWarning("Meeting access denied by team scope. MeetingId={MeetingId}", id);
+            Logger.LogWarning("Meeting access denied by project access. MeetingId={MeetingId}", id);
             return new MeetingAdapterModel();
         }
 
@@ -230,6 +227,10 @@ public class MeetingService
             Meeting itemParameter = Mapper.Map<Meeting>(paraObject);
             itemParameter.CreatedAt = DateTime.Now;
             itemParameter.UpdatedAt = DateTime.Now;
+
+            // 上傳者（0.4.99）：未歸屬專案之前，只有他和管理者看得到這筆會議。
+            var access = await projectAccess.GetAsync();
+            itemParameter.CreatedByUserId = access.UserId == 0 ? null : access.UserId;
 
             await context.Meeting.AddAsync(itemParameter);
             await context.SaveChangesAsync();
@@ -268,6 +269,12 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的會議紀錄。");
             }
 
+            if (!(await projectAccess.GetAsync()).CanViewMeeting(item.ProjectId, item.CreatedByUserId))
+            {
+                Logger.LogWarning("Meeting update denied by project access. MeetingId={MeetingId}", paraObject.Id);
+                return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
+            }
+
             Meeting itemData = Mapper.Map<Meeting>(paraObject);
             itemData.CreatedAt = item.CreatedAt;
             itemData.UpdatedAt = DateTime.Now;
@@ -300,6 +307,7 @@ public class MeetingService
             // AttachToProjectAsync／DetachFromProjectAsync 兩支方法，不再是這張表單；
             // 讓畫面上的舊複本寫回去，只會在別處剛改過歸屬時把它靜默退回舊值。
             itemData.ProjectId = item.ProjectId;
+            itemData.CreatedByUserId = item.CreatedByUserId;
 
             CleanTrackingHelper.Clean<Meeting>(context);
             context.Entry(itemData).State = EntityState.Modified;
@@ -335,6 +343,12 @@ public class MeetingService
             {
                 Logger.LogWarning("Meeting deletion rejected because record was not found. MeetingId={MeetingId}", id);
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的會議紀錄。");
+            }
+
+            if (!(await projectAccess.GetAsync()).CanViewMeeting(item.ProjectId, item.CreatedByUserId))
+            {
+                Logger.LogWarning("Meeting deletion denied by project access. MeetingId={MeetingId}", id);
+                return VerifyRecordResultFactory.Build(false, "沒有權限刪除這筆會議紀錄。");
             }
 
             var mediaRelativePath = item.MediaRelativePath;
@@ -443,10 +457,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要上傳影音檔的會議紀錄。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
-                Logger.LogWarning("Meeting media upload denied by team scope. MeetingId={MeetingId}", meetingId);
+                Logger.LogWarning("Meeting media upload denied by project access. MeetingId={MeetingId}", meetingId);
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
             }
 
@@ -479,7 +493,7 @@ public class MeetingService
             fileStore.TryDeleteTranscript(previousTranscriptRelativePath);
 
             // 先登錄進度再入列：背景工作要等輪到才會知道這件事，先登錄畫面才立刻看得到「排隊中」。
-            progressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
+            progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
 
             Logger.LogInformation("Meeting media uploaded and queued for transcription. MeetingId={MeetingId}", meetingId);
@@ -510,10 +524,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要轉錄的會議紀錄。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
-                Logger.LogWarning("Transcription requeue denied by team scope. MeetingId={MeetingId}", meetingId);
+                Logger.LogWarning("Transcription requeue denied by project access. MeetingId={MeetingId}", meetingId);
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄執行轉錄。");
             }
 
@@ -538,7 +552,7 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
-            progressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
+            progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -585,10 +599,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要歸屬的會議紀錄。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
-                Logger.LogWarning("Attach denied by team scope. MeetingId={MeetingId}", meetingId);
+                Logger.LogWarning("Attach denied by project access. MeetingId={MeetingId}", meetingId);
                 return VerifyRecordResultFactory.Build(false, "沒有權限變更這筆會議紀錄的歸屬。");
             }
 
@@ -616,7 +630,8 @@ public class MeetingService
 
             var project = await context.Project.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == projectId, cancellationToken);
-            if (project is null)
+            // 看不到的專案當成不存在，不透露它存在與否。
+            if (project is null || !access.CanViewProject(project.Id))
             {
                 return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
             }
@@ -681,10 +696,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要移除的會議紀錄。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
-                Logger.LogWarning("Detach denied by team scope. MeetingId={MeetingId}", meetingId);
+                Logger.LogWarning("Detach denied by project access. MeetingId={MeetingId}", meetingId);
                 return VerifyRecordResultFactory.Build(false, "沒有權限移除這筆會議紀錄。");
             }
 
@@ -769,10 +784,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要產生會議紀錄的逐字稿。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
-                Logger.LogWarning("Draft request denied by team scope. MeetingId={MeetingId}", meetingId);
+                Logger.LogWarning("Draft request denied by project access. MeetingId={MeetingId}", meetingId);
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆逐字稿產生會議紀錄。");
             }
 
@@ -803,7 +818,7 @@ public class MeetingService
             {
                 var project = await context.Project.AsNoTracking()
                     .FirstOrDefaultAsync(x => x.Id == effectiveProjectId, cancellationToken);
-                if (project is null)
+                if (project is null || !access.CanViewProject(project.Id))
                 {
                     return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
                 }
@@ -814,12 +829,6 @@ public class MeetingService
             if (template is null || !template.IsEnabled)
             {
                 return VerifyRecordResultFactory.Build(false, "找不到指定的提示詞，或該提示詞已停用。");
-            }
-
-            if (!TagStringHelper.IsTeamAccessible(template.Teams, scope.Teams, scope.IsAdmin))
-            {
-                Logger.LogWarning("Draft request denied by prompt template team scope. PromptTemplateId={PromptTemplateId}", promptTemplateId);
-                return VerifyRecordResultFactory.Build(false, "沒有權限使用指定的提示詞。");
             }
 
             meeting.ProjectId = effectiveProjectId;
@@ -838,7 +847,7 @@ public class MeetingService
             CleanTrackingHelper.Clean<Meeting>(context);
 
             // 先登錄進度再入列，理由同轉錄：背景工作要等輪到才知道，先登錄畫面才立刻看得到「排隊中」。
-            draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.Teams);
+            draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await draftQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -858,11 +867,7 @@ public class MeetingService
         IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking()
             .Where(x => x.TranscriptionStatus == TranscriptionStatus.Completed);
 
-        var scope = await accessScope.GetAsync();
-        if (!scope.IsAdmin)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
-        }
+        dataSource = (await projectAccess.GetAsync()).Filter(dataSource);
 
         var items = await dataSource
             .Include(x => x.Project)
@@ -879,11 +884,7 @@ public class MeetingService
         IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking()
             .Where(x => x.ProjectId == projectId);
 
-        var scope = await accessScope.GetAsync();
-        if (!scope.IsAdmin)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<Meeting>(x => x.Teams, scope.Teams));
-        }
+        dataSource = (await projectAccess.GetAsync()).Filter(dataSource);
 
         var items = await dataSource
             .Include(x => x.Project)
@@ -909,10 +910,10 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的會議紀錄。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(meeting.Teams, scope.Teams, scope.IsAdmin))
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
-                Logger.LogWarning("Draft update denied by team scope. MeetingId={MeetingId}", meetingId);
+                Logger.LogWarning("Draft update denied by project access. MeetingId={MeetingId}", meetingId);
                 return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
             }
 

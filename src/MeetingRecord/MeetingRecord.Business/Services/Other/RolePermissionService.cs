@@ -41,12 +41,29 @@ public class RolePermissionService
             [
                 MagicObjectHelper.角色_資料定義,
                 MagicObjectHelper.角色_分類清單,
-                MagicObjectHelper.角色_團隊清單,
+                // 團隊清單 0.4.99 起不在選單上：專案權控改走專案成員，團隊已不影響任何資料的可見性。
                 MagicObjectHelper.角色_提示詞清單,
             ],
             [MagicObjectHelper.角色_登出],
         ];
     }
+
+    /// <summary>
+    /// 一般使用者的固定權限（0.4.98）。只有業務頁：會議、專案、待辦、使用說明、登出；
+    /// 系統管理與資料定義（含提示詞範本）只有管理者能用，管理者由 <c>IsAdmin</c> 短路放行，不靠權限鍵。
+    /// 群組鍵（專案管理功能、會議管理功能）也要給，否則那一區的選單不會出現。
+    /// </summary>
+    public List<string> GetGeneralUserPermissionNames()
+        =>
+        [
+            MagicObjectHelper.角色_使用說明,
+            MagicObjectHelper.角色_專案管理,
+            MagicObjectHelper.角色_專案項目,
+            MagicObjectHelper.角色_待辦事項,
+            MagicObjectHelper.角色_會議管理,
+            MagicObjectHelper.角色_會議紀錄,
+            MagicObjectHelper.角色_登出,
+        ];
 
     public List<string> GetRolePermissionAllName()
     {
@@ -55,13 +72,6 @@ public class RolePermissionService
             .ToList();
 
         return result;
-    }
-
-    public string GetRolePermissionAllNameToJson()
-    {
-        var items = GetRolePermissionAllName();
-        var json = Newtonsoft.Json.JsonConvert.SerializeObject(items);
-        return json;
     }
 
     public RolePermission InitializePermissionSetting()

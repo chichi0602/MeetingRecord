@@ -204,7 +204,8 @@ public sealed class ProjectServiceTests
                 mapper,
                 loggerFactory.CreateLogger<ProjectService>(),
                 systemSettings,
-                chatStore);
+                chatStore,
+                TestProjectAccess.Admin(Context));
         }
 
         public async ValueTask DisposeAsync()

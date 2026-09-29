@@ -166,6 +166,17 @@ public partial class ProjectViewView : IDisposable
 
     private ProjectAdapterModel? SelectedProject => projects.FirstOrDefault(x => x.Id == selectedProjectId);
 
+    /// <summary>目前使用者的專案權限（0.4.99），每次重新載入清單時一起更新。</summary>
+    private ProjectAccess projectAccessInfo = new(false, 0, [], []);
+
+    /// <summary>編輯專案資料、管理成員：負責人或管理者。</summary>
+    private bool CanManageSelected => SelectedProject is not null && projectAccessInfo.CanManageProject(SelectedProject.Id);
+
+    private bool memberModalVisible;
+
+    [Inject]
+    private ProjectAccessService ProjectAccessService { get; set; } = default!;
+
     private IReadOnlyList<string> StatusOptions => ProjectAdapterModel.StatusOptions;
 
     [Inject]
@@ -261,6 +272,7 @@ public partial class ProjectViewView : IDisposable
     public async Task ReloadAsync()
     {
         projects = await projectService.GetSelectableAsync();
+        projectAccessInfo = await ProjectAccessService.GetAsync();
 
         // 選取的專案被刪掉或已不可存取時，退回第一筆。
         if (projects.All(x => x.Id != selectedProjectId))

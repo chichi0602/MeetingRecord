@@ -175,6 +175,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
@@ -428,6 +431,34 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("ProjectFile");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectMember", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MyUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MyUserId");
+
+                    b.HasIndex("ProjectId", "MyUserId")
+                        .IsUnique();
+
+                    b.ToTable("ProjectMember");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.PromptTemplate", b =>
                 {
                     b.Property<int>("Id")
@@ -669,6 +700,25 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectMember", b =>
+                {
+                    b.HasOne("MeetingRecord.AccessDatas.Models.MyUser", "MyUser")
+                        .WithMany()
+                        .HasForeignKey("MyUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Project", "Project")
+                        .WithMany("Members")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MyUser");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.RolePermissionMap", b =>
                 {
                     b.HasOne("MeetingRecord.AccessDatas.Models.Permission", "Permission")
@@ -754,6 +804,8 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Navigation("Files");
 
                     b.Navigation("Meetings");
+
+                    b.Navigation("Members");
 
                     b.Navigation("Todos");
                 });

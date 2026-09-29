@@ -87,7 +87,7 @@ public sealed class MeetingDraftProgressNotifierTests
         // 逐字稿在 12000 字元以內時不做 map-reduce，多數會議都走這條：0 → 5 → 70 → 100。
         var notifier = new MeetingDraftProgressNotifier();
 
-        notifier.Enqueued(7, "需求確認會議", teams: null);
+        notifier.Enqueued(7, "需求確認會議", projectId: null, createdByUserId: null);
         Assert.Equal(0, notifier.Find(7)!.Percent);
 
         notifier.ReportPreparing(7);
@@ -108,7 +108,7 @@ public sealed class MeetingDraftProgressNotifierTests
     {
         var notifier = new MeetingDraftProgressNotifier();
 
-        notifier.Enqueued(9, "季度檢討會議", teams: null);
+        notifier.Enqueued(9, "季度檢討會議", projectId: null, createdByUserId: null);
         notifier.ReportPreparing(9);
         notifier.ReportSummarizing(9, 0, 4);
         Assert.Equal(MeetingDraftPhase.Summarizing, notifier.Find(9)!.Phase);
@@ -128,7 +128,7 @@ public sealed class MeetingDraftProgressNotifierTests
     public void ReportFailed_ShouldKeepMessageAndStopRunning()
     {
         var notifier = new MeetingDraftProgressNotifier();
-        notifier.Enqueued(3, "失敗的會議", teams: null);
+        notifier.Enqueued(3, "失敗的會議", projectId: null, createdByUserId: null);
         notifier.ReportPreparing(3);
 
         notifier.ReportFailed(3, "找不到逐字稿內容。");
@@ -144,10 +144,10 @@ public sealed class MeetingDraftProgressNotifierTests
     {
         // 重新產生會用同一個 Id 再入列一次，不該留下上一輪的完成狀態。
         var notifier = new MeetingDraftProgressNotifier();
-        notifier.Enqueued(5, "舊標題", teams: null);
+        notifier.Enqueued(5, "舊標題", projectId: null, createdByUserId: null);
         notifier.ReportCompleted(5);
 
-        notifier.Enqueued(5, "新標題", teams: null);
+        notifier.Enqueued(5, "新標題", projectId: null, createdByUserId: null);
 
         var item = notifier.Find(5)!;
         Assert.Equal(MeetingDraftPhase.Queued, item.Phase);
@@ -161,8 +161,8 @@ public sealed class MeetingDraftProgressNotifierTests
     public void Dismiss_ShouldRemoveFromSnapshot()
     {
         var notifier = new MeetingDraftProgressNotifier();
-        notifier.Enqueued(1, "甲會議", teams: null);
-        notifier.Enqueued(2, "乙會議", teams: null);
+        notifier.Enqueued(1, "甲會議", projectId: null, createdByUserId: null);
+        notifier.Enqueued(2, "乙會議", projectId: null, createdByUserId: null);
 
         notifier.Dismiss(1);
 
@@ -185,14 +185,15 @@ public sealed class MeetingDraftProgressNotifierTests
     }
 
     [Fact]
-    public void Enqueued_ShouldKeepTeamsForVisibilityFiltering()
+    public void Enqueued_ShouldKeepProjectAndCreatorForVisibilityFiltering()
     {
-        // 面板要靠這個欄位過濾，不然會把受團隊限制的會議標題顯示給無權的人。
+        // 面板要靠這兩個欄位過濾（0.4.99 起取代團隊），不然會把別人專案的會議標題顯示給無權的人。
         var notifier = new MeetingDraftProgressNotifier();
 
-        notifier.Enqueued(4, "機密會議", teams: "\n團隊A\n");
+        notifier.Enqueued(4, "機密會議", projectId: 12, createdByUserId: 34);
 
-        Assert.Equal("\n團隊A\n", notifier.Find(4)!.Teams);
+        Assert.Equal(12, notifier.Find(4)!.ProjectId);
+        Assert.Equal(34, notifier.Find(4)!.CreatedByUserId);
     }
 
     #endregion
@@ -206,7 +207,7 @@ public sealed class MeetingDraftProgressNotifierTests
         var count = 0;
         notifier.Changed += () => count++;
 
-        notifier.Enqueued(1, "會議", teams: null);
+        notifier.Enqueued(1, "會議", projectId: null, createdByUserId: null);
         notifier.ReportPreparing(1);
         notifier.ReportSummarizing(1, 1, 2);
         notifier.ReportGenerating(1);
@@ -288,7 +289,7 @@ public sealed class MeetingDraftProgressNotifierTests
     {
         // 每個 SSE 片段只有幾個字，逐片通知會用上百次重繪轟炸 Blazor circuit。
         var notifier = new MeetingDraftProgressNotifier();
-        notifier.Enqueued(5, "需求確認會議", teams: null);
+        notifier.Enqueued(5, "需求確認會議", projectId: null, createdByUserId: null);
         notifier.ReportGenerating(5);
 
         var count = 0;
@@ -324,7 +325,7 @@ public sealed class MeetingDraftProgressNotifierTests
     {
         // 重新產生時若沿用上一輪的字數，進度會從高檔往下掉。
         var notifier = new MeetingDraftProgressNotifier();
-        notifier.Enqueued(8, "季度檢討會議", teams: null);
+        notifier.Enqueued(8, "季度檢討會議", projectId: null, createdByUserId: null);
         notifier.ReportGenerating(8);
         notifier.ReportGeneratedCharacters(8, 3000);
 

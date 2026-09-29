@@ -5,6 +5,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 
@@ -13,12 +14,13 @@ namespace MeetingRecord.Business.Services.DataAccess;
 /// <summary>
 /// 待辦事項的 Blazor 服務層。CRUD 骨架比照 <see cref="PromptTemplateService"/>。
 ///
-/// 0.4.66 起**沒有列級權控**：分類與團隊欄位已徹底移除，所有待辦對所有使用者可見。
-/// 待辦必定隸屬於專案，而專案自 0.4.39 起也已退出團隊控管，兩者一致。
+/// 0.4.99 起**跟著專案走**：只看得到、改得到自己是成員的專案底下的待辦（管理者不受限），
+/// 判斷一律經 <see cref="ProjectAccessService"/>。0.4.66～0.4.98 期間所有待辦對所有人可見。
 /// </summary>
 public class TodoService
 {
     private readonly BackendDBContext context;
+    private readonly ProjectAccessService projectAccess;
 
     public IMapper Mapper { get; }
     public ILogger<TodoService> Logger { get; }
@@ -26,9 +28,11 @@ public class TodoService
     public TodoService(
         BackendDBContext context,
         IMapper mapper,
-        ILogger<TodoService> logger)
+        ILogger<TodoService> logger,
+        ProjectAccessService projectAccess)
     {
         this.context = context;
+        this.projectAccess = projectAccess;
         Mapper = mapper;
         Logger = logger;
     }
@@ -47,7 +51,7 @@ public class TodoService
             dataRequest.Take);
 
         DataRequestResult<TodoAdapterModel> result = new();
-        IQueryable<Todo> dataSource = context.Todo.AsNoTracking()
+        IQueryable<Todo> dataSource = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
             .Include(x => x.Project)
             .Include(x => x.Meeting);
 
@@ -175,9 +179,9 @@ public class TodoService
             .Include(x => x.Meeting)
             .FirstOrDefaultAsync(x => x.Id == id);
 
-        if (item is null)
+        if (item is null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
         {
-            Logger.LogWarning("Todo not found. TodoId={TodoId}", id);
+            Logger.LogWarning("Todo not found or not visible. TodoId={TodoId}", id);
             return new TodoAdapterModel();
         }
 
@@ -191,6 +195,11 @@ public class TodoService
     public async Task<VerifyRecordResult> AddAsync(TodoAdapterModel paraObject)
     {
         Logger.LogInformation("Creating todo. Title={TodoTitle}, ProjectId={ProjectId}", paraObject.Title, paraObject.ProjectId);
+
+        if (!(await projectAccess.GetAsync()).CanViewProject(paraObject.ProjectId))
+        {
+            return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
+        }
 
         try
         {
@@ -230,6 +239,14 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的待辦事項。");
             }
 
+            // 原本的專案與要搬去的專案都得看得到——否則能把待辦搬進別人的專案，或從別人的專案搬走。
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewProject(item.ProjectId) || !access.CanViewProject(paraObject.ProjectId))
+            {
+                Logger.LogWarning("Todo update denied by project access. TodoId={TodoId}", paraObject.Id);
+                return VerifyRecordResultFactory.Build(false, "找不到要修改的待辦事項。");
+            }
+
             Todo itemData = Mapper.Map<Todo>(paraObject);
             itemData.CreatedAt = item.CreatedAt;
             itemData.UpdatedAt = DateTime.Now;
@@ -262,7 +279,7 @@ public class TodoService
         {
             CleanTrackingHelper.Clean<Todo>(context);
             Todo? item = await context.Todo.FirstOrDefaultAsync(x => x.Id == id);
-            if (item == null)
+            if (item == null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
             {
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項。");
             }
@@ -296,9 +313,9 @@ public class TodoService
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == id);
 
-            if (item == null)
+            if (item == null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
             {
-                Logger.LogWarning("Todo deletion rejected because record was not found. TodoId={TodoId}", id);
+                Logger.LogWarning("Todo deletion rejected because record was not found or not visible. TodoId={TodoId}", id);
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的待辦事項。");
             }
 
@@ -328,7 +345,7 @@ public class TodoService
         var project = await context.Project.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == paraObject.ProjectId);
 
-        if (project is null)
+        if (project is null || !(await projectAccess.GetAsync()).CanViewProject(project.Id))
         {
             Logger.LogWarning("Pre-create validation failed because project was not found. ProjectId={ProjectId}", paraObject.ProjectId);
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
@@ -393,7 +410,7 @@ public class TodoService
         int? projectFilter,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Todo> query = context.Todo.AsNoTracking();
+        IQueryable<Todo> query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking());
         if (projectFilter is > 0)
         {
             query = query.Where(x => x.ProjectId == projectFilter);
@@ -445,7 +462,7 @@ public class TodoService
             return [];
         }
 
-        IQueryable<Todo> query = context.Todo.AsNoTracking().Include(x => x.Project);
+        IQueryable<Todo> query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking()).Include(x => x.Project);
         if (projectFilter is > 0)
         {
             query = query.Where(x => x.ProjectId == projectFilter);

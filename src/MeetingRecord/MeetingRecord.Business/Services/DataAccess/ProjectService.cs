@@ -10,6 +10,7 @@ using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -20,6 +21,7 @@ public class ProjectService
     private readonly BackendDBContext context;
     private readonly string projectFileRootPath;
     private readonly AiChatStore chatStore;
+    private readonly ProjectAccessService projectAccess;
 
     public IMapper Mapper { get; }
     public ILogger<ProjectService> Logger { get; }
@@ -29,13 +31,15 @@ public class ProjectService
         IMapper mapper,
         ILogger<ProjectService> logger,
         IOptions<SystemSettings> systemSettings,
-        AiChatStore chatStore)
+        AiChatStore chatStore,
+        ProjectAccessService projectAccess)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
         projectFileRootPath = systemSettings.Value.ExternalFileSystem.ProjectFilePath;
         this.chatStore = chatStore;
+        this.projectAccess = projectAccess;
     }
 
     public async Task<DataRequestResult<ProjectAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -50,7 +54,8 @@ public class ProjectService
             dataRequest.Take);
 
         DataRequestResult<ProjectAdapterModel> result = new();
-        IQueryable<Project> dataSource = context.Project.AsNoTracking();
+        var access = await projectAccess.GetAsync();
+        IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking());
 
         if (!string.IsNullOrWhiteSpace(dataRequest.Search))
         {
@@ -146,6 +151,12 @@ public class ProjectService
     {
         Logger.LogDebug("Loading project by id. ProjectId={ProjectId}", id);
 
+        if (!(await projectAccess.GetAsync()).CanViewProject(id))
+        {
+            Logger.LogWarning("Project read denied because user is not a member. ProjectId={ProjectId}", id);
+            return new ProjectAdapterModel();
+        }
+
         Project? item = await context.Project
             .AsNoTracking()
             .Include(x => x.Files)
@@ -169,6 +180,20 @@ public class ProjectService
             CleanTrackingHelper.Clean<Project>(context);
             Project itemParameter = Mapper.Map<Project>(paraObject);
             itemParameter.Files = [];
+
+            // 建立者就是負責人（0.4.99）。負責人姓名以帳號資料為準，不信任表單傳進來的字串。
+            var access = await projectAccess.GetAsync();
+            var creator = access.UserId == 0
+                ? null
+                : await context.MyUser.AsNoTracking().FirstOrDefaultAsync(x => x.Id == access.UserId);
+            if (creator is not null)
+            {
+                itemParameter.Owner = creator.Name;
+                itemParameter.Members =
+                [
+                    new ProjectMember { MyUserId = creator.Id, Role = ProjectMemberRole.Owner },
+                ];
+            }
 
             await context.Project.AddAsync(itemParameter);
             await context.SaveChangesAsync();
@@ -196,6 +221,12 @@ public class ProjectService
     {
         Logger.LogInformation("Updating project. ProjectId={ProjectId}, Title={Title}", paraObject.Id, paraObject.Title);
 
+        if (!(await projectAccess.GetAsync()).CanManageProject(paraObject.Id))
+        {
+            Logger.LogWarning("Project update denied because user is not the owner. ProjectId={ProjectId}", paraObject.Id);
+            return VerifyRecordResultFactory.Build(false, "只有專案負責人或管理者可以修改專案資料。");
+        }
+
         try
         {
             CleanTrackingHelper.Clean<Project>(context);
@@ -214,7 +245,7 @@ public class ProjectService
             currentItem.EndDate = paraObject.EndDate;
             currentItem.Status = paraObject.Status;
             currentItem.CompletionPercentage = paraObject.CompletionPercentage;
-            currentItem.Owner = paraObject.Owner;
+            // Owner 不從表單抄：它跟著 ProjectMember 的負責人同步（ProjectMemberService.SetOwnerAsync）。
 
             // ⚠️ 這個方法刻意手抄欄位、不走 Mapper（AddAsync 才走）。
             // 新增欄位時只改 AutoMapping 會變成「新增存得進去、修改存不進去」，而且不會報錯。
@@ -250,6 +281,13 @@ public class ProjectService
     public async Task<VerifyRecordResult> DeleteAsync(int id)
     {
         Logger.LogInformation("Deleting project. ProjectId={ProjectId}", id);
+
+        // 刪除會連帶刪掉待辦與附件，只給管理者（0.4.99）；負責人也不行。
+        if (!(await projectAccess.GetAsync()).IsAdmin)
+        {
+            Logger.LogWarning("Project deletion denied because user is not an administrator. ProjectId={ProjectId}", id);
+            return VerifyRecordResultFactory.Build(false, "只有管理者可以刪除專案。");
+        }
 
         try
         {
@@ -324,7 +362,7 @@ public class ProjectService
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == projectFileId);
 
-        if (file is null)
+        if (file is null || !(await projectAccess.GetAsync()).CanViewProject(file.ProjectId))
         {
             return null;
         }
@@ -525,7 +563,8 @@ public class ProjectService
     /// </summary>
     public async Task<List<ProjectAdapterModel>> GetSelectableAsync(CancellationToken cancellationToken = default)
     {
-        IQueryable<Project> dataSource = context.Project.AsNoTracking();
+        var access = await projectAccess.GetAsync();
+        IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking());
 
         var items = await dataSource
             .OrderBy(x => x.Title)

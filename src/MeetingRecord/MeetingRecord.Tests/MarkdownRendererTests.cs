@@ -68,6 +68,40 @@ public sealed class MarkdownRendererTests
 
     #endregion
 
+    #region 原文行號（編修視窗同步捲動，0.4.100）
+
+    [Fact]
+    public void ToHtml_WithSourceLines_ShouldTagBlocksWithZeroBasedLine()
+    {
+        var markdown = """
+            ## 會議決議
+
+            第一段內容。
+
+            | 決議 | 負責人 |
+            | --- | --- |
+            | 改版 | 王小明 |
+            """;
+
+        var html = MarkdownRenderer.ToHtml(markdown, includeSourceLines: true);
+
+        // 行號從 0 起算，前端拿它去對 <textarea> 的第幾行。
+        Assert.Matches("<h2 [^>]*data-source-line=\"0\"", html);
+        Assert.Contains("<p data-source-line=\"2\"", html);
+        Assert.Contains("<table data-source-line=\"4\"", html);
+    }
+
+    [Fact]
+    public void ToHtml_ByDefault_ShouldNotEmitSourceLines()
+    {
+        // PDF、AI 問答、使用說明頁都走預設值，輸出不能因為編修視窗的需求而改變。
+        var html = MarkdownRenderer.ToHtml("## 標題\n\n段落");
+
+        Assert.DoesNotContain("data-source-line", html);
+    }
+
+    #endregion
+
     #region 安全：原始 HTML
 
     [Fact]

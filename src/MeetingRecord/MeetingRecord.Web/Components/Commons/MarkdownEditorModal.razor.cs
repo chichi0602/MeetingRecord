@@ -108,6 +108,15 @@ public partial class MarkdownEditorModal : IDisposable
 
     private ElementReference sourceElement;
 
+    private ElementReference previewElement;
+
+    /// <summary>左右同步捲動目前是否綁著（0.4.100）。只在可編輯、視窗開著時綁。</summary>
+    private bool isScrollSyncBound;
+
+    private const int MaxScrollSyncRetries = 10;
+
+    private int scrollSyncRetries;
+
     private bool wasVisible;
 
     private string editingText = string.Empty;
@@ -182,7 +191,47 @@ public partial class MarkdownEditorModal : IDisposable
         previewCts?.Dispose();
         previewCts = null;
 
+        // Dispose 是同步的，解除綁定只能丟出去不等；失敗只會留下一個隱藏的量測元素，不影響功能。
+        if (isScrollSyncBound)
+        {
+            isScrollSyncBound = false;
+            _ = TextEditor.UnbindScrollSyncAsync(sourceElement);
+        }
+
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 視窗打開（而且可以編輯）後才綁同步捲動：兩個元素要真的在 DOM 上才量得到位置。
+    /// 關掉時解除，下次打開再綁——內容可能已經換成另一份會議紀錄。
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var shouldBind = Visible && CanEdit;
+
+        if (shouldBind && !isScrollSyncBound)
+        {
+            // 綁不上（內容還沒進 DOM）就維持 false，下一次算繪再試；不要先設 true，否則永遠不會再綁。
+            isScrollSyncBound = await TextEditor.BindScrollSyncAsync(sourceElement, previewElement);
+
+            // 打開之後不一定還有下一次算繪（使用者可能直接捲動），所以自己排一次重試，最多幾次就放棄。
+            if (!isScrollSyncBound && scrollSyncRetries < MaxScrollSyncRetries)
+            {
+                scrollSyncRetries++;
+                await Task.Delay(100);
+                StateHasChanged();
+            }
+        }
+        else if (!shouldBind && isScrollSyncBound)
+        {
+            isScrollSyncBound = false;
+            await TextEditor.UnbindScrollSyncAsync(sourceElement);
+        }
+
+        if (!shouldBind)
+        {
+            scrollSyncRetries = 0;
+        }
     }
 
     protected override void OnParametersSet()
@@ -365,7 +414,8 @@ public partial class MarkdownEditorModal : IDisposable
     }
 
     /// <summary>⚠️ 全站唯一的 Markdown 管線，不要在這裡另外開一條 Markdig pipeline。</summary>
-    private void RenderPreviewNow() => previewHtml = MarkdownRenderer.ToHtml(editingText);
+    /// <summary>預覽帶上原文行號，左右同步捲動靠它對齊段落。</summary>
+    private void RenderPreviewNow() => previewHtml = MarkdownRenderer.ToHtml(editingText, includeSourceLines: true);
 
     private Task OnExportAsync() => OnExport.InvokeAsync(editingText);
 

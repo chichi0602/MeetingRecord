@@ -2,6 +2,8 @@
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers.Searchs;
+using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Dtos.Commons;
 using System;
 using System.Collections.Generic;
@@ -10,13 +12,19 @@ using System.Text;
 
 namespace MeetingRecord.Business.Repositories;
 
+/// <summary>
+/// 專案的 Web API 資料存取。0.4.99 起與 <c>ProjectService</c> 套同一套專案權限：
+/// 看不到的專案當成不存在（控制器回 404）；修改要負責人或管理者，刪除只有管理者。
+/// </summary>
 public class ProjectRepository
 {
     private readonly BackendDBContext context;
+    private readonly ProjectAccessService projectAccess;
 
-    public ProjectRepository(BackendDBContext context)
+    public ProjectRepository(BackendDBContext context, ProjectAccessService projectAccess)
     {
         this.context = context;
+        this.projectAccess = projectAccess;
     }
 
     #region 查詢方法
@@ -26,7 +34,7 @@ public class ProjectRepository
     /// </summary>
     public async Task<Project?> GetByIdAsync(int id, bool includeRelatedData = false)
     {
-        var query = context.Project.AsNoTracking().AsQueryable();
+        var query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking());
 
         if (includeRelatedData)
         {
@@ -40,7 +48,7 @@ public class ProjectRepository
         ProjectSearchRequestDto request,
         bool includeRelatedData = false)
     {
-        var query = context.Project.AsNoTracking().AsQueryable();
+        var query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking());
 
         #region 建立過濾條件
         Expression<Func<Project, bool>>? predicate = null;
@@ -173,6 +181,17 @@ public class ProjectRepository
         project.CreatedAt = DateTime.Now;
         project.UpdatedAt = DateTime.Now;
 
+        // 建立者就是負責人（0.4.99），與 ProjectService.AddAsync 同一條規則。
+        var access = await projectAccess.GetAsync();
+        var creator = access.UserId == 0
+            ? null
+            : await context.MyUser.AsNoTracking().FirstOrDefaultAsync(x => x.Id == access.UserId);
+        if (creator is not null)
+        {
+            project.Owner = creator.Name;
+            project.Members = [new ProjectMember { MyUserId = creator.Id, Role = ProjectMemberRole.Owner }];
+        }
+
         await context.Project.AddAsync(project);
         await context.SaveChangesAsync();
 
@@ -205,7 +224,7 @@ public class ProjectRepository
     public async Task<bool> UpdateAsync(Project project)
     {
         var existingProject = await context.Project.FindAsync(project.Id);
-        if (existingProject == null)
+        if (existingProject == null || !(await projectAccess.GetAsync()).CanManageProject(project.Id))
         {
             return false;
         }
@@ -222,6 +241,9 @@ public class ProjectRepository
         project.GlossaryTerms ??= existingProject.GlossaryTerms;
         project.Participants ??= existingProject.Participants;
 
+        // 負責人姓名跟著 ProjectMember 走，不接受 API 直接改（改了也不會真的換負責人）。
+        project.Owner = existingProject.Owner;
+
         context.Entry(existingProject).CurrentValues.SetValues(project);
         await context.SaveChangesAsync();
 
@@ -234,7 +256,7 @@ public class ProjectRepository
     public async Task<bool> UpdateStatusAsync(int id, string status)
     {
         var project = await context.Project.FindAsync(id);
-        if (project == null)
+        if (project == null || !(await projectAccess.GetAsync()).CanManageProject(id))
         {
             return false;
         }
@@ -257,7 +279,7 @@ public class ProjectRepository
         }
 
         var project = await context.Project.FindAsync(id);
-        if (project == null)
+        if (project == null || !(await projectAccess.GetAsync()).CanManageProject(id))
         {
             return false;
         }
@@ -278,8 +300,9 @@ public class ProjectRepository
     /// </summary>
     public async Task<bool> DeleteAsync(int id)
     {
+        // 刪除會連帶刪掉待辦與附件，只給管理者（0.4.99）。
         var project = await context.Project.FindAsync(id);
-        if (project == null)
+        if (project == null || !(await projectAccess.GetAsync()).IsAdmin)
         {
             return false;
         }
@@ -295,6 +318,11 @@ public class ProjectRepository
     /// </summary>
     public async Task<int> DeleteRangeAsync(List<int> ids)
     {
+        if (!(await projectAccess.GetAsync()).IsAdmin)
+        {
+            return 0;
+        }
+
         var projects = await context.Project
             .Where(p => ids.Contains(p.Id))
             .ToListAsync();

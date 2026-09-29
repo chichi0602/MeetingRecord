@@ -30,6 +30,8 @@ public sealed class TextEditorInterop
     private const string SelectRangeFunction = "meetingRecordTextEditor.selectRange";
     private const string GetStateFunction = "meetingRecordTextEditor.getState";
     private const string SetScrollTopFunction = "meetingRecordTextEditor.setScrollTop";
+    private const string BindScrollSyncFunction = "meetingRecordTextEditor.bindScrollSync";
+    private const string UnbindScrollSyncFunction = "meetingRecordTextEditor.unbindScrollSync";
 
     private readonly IJSRuntime jsRuntime;
     private readonly ILogger<TextEditorInterop> logger;
@@ -74,6 +76,52 @@ public sealed class TextEditorInterop
         {
             logger.LogDebug(ex, "Text editor getState skipped.");
             return default;
+        }
+    }
+
+    /// <summary>
+    /// 讓原文與預覽左右同步捲動，對齊到段落（0.4.100）。預覽裡的區塊要帶
+    /// <c>data-source-line</c>（<c>MarkdownRenderer.ToHtml(..., includeSourceLines: true)</c>）。
+    /// 重複呼叫會先解除舊的，所以視窗每次打開都可以放心再綁一次。
+    /// 回傳是否真的綁上：元素還沒進 DOM（對話框剛打開那一輪）時是 false，呼叫端下一輪再試。
+    /// </summary>
+    public async Task<bool> BindScrollSyncAsync(ElementReference source, ElementReference preview)
+    {
+        try
+        {
+            return await jsRuntime.InvokeAsync<bool>(BindScrollSyncFunction, source, preview);
+        }
+        catch (JSException ex)
+        {
+            logger.LogWarning(ex, "Text editor bindScrollSync failed.");
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogDebug(ex, "Text editor bindScrollSync skipped.");
+            return false;
+        }
+    }
+
+    /// <summary>解除同步捲動（移除事件、觀察者與量測用的隱藏元素）。</summary>
+    public async Task UnbindScrollSyncAsync(ElementReference source)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(UnbindScrollSyncFunction, source);
+        }
+        catch (JSException ex)
+        {
+            logger.LogWarning(ex, "Text editor unbindScrollSync failed.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogDebug(ex, "Text editor unbindScrollSync skipped.");
+        }
+        catch (JSDisconnectedException ex)
+        {
+            // 從 Dispose 呼叫時連線可能已經斷了，那時頁面上的東西本來就不在了。
+            logger.LogDebug(ex, "Text editor unbindScrollSync skipped because the circuit is gone.");
         }
     }
 

@@ -19,14 +19,12 @@ public partial class PromptTemplateViewView
     private readonly ILogger<PromptTemplateViewView> logger;
     private readonly PromptTemplateService promptTemplateService;
     private readonly CategoryService categoryService;
-    private readonly TeamService teamService;
     private readonly ModalService modalService;
     private readonly MessageService messageService;
     private readonly NotificationService notificationService;
     private ITable? table;
 
     private List<string> availableCategories = [];
-    private List<string> availableTeams = [];
     private string selectedPresetName = string.Empty;
     private bool isSeedingPresets;
     private int _pageIndex = 1;
@@ -70,7 +68,6 @@ public partial class PromptTemplateViewView
         ILogger<PromptTemplateViewView> logger,
         PromptTemplateService promptTemplateService,
         CategoryService categoryService,
-        TeamService teamService,
         ModalService modalService,
         MessageService messageService,
         NotificationService notificationService)
@@ -78,7 +75,6 @@ public partial class PromptTemplateViewView
         this.logger = logger;
         this.promptTemplateService = promptTemplateService;
         this.categoryService = categoryService;
-        this.teamService = teamService;
         this.modalService = modalService;
         this.messageService = messageService;
         this.notificationService = notificationService;
@@ -102,7 +98,6 @@ public partial class PromptTemplateViewView
         }
 
         availableCategories = await categoryService.GetAllEnabledNamesAsync();
-        availableTeams = await teamService.GetAllEnabledNamesAsync();
 
         await ReloadAsync();
     }
@@ -202,10 +197,8 @@ public partial class PromptTemplateViewView
         var checkResult = await promptTemplateService.BeforeAddCheckAsync(model);
         if (!checkResult.Success)
         {
-            // 名稱唯一性是全域的、可見性卻是團隊範圍，所以撞名的那一筆有可能根本
-            // 不在這位使用者的清單上。訊息要講清楚，不然會被當成系統壞了。
             logger.LogInformation("Prompt template preset skipped because the name already exists. Name={Name}", preset.Name);
-            NotifyError($"「{preset.Name}」已存在，未新增。（同名提示詞可能屬於其他團隊而未顯示在清單上）");
+            NotifyError($"「{preset.Name}」已存在，未新增。");
             return;
         }
 
@@ -291,11 +284,6 @@ public partial class PromptTemplateViewView
     private void OnRecordCategoriesChanged(IEnumerable<string> values)
     {
         CurrentRecord.Categories = values?.ToList() ?? [];
-    }
-
-    private void OnRecordTeamsChanged(IEnumerable<string> values)
-    {
-        CurrentRecord.Teams = values?.ToList() ?? [];
     }
 
     private async Task OnTableChange(QueryModel<PromptTemplateAdapterModel> args)

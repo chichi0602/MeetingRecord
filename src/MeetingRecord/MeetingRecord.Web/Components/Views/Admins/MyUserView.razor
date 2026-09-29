@@ -53,9 +53,8 @@ else
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Account)" Title="帳號" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Name)" Title="名稱" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Email)" Title="Email" Sortable />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleViewName)" Title="角色" Sortable />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleText)" Title="角色" Sortable />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.IsAdminText)" Title="管理員" Sortable />
                 <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.CreateAt)" Title="建立時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.UpdateAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
@@ -112,38 +111,21 @@ else
                             <ValidationMessage For="() => CurrentRecord.Email" />
                         </FormItem>
 
-                        <FormItem Label="角色" Required>
-                            <Select TItem="RoleViewAdapterModel" TItemValue="int?"
-                                    DataSource="@roleViewAdapterModels"
-                                    @bind-Value="CurrentRecord.RoleViewId"
-                                    LabelName="@nameof(RoleViewAdapterModel.Name)"
-                                    ValueName="@nameof(RoleViewAdapterModel.Id)"
-                                    Placeholder="請選擇角色"
-                                    Style="width: 100%;" />
-                            <ValidationMessage For="() => CurrentRecord.RoleViewId" />
-                        </FormItem>
+                        @* 0.4.98 起沒有角色選單：身分只有「管理者」（下方勾選）與一般使用者兩種，
+                           角色一律是「一般使用者」，由 OnAddAsync／OnEditAsync 帶入。 *@
 
-                        <FormItem Label="額外角色（多角色，權限取聯集）">
+                        @* 0.4.99：「團隊」就是專案。勾了＝那個專案的協作者；負責人的專案鎖住不能取消，
+                           要換負責人請到專案頁由管理者轉移。跨整列：專案名稱多時半欄放不下。 *@
+                        <FormItem Label="所屬團隊（專案）" Class="form-modal-full">
                             <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
-                                    Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
+                                    Values="selectedProjectIds" OnSelectedItemsChanged="OnUserProjectsChanged"
+                                    Placeholder="勾選這個人參與的專案；沒勾的專案他看不到（管理者不受限）"
                                     AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var r in roleViewAdapterModels)
+                                @foreach (var p in availableProjects)
                                 {
-                                    <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
-                                }
-                            </Select>
-                        </FormItem>
-
-                        @* 團隊跨整列：placeholder 很長，壓成半欄會被截掉看不出在說什麼。 *@
-                        <FormItem Label="團隊（直接綁定此使用者）" Class="form-modal-full">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
-                                    Placeholder="指派此使用者可存取的團隊（不設定則沿用其角色的預設團隊）"
-                                    AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var t in availableTeams)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                                    var isOwner = ownedProjectIds.Contains(p.Id);
+                                    <SelectOption TItemValue="int" TItem="int" Value="@p.Id" Disabled="@isOwner"
+                                                  Label="@(isOwner ? $"{p.Title}（負責人）" : p.Title)" />
                                 }
                             </Select>
                         </FormItem>
@@ -158,7 +140,7 @@ else
                         <FormItem>
                             <Checkbox Checked="@CurrentRecord.IsAdmin"
                                       CheckedChanged="@(value => CurrentRecord.IsAdmin = value)">
-                                管理員
+                                管理者（擁有全部功能、看得到所有專案）
                             </Checkbox>
                         </FormItem>
                     </div>

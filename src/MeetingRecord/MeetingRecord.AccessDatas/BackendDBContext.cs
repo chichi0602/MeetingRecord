@@ -29,6 +29,9 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<UserRole> UserRole { get; set; }
     public virtual DbSet<UserTeam> UserTeam { get; set; }
 
+    /// <summary>專案成員（0.4.99），專案層級資料權限的唯一來源。</summary>
+    public virtual DbSet<ProjectMember> ProjectMember { get; set; }
+
     /// <summary>AI 呼叫的用量帳本（0.4.80）。一次呼叫一列，永久保留，不回填歷史。</summary>
     public virtual DbSet<AiUsageLog> AiUsageLog { get; set; }
 
@@ -71,6 +74,13 @@ public partial class BackendDBContext : DbContext
                 .WithOne(x => x.Project)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProjectMember>(entity =>
+        {
+            entity.HasIndex(x => new { x.ProjectId, x.MyUserId }).IsUnique();
+            entity.HasOne(x => x.Project).WithMany(x => x.Members).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MyUser).WithMany().HasForeignKey(x => x.MyUserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Meeting>(entity =>

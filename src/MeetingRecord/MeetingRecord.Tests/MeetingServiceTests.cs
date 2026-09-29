@@ -309,11 +309,12 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
-    public async Task SaveMediaAsync_NonAdmin_ShouldDenyRecordOutsideTeamScope()
+    public async Task SaveMediaAsync_NonMember_ShouldDenyMeetingOfOtherProject()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
-        var existing = await fixture.AddMeetingAsync("團隊B的會議", teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var existing = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == ids["B專案會議"]);
+        var service = fixture.CreateService(isAdmin: false, userA);
 
         var result = await service.SaveMediaAsync(existing.Id, NewUpload("錄音.mp3", [1, 2, 3]));
 
@@ -742,12 +743,14 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
-    public async Task AttachToProjectAsync_ShouldReject_WhenOutOfTeamScope()
+    public async Task AttachToProjectAsync_ShouldReject_WhenTargetProjectIsNotVisible()
     {
+        // 會議是自己上傳的（看得到），但目標專案自己不是成員：不能把會議塞進別人的專案。
         await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var user = await fixture.AddUserAsync("alice");
         var project = await fixture.AddProjectAsync("客戶訪談專案");
-        var meeting = await fixture.AddCompletedMeetingAsync("團隊B會議", teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var meeting = await fixture.AddCompletedMeetingAsync("自己的會議", createdByUserId: user.Id);
+        var service = fixture.CreateService(isAdmin: false, user.Id);
 
         var result = await service.AttachToProjectAsync(meeting.Id, project.Id);
 
@@ -950,13 +953,16 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
-    public async Task RequestDraftAsync_ShouldReject_WhenMeetingIsOutOfTeamScope()
+    public async Task RequestDraftAsync_ShouldReject_WhenMeetingIsUploadedBySomeoneElse()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
         var project = await fixture.AddProjectAsync("Q3 產品改版專案");
+        await fixture.AddMemberAsync(project.Id, alice.Id);
         var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
-        var meeting = await fixture.AddCompletedMeetingAsync("團隊B會議", teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var meeting = await fixture.AddCompletedMeetingAsync("bob 還沒歸屬的會議", createdByUserId: bob.Id);
+        var service = fixture.CreateService(isAdmin: false, alice.Id);
 
         var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id);
 
@@ -1115,7 +1121,7 @@ public sealed class MeetingServiceTests
     }
     #endregion
 
-    #region 團隊可見性
+    #region 專案可見性（0.4.99 起取代團隊）
 
     [Fact]
     public async Task GetAsync_Admin_ShouldSeeAllRecords()
@@ -1126,45 +1132,79 @@ public sealed class MeetingServiceTests
 
         var result = await service.GetAsync(NewRequest());
 
-        Assert.Equal(3, result.Count);
+        Assert.Equal(4, result.Count);
     }
 
     [Fact]
-    public async Task GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords()
+    public async Task GetAsync_Member_ShouldSeeOwnProjectsAndOwnUnassignedMeetings()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
-        await fixture.SeedDefaultMeetingsAsync();
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var (userA, _, _) = await fixture.SeedDefaultMeetingsAsync();
+        var service = fixture.CreateService(isAdmin: false, userA);
 
         var result = await service.GetAsync(NewRequest());
 
-        Assert.Equal(2, result.Count);
-        Assert.DoesNotContain(result.Result, x => x.Title == "團隊B會議");
+        // 別人專案的看不到；沒有上傳者的舊會議在歸屬之前只有管理者看得到。
+        Assert.Equal(
+            ["A上傳未歸屬", "A專案會議"],
+            result.Result.Select(x => x.Title).Order().ToList());
     }
 
     [Fact]
-    public async Task GetAsync_NonAdminWithoutTeams_ShouldSeeOnlyPublicRecords()
+    public async Task GetAsync_UserWithoutProjects_ShouldSeeNothingOfOthers()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
         await fixture.SeedDefaultMeetingsAsync();
-        var service = fixture.CreateService(isAdmin: false);
+        var stranger = await fixture.AddUserAsync("carol");
+        var service = fixture.CreateService(isAdmin: false, stranger.Id);
 
         var result = await service.GetAsync(NewRequest());
 
-        Assert.Equal(1, result.Count);
-        Assert.Equal("公開會議", Assert.Single(result.Result).Title);
+        Assert.Equal(0, result.Count);
     }
 
     [Fact]
-    public async Task GetById_NonAdmin_ShouldDenyRecordOutsideTeamScope()
+    public async Task GetById_NonMember_ShouldDenyMeetingOfOtherProject()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
-        var ids = await fixture.SeedDefaultMeetingsAsync();
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var service = fixture.CreateService(isAdmin: false, userA);
 
-        var model = await service.GetAsync(ids["團隊B會議"]);
+        var model = await service.GetAsync(ids["B專案會議"]);
 
         Assert.Equal(0, model.Id);
+    }
+
+    [Fact]
+    public async Task AddAsync_ShouldRecordUploader()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var user = await fixture.AddUserAsync("alice");
+        var service = fixture.CreateService(isAdmin: false, user.Id);
+
+        var model = new MeetingAdapterModel { Title = "新會議" };
+        var result = await service.AddAsync(model);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == model.Id);
+        Assert.Equal(user.Id, saved.CreatedByUserId);
+    }
+
+    [Fact]
+    public async Task UpdateAndDelete_NonMember_ShouldBeDenied()
+    {
+        // 0.4.98 以前這兩支完全沒有權限檢查。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var service = fixture.CreateService(isAdmin: false, userA);
+
+        var update = await service.UpdateAsync(new MeetingAdapterModel { Id = ids["B專案會議"], Title = "改掉別人的標題" });
+        var delete = await service.DeleteAsync(ids["B專案會議"]);
+
+        Assert.False(update.Success);
+        Assert.False(delete.Success);
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == ids["B專案會議"]);
+        Assert.Equal("B專案會議", saved.Title);
     }
 
     [Fact]
@@ -1178,7 +1218,7 @@ public sealed class MeetingServiceTests
         request.TeamFilters = ["團隊B"];
         var result = await service.GetAsync(request);
 
-        Assert.Equal("團隊B會議", Assert.Single(result.Result).Title);
+        Assert.Equal("B專案會議", Assert.Single(result.Result).Title);
     }
 
     [Fact]
@@ -1226,11 +1266,6 @@ public sealed class MeetingServiceTests
         PageSize = 50,
         Take = 0,
     };
-
-    private sealed class FakeScopeProvider(bool isAdmin, IReadOnlyList<string> teams) : IRecordAccessScopeProvider
-    {
-        public Task<RecordAccessScope> GetAsync() => Task.FromResult(new RecordAccessScope(isAdmin, teams));
-    }
 
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue
     {
@@ -1351,13 +1386,14 @@ public sealed class MeetingServiceTests
         /// </summary>
         public CurrentUserService CurrentUserService { get; } = new();
 
-        public MeetingService CreateService(bool isAdmin = true, params string[] teams)
+        /// <summary>預設是管理者；<paramref name="isAdmin"/> 為 false 時是 Id 為 <paramref name="userId"/> 的一般使用者。</summary>
+        public MeetingService CreateService(bool isAdmin = true, int userId = 0)
         {
             return new MeetingService(
                 Context,
                 mapper,
                 loggerFactory.CreateLogger<MeetingService>(),
-                new FakeScopeProvider(isAdmin, teams),
+                isAdmin ? TestProjectAccess.Admin(Context, userId) : TestProjectAccess.User(Context, userId),
                 fileStore,
                 chatStore,
                 Queue,
@@ -1370,13 +1406,17 @@ public sealed class MeetingServiceTests
         public async Task<Meeting> AddMeetingAsync(
             string title,
             IEnumerable<string>? categories = null,
-            IEnumerable<string>? teams = null)
+            IEnumerable<string>? teams = null,
+            int? projectId = null,
+            int? createdByUserId = null)
         {
             var meeting = new Meeting
             {
                 Title = title,
                 Categories = TagStringHelper.ToStored(categories),
                 Teams = TagStringHelper.ToStored(teams),
+                ProjectId = projectId,
+                CreatedByUserId = createdByUserId,
             };
 
             Context.Meeting.Add(meeting);
@@ -1390,7 +1430,8 @@ public sealed class MeetingServiceTests
             string title,
             int? projectId = null,
             DraftStatus draftStatus = DraftStatus.NotGenerated,
-            IEnumerable<string>? teams = null)
+            IEnumerable<string>? teams = null,
+            int? createdByUserId = null)
         {
             var meeting = new Meeting
             {
@@ -1400,6 +1441,7 @@ public sealed class MeetingServiceTests
                 ProjectId = projectId,
                 DraftStatus = draftStatus,
                 Teams = TagStringHelper.ToStored(teams),
+                CreatedByUserId = createdByUserId,
             };
 
             Context.Meeting.Add(meeting);
@@ -1439,18 +1481,47 @@ public sealed class MeetingServiceTests
             return template;
         }
 
-        public async Task<Dictionary<string, int>> SeedDefaultMeetingsAsync()
+        public async Task<MyUser> AddUserAsync(string account)
         {
-            var pub = await AddMeetingAsync("公開會議");
-            var teamA = await AddMeetingAsync("團隊A會議", teams: ["團隊A"]);
-            var teamB = await AddMeetingAsync("團隊B會議", teams: ["團隊B"]);
+            var user = new MyUser { Account = account, Name = account, Password = "x", Status = true };
+            Context.MyUser.Add(user);
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return user;
+        }
 
-            return new Dictionary<string, int>
+        public async Task AddMemberAsync(int projectId, int userId, ProjectMemberRole role = ProjectMemberRole.Collaborator)
+        {
+            Context.ProjectMember.Add(new ProjectMember { ProjectId = projectId, MyUserId = userId, Role = role });
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+        }
+
+        /// <summary>
+        /// 專案可見性的標準資料（0.4.99）：使用者 A 是專案 A 的成員、B 是專案 B 的成員；
+        /// 另有 A 上傳還沒歸屬的會議，以及沒有上傳者的舊會議。
+        /// </summary>
+        public async Task<(int UserA, int UserB, Dictionary<string, int> Meetings)> SeedDefaultMeetingsAsync()
+        {
+            var userA = await AddUserAsync("alice");
+            var userB = await AddUserAsync("bob");
+            var projectA = await AddProjectAsync("專案A");
+            var projectB = await AddProjectAsync("專案B");
+            await AddMemberAsync(projectA.Id, userA.Id, ProjectMemberRole.Owner);
+            await AddMemberAsync(projectB.Id, userB.Id, ProjectMemberRole.Owner);
+
+            var a = await AddMeetingAsync("A專案會議", projectId: projectA.Id);
+            var b = await AddMeetingAsync("B專案會議", teams: ["團隊B"], projectId: projectB.Id);
+            var mine = await AddMeetingAsync("A上傳未歸屬", createdByUserId: userA.Id);
+            var legacy = await AddMeetingAsync("舊會議未歸屬");
+
+            return (userA.Id, userB.Id, new Dictionary<string, int>
             {
-                ["公開會議"] = pub.Id,
-                ["團隊A會議"] = teamA.Id,
-                ["團隊B會議"] = teamB.Id,
-            };
+                ["A專案會議"] = a.Id,
+                ["B專案會議"] = b.Id,
+                ["A上傳未歸屬"] = mine.Id,
+                ["舊會議未歸屬"] = legacy.Id,
+            });
         }
 
         public string MediaFullPath(string relativePath) => fileStore.GetMediaFullPath(relativePath);

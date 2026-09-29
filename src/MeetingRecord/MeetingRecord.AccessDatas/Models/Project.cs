@@ -56,4 +56,7 @@ public class Project
     /// 待辦沒有專案就沒有意義。
     /// </summary>
     public ICollection<Todo> Todos { get; set; } = [];
+
+    /// <summary>專案成員（0.4.99）。刪除專案時一併刪除。</summary>
+    public ICollection<ProjectMember> Members { get; set; } = [];
 }

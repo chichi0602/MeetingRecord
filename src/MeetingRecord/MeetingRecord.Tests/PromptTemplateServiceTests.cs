@@ -191,14 +191,15 @@ public sealed class PromptTemplateServiceTests
 
     #endregion
 
-    #region 團隊列級權控
+    #region 對所有人開放（0.4.99 起不再套團隊過濾）
 
     [Fact]
-    public async Task GetAsync_Admin_ShouldSeeAllRecords()
+    public async Task GetAsync_ShouldSeeAllRecordsRegardlessOfTeams()
     {
+        // 範本只有管理者能維護，啟用中的所有人都選得到；標過團隊的舊範本不能因此消失。
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
         await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService(isAdmin: true);
+        var service = fixture.CreateService();
 
         var result = await service.GetAsync(NewRequest());
 
@@ -206,43 +207,15 @@ public sealed class PromptTemplateServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords()
-    {
-        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
-
-        var result = await service.GetAsync(NewRequest());
-        var names = result.Result.Select(x => x.Name).OrderBy(x => x).ToList();
-
-        // 公開（無團隊）與 團隊A 可見；團隊B 不可見
-        Assert.Equal(["公開提示詞", "團隊A提示詞"], names);
-    }
-
-    [Fact]
-    public async Task GetAsync_NonAdminWithoutTeams_ShouldSeeOnlyPublicRecords()
-    {
-        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService(isAdmin: false);
-
-        var result = await service.GetAsync(NewRequest());
-
-        Assert.Equal(["公開提示詞"], result.Result.Select(x => x.Name).ToList());
-    }
-
-    [Fact]
-    public async Task GetById_NonAdmin_ShouldDenyRecordOutsideTeamScope()
+    public async Task GetById_ShouldReturnTeamTaggedRecord()
     {
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
         var ids = await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var service = fixture.CreateService();
 
-        var denied = await service.GetAsync(ids["團隊B提示詞"]);
-        var allowed = await service.GetAsync(ids["團隊A提示詞"]);
+        var model = await service.GetAsync(ids["團隊B提示詞"]);
 
-        Assert.Equal(0, denied.Id); // 守門回空模型
-        Assert.Equal("團隊A提示詞", allowed.Name);
+        Assert.Equal("團隊B提示詞", model.Name);
     }
 
     [Fact]
@@ -250,7 +223,7 @@ public sealed class PromptTemplateServiceTests
     {
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
         await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService(isAdmin: true);
+        var service = fixture.CreateService();
 
         var request = NewRequest();
         request.TeamFilters = ["團隊B"];
@@ -325,27 +298,12 @@ public sealed class PromptTemplateServiceTests
     }
 
     [Fact]
-    public async Task SetEnabledAsync_NonAdminOutsideTeamScope_ShouldDenyAndKeepOriginalValue()
+    public async Task SetEnabledAsync_TeamTaggedRecord_ShouldSucceed()
     {
+        // 0.4.98 以前這裡會被團隊擋掉；範本改為所有人開放後，團隊標籤不再影響任何操作。
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
         var prompt = await fixture.AddPromptAsync("團隊B提示詞", teams: ["團隊B"]);
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
-
-        var result = await service.SetEnabledAsync(prompt.Id, false);
-
-        Assert.False(result.Success);
-        // 一定要斷言資料庫的值沒變，不能只看 Success：若不小心加了 AsNoTracking，
-        // 這裡會變成「回傳成功但沒寫入」，只驗 Success 的測試抓不到。
-        var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == prompt.Id);
-        Assert.True(saved.IsEnabled);
-    }
-
-    [Fact]
-    public async Task SetEnabledAsync_NonAdminWithPublicRecord_ShouldSucceed()
-    {
-        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        var prompt = await fixture.AddPromptAsync("公開提示詞");
-        var service = fixture.CreateService(isAdmin: false, "團隊A");
+        var service = fixture.CreateService();
 
         var result = await service.SetEnabledAsync(prompt.Id, false);
 
@@ -522,11 +480,6 @@ public sealed class PromptTemplateServiceTests
         Take = 0,
     };
 
-    private sealed class FakeScopeProvider(bool isAdmin, IReadOnlyList<string> teams) : IRecordAccessScopeProvider
-    {
-        public Task<RecordAccessScope> GetAsync() => Task.FromResult(new RecordAccessScope(isAdmin, teams));
-    }
-
     private sealed class PromptTemplateServiceFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -562,13 +515,12 @@ public sealed class PromptTemplateServiceTests
             return new PromptTemplateServiceFixture(connection, context);
         }
 
-        public PromptTemplateService CreateService(bool isAdmin = true, params string[] teams)
+        public PromptTemplateService CreateService()
         {
             return new PromptTemplateService(
                 Context,
                 mapper,
-                loggerFactory.CreateLogger<PromptTemplateService>(),
-                new FakeScopeProvider(isAdmin, teams));
+                loggerFactory.CreateLogger<PromptTemplateService>());
         }
 
         public async Task<PromptTemplate> AddPromptAsync(

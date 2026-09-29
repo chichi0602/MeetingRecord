@@ -27,7 +27,8 @@ public enum MeetingDraftPhase
 /// <summary>單一草稿生成工作的即時進度快照。</summary>
 /// <param name="MeetingId">會議 Id。</param>
 /// <param name="Title">會議標題，用於畫面顯示。</param>
-/// <param name="Teams">會議的團隊標籤原始字串，供畫面做可見性過濾。</param>
+/// <param name="ProjectId">所屬專案（0.4.99），供畫面依專案成員過濾可見性。</param>
+/// <param name="CreatedByUserId">上傳者（0.4.99）；未歸屬專案時只有他與管理者看得到。</param>
 /// <param name="Phase">目前階段。</param>
 /// <param name="CompletedChunks">已完成摘要的段數。</param>
 /// <param name="TotalChunks">總段數（未分段時為 0）。</param>
@@ -37,7 +38,8 @@ public enum MeetingDraftPhase
 public sealed record MeetingDraftProgressItem(
     int MeetingId,
     string Title,
-    string? Teams,
+    int? ProjectId,
+    int? CreatedByUserId,
     MeetingDraftPhase Phase,
     int CompletedChunks,
     int TotalChunks,
@@ -87,7 +89,7 @@ public interface IMeetingDraftProgressNotifier
     MeetingDraftProgressItem? Find(int meetingId);
 
     /// <summary>會議排入佇列。同一個 Id 重新入列（重新產生）會覆蓋舊項目。</summary>
-    void Enqueued(int meetingId, string title, string? teams);
+    void Enqueued(int meetingId, string title, int? projectId, int? createdByUserId);
 
     /// <summary>開始讀取提示詞範本與逐字稿。</summary>
     void ReportPreparing(int meetingId);
@@ -142,12 +144,13 @@ public sealed class MeetingDraftProgressNotifier : IMeetingDraftProgressNotifier
     public MeetingDraftProgressItem? Find(int meetingId)
         => items.TryGetValue(meetingId, out var item) ? item : null;
 
-    public void Enqueued(int meetingId, string title, string? teams)
+    public void Enqueued(int meetingId, string title, int? projectId, int? createdByUserId)
     {
         items[meetingId] = new MeetingDraftProgressItem(
             meetingId,
             title,
-            teams,
+            projectId,
+            createdByUserId,
             MeetingDraftPhase.Queued,
             CompletedChunks: 0,
             TotalChunks: 0,

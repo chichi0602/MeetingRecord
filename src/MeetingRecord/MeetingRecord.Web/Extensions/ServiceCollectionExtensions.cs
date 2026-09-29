@@ -67,6 +67,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IRbacBackfillService, RbacBackfillService>();
+        services.AddScoped<RoleConsolidationService>();
+        services.AddScoped<ProjectAccessBackfillService>();
         services.AddScoped<IPermissionChecker, PermissionChecker>();
         services.AddScoped<IRbacWriteService, RbacWriteService>();
         services.AddScoped<IEffectiveTeamResolver, EffectiveTeamResolver>();
@@ -78,6 +80,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MyUserService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ProjectService>();
+        services.AddScoped<ProjectMemberService>();
         services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
         services.AddScoped<CategoryRepository>();
@@ -103,6 +106,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
+        services.AddScoped<ProjectAccessService>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, MeetingRecord.Web.Components.ApplicationCircuitHandler>();
 
         return services;

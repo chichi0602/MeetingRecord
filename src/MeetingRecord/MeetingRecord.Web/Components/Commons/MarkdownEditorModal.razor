@@ -89,7 +89,7 @@
             </div>
         }
 
-        <div class="markdown-editor-pane markdown-editor-preview">
+        <div class="markdown-editor-pane markdown-editor-preview" @ref="previewElement">
             @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。 *@
             <div class="markdown-content">@((MarkupString)previewHtml)</div>
         </div>

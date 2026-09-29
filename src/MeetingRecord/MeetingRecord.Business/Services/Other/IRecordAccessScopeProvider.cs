@@ -1,9 +1,9 @@
 namespace MeetingRecord.Business.Services.Other;
 
 /// <summary>
-/// 目前使用者對紀錄的存取範圍：是否管理員、以及授權團隊清單。
+/// 目前使用者對紀錄的存取範圍：是否管理員、授權團隊清單，以及使用者 Id（0.4.99，專案成員判斷用；解析不到時為 0）。
 /// </summary>
-public sealed record RecordAccessScope(bool IsAdmin, IReadOnlyList<string> Teams);
+public sealed record RecordAccessScope(bool IsAdmin, IReadOnlyList<string> Teams, int UserId = 0);
 
 /// <summary>
 /// 解析目前使用者的紀錄存取範圍。需同時支援 Blazor（CurrentUserService）

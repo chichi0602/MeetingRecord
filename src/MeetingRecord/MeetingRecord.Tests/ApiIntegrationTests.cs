@@ -152,6 +152,65 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 
     [Fact]
+    public async Task ProjectApi_NonMember_ShouldNotSeeOthersProject_ButCreatorBecomesOwner()
+    {
+        // 0.4.99：API 與畫面套同一條專案權限。這筆同時守住「JWT 放的是 NameIdentifier 而不是 Sid」——
+        // 0.4.98 以前 API 解析不到使用者，所有呼叫都被當成「非管理員、無團隊」。
+        var account = $"member-{Guid.NewGuid():N}";
+        const string password = "member-pass";
+        int othersProjectId;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var writer = scope.ServiceProvider.GetRequiredService<MeetingRecord.Business.Services.Other.IRbacWriteService>();
+
+            var role = new RoleView { Name = $"專案-{Guid.NewGuid():N}", TabViewJson = "[]" };
+            db.RoleView.Add(role);
+            var others = new Project { Title = $"別人的專案-{Guid.NewGuid():N}", Status = "進行中", Owner = "someone" };
+            db.Project.Add(others);
+            await db.SaveChangesAsync();
+            othersProjectId = others.Id;
+            await writer.SyncRolePermissionsAsync(role.Id, [MeetingRecord.Share.Helpers.MagicObjectHelper.角色_專案項目]);
+
+            var user = new MyUser
+            {
+                Account = account,
+                Name = "member",
+                Status = true,
+                IsAdmin = false,
+                RoleViewId = role.Id,
+                Password = SecurePasswordHasher.HashPassword(password),
+            };
+            db.MyUser.Add(user);
+            await db.SaveChangesAsync();
+            await writer.SyncUserRolesAsync(user.Id, [role.Id]);
+        }
+
+        using var client = factory.CreateClient();
+        var login = await client.PostAsJsonAsync("/api/Auth/login", new LoginRequestDto { Account = account, Password = password });
+        var loginResult = await ReadApiResultAsync<TokenResponseDto>(login);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loginResult.Data!.AccessToken);
+
+        var hidden = await client.GetAsync($"/api/Project/{othersProjectId}");
+        Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+
+        var createResponse = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 0,
+            Title = $"自己的專案-{Guid.NewGuid():N}",
+            Status = "進行中",
+            Owner = "表單隨便填",
+        });
+        var created = await ReadApiResultAsync<ProjectDto>(createResponse);
+        Assert.True(created.Success);
+
+        var mine = await client.GetAsync($"/api/Project/{created.Data!.Id}");
+        Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
+        Assert.Equal("member", (await ReadApiResultAsync<ProjectDto>(mine)).Data!.Owner);
+    }
+
+    [Fact]
     public async Task AuthEndpoints_LoginRefreshAndMe_ShouldReturnApiResult()
     {
         using var client = factory.CreateClient();

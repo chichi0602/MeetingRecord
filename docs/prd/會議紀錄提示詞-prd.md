@@ -2,9 +2,11 @@
 
 - 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.77
+- 現行系統版本：0.4.99
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/09/16
+- 最後核對日期：2026/09/23
+
+> **0.4.99：提示詞範本對所有人開放。** `PromptTemplateService` 拿掉團隊過濾（清單、單筆、啟用切換、`GetEnabledSelectableAsync`），編輯表單拿掉團隊欄位；範本只有管理者能維護（頁面權限），啟用中的所有人產生會議紀錄時都選得到。`Teams` 欄位保留、存檔時原值帶回。下文的團隊權控描述的是 0.4.98 以前的狀態。
 
 ## 一、目標與範圍
 
@@ -118,7 +120,7 @@
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路（不需個別權限）。
 - UI 與 API 共用單一 RBAC 權威來源：UI 用 Cookie 驗證並以 `CheckAccessPage`（頁面鍵）控制進入頁面、以 `CheckAccessAction` 控制按鈕顯示，API 用 JWT Bearer 並以動作鍵控制個別操作。
 - **團隊列級權控只在 Blazor Service 層生效**：非管理員於 `PromptTemplateService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的提示詞；單筆讀取以 `TagStringHelper.IsTeamAccessible` 守門，越權時回空模型。**Web API 的 repository 路徑不做列級過濾**，與 `ProjectController`／`ProjectRepository` 一致（見 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §4.1）——持有有效 JWT 與 `提示詞清單:view` 的用戶端可經 API 讀到跨團隊資料，這是既有設計界線，非本次引入。
-- 新增權限鍵後，掛「預設角色」的使用者需重啟一次應用程式才會生效；掛自訂角色者需由管理員到 `/roleviews` 手動勾選。
+- 0.4.98 起只有「一般使用者」一個角色；新增權限鍵要開給一般使用者時，由管理者到角色管理（`/roleviews`）勾選。
 - `LlmSettings` 的 `ApiKey` 為機敏值：版控內只放開發預設值，`appsettings.Production.json` 一併清空 `DefaultProvider` 與 `ApiKey`，正式環境須以環境變數（`LlmSettings__Providers__AzureOpenAI__ApiKey`）或 user-secrets 提供。`StartupSafetyValidator` 在 Production 啟動時檢查：指定了 `DefaultProvider` 就不允許 `ApiKey` 留空或沿用開發預設值、也不允許 `Endpoint` 留空或沿用範例值。
 
 ## 六、錯誤與邊界

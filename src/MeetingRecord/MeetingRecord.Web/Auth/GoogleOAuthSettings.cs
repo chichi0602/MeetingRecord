@@ -1,3 +1,5 @@
+using MeetingRecord.Share.Helpers;
+
 namespace MeetingRecord.Web.Auth;
 
 /// <summary>
@@ -26,7 +28,7 @@ public class GoogleOAuthSettings
     /// <summary>
     /// 首次以 Google 登入而自動建立的使用者所套用的預設角色名稱。
     /// </summary>
-    public string DefaultRoleName { get; set; } = "預設角色";
+    public string DefaultRoleName { get; set; } = MagicObjectHelper.預設角色;
 
     /// <summary>
     /// 是否已提供有效的用戶端設定。

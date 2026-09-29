@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Share.Enums;
 
@@ -9,8 +10,8 @@ namespace MeetingRecord.Business.Repositories;
 /// <summary>
 /// 會議紀錄的 Web API 資料存取（僅中繼資料的 CRUD）。
 ///
-/// 與 <c>ProjectRepository</c>、<c>PromptTemplateRepository</c> 一致，API（repository）路徑
-/// 不做團隊行級過濾；團隊可見性只在 Blazor 的 <c>MeetingService</c> 生效。
+/// 0.4.99 起與 Blazor 的 <c>MeetingService</c> 套同一條專案權限（<see cref="ProjectAccessService"/>）：
+/// 看不到的會議一律當成不存在（控制器回 404）。0.4.98 以前 API 完全不過濾。
 ///
 /// 影音檔上傳、轉錄與逐字稿讀取都不經由這條路徑——那些操作牽涉實體檔案與背景佇列，
 /// 只在 Blazor 服務層提供。
@@ -18,22 +19,24 @@ namespace MeetingRecord.Business.Repositories;
 public class MeetingRepository
 {
     private readonly BackendDBContext context;
+    private readonly ProjectAccessService projectAccess;
 
-    public MeetingRepository(BackendDBContext context)
+    public MeetingRepository(BackendDBContext context, ProjectAccessService projectAccess)
     {
         this.context = context;
+        this.projectAccess = projectAccess;
     }
 
     #region 查詢方法
 
     public async Task<Meeting?> GetByIdAsync(int id)
     {
-        return await context.Meeting.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+        return await (await projectAccess.GetAsync()).Filter(context.Meeting.AsNoTracking()).FirstOrDefaultAsync(x => x.Id == id);
     }
 
     public async Task<PagedResult<Meeting>> GetPagedAsync(MeetingSearchRequestDto request)
     {
-        var query = context.Meeting.AsNoTracking().AsQueryable();
+        var query = (await projectAccess.GetAsync()).Filter(context.Meeting.AsNoTracking());
 
         if (!string.IsNullOrEmpty(request.Keyword))
         {
@@ -83,6 +86,11 @@ public class MeetingRepository
         meeting.CreatedAt = DateTime.Now;
         meeting.UpdatedAt = DateTime.Now;
 
+        // API 建立的會議一律未歸屬，上傳者就是呼叫者——否則建完自己就看不到了。
+        var access = await projectAccess.GetAsync();
+        meeting.ProjectId = null;
+        meeting.CreatedByUserId = access.UserId == 0 ? null : access.UserId;
+
         await context.Meeting.AddAsync(meeting);
         await context.SaveChangesAsync();
 
@@ -96,7 +104,7 @@ public class MeetingRepository
     public async Task<bool> UpdateAsync(Meeting meeting)
     {
         var existing = await context.Meeting.FindAsync(meeting.Id);
-        if (existing == null)
+        if (existing == null || !(await projectAccess.GetAsync()).CanViewMeeting(existing.ProjectId, existing.CreatedByUserId))
         {
             return false;
         }
@@ -121,6 +129,12 @@ public class MeetingRepository
         meeting.DraftStartedAt = existing.DraftStartedAt;
         meeting.DraftCompletedAt = existing.DraftCompletedAt;
 
+        // DTO 沒有這兩欄，不沿用的話 SetValues 會把它們清成 null——
+        // 0.4.98 以前 API 更新一次就會把會議從專案裡拔掉。
+        meeting.ProjectId = existing.ProjectId;
+        meeting.CreatedByUserId = existing.CreatedByUserId;
+        meeting.DraftAttendees = existing.DraftAttendees;
+
         context.Entry(existing).CurrentValues.SetValues(meeting);
         await context.SaveChangesAsync();
 
@@ -133,7 +147,7 @@ public class MeetingRepository
     public async Task<Meeting?> DeleteAsync(int id)
     {
         var meeting = await context.Meeting.FindAsync(id);
-        if (meeting == null)
+        if (meeting == null || !(await projectAccess.GetAsync()).CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
         {
             return null;
         }

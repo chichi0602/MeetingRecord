@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 
 namespace MeetingRecord.Business.Repositories;
@@ -8,23 +9,25 @@ namespace MeetingRecord.Business.Repositories;
 /// <summary>
 /// 待辦事項的 Web API 資料存取。
 ///
-/// 0.4.66 起待辦事項完全沒有列級權控（Categories／Teams 欄位已移除），
-/// 所以這裡與 Blazor 的 <c>TodoService</c> 看到的資料範圍是一樣的。
+/// 0.4.99 起與 Blazor 的 <c>TodoService</c> 套同一條專案權限：只看得到、改得到自己是成員的專案底下的待辦。
+/// 看不到的一律當成不存在（控制器回 404／「專案不存在」）。
 /// </summary>
 public class TodoRepository
 {
     private readonly BackendDBContext context;
+    private readonly ProjectAccessService projectAccess;
 
-    public TodoRepository(BackendDBContext context)
+    public TodoRepository(BackendDBContext context, ProjectAccessService projectAccess)
     {
         this.context = context;
+        this.projectAccess = projectAccess;
     }
 
     #region 查詢方法
 
     public async Task<Todo?> GetByIdAsync(int id)
     {
-        return await context.Todo.AsNoTracking()
+        return await (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
             .Include(x => x.Project)
             .Include(x => x.Meeting)
             .FirstOrDefaultAsync(x => x.Id == id);
@@ -32,7 +35,7 @@ public class TodoRepository
 
     public async Task<PagedResult<Todo>> GetPagedAsync(TodoSearchRequestDto request)
     {
-        var query = context.Todo.AsNoTracking()
+        var query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
             .Include(x => x.Project)
             .Include(x => x.Meeting)
             .AsQueryable();
@@ -89,7 +92,9 @@ public class TodoRepository
 
     public async Task<bool> ProjectExistsAsync(int projectId)
     {
-        return await context.Project.AnyAsync(x => x.Id == projectId);
+        // 看不到的專案當成不存在：新增與修改都靠這支擋「把待辦塞進別人的專案」。
+        return (await projectAccess.GetAsync()).CanViewProject(projectId)
+            && await context.Project.AnyAsync(x => x.Id == projectId);
     }
 
     #endregion
@@ -101,6 +106,11 @@ public class TodoRepository
         todo.CreatedAt = DateTime.Now;
         todo.UpdatedAt = DateTime.Now;
 
+        if (!(await projectAccess.GetAsync()).CanViewProject(todo.ProjectId))
+        {
+            throw new InvalidOperationException("找不到指定的專案項目。");
+        }
+
         await context.Todo.AddAsync(todo);
         await context.SaveChangesAsync();
 
@@ -110,7 +120,8 @@ public class TodoRepository
     public async Task<bool> UpdateAsync(Todo todo)
     {
         var existing = await context.Todo.FindAsync(todo.Id);
-        if (existing == null)
+        var access = await projectAccess.GetAsync();
+        if (existing == null || !access.CanViewProject(existing.ProjectId) || !access.CanViewProject(todo.ProjectId))
         {
             return false;
         }
@@ -129,7 +140,7 @@ public class TodoRepository
     public async Task<bool> DeleteAsync(int id)
     {
         var todo = await context.Todo.FindAsync(id);
-        if (todo == null)
+        if (todo == null || !(await projectAccess.GetAsync()).CanViewProject(todo.ProjectId))
         {
             return false;
         }

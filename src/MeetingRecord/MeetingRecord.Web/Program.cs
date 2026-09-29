@@ -309,33 +309,11 @@ namespace MeetingRecord.Web
                         logger.LogInformation("Database created because no migrations were found.");
                     }
 
-                    RoleView? roleViewItemNew = null;
-
-                    #region 是否有存在的角色檢視定義
-                    var roleViewItem = dbContext.RoleView
-                        .FirstOrDefault(x => x.Name == MagicObjectHelper.預設角色);
-                    RolePermissionService RolePermissionService = scope
-                        .ServiceProvider
-                        .GetRequiredService<RolePermissionService>();
-                    var allPermissionJson = RolePermissionService
-                        .GetRolePermissionAllNameToJson();
-                    if (roleViewItem == null)
-                    {
-                        roleViewItemNew = new RoleView()
-                        {
-                            Name = MagicObjectHelper.預設角色,
-                            TabViewJson = allPermissionJson
-                        };
-                        dbContext.RoleView.Add(roleViewItemNew);
-                        dbContext.SaveChanges();
-                        logger.LogInformation("Seeded default role view.");
-                    }
-                    else
-                    {
-                        roleViewItem.TabViewJson = allPermissionJson;
-                        dbContext.SaveChanges();
-                        logger.LogDebug("Updated existing default role view.");
-                    }
+                    #region 角色收斂為「管理者／一般使用者」（0.4.98，冪等）
+                    // 0.4.97 以前這裡每次啟動都把預設角色覆寫成「全部權限」，一般帳號因此什麼都能做。
+                    var generalRoleId = scope.ServiceProvider
+                        .GetRequiredService<RoleConsolidationService>()
+                        .RunAsync().GetAwaiter().GetResult();
                     #endregion
 
                     #region 產生預設帳號
@@ -352,7 +330,7 @@ namespace MeetingRecord.Web
                             IsAdmin = true,
                             Salt = Guid.NewGuid().ToString(),
                             Status = true,
-                            RoleViewId = (roleViewItemNew ?? roleViewItem)!.Id,
+                            RoleViewId = generalRoleId,
                         };
                         support.Password =
                             SecurePasswordHasher.HashPassword(bootstrapSettings.SupportPassword);
@@ -370,10 +348,7 @@ namespace MeetingRecord.Web
                                 SecurePasswordHasher.HashPassword(bootstrapSettings.SupportPassword);
                         }
                         support.IsAdmin = true;
-                        if (roleViewItemNew != null)
-                            support.RoleViewId = roleViewItemNew.Id;
-                        else
-                            support.RoleViewId = roleViewItem!.Id;
+                        support.RoleViewId = generalRoleId;
                         dbContext.SaveChanges();
                         logger.LogDebug("Updated existing support user seed data.");
                     }
@@ -388,6 +363,18 @@ namespace MeetingRecord.Web
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "RBAC backfill failed at startup.");
+                    }
+                    #endregion
+
+                    #region 專案權限回填（0.4.99：舊專案的負責人、舊會議的上傳者；冪等，失敗不中止啟動）
+                    try
+                    {
+                        scope.ServiceProvider.GetRequiredService<ProjectAccessBackfillService>()
+                            .RunAsync().GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Project access backfill failed at startup.");
                     }
                     #endregion
 

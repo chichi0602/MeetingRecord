@@ -36,13 +36,16 @@ public sealed class RecordAccessScopeProvider : IRecordAccessScopeProvider
         var currentUser = currentUserService.CurrentUser;
         if (currentUser.IsAuthenticated)
         {
-            return new RecordAccessScope(currentUser.IsAdmin, currentUser.TeamList ?? []);
+            return new RecordAccessScope(currentUser.IsAdmin, currentUser.TeamList ?? [], currentUser.Id);
         }
 
         var principal = httpContextAccessor.HttpContext?.User;
         if (principal?.Identity?.IsAuthenticated == true)
         {
-            var sid = principal.FindFirst(ClaimTypes.Sid)?.Value;
+            // Cookie 放的是 Sid，JWT（JwtTokenService）放的是 NameIdentifier。0.4.98 以前只認 Sid，
+            // 所以 API 呼叫一律被當成「非管理員、無團隊」——兩個都要看。
+            var sid = principal.FindFirst(ClaimTypes.Sid)?.Value
+                ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (int.TryParse(sid, out var id) && id > 0)
             {
                 var user = await context.MyUser
@@ -53,7 +56,7 @@ public sealed class RecordAccessScopeProvider : IRecordAccessScopeProvider
                 if (user is not null)
                 {
                     var teams = await effectiveTeamResolver.GetEffectiveTeamNamesAsync(id);
-                    return new RecordAccessScope(user.IsAdmin, teams);
+                    return new RecordAccessScope(user.IsAdmin, teams, user.Id);
                 }
             }
         }

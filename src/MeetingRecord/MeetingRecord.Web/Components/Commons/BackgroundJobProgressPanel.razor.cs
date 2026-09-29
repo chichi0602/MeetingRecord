@@ -1,6 +1,6 @@
 using AntDesign;
 using Microsoft.AspNetCore.Components;
-using MeetingRecord.Business.Helpers;
+using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
@@ -13,7 +13,7 @@ namespace MeetingRecord.Web.Components.Commons;
 /// <para>
 /// 掛在 <c>MainLayout</c>，所以切到任何頁面都看得到。同時顯示語音轉錄與會議紀錄生成
 /// 兩種工作——兩者都固定在右下角，各做一個面板會直接重疊，因此合併成同一個。
-/// 資料來自兩個 Singleton 通知器，不查資料庫。
+/// 進度資料來自兩個 Singleton 通知器；只有判斷可見性時查一次專案成員（自開 scope）。
 /// </para>
 /// </summary>
 public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
@@ -26,6 +26,9 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
 
     [Inject]
     public IRecordAccessScopeProvider AccessScope { get; set; } = default!;
+
+    [Inject]
+    public IServiceScopeFactory ScopeFactory { get; set; } = default!;
 
     [Inject]
     public IJobCancellationRegistry CancellationRegistry { get; set; } = default!;
@@ -63,25 +66,35 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
         });
 
     /// <summary>
-    /// 重新取兩邊的快照、轉成畫面用的列，並套用團隊可見性。
+    /// 重新取兩邊的快照、轉成畫面用的列，並套用專案可見性（0.4.99 起，取代團隊）。
     ///
     /// <para>
-    /// 通知器是全行程共用的，所以這裡要過濾——否則會把受團隊限制的會議標題
+    /// 通知器是全行程共用的，所以這裡要過濾——否則會把別人專案的會議標題
     /// 洩漏給看不到那筆資料的使用者。
+    /// </para>
+    /// <para>
+    /// ⚠️ 成員資格要用自己開的 scope 查：這個面板由背景事件觸發，拿頁面那個 DbContext 查
+    /// 會和頁面正在跑的查詢撞在一起。
     /// </para>
     /// </summary>
     private async Task RefreshAsync()
     {
         var scope = await AccessScope.GetAsync();
+        ProjectAccess access;
+        using (var serviceScope = ScopeFactory.CreateScope())
+        {
+            var context = serviceScope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            access = await ProjectAccessService.LoadAsync(context, scope);
+        }
 
         var transcriptionJobs = TranscriptionNotifier
             .GetSnapshot()
-            .Where(x => TagStringHelper.IsTeamAccessible(x.Teams, scope.Teams, scope.IsAdmin))
+            .Where(x => access.CanViewMeeting(x.ProjectId, x.CreatedByUserId))
             .Select(JobRow.FromTranscription);
 
         var draftJobs = DraftNotifier
             .GetSnapshot()
-            .Where(x => TagStringHelper.IsTeamAccessible(x.Teams, scope.Teams, scope.IsAdmin))
+            .Where(x => access.CanViewMeeting(x.ProjectId, x.CreatedByUserId))
             .Select(JobRow.FromDraft);
 
         // 進行中的排前面，讓仍在跑的工作不會被一堆已完成的項目擠下去。

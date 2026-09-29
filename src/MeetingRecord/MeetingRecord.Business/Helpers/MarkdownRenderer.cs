@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Markdig;
+using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
@@ -58,7 +60,13 @@ public static class MarkdownRenderer
     private static readonly Regex SchemePattern = new(@"^[a-zA-Z][a-zA-Z0-9+.\-]*$", RegexOptions.Compiled);
 
     /// <summary>把 Markdown 轉成可安全塞進 <c>MarkupString</c> 或列印用 HTML 的字串。</summary>
-    public static string ToHtml(string? markdown)
+    /// <param name="markdown">原文。</param>
+    /// <param name="includeSourceLines">
+    /// 在每個區塊加上 <c>data-source-line</c>（原文的第幾行，從 0 起算），給編修視窗做左右同步捲動（0.4.100）。
+    /// <b>預設關閉</b>：PDF、AI 問答、使用說明頁用不到，關著才能保證它們的輸出一個字都不變。
+    /// 值只會是整數，不會把使用者輸入帶進屬性，GenericAttributes 仍然是關的。
+    /// </param>
+    public static string ToHtml(string? markdown, bool includeSourceLines = false)
     {
         if (string.IsNullOrEmpty(markdown))
         {
@@ -80,6 +88,9 @@ public static class MarkdownRenderer
                     break;
                 case AutolinkInline autolink:
                     autolink.Url = SanitizeUrl(autolink.Url);
+                    break;
+                case Block block when includeSourceLines && block is not MarkdownDocument:
+                    block.GetAttributes().AddPropertyIfNotExist("data-source-line", block.Line.ToString(CultureInfo.InvariantCulture));
                     break;
             }
         }

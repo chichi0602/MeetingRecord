@@ -41,6 +41,7 @@ public class TodoExtractionService
     private readonly AiUsageRecorder usageRecorder;
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<TodoExtractionService> logger;
+    private readonly ProjectAccessService projectAccess;
 
     public TodoExtractionService(
         BackendDBContext context,
@@ -48,7 +49,8 @@ public class TodoExtractionService
         IOptions<LlmSettings> llmSettings,
         AiUsageRecorder usageRecorder,
         CurrentUserService currentUserService,
-        ILogger<TodoExtractionService> logger)
+        ILogger<TodoExtractionService> logger,
+        ProjectAccessService projectAccess)
     {
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
@@ -56,6 +58,7 @@ public class TodoExtractionService
         this.usageRecorder = usageRecorder;
         this.currentUserService = currentUserService;
         this.logger = logger;
+        this.projectAccess = projectAccess;
     }
 
     /// <summary>
@@ -72,9 +75,14 @@ public class TodoExtractionService
         var meeting = await context.Meeting.AsNoTracking()
             .Where(x => x.Id == meetingId)
             // ProjectId 是給用量帳本用的：要能回答「哪個專案最燒錢」。
-            .Select(x => new { x.Title, x.MeetingDate, x.DraftContent, x.ProjectId })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new InvalidOperationException($"找不到 Id 為 {meetingId} 的會議紀錄，可能已被刪除。");
+            .Select(x => new { x.Title, x.MeetingDate, x.DraftContent, x.ProjectId, x.CreatedByUserId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // 看不到的會議當成不存在（0.4.99）：這支會花錢呼叫 AI，也會把會議內容送出去。
+        if (meeting is null || !(await projectAccess.GetAsync()).CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
+        {
+            throw new InvalidOperationException($"找不到 Id 為 {meetingId} 的會議紀錄，可能已被刪除。");
+        }
 
         if (string.IsNullOrWhiteSpace(meeting.DraftContent))
         {
@@ -160,7 +168,7 @@ public class TodoExtractionService
         int meetingId,
         CancellationToken cancellationToken = default)
     {
-        var titles = await context.Todo.AsNoTracking()
+        var titles = await (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
             .Where(x => x.MeetingId == meetingId)
             .Select(x => x.Title)
             .ToListAsync(cancellationToken);

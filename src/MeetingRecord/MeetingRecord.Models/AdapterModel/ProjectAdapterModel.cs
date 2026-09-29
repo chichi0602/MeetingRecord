@@ -28,7 +28,10 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
     [Range(0, 100, ErrorMessage = "完成百分比 必須介於 0 到 100")]
     public int CompletionPercentage { get; set; }
 
-    [Required(ErrorMessage = "負責人 不可為空白")]
+    /// <summary>
+    /// 負責人姓名，只做顯示（0.4.99）。實際的負責人是 <c>ProjectMember</c> 裡 Role=Owner 那一列，
+    /// 這個欄位由 <c>ProjectService</c>／<c>ProjectMemberService</c> 跟著它同步，表單不再能輸入。
+    /// </summary>
     public string Owner { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;

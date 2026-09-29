@@ -146,7 +146,8 @@ public sealed class TodoExtractionServiceTests
                 settings,
                 new AiUsageRecorder(Context, settings, new ExchangeRateCache(), loggerFactory.CreateLogger<AiUsageRecorder>()),
                 new CurrentUserService(),
-                loggerFactory.CreateLogger<TodoExtractionService>());
+                loggerFactory.CreateLogger<TodoExtractionService>(),
+                TestProjectAccess.Admin(Context));
         }
 
         public async Task<Project> AddProjectAsync(string title)

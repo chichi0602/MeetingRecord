@@ -15,7 +15,14 @@ public class MagicObjectHelper
     /// </summary>
     public const string ExternalCookieScheme = "ExternalCookieScheme";
     public const string 開發者帳號 = "support";
-    public const string 預設角色 = "預設角色";
+    /// <summary>
+    /// 0.4.98 起系統只有兩種身分：管理者（<c>MyUser.IsAdmin</c>）與一般使用者（這個角色）。
+    /// 所有帳號（含管理者）都掛這個角色，<c>RoleConsolidationService</c> 每次啟動會收斂一次。
+    /// </summary>
+    public const string 預設角色 = "一般使用者";
+
+    /// <summary>0.4.97 以前的預設角色名稱，只用來在啟動時把舊資料改名。</summary>
+    public const string 舊版預設角色 = "預設角色";
     public const string NeedChangePassword = "123456";
 
     public static readonly int PageSize = 8;

@@ -11,10 +11,13 @@ using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
+/// <summary>
+/// 會議紀錄提示詞範本。0.4.99 起**對所有人開放**：只有管理者能維護（頁面權限），
+/// 啟用中的範本所有人產生會議紀錄時都選得到，不再套團隊過濾。<c>Teams</c> 欄位保留但不再作用。
+/// </summary>
 public class PromptTemplateService
 {
     private readonly BackendDBContext context;
-    private readonly IRecordAccessScopeProvider accessScope;
 
     public IMapper Mapper { get; }
     public ILogger<PromptTemplateService> Logger { get; }
@@ -22,13 +25,11 @@ public class PromptTemplateService
     public PromptTemplateService(
         BackendDBContext context,
         IMapper mapper,
-        ILogger<PromptTemplateService> logger,
-        IRecordAccessScopeProvider accessScope)
+        ILogger<PromptTemplateService> logger)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
-        this.accessScope = accessScope;
     }
 
     public async Task<DataRequestResult<PromptTemplateAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -62,12 +63,6 @@ public class PromptTemplateService
         if (dataRequest.TeamFilters.Count > 0)
         {
             dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<PromptTemplate>(x => x.Teams, dataRequest.TeamFilters));
-        }
-
-        var scope = await accessScope.GetAsync();
-        if (!scope.IsAdmin)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildTeamAccessPredicate<PromptTemplate>(x => x.Teams, scope.Teams));
         }
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
@@ -138,13 +133,6 @@ public class PromptTemplateService
         if (item is null)
         {
             Logger.LogWarning("Prompt template not found. PromptTemplateId={PromptTemplateId}", id);
-            return new PromptTemplateAdapterModel();
-        }
-
-        var scope = await accessScope.GetAsync();
-        if (!TagStringHelper.IsTeamAccessible(item.Teams, scope.Teams, scope.IsAdmin))
-        {
-            Logger.LogWarning("Prompt template access denied by team scope. PromptTemplateId={PromptTemplateId}", id);
             return new PromptTemplateAdapterModel();
         }
 
@@ -271,13 +259,6 @@ public class PromptTemplateService
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的提示詞資料。");
             }
 
-            var scope = await accessScope.GetAsync();
-            if (!TagStringHelper.IsTeamAccessible(item.Teams, scope.Teams, scope.IsAdmin))
-            {
-                Logger.LogWarning("Prompt template enabled state update denied by team scope. PromptTemplateId={PromptTemplateId}", id);
-                return VerifyRecordResultFactory.Build(false, "沒有權限更新這筆提示詞。");
-            }
-
             item.IsEnabled = isEnabled;
             item.UpdatedAt = DateTime.Now;
 
@@ -301,10 +282,6 @@ public class PromptTemplateService
     /// 建出來的範本一律啟用、不掛分類也不掛團隊——不掛團隊等於公開，所有人都看得到。
     /// </para>
     ///
-    /// <para>
-    /// 訊息文字要提到「同名範本可能屬於其他團隊」：名稱唯一性是全域的、可見性卻是團隊範圍，
-    /// 所以非管理員有可能拿到「全部略過」但清單仍是空的，只寫「名稱已存在」會讓人以為壞了。
-    /// </para>
     /// </summary>
     public async Task<VerifyRecordResult> AddPresetsAsync(CancellationToken cancellationToken = default)
     {
@@ -348,7 +325,7 @@ public class PromptTemplateService
             var skipped = PromptTemplatePresets.All.Count - toAdd.Count;
             var message = skipped == 0
                 ? $"已新增 {toAdd.Count} 筆內建範本。"
-                : $"已新增 {toAdd.Count} 筆內建範本，略過 {skipped} 筆（已有同名提示詞；同名範本可能屬於其他團隊而未顯示在清單上）。";
+                : $"已新增 {toAdd.Count} 筆內建範本，略過 {skipped} 筆（已有同名提示詞）。";
 
             Logger.LogInformation("Prompt template presets applied. Added={Added}, Skipped={Skipped}", toAdd.Count, skipped);
             return VerifyRecordResultFactory.Build(true, message);
@@ -427,11 +404,10 @@ public class PromptTemplateService
     }
 
     /// <summary>
-    /// 取得啟用中且目前使用者可存取的提示詞，供「AI 轉會議紀錄」的下拉選用。
+    /// 取得啟用中的提示詞，供「AI 轉會議紀錄」的下拉選用。
     ///
-    /// 與 <see cref="GetAllEnabledNamesAsync"/> 的差別：這裡帶 Id（呼叫端要據以取內容）
-    /// 並套用團隊列級權控——沒有權控的話會出現「選單看得到但讀不到內容」，
-    /// 或讓使用者用到其他團隊的提示詞。
+    /// 與 <see cref="GetAllEnabledNamesAsync"/> 的差別：這裡帶 Id（呼叫端要據以取內容）。
+    /// 0.4.98 以前這裡套團隊過濾，0.4.99 起範本對所有人開放。
     /// </summary>
     public async Task<List<PromptTemplateAdapterModel>> GetEnabledSelectableAsync(
         CancellationToken cancellationToken = default)
@@ -439,13 +415,6 @@ public class PromptTemplateService
         IQueryable<PromptTemplate> dataSource = context.PromptTemplate
             .AsNoTracking()
             .Where(x => x.IsEnabled);
-
-        var scope = await accessScope.GetAsync();
-        if (!scope.IsAdmin)
-        {
-            dataSource = dataSource.Where(
-                TagStringHelper.BuildTeamAccessPredicate<PromptTemplate>(x => x.Teams, scope.Teams));
-        }
 
         var items = await dataSource
             .OrderBy(x => x.Name)

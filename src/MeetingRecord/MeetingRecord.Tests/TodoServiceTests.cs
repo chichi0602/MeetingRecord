@@ -551,7 +551,8 @@ public sealed class TodoServiceTests
             return new TodoService(
                 Context,
                 mapper,
-                loggerFactory.CreateLogger<TodoService>());
+                loggerFactory.CreateLogger<TodoService>(),
+                TestProjectAccess.Admin(Context));
         }
 
         public async Task<Project> AddProjectAsync(string title)

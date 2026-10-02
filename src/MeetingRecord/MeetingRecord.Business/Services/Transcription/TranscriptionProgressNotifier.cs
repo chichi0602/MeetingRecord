@@ -24,7 +24,7 @@ public enum TranscriptionPhase
 /// <summary>單一轉錄工作的即時進度快照。</summary>
 /// <param name="MeetingId">會議 Id。</param>
 /// <param name="Title">會議標題，用於畫面顯示。</param>
-/// <param name="ProjectId">所屬專案（0.4.99），供畫面依專案成員過濾可見性。</param>
+/// <param name="ProjectId">所屬專案（0.4.99），供畫面依專案的團隊過濾可見性。</param>
 /// <param name="CreatedByUserId">上傳者（0.4.99）；未歸屬專案時只有他與管理者看得到。</param>
 /// <param name="Phase">目前階段。</param>
 /// <param name="CompletedSegments">已完成的段數。</param>

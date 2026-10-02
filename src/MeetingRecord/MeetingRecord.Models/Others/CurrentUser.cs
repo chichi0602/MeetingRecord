@@ -17,7 +17,7 @@ public class CurrentUser
     public string RoleJson { get; set; } = string.Empty;
     public bool IsAuthenticated { get; set; } = false;
     public List<string> RoleList { get; set; } = new();
-    /// <summary>角色的預設團隊清單（用於紀錄團隊權限過濾）</summary>
+    /// <summary>使用者所屬的團隊名稱（UserTeam；角色不帶團隊）</summary>
     public List<string> TeamList { get; set; } = new();
 
     public void CopyFrom(CurrentUser source)

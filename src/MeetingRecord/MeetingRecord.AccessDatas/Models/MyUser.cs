@@ -19,6 +19,12 @@ public class MyUser
     public string Name { get; set; } = String.Empty;
     public string? Salt { get; set; }
     public bool Status { get; set; } = true;
+
+    /// <summary>
+    /// 下次登入必須先改密碼（0.4.113）。管理者建立帳號或替別人重設密碼時設為 true，本人改完密碼清掉。
+    /// 帳號密碼是管理者提供的，使用者第一次登入就要改成自己的。
+    /// </summary>
+    public bool MustChangePassword { get; set; }
     public string? Email { get; set; }
     public bool IsAdmin { get; set; } = false;
     public DateTime CreateAt { get; set; }= DateTime.Now;

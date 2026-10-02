@@ -442,3 +442,18 @@ body .ant-spin-dot-item {
 .markdown-content img {
     max-width: 100%;
 }
+
+/* ===== 收合側邊欄：滑過選單時讓收合鈕讓路（0.4.111）=====
+   收合鈕（MainLayout 的 .sidebar-toggle-edge）固定在視窗正中間、騎在側邊欄右緣，圖層又高於側邊欄。
+   正好落在某個選單項目（例如「系統管理」）上時，滑鼠從圖示往右移向飛出子選單會先碰到收合鈕，
+   選單項目失去 hover、子選單立刻關掉，永遠點不到。滑過或鍵盤聚焦收合態的選單項目時，
+   收合鈕淡出且不接收滑鼠事件，事件落回底下的選單項目。
+   放全站樣式而不放 MainLayout.razor.css：:has() 裡比對的是 NavMenu 元件的元素，
+   元件隔離樣式會在選擇器加上 MainLayout 自己的 scope 屬性而比對不到。 */
+@media (min-width: 641px) {
+    .page:has(.collapsed-menu-item:hover) .sidebar-toggle-edge,
+    .page:has(.collapsed-menu-trigger:focus-visible) .sidebar-toggle-edge {
+        opacity: 0;
+        pointer-events: none;
+    }
+}

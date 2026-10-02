@@ -76,6 +76,25 @@ public class ProjectCreateUpdateDto
     public List<string> Participants { get; set; } = [];
 
     /// <summary>
+    /// 主責團隊 Id（選填）。建立時沒給就用建立者所屬、Id 最小的團隊；修改時沒給就保留原值。
+    /// 非管理者只能指定自己所屬的團隊。
+    /// </summary>
+    [JsonPropertyName("primaryTeamId")]
+    public int? PrimaryTeamId { get; set; }
+
+    /// <summary>
+    /// 協作團隊 Id（選填，可指定任何團隊）。修改時沒給（null）就保留原值。
+    /// </summary>
+    [JsonPropertyName("collaboratorTeamIds")]
+    public List<int>? CollaboratorTeamIds { get; set; }
+
+    /// <summary>
+    /// 分類（選填，只描述性質，不影響誰看得到）。修改時沒給（null）就保留原值。
+    /// </summary>
+    [JsonPropertyName("categories")]
+    public List<string>? Categories { get; set; }
+
+    /// <summary>
     /// 建立時間
     /// </summary>
     [JsonPropertyName("createdAt")]

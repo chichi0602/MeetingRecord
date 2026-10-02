@@ -169,6 +169,24 @@ public class MyUserService
             await OtherDependencyData(adapterModelItem);
         }
 
+        // 清單要顯示每個人的所有角色與團隊（0.4.101）：一次撈這一頁的，不要逐列查。
+        var userIds = adapterModelObjects.Select(x => x.Id).ToList();
+        var roleNames = (await context.UserRole.AsNoTracking()
+                .Where(x => userIds.Contains(x.MyUserId))
+                .Join(context.RoleView, ur => ur.RoleViewId, r => r.Id, (ur, r) => new { ur.MyUserId, r.Name })
+                .ToListAsync())
+            .ToLookup(x => x.MyUserId, x => x.Name);
+        var teamNames = (await context.UserTeam.AsNoTracking()
+                .Where(x => userIds.Contains(x.MyUserId))
+                .Join(context.Team, ut => ut.TeamId, t => t.Id, (ut, t) => new { ut.MyUserId, t.Name })
+                .ToListAsync())
+            .ToLookup(x => x.MyUserId, x => x.Name);
+        foreach (var item in adapterModelObjects)
+        {
+            item.RoleNames = [.. roleNames[item.Id].Order()];
+            item.TeamNames = [.. teamNames[item.Id].Order()];
+        }
+
         result.Result = adapterModelObjects;
         Logger.LogDebug("Loaded users successfully. Count={Count}", result.Count);
         return result;
@@ -212,6 +230,8 @@ public class MyUserService
             itemParameter.RoleView = null;
             itemParameter.Salt = Guid.NewGuid().ToString();
             itemParameter.Password = SecurePasswordHasher.HashPassword(paraObject.Password);
+            // 密碼是管理者給的，第一次登入要改成自己的（0.4.113）。
+            itemParameter.MustChangePassword = !IsSupportAccount(itemParameter.Account);
 
             await context.MyUser.AddAsync(itemParameter);
             await context.SaveChangesAsync();
@@ -256,6 +276,9 @@ public class MyUserService
             MyUser itemData = Mapper.Map<MyUser>(paraObject);
             itemData.RoleView = null;
 
+            // 畫面模型沒有這個欄位，整筆蓋回時要先帶回原值，否則會被清成 false。
+            itemData.MustChangePassword = currentItem.MustChangePassword;
+
             if (string.IsNullOrWhiteSpace(paraObject.Password))
             {
                 itemData.Password = currentItem.Password;
@@ -265,6 +288,13 @@ public class MyUserService
             {
                 itemData.Salt = string.IsNullOrWhiteSpace(currentItem.Salt) ? Guid.NewGuid().ToString() : currentItem.Salt;
                 itemData.Password = SecurePasswordHasher.HashPassword(paraObject.Password);
+
+                // 管理者替別人重設密碼：對方下次登入要改（0.4.113）。改自己的不設；
+                // support 被禁止改密碼，設了會卡在改密碼頁出不去。
+                if (currentUserService.CurrentUser.Id != currentItem.Id && !IsSupportAccount(currentItem.Account))
+                {
+                    itemData.MustChangePassword = true;
+                }
             }
 
             CleanTrackingHelper.Clean<MyUser>(context);
@@ -478,6 +508,7 @@ public class MyUserService
 
         user.Salt = string.IsNullOrWhiteSpace(user.Salt) ? Guid.NewGuid().ToString() : user.Salt;
         user.Password = SecurePasswordHasher.HashPassword(newPassword);
+        user.MustChangePassword = false;
         user.UpdateAt = DateTime.Now;
 
         await context.SaveChangesAsync();
@@ -548,12 +579,104 @@ public class MyUserService
 
         user.Salt = string.IsNullOrWhiteSpace(user.Salt) ? Guid.NewGuid().ToString() : user.Salt;
         user.Password = SecurePasswordHasher.HashPassword(newPassword);
+        user.MustChangePassword = false;
         user.UpdateAt = DateTime.Now;
 
         await context.SaveChangesAsync();
 
         Logger.LogInformation("Own API password set successfully. UserId={UserId}", userId);
         return VerifyRecordResultFactory.Build(true);
+    }
+
+    public async Task<List<RoleViewAdapterModel>> GetRoleViewsAsync()
+    {
+        Logger.LogDebug("Loading role views for user maintenance.");
+
+        List<RoleView> roleViews = await context.RoleView
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        Logger.LogDebug("Loaded role views successfully. Count={Count}", roleViews.Count);
+        return Mapper.Map<List<RoleViewAdapterModel>>(roleViews);
+    }
+
+    /// <summary>
+    /// 清單上點狀態膠囊直接切換帳號狀態（0.4.105），不必進編輯視窗。
+    /// </summary>
+    public async Task<VerifyRecordResult> SetStatusAsync(int id, bool value)
+    {
+        Logger.LogInformation("Setting MyUser state. Id={Id}, Value={Value}", id, value);
+
+        try
+        {
+            CleanTrackingHelper.Clean<MyUser>(context);
+
+            // 刻意不加 AsNoTracking：這裡要靠變更追蹤把欄位寫回去。
+            MyUser? item = await context.MyUser.FirstOrDefaultAsync(x => x.Id == id);
+            if (item == null)
+            {
+                Logger.LogWarning("MyUser state update rejected because record was not found. Id={Id}", id);
+                return VerifyRecordResultFactory.Build(false, "找不到要更新的使用者資料。");
+            }
+
+            item.Status = value;
+            item.UpdateAt = DateTime.Now;
+
+            await context.SaveChangesAsync();
+            CleanTrackingHelper.Clean<MyUser>(context);
+
+            Logger.LogInformation("MyUser state updated. Id={Id}, Value={Value}", id, value);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to set MyUser state. Id={Id}", id);
+            return VerifyRecordResultFactory.Build(false, "更新。", ex);
+        }
+    }
+
+    /// <summary>
+    /// 批次把多位使用者加進一個團隊（0.4.101）。已經在裡面的略過，回傳實際新增的人數。
+    /// 調整一批人的可見範圍靠這裡，不是靠改角色——角色只管能做什麼。
+    /// </summary>
+    public async Task<int> AddUsersToTeamAsync(IEnumerable<int> userIds, int teamId)
+    {
+        var ids = userIds.Distinct().ToList();
+        if (ids.Count == 0 || !await context.Team.AnyAsync(x => x.Id == teamId))
+        {
+            return 0;
+        }
+
+        var existing = await context.UserTeam
+            .Where(x => x.TeamId == teamId && ids.Contains(x.MyUserId))
+            .Select(x => x.MyUserId)
+            .ToListAsync();
+        var validIds = await context.MyUser.Where(x => ids.Contains(x.Id)).Select(x => x.Id).ToListAsync();
+        var toAdd = validIds.Except(existing).ToList();
+
+        context.UserTeam.AddRange(toAdd.Select(userId => new UserTeam { MyUserId = userId, TeamId = teamId }));
+        await context.SaveChangesAsync();
+        CleanTrackingHelper.Clean<UserTeam>(context);
+
+        Logger.LogInformation("Users added to data group. TeamId={TeamId}, Added={Added}", teamId, toAdd.Count);
+        return toAdd.Count;
+    }
+
+    /// <summary>批次把多位使用者移出一個團隊，回傳實際移除的人數。</summary>
+    public async Task<int> RemoveUsersFromTeamAsync(IEnumerable<int> userIds, int teamId)
+    {
+        var ids = userIds.Distinct().ToList();
+        var rows = await context.UserTeam
+            .Where(x => x.TeamId == teamId && ids.Contains(x.MyUserId))
+            .ToListAsync();
+
+        context.UserTeam.RemoveRange(rows);
+        await context.SaveChangesAsync();
+        CleanTrackingHelper.Clean<UserTeam>(context);
+
+        Logger.LogInformation("Users removed from data group. TeamId={TeamId}, Removed={Removed}", teamId, rows.Count);
+        return rows.Count;
     }
 
     private Task OtherDependencyData(MyUserAdapterModel data)
@@ -566,6 +689,9 @@ public class MyUserService
 
         return Task.CompletedTask;
     }
+
+    private static bool IsSupportAccount(string account)
+        => string.Equals(account, MagicObjectHelper.開發者帳號, StringComparison.OrdinalIgnoreCase);
 
     public async Task<bool> NeedChangePasswordAsync(MyUserAdapterModel myUser)
     {
@@ -582,8 +708,10 @@ public class MyUserService
             return false;
         }
 
-        bool result = SecurePasswordHasher.VerifyPassword(MagicObjectHelper.NeedChangePassword, user.Password, user.Salt)
-            != PasswordVerificationOutcome.Failed;
+        // 管理者建立或重設過密碼（0.4.113），或密碼仍是系統預設值，都要先改。
+        bool result = user.MustChangePassword
+            || SecurePasswordHasher.VerifyPassword(MagicObjectHelper.NeedChangePassword, user.Password, user.Salt)
+                != PasswordVerificationOutcome.Failed;
 
         Logger.LogDebug("Password-change requirement check completed. UserId={UserId}, NeedChangePassword={NeedChangePassword}", myUser.Id, result);
         return result;
@@ -617,6 +745,7 @@ public class MyUserService
             CleanTrackingHelper.Clean<MyUser>(context);
             MyUser? trackedUser = await context.MyUser.FirstOrDefaultAsync(x => x.Id == userId);
             trackedUser!.Password = newHash;
+            trackedUser.MustChangePassword = false;
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<MyUser>(context);
 

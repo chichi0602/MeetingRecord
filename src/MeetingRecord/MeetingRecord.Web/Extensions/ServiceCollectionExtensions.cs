@@ -67,8 +67,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IRbacBackfillService, RbacBackfillService>();
-        services.AddScoped<RoleConsolidationService>();
-        services.AddScoped<ProjectAccessBackfillService>();
+        services.AddScoped<DefaultRoleSeeder>();
+        services.AddScoped<TeamConversionService>();
         services.AddScoped<IPermissionChecker, PermissionChecker>();
         services.AddScoped<IRbacWriteService, RbacWriteService>();
         services.AddScoped<IEffectiveTeamResolver, EffectiveTeamResolver>();
@@ -80,7 +80,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MyUserService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ProjectService>();
-        services.AddScoped<ProjectMemberService>();
         services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
         services.AddScoped<CategoryRepository>();

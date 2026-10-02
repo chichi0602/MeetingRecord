@@ -152,13 +152,82 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 
     [Fact]
-    public async Task ProjectApi_NonMember_ShouldNotSeeOthersProject_ButCreatorBecomesOwner()
+    public async Task ProjectApi_ViewerPreset_CanRead_ButCannotCreateEditDelete()
     {
-        // 0.4.99：API 與畫面套同一條專案權限。這筆同時守住「JWT 放的是 NameIdentifier 而不是 Sid」——
+        // 0.4.109：預設角色「檢視者」配給使用者後，限制要真的生效——讀得到、改不了（API 回 403）。
+        var account = $"viewer-{Guid.NewGuid():N}";
+        const string password = "viewer-pass";
+        int projectId;
+        int teamId;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var writer = scope.ServiceProvider.GetRequiredService<MeetingRecord.Business.Services.Other.IRbacWriteService>();
+
+            var preset = RolePresets.All.Single(x => x.Name == "檢視者");
+            var role = new RoleView { Name = $"檢視者-{Guid.NewGuid():N}", TabViewJson = "[]" };
+            var team = new Team { Name = $"檢視團隊-{Guid.NewGuid():N}", IsEnabled = true };
+            db.RoleView.Add(role);
+            db.Team.Add(team);
+            await db.SaveChangesAsync();
+            teamId = team.Id;
+            await writer.SyncRolePermissionsAsync(role.Id, preset.PermissionKeys);
+
+            var project = new Project { Title = $"檢視者看得到的專案-{Guid.NewGuid():N}", Status = "進行中", Owner = "x" };
+            project.Teams.Add(new ProjectTeam { TeamId = teamId, IsPrimary = true });
+            db.Project.Add(project);
+
+            var user = new MyUser
+            {
+                Account = account,
+                Name = "viewer",
+                Status = true,
+                IsAdmin = false,
+                RoleViewId = role.Id,
+                Password = SecurePasswordHasher.HashPassword(password),
+            };
+            db.MyUser.Add(user);
+            await db.SaveChangesAsync();
+            projectId = project.Id;
+            await writer.SyncUserRolesAsync(user.Id, [role.Id]);
+            db.UserTeam.Add(new UserTeam { MyUserId = user.Id, TeamId = teamId });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = factory.CreateClient();
+        var login = await client.PostAsJsonAsync("/api/Auth/login", new LoginRequestDto { Account = account, Password = password });
+        var loginResult = await ReadApiResultAsync<TokenResponseDto>(login);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loginResult.Data!.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/Project/{projectId}")).StatusCode);
+
+        var dto = new ProjectCreateUpdateDto
+        {
+            Id = 0,
+            Title = $"檢視者想建的專案-{Guid.NewGuid():N}",
+            StartDate = DateTime.Today,
+            EndDate = DateTime.Today.AddDays(7),
+            Status = "進行中",
+            Owner = "viewer",
+            PrimaryTeamId = teamId,
+        };
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/Project", dto)).StatusCode);
+
+        dto.Id = projectId;
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/Project/{projectId}", dto)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/Project/{projectId}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ProjectApi_OtherTeamsProject_ShouldBeHidden_AndCreatorTeamBecomesPrimary()
+    {
+        // 0.4.102：API 與畫面套同一條團隊規則（主責＋協作）。這筆同時守住「JWT 放的是 NameIdentifier 而不是 Sid」——
         // 0.4.98 以前 API 解析不到使用者，所有呼叫都被當成「非管理員、無團隊」。
         var account = $"member-{Guid.NewGuid():N}";
         const string password = "member-pass";
         int othersProjectId;
+        int myGroupId;
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -167,9 +236,14 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
 
             var role = new RoleView { Name = $"專案-{Guid.NewGuid():N}", TabViewJson = "[]" };
             db.RoleView.Add(role);
+            var otherGroup = new Team { Name = $"別的團隊-{Guid.NewGuid():N}", IsEnabled = true };
+            var myGroup = new Team { Name = $"我的團隊-{Guid.NewGuid():N}", IsEnabled = true };
+            db.Team.AddRange(otherGroup, myGroup);
             var others = new Project { Title = $"別人的專案-{Guid.NewGuid():N}", Status = "進行中", Owner = "someone" };
+            others.Teams.Add(new ProjectTeam { Team = otherGroup, IsPrimary = true });
             db.Project.Add(others);
             await db.SaveChangesAsync();
+            myGroupId = myGroup.Id;
             othersProjectId = others.Id;
             await writer.SyncRolePermissionsAsync(role.Id, [MeetingRecord.Share.Helpers.MagicObjectHelper.角色_專案項目]);
 
@@ -185,6 +259,8 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
             db.MyUser.Add(user);
             await db.SaveChangesAsync();
             await writer.SyncUserRolesAsync(user.Id, [role.Id]);
+            db.UserTeam.Add(new UserTeam { MyUserId = user.Id, TeamId = myGroupId });
+            await db.SaveChangesAsync();
         }
 
         using var client = factory.CreateClient();
@@ -207,7 +283,14 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
 
         var mine = await client.GetAsync($"/api/Project/{created.Data!.Id}");
         Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
-        Assert.Equal("member", (await ReadApiResultAsync<ProjectDto>(mine)).Data!.Owner);
+        // 負責人回到手打的描述欄位；沒指定主責時用建立者的團隊當主責，所以他自己看得到。
+        Assert.Equal("表單隨便填", (await ReadApiResultAsync<ProjectDto>(mine)).Data!.Owner);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var groups = db.ProjectTeam.Where(x => x.ProjectId == created.Data.Id).Select(x => x.TeamId).ToList();
+            Assert.Equal([myGroupId], groups);
+        }
     }
 
     [Fact]
@@ -270,6 +353,17 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         Assert.NotNull(result.Errors);
     }
 
+    /// <summary>建一個團隊給建立專案的測試當主責團隊。</summary>
+    private async Task<int> SeedTeamAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+        var team = new Team { Name = $"團隊-{Guid.NewGuid():N}", IsEnabled = true };
+        db.Team.Add(team);
+        await db.SaveChangesAsync();
+        return team.Id;
+    }
+
     [Fact]
     public async Task ProjectCrud_WithBearerToken_ShouldUseApiResultAndDto()
     {
@@ -286,7 +380,9 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
             EndDate = DateTime.Today.AddDays(7),
             Status = "進行中",
             CompletionPercentage = 10,
-            Owner = "integration-test"
+            Owner = "integration-test",
+            // 主責團隊必填（0.4.102）；測試用的管理者帳號不屬於任何團隊，所以明確指定。
+            PrimaryTeamId = await SeedTeamAsync(),
         };
 
         var createResponse = await client.PostAsJsonAsync("/api/Project", createDto);
@@ -327,6 +423,7 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
             Status = "進行中",
             CompletionPercentage = 10,
             Owner = "integration-test",
+            PrimaryTeamId = await SeedTeamAsync(),
             GlossaryTerms = ["甲專案", "乙系統"],
             Participants = ["王小明"],
         });

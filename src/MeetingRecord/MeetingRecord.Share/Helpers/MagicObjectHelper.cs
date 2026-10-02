@@ -16,8 +16,8 @@ public class MagicObjectHelper
     public const string ExternalCookieScheme = "ExternalCookieScheme";
     public const string 開發者帳號 = "support";
     /// <summary>
-    /// 0.4.98 起系統只有兩種身分：管理者（<c>MyUser.IsAdmin</c>）與一般使用者（這個角色）。
-    /// 所有帳號（含管理者）都掛這個角色，<c>RoleConsolidationService</c> 每次啟動會收斂一次。
+    /// 新帳號的預設角色。0.4.101 起可以多角色、權限取聯集，這只是起點；
+    /// <c>DefaultRoleSeeder</c> 啟動時確保它存在，不會動任何人的角色。
     /// </summary>
     public const string 預設角色 = "一般使用者";
 

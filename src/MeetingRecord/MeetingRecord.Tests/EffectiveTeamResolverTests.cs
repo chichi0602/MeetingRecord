@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
@@ -7,26 +6,14 @@ using MeetingRecord.Business.Services.Other;
 
 namespace MeetingRecord.Tests;
 
+/// <summary>0.4.101 起有效團隊＝使用者直接所屬的團隊（UserTeam），角色不再帶任何團隊。</summary>
 public sealed class EffectiveTeamResolverTests
 {
-    [Fact]
-    public async Task ShouldReturnRoleDefaultTeams()
-    {
-        await using var fixture = await Fixture.CreateAsync();
-        var role = await fixture.AddRoleAsync("R", new[] { "團隊A" });
-        var user = await fixture.AddUserAsync("u", role.Id);
-        var resolver = new EffectiveTeamResolver(fixture.Context);
-
-        var teams = await resolver.GetEffectiveTeamNamesAsync(user.Id);
-
-        Assert.Contains("團隊A", teams);
-    }
-
     [Fact]
     public async Task ShouldReturnDirectUserTeams()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var role = await fixture.AddRoleAsync("R", Array.Empty<string>());
+        var role = await fixture.AddRoleAsync("R");
         var user = await fixture.AddUserAsync("u", role.Id);
         var team = await fixture.AddTeamAsync("團隊B");
         await fixture.AddUserTeamAsync(user.Id, team.Id);
@@ -38,23 +25,21 @@ public sealed class EffectiveTeamResolverTests
     }
 
     [Fact]
-    public async Task ShouldUnionAndDeduplicate()
+    public async Task ShouldReturnAllDirectTeamsOnly()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var role = await fixture.AddRoleAsync("R", new[] { "團隊A", "團隊C" });
+        var role = await fixture.AddRoleAsync("R");
         var user = await fixture.AddUserAsync("u", role.Id);
-        var teamA = await fixture.AddTeamAsync("團隊A"); // 與角色團隊重複
+        var teamA = await fixture.AddTeamAsync("團隊A");
         var teamB = await fixture.AddTeamAsync("團隊B");
+        await fixture.AddTeamAsync("團隊C");
         await fixture.AddUserTeamAsync(user.Id, teamA.Id);
         await fixture.AddUserTeamAsync(user.Id, teamB.Id);
         var resolver = new EffectiveTeamResolver(fixture.Context);
 
         var teams = await resolver.GetEffectiveTeamNamesAsync(user.Id);
 
-        Assert.Equal(3, teams.Count);
-        Assert.Contains("團隊A", teams);
-        Assert.Contains("團隊B", teams);
-        Assert.Contains("團隊C", teams);
+        Assert.Equal(["團隊A", "團隊B"], teams.Order().ToList());
     }
 
     [Fact]
@@ -90,9 +75,9 @@ public sealed class EffectiveTeamResolverTests
             return new Fixture(connection, context);
         }
 
-        public async Task<RoleView> AddRoleAsync(string name, string[] defaultTeams)
+        public async Task<RoleView> AddRoleAsync(string name)
         {
-            var role = new RoleView { Name = name, TabViewJson = "[]", DefaultTeamsJson = JsonSerializer.Serialize(defaultTeams) };
+            var role = new RoleView { Name = name, TabViewJson = "[]" };
             Context.RoleView.Add(role);
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();

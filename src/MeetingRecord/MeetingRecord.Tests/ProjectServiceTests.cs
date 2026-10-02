@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Models.AdapterModel;
@@ -141,6 +142,8 @@ public sealed class ProjectServiceTests
             Title = "Q3 產品改版專案",
             Status = "進行中",
             Owner = "林怡君",
+            // 主責團隊必填（0.4.102）；夾具建立時先放一個 Id=1 的團隊。
+            PrimaryTeamId = 1,
             GlossaryTerms = [.. glossaryTerms ?? []],
             Participants = [.. participants ?? []],
         };
@@ -188,6 +191,9 @@ public sealed class ProjectServiceTests
 
             var context = new BackendDBContext(options);
             await context.Database.EnsureCreatedAsync();
+            context.Team.Add(new Team { Id = 1, Name = "研發部", IsEnabled = true });
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
 
             var rootPath = Path.Combine(Path.GetTempPath(), "MeetingRecordTests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(rootPath);

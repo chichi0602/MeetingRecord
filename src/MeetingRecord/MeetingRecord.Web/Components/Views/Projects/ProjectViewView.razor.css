@@ -1,9 +1,24 @@
 .project-view-picker {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 16px;
+}
+
+/* 工具列一行（0.4.106）：左邊選專案與操作，右邊篩選；窄螢幕各自換行。 */
+.project-view-picker-left,
+.project-view-picker-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 三個篩選固定排成一行，不在組內換行。 */
+.project-view-picker-right {
+    flex-wrap: nowrap;
 }
 
 /* 這兩條掛在 AntDesign 元件的 Class 上。Blazor CSS 隔離的 scope 屬性
@@ -14,7 +29,7 @@
    （0.4.56 修好的第三條 `.project-view-icon-button`——36px 方形——已於 0.4.57 移除：
    按鈕加上文字之後，方形圖示鈕這個形狀本來就不該存在了。） */
 .project-view-picker ::deep .project-view-project-select {
-    min-width: 260px;
+    width: 200px;
 }
 
 .project-view-field-label {

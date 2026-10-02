@@ -1,9 +1,10 @@
 .splash-shell {
     align-items: center;
+    /* 0.4.112：改用系統的奶茶色票（app.css 的 --oat-*），原本是範本的藍色系。 */
     background:
-        radial-gradient(circle at top left, rgba(191, 219, 254, 0.65), transparent 34%),
-        radial-gradient(circle at bottom right, rgba(186, 230, 253, 0.55), transparent 30%),
-        linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+        radial-gradient(circle at top left, rgba(212, 189, 168, 0.55), transparent 36%),
+        radial-gradient(circle at bottom right, rgba(194, 162, 132, 0.35), transparent 32%),
+        linear-gradient(180deg, var(--oat-50) 0%, #F7F2EE 100%);
     display: flex;
     justify-content: center;
     min-height: 100vh;
@@ -11,10 +12,10 @@
 }
 
 .splash-card {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(226, 232, 240, 0.9);
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
     border-radius: 28px;
-    box-shadow: 0 24px 60px rgba(148, 163, 184, 0.22);
+    box-shadow: 0 24px 60px rgba(67, 54, 44, 0.14);
     max-width: 760px;
     padding: 2rem;
     width: min(100%, 760px);
@@ -28,7 +29,7 @@
 
 .splash-brand-image-wrap {
     align-items: center;
-    background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+    background: linear-gradient(135deg, var(--oat-200) 0%, var(--oat-50) 100%);
     border-radius: 24px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
     display: flex;
@@ -51,7 +52,7 @@
 }
 
 .splash-eyebrow {
-    color: var(--oat-ink);
+    color: var(--oat-500);
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.16em;
@@ -83,16 +84,22 @@
     gap: 0.7rem;
     margin-top: 1.5rem;
     padding: 0.8rem 1rem;
-    background: rgba(248, 250, 252, 0.95);
-    border: 1px solid rgba(203, 213, 225, 0.85);
+    background: var(--oat-50);
+    border: 1px solid var(--oat-200);
     border-radius: 999px;
     font-size: 0.92rem;
     font-weight: 600;
 }
 
+.splash-version {
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+    margin: 1rem 0 0;
+}
+
 .splash-status-dot {
     animation: splash-pulse 1.2s ease-in-out infinite;
-    background: var(--oat-ink);
+    background: var(--oat-500);
     border-radius: 999px;
     display: inline-block;
     height: 0.75rem;

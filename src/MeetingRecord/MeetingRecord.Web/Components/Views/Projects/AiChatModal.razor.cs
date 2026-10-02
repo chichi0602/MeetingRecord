@@ -85,6 +85,17 @@ public partial class AiChatModal : ComponentBase
     [Parameter]
     public bool CanExport { get; set; }
 
+    /// <summary>
+    /// 可以改名、編輯訊息、重新產生答案（0.4.109）。沿用宿主頁的「修改」動作權限。
+    /// 提問、開新對話、附加檔案、讀取與下載附件只要能開這個視窗就可以。
+    /// </summary>
+    [Parameter]
+    public bool CanEdit { get; set; }
+
+    /// <summary>可以刪除或清空對話（0.4.109）。沿用宿主頁的「刪除」動作權限。</summary>
+    [Parameter]
+    public bool CanDelete { get; set; }
+
     private readonly List<AiChatMessageItem> messages = [];
 
     private string question = string.Empty;
@@ -262,6 +273,12 @@ public partial class AiChatModal : ComponentBase
 
     private void OnRenameStart(AiChatConversationInfo session)
     {
+        // 按鈕已依權限隱藏，這裡再擋一次。
+        if (!CanEdit)
+        {
+            return;
+        }
+
         renamingId = session.Id;
         renamingText = session.Title;
     }
@@ -287,7 +304,7 @@ public partial class AiChatModal : ComponentBase
     /// <summary>送出改名。空白視同取消——不要讓對話變成沒有名字。</summary>
     private async Task OnRenameCommitAsync()
     {
-        if (string.IsNullOrWhiteSpace(renamingId) || string.IsNullOrWhiteSpace(renamingText))
+        if (!CanEdit || string.IsNullOrWhiteSpace(renamingId) || string.IsNullOrWhiteSpace(renamingText))
         {
             OnRenameCancel();
             return;
@@ -317,7 +334,7 @@ public partial class AiChatModal : ComponentBase
     /// <summary>刪掉其中一段對話。會刪資料，所以跳二次確認。</summary>
     private async Task OnDeleteConversationAsync(AiChatConversationInfo session)
     {
-        if (IsBusy)
+        if (IsBusy || !CanDelete)
         {
             return;
         }
@@ -657,7 +674,7 @@ public partial class AiChatModal : ComponentBase
 
     private void OnStartEdit(int index)
     {
-        if (IsBusy || index < 0 || index >= messages.Count)
+        if (IsBusy || !CanEdit || index < 0 || index >= messages.Count)
         {
             return;
         }
@@ -678,7 +695,7 @@ public partial class AiChatModal : ComponentBase
     /// <summary>只更正文字，不呼叫模型，所以不需要費用確認。</summary>
     private async Task OnSaveEditAsync()
     {
-        if (IsBusy || editingIndex < 0 || editingIndex >= messages.Count || string.IsNullOrWhiteSpace(editingText))
+        if (IsBusy || !CanEdit || editingIndex < 0 || editingIndex >= messages.Count || string.IsNullOrWhiteSpace(editingText))
         {
             return;
         }
@@ -726,7 +743,7 @@ public partial class AiChatModal : ComponentBase
     /// </summary>
     private async Task OnRegenerateAsync()
     {
-        if (IsBusy || editingIndex < 0 || editingIndex >= messages.Count || string.IsNullOrWhiteSpace(editingText))
+        if (IsBusy || !CanEdit || editingIndex < 0 || editingIndex >= messages.Count || string.IsNullOrWhiteSpace(editingText))
         {
             return;
         }

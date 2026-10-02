@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 
 namespace MeetingRecord.Business.Repositories;
@@ -8,10 +9,12 @@ namespace MeetingRecord.Business.Repositories;
 public class TeamRepository
 {
     private readonly BackendDBContext context;
+    private readonly ProjectAccessService projectAccess;
 
-    public TeamRepository(BackendDBContext context)
+    public TeamRepository(BackendDBContext context, ProjectAccessService projectAccess)
     {
         this.context = context;
+        this.projectAccess = projectAccess;
     }
 
     #region 查詢方法
@@ -115,18 +118,27 @@ public class TeamRepository
         return true;
     }
 
-    public async Task<bool> DeleteAsync(int id)
+    /// <summary>刪除團隊。還是某個專案的主責時，非管理者不刪、回傳錯誤訊息（0.4.102）；管理者不受限（0.4.104）。</summary>
+    public async Task<(bool Found, string? Error)> DeleteAsync(int id)
     {
         var team = await context.Team.FindAsync(id);
         if (team == null)
         {
-            return false;
+            return (false, null);
+        }
+
+        var primaryOf = (await projectAccess.GetAsync()).IsAdmin
+            ? []
+            : await ProjectTeamWriter.PrimaryProjectTitlesAsync(context, id);
+        if (primaryOf.Count > 0)
+        {
+            return (true, ProjectTeamWriter.PrimaryInUseMessage(primaryOf));
         }
 
         context.Team.Remove(team);
         await context.SaveChangesAsync();
 
-        return true;
+        return (true, null);
     }
 
     #endregion

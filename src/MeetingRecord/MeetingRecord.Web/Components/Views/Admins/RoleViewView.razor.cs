@@ -209,10 +209,14 @@ namespace MeetingRecord.Web.Components.Views.Admins
         {
             logger.LogInformation("Delete role view requested. RoleViewId={RoleViewId}, Name={RoleName}", roleViewAdapterModel.Id, roleViewAdapterModel.Name);
 
+            // 有人掛著這個角色時先講清楚會發生什麼（0.4.110）：主要角色會被自動換掉，不會變成沒有角色。
+            var userCount = await roleViewService.CountUsersAsync(roleViewAdapterModel.Id);
             var ok = await modalService.ConfirmAsync(new ConfirmOptions()
             {
                 Title = "確認刪除",
-                Content = "確定要刪除這筆紀錄嗎？此操作無法復原。",
+                Content = userCount == 0
+                    ? $"確定要刪除「{roleViewAdapterModel.Name}」嗎？此操作無法復原。"
+                    : $"目前有 {userCount} 位使用者掛著「{roleViewAdapterModel.Name}」。刪除後，以它為主要角色的人會改用他們的其他角色，沒有其他角色的改用「{MagicObjectHelper.預設角色}」。此操作無法復原，確定要刪除嗎？",
                 OkText = "刪除",
                 CancelText = "取消",
                 OkButtonProps = new ButtonProps { Danger = true },
@@ -225,18 +229,60 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 return;
             }
 
-            await roleViewService.DeleteAsync(roleViewAdapterModel.Id);
-            logger.LogInformation("Role view delete completed. RoleViewId={RoleViewId}", roleViewAdapterModel.Id);
+            // 0.4.109 以前不看回傳結果，刪除失敗也顯示「刪除成功」，看起來就像一直刪不掉。
+            var result = await roleViewService.DeleteAsync(roleViewAdapterModel.Id);
+            logger.LogInformation("Role view delete completed. RoleViewId={RoleViewId}, Success={Success}", roleViewAdapterModel.Id, result.Success);
 
             _ = notificationService.Open(new NotificationConfig()
             {
                 Message = "系統訊息",
-                Description = "刪除成功",
-                NotificationType = NotificationType.Warning,
+                Description = result.Success ? "刪除成功" : result.Message,
+                NotificationType = result.Success ? NotificationType.Warning : NotificationType.Error,
                 Placement = NotificationPlacement.BottomRight
             });
 
             await ReloadAsync();
+        }
+
+        bool isSeedingPresets;
+
+        async Task OnAddPresetsAsync()
+        {
+            if (isSeedingPresets)
+            {
+                return;
+            }
+
+            var ok = await modalService.ConfirmAsync(new ConfirmOptions
+            {
+                Title = "建立預設角色",
+                Content = "會建立管理者、一般使用者、檢視者、主管四個角色並設定好權限；已經有同名角色的會略過，不會覆蓋。要繼續嗎？",
+                OkText = "建立",
+                CancelText = "取消",
+                MaskClosable = false
+            });
+            if (!ok)
+            {
+                return;
+            }
+
+            isSeedingPresets = true;
+            try
+            {
+                var result = await roleViewService.AddPresetsAsync();
+                _ = notificationService.Open(new NotificationConfig()
+                {
+                    Message = "系統訊息",
+                    Description = result.Message,
+                    NotificationType = result.Success ? NotificationType.Success : NotificationType.Error,
+                    Placement = NotificationPlacement.BottomRight
+                });
+                await ReloadAsync();
+            }
+            finally
+            {
+                isSeedingPresets = false;
+            }
         }
 
         async Task OnAddAsync(bool continueOnCapturedContext)

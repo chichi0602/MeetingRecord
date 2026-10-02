@@ -18,11 +18,7 @@ public class MeetingAdapterModel : ICloneable
 
     public List<string> Categories { get; set; } = [];
 
-    public List<string> Teams { get; set; } = [];
-
     public string CategoriesText => string.Join("、", Categories);
-
-    public string TeamsText => string.Join("、", Teams);
 
     #region 影音檔中繼資料
 
@@ -148,7 +144,6 @@ public class MeetingAdapterModel : ICloneable
         var cloned = (MeetingAdapterModel)((ICloneable)this).Clone();
         // MemberwiseClone 為淺複製，標籤清單需另建新實例，避免編輯中的修改回寫到清單資料列。
         cloned.Categories = [.. Categories];
-        cloned.Teams = [.. Teams];
         return cloned;
     }
 

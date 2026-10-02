@@ -31,6 +31,7 @@ namespace MeetingRecord.Web.Components.Views.Teams
         List<TeamAdapterModel> teamAdapterModels = new();
 
         string modalTitle = "團隊維護";
+        List<TeamService.MemberOption> selectableMembers = new();
         bool modalVisible = false;
         TeamAdapterModel CurrentRecord = new();
 
@@ -196,6 +197,8 @@ namespace MeetingRecord.Web.Components.Views.Teams
             isNewRecordMode = false;
             modalTitle = "修改團隊";
             CurrentRecord = teamAdapterModel.Clone();
+            CurrentRecord.MemberIds = await teamService.GetMemberIdsAsync(teamAdapterModel.Id);
+            selectableMembers = await teamService.GetSelectableMembersAsync();
             formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened edit modal for team. TeamId={TeamId}, Name={Name}", teamAdapterModel.Id, teamAdapterModel.Name);
@@ -204,6 +207,14 @@ namespace MeetingRecord.Web.Components.Views.Teams
         async Task OnDeleteAsync(TeamAdapterModel teamAdapterModel)
         {
             logger.LogInformation("Delete team requested. TeamId={TeamId}, Name={Name}", teamAdapterModel.Id, teamAdapterModel.Name);
+
+            // 還是某個專案的主責團隊時不能刪（主責必填，0.4.102）；先擋下來，不要讓使用者按了確認才失敗。
+            var beforeDeleteCheckResult = await teamService.BeforeDeleteCheckAsync(teamAdapterModel);
+            if (!beforeDeleteCheckResult.Success)
+            {
+                NotifyError(beforeDeleteCheckResult.Message);
+                return;
+            }
 
             var ok = await modalService.ConfirmAsync(new ConfirmOptions()
             {
@@ -221,7 +232,13 @@ namespace MeetingRecord.Web.Components.Views.Teams
                 return;
             }
 
-            await teamService.DeleteAsync(teamAdapterModel.Id);
+            var deleteResult = await teamService.DeleteAsync(teamAdapterModel.Id);
+            if (!deleteResult.Success)
+            {
+                NotifyError(deleteResult.Message);
+                return;
+            }
+
             logger.LogInformation("Team delete completed. TeamId={TeamId}", teamAdapterModel.Id);
 
             _ = notificationService.Open(new NotificationConfig()
@@ -240,6 +257,7 @@ namespace MeetingRecord.Web.Components.Views.Teams
             CurrentRecord = new();
             isNewRecordMode = true;
             modalTitle = "新增團隊";
+            selectableMembers = await teamService.GetSelectableMembersAsync();
             formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened create modal for team.");
@@ -288,7 +306,11 @@ namespace MeetingRecord.Web.Components.Views.Teams
                 CurrentRecord.CreatedAt = DateTime.Now;
                 CurrentRecord.UpdatedAt = DateTime.Now;
 
-                await teamService.AddAsync(CurrentRecord);
+                var addResult = await teamService.AddAsync(CurrentRecord);
+                if (addResult.Success)
+                {
+                    await teamService.SyncMembersAsync(CurrentRecord.Id, CurrentRecord.MemberIds);
+                }
                 logger.LogInformation("Team create submitted. Name={Name}", CurrentRecord.Name);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -320,7 +342,11 @@ namespace MeetingRecord.Web.Components.Views.Teams
                 }
 
                 CurrentRecord.UpdatedAt = DateTime.Now;
-                await teamService.UpdateAsync(CurrentRecord);
+                var updateResult = await teamService.UpdateAsync(CurrentRecord);
+                if (updateResult.Success)
+                {
+                    await teamService.SyncMembersAsync(CurrentRecord.Id, CurrentRecord.MemberIds);
+                }
                 logger.LogInformation("Team update submitted. TeamId={TeamId}, Name={Name}", CurrentRecord.Id, CurrentRecord.Name);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -383,6 +409,67 @@ namespace MeetingRecord.Web.Components.Views.Teams
             else if (FormKeyboardHelper.IsCancel(args))
             {
                 await OnModalCancelHandleAsync(new MouseEventArgs());
+            }
+        }
+
+        void NotifyError(string message)
+        {
+            _ = notificationService.Open(new NotificationConfig()
+            {
+                Message = "系統訊息",
+                Description = message,
+                NotificationType = NotificationType.Error,
+                Placement = NotificationPlacement.BottomRight,
+                Duration = 8
+            });
+        }
+
+        void OnMembersChanged(IEnumerable<int> values)
+        {
+            CurrentRecord.MemberIds = values?.ToList() ?? new();
+        }
+
+        /// <summary>清單上點狀態膠囊直接切換（0.4.105，比照提示詞清單），先跳確認視窗。</summary>
+        async Task OnToggleEnabledAsync(TeamAdapterModel item)
+        {
+            var willEnable = !item.IsEnabled;
+            logger.LogInformation("Team enabled toggle requested. Id={Id}, WillEnable={WillEnable}", item.Id, willEnable);
+
+            var confirmOptions = new ConfirmOptions
+            {
+                Title = willEnable ? "確認啟用" : "確認停用",
+                Content = willEnable
+                    ? $"確定要啟用「{item.Name}」嗎？啟用後會出現在團隊下拉選單。"
+                    : $"確定要停用「{item.Name}」嗎？停用後不會出現在團隊下拉選單；已設定的成員與專案團隊不受影響。",
+                OkText = willEnable ? "啟用" : "停用",
+                CancelText = "取消",
+                MaskClosable = false
+            };
+
+            if (!willEnable)
+            {
+                confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+            }
+
+            if (!await modalService.ConfirmAsync(confirmOptions))
+            {
+                return;
+            }
+
+            var result = await teamService.SetEnabledAsync(item.Id, willEnable);
+            _ = notificationService.Open(new NotificationConfig()
+            {
+                Message = "系統訊息",
+                Description = result.Success
+                    ? (willEnable ? $"已啟用「{item.Name}」。" : $"已停用「{item.Name}」。")
+                    : result.Message,
+                NotificationType = result.Success ? NotificationType.Success : NotificationType.Error,
+                Placement = NotificationPlacement.BottomRight
+            });
+
+            if (result.Success)
+            {
+                await ReloadAsync();
             }
         }
 

@@ -55,7 +55,8 @@ public class ProjectService
 
         DataRequestResult<ProjectAdapterModel> result = new();
         var access = await projectAccess.GetAsync();
-        IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking());
+        IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking())
+            .Include(x => x.Teams).ThenInclude(x => x.Team);
 
         if (!string.IsNullOrWhiteSpace(dataRequest.Search))
         {
@@ -64,6 +65,11 @@ public class ProjectService
                 x.Title.Contains(search) ||
                 x.Status.Contains(search) ||
                 x.Owner.Contains(search));
+        }
+
+        if (dataRequest.CategoryFilters.Count > 0)
+        {
+            dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<Project>(x => x.Categories, dataRequest.CategoryFilters));
         }
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
@@ -153,13 +159,14 @@ public class ProjectService
 
         if (!(await projectAccess.GetAsync()).CanViewProject(id))
         {
-            Logger.LogWarning("Project read denied because user is not a member. ProjectId={ProjectId}", id);
+            Logger.LogWarning("Project read denied by data group. ProjectId={ProjectId}", id);
             return new ProjectAdapterModel();
         }
 
         Project? item = await context.Project
             .AsNoTracking()
             .Include(x => x.Files)
+            .Include(x => x.Teams).ThenInclude(x => x.Team)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (item is null)
@@ -181,19 +188,16 @@ public class ProjectService
             Project itemParameter = Mapper.Map<Project>(paraObject);
             itemParameter.Files = [];
 
-            // 建立者就是負責人（0.4.99）。負責人姓名以帳號資料為準，不信任表單傳進來的字串。
+            // 團隊（0.4.102）：主責必填，非管理者的主責只能是自己所屬的團隊；協作可選任何團隊。
             var access = await projectAccess.GetAsync();
-            var creator = access.UserId == 0
-                ? null
-                : await context.MyUser.AsNoTracking().FirstOrDefaultAsync(x => x.Id == access.UserId);
-            if (creator is not null)
+            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(null, paraObject.PrimaryTeamId, paraObject.CollaboratorTeamIds));
+            if (teams.Error is not null)
             {
-                itemParameter.Owner = creator.Name;
-                itemParameter.Members =
-                [
-                    new ProjectMember { MyUserId = creator.Id, Role = ProjectMemberRole.Owner },
-                ];
+                return VerifyRecordResultFactory.Build(false, teams.Error);
             }
+
+            itemParameter.Teams = [];
+            ProjectTeamWriter.Apply(itemParameter, teams);
 
             await context.Project.AddAsync(itemParameter);
             await context.SaveChangesAsync();
@@ -221,10 +225,12 @@ public class ProjectService
     {
         Logger.LogInformation("Updating project. ProjectId={ProjectId}, Title={Title}", paraObject.Id, paraObject.Title);
 
-        if (!(await projectAccess.GetAsync()).CanManageProject(paraObject.Id))
+        // 能不能改由角色決定（畫面與 API 各自檢查動作權限）；這裡只擋「看不到的專案」——看不到就當成不存在。
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewProject(paraObject.Id))
         {
-            Logger.LogWarning("Project update denied because user is not the owner. ProjectId={ProjectId}", paraObject.Id);
-            return VerifyRecordResultFactory.Build(false, "只有專案負責人或管理者可以修改專案資料。");
+            Logger.LogWarning("Project update denied by data group. ProjectId={ProjectId}", paraObject.Id);
+            return VerifyRecordResultFactory.Build(false, "找不到要修改的專案資料。");
         }
 
         try
@@ -232,6 +238,7 @@ public class ProjectService
             CleanTrackingHelper.Clean<Project>(context);
             Project? currentItem = await context.Project
                 .Include(x => x.Files)
+                .Include(x => x.Teams)
                 .FirstOrDefaultAsync(x => x.Id == paraObject.Id);
 
             if (currentItem == null)
@@ -245,12 +252,23 @@ public class ProjectService
             currentItem.EndDate = paraObject.EndDate;
             currentItem.Status = paraObject.Status;
             currentItem.CompletionPercentage = paraObject.CompletionPercentage;
-            // Owner 不從表單抄：它跟著 ProjectMember 的負責人同步（ProjectMemberService.SetOwnerAsync）。
+            currentItem.Owner = paraObject.Owner;
+
+            // 主責沒變時照原樣保留（就算不是自己的團隊，協作團隊的人也要能存檔）；改主責才檢查是不是自己的團隊。
+            var existingPrimary = currentItem.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
+            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(existingPrimary, paraObject.PrimaryTeamId, paraObject.CollaboratorTeamIds));
+            if (teams.Error is not null)
+            {
+                return VerifyRecordResultFactory.Build(false, teams.Error);
+            }
+
+            ProjectTeamWriter.Apply(currentItem, teams);
 
             // ⚠️ 這個方法刻意手抄欄位、不走 Mapper（AddAsync 才走）。
             // 新增欄位時只改 AutoMapping 會變成「新增存得進去、修改存不進去」，而且不會報錯。
             currentItem.GlossaryTerms = TagStringHelper.ToStored(paraObject.GlossaryTerms);
             currentItem.Participants = TagStringHelper.ToStored(paraObject.Participants);
+            currentItem.Categories = TagStringHelper.ToStored(paraObject.Categories);
 
             currentItem.UpdatedAt = paraObject.UpdatedAt;
 
@@ -282,11 +300,11 @@ public class ProjectService
     {
         Logger.LogInformation("Deleting project. ProjectId={ProjectId}", id);
 
-        // 刪除會連帶刪掉待辦與附件，只給管理者（0.4.99）；負責人也不行。
-        if (!(await projectAccess.GetAsync()).IsAdmin)
+        // 能不能刪由角色的刪除權限決定；這裡只擋看不到的專案。
+        if (!(await projectAccess.GetAsync()).CanViewProject(id))
         {
-            Logger.LogWarning("Project deletion denied because user is not an administrator. ProjectId={ProjectId}", id);
-            return VerifyRecordResultFactory.Build(false, "只有管理者可以刪除專案。");
+            Logger.LogWarning("Project deletion denied by data group. ProjectId={ProjectId}", id);
+            return VerifyRecordResultFactory.Build(false, "找不到要刪除的專案資料。");
         }
 
         try
@@ -564,13 +582,43 @@ public class ProjectService
     public async Task<List<ProjectAdapterModel>> GetSelectableAsync(CancellationToken cancellationToken = default)
     {
         var access = await projectAccess.GetAsync();
-        IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking());
+        IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking())
+            .Include(x => x.Teams).ThenInclude(x => x.Team);
 
         var items = await dataSource
             .OrderBy(x => x.Title)
             .ToListAsync(cancellationToken);
 
         return Mapper.Map<List<ProjectAdapterModel>>(items);
+    }
+
+    /// <summary>
+    /// 專案表單「主責團隊」的選項（0.4.102）：管理者看全部啟用中的團隊，一般使用者只看自己所屬的。
+    /// </summary>
+    public async Task<List<TeamOption>> GetSelectablePrimaryTeamsAsync()
+    {
+        var access = await projectAccess.GetAsync();
+        var query = context.Team.AsNoTracking().Where(x => x.IsEnabled);
+        if (!access.IsAdmin)
+        {
+            var mine = access.TeamIds.ToList();
+            query = query.Where(x => mine.Contains(x.Id));
+        }
+
+        return await query
+            .OrderBy(x => x.Name)
+            .Select(x => new TeamOption(x.Id, x.Name))
+            .ToListAsync();
+    }
+
+    /// <summary>專案表單「協作團隊」的選項：全部啟用中的團隊，任何人都可以拉別的部門進來協作。</summary>
+    public async Task<List<TeamOption>> GetSelectableCollaboratorTeamsAsync()
+    {
+        return await context.Team.AsNoTracking()
+            .Where(x => x.IsEnabled)
+            .OrderBy(x => x.Name)
+            .Select(x => new TeamOption(x.Id, x.Name))
+            .ToListAsync();
     }
 
     private string GetFullPath(string relativePath)
@@ -581,6 +629,9 @@ public class ProjectService
 
         return Path.Combine(projectFileRootPath, normalizedRelativePath);
     }
+
+    /// <summary>團隊下拉的一個選項。</summary>
+    public sealed record TeamOption(int Id, string Name);
 
     public class ProjectFileDownloadResult
     {

@@ -8,31 +8,30 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Business.Services.Other;
 
 /// <summary>
-/// 把角色收斂成「管理者／一般使用者」兩種（0.4.98）。每次啟動都跑，冪等。
+/// 確保「一般使用者」這個新帳號預設角色存在。每次啟動都跑，冪等。
 ///
 /// <para>
-/// 管理者靠 <c>MyUser.IsAdmin</c> 短路放行，不需要專屬角色；所以只維護一個角色「一般使用者」，
-/// **所有帳號（含管理者）都只掛它**——<c>AuthenticationStateHelper.Check</c> 要求每個人都要有主要角色。
+/// 0.4.101 起角色只管「能做什麼」，可以多角色、權限取聯集，由管理者在角色管理與使用者管理自由設定。
+/// 這裡**不動任何帳號的角色**（0.4.98～0.4.100 曾把所有人收斂成一般使用者，已拿掉），
+/// 也不再每次啟動覆寫權限——0.4.97 以前就是那樣才讓一般帳號拿到全部權限。
 /// </para>
 /// <para>
-/// ⚠️ 權限用 <see cref="IRbacWriteService.SyncRolePermissionsAsync"/> 同步而不是回填：
-/// 舊的預設角色擁有全部權限，<see cref="RbacBackfillService"/> 只會新增不會移除，收不回來。
-/// 同步**只在升級當下做一次**（角色剛建立或剛改名），之後以角色管理頁為準。
-/// 其他舊角色列留在資料庫但不再有人使用，刻意不刪（刪了稽核紀錄的角色名稱就對不回去）。
+/// 權限只在角色**剛建立或剛從舊名「預設角色」改名**時設成業務頁那一組，
+/// 用 <see cref="IRbacWriteService.SyncRolePermissionsAsync"/> 同步（會移除多餘的權限）；之後以角色管理頁為準。
 /// </para>
 /// </summary>
-public sealed class RoleConsolidationService
+public sealed class DefaultRoleSeeder
 {
     private readonly BackendDBContext context;
     private readonly RolePermissionService rolePermissionService;
     private readonly IRbacWriteService rbacWriteService;
-    private readonly ILogger<RoleConsolidationService> logger;
+    private readonly ILogger<DefaultRoleSeeder> logger;
 
-    public RoleConsolidationService(
+    public DefaultRoleSeeder(
         BackendDBContext context,
         RolePermissionService rolePermissionService,
         IRbacWriteService rbacWriteService,
-        ILogger<RoleConsolidationService> logger)
+        ILogger<DefaultRoleSeeder> logger)
     {
         this.context = context;
         this.rolePermissionService = rolePermissionService;
@@ -40,13 +39,11 @@ public sealed class RoleConsolidationService
         this.logger = logger;
     }
 
-    /// <summary>執行收斂，回傳「一般使用者」角色的 Id（啟動時的預設帳號要掛它）。</summary>
+    /// <summary>回傳「一般使用者」角色的 Id（啟動時的預設帳號沒有角色時掛它）。</summary>
     public async Task<int> RunAsync()
     {
         var (role, isNewOrRenamed) = await EnsureGeneralRoleAsync();
 
-        // 權限只在「剛建立或剛從舊預設角色改名」時設定一次。之後管理者可以在角色管理頁調整，
-        // 每次啟動都覆寫的話，那一頁改了等於沒改（0.4.97 以前就是這樣才讓一般帳號拿到全部權限）。
         if (isNewOrRenamed)
         {
             var permissions = rolePermissionService.GetGeneralUserPermissionNames();
@@ -57,19 +54,7 @@ public sealed class RoleConsolidationService
             await rbacWriteService.SyncRolePermissionsAsync(role.Id, permissions);
         }
 
-        var users = await context.MyUser.ToListAsync();
-        foreach (var user in users.Where(x => x.RoleViewId != role.Id))
-        {
-            user.RoleViewId = role.Id;
-        }
-        await context.SaveChangesAsync();
-
-        foreach (var user in users)
-        {
-            await rbacWriteService.SyncUserRolesAsync(user.Id, [role.Id]);
-        }
-
-        logger.LogInformation("Role consolidation completed. RoleViewId={RoleViewId}, Users={Users}", role.Id, users.Count);
+        logger.LogInformation("Default role ensured. RoleViewId={RoleViewId}, Initialized={Initialized}", role.Id, isNewOrRenamed);
         return role.Id;
     }
 
@@ -81,7 +66,7 @@ public sealed class RoleConsolidationService
             return (role, false);
         }
 
-        // 沿用舊預設角色那一列（改名）而不是另建：既有帳號的 RoleViewId、預設團隊都掛在它上面。
+        // 沿用舊預設角色那一列（改名）而不是另建：既有帳號的 RoleViewId 都掛在它上面。
         role = await context.RoleView.FirstOrDefaultAsync(x => x.Name == MagicObjectHelper.舊版預設角色);
         if (role is not null)
         {

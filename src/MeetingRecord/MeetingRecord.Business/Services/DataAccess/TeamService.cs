@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Models.AdapterModel;
@@ -13,6 +14,7 @@ namespace MeetingRecord.Business.Services.DataAccess;
 public class TeamService
 {
     private readonly BackendDBContext context;
+    private readonly ProjectAccessService projectAccess;
 
     public IMapper Mapper { get; }
     public ILogger<TeamService> Logger { get; }
@@ -20,11 +22,13 @@ public class TeamService
     public TeamService(
         BackendDBContext context,
         IMapper mapper,
-        ILogger<TeamService> logger)
+        ILogger<TeamService> logger,
+        ProjectAccessService projectAccess)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
+        this.projectAccess = projectAccess;
     }
 
     public async Task<DataRequestResult<TeamAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -98,6 +102,17 @@ public class TeamService
 
         List<Team> records = await dataSource.ToListAsync();
         result.Result = Mapper.Map<List<TeamAdapterModel>>(records);
+
+        var teamIds = result.Result.Select(x => x.Id).ToList();
+        var counts = await context.UserTeam.AsNoTracking()
+            .Where(x => teamIds.Contains(x.TeamId))
+            .GroupBy(x => x.TeamId)
+            .Select(g => new { TeamId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TeamId, x => x.Count);
+        foreach (var item in result.Result)
+        {
+            item.MemberCount = counts.GetValueOrDefault(item.Id);
+        }
         Logger.LogDebug("Loaded teams successfully. Count={Count}", result.Count);
         return result;
     }
@@ -132,6 +147,7 @@ public class TeamService
 
             await context.Team.AddAsync(itemParameter);
             await context.SaveChangesAsync();
+            paraObject.Id = itemParameter.Id;
             CleanTrackingHelper.Clean<Team>(context);
 
             Logger.LogInformation("Team created successfully. TeamId={TeamId}, Name={TeamName}", itemParameter.Id, itemParameter.Name);
@@ -195,6 +211,17 @@ public class TeamService
             {
                 Logger.LogWarning("Team deletion rejected because record was not found. TeamId={TeamId}", id);
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的團隊資料。");
+            }
+
+            // 主責必填：還是某個專案的主責時，非管理者不能刪（0.4.102）；管理者不受限（0.4.104）。
+            // 畫面有先檢查，這裡再擋一次。
+            var primaryOf = (await projectAccess.GetAsync()).IsAdmin
+                ? []
+                : await ProjectTeamWriter.PrimaryProjectTitlesAsync(context, id);
+            if (primaryOf.Count > 0)
+            {
+                Logger.LogWarning("Team deletion rejected because it is still a primary team. TeamId={TeamId}, Projects={Count}", id, primaryOf.Count);
+                return VerifyRecordResultFactory.Build(false, ProjectTeamWriter.PrimaryInUseMessage(primaryOf));
             }
 
             CleanTrackingHelper.Clean<Team>(context);
@@ -287,11 +314,104 @@ public class TeamService
         return VerifyRecordResultFactory.Build(true);
     }
 
-    public Task<VerifyRecordResult> BeforeDeleteCheckAsync(TeamAdapterModel paraObject)
+    public async Task<VerifyRecordResult> BeforeDeleteCheckAsync(TeamAdapterModel paraObject)
     {
         Logger.LogDebug("Running pre-delete validation for team. TeamId={TeamId}, Name={TeamName}", paraObject.Id, paraObject.Name);
-        return Task.FromResult(VerifyRecordResultFactory.Build(true));
+        // 管理者不受限（0.4.104）：照刪，受影響的專案就沒有主責，之後編輯時再補。
+        if ((await projectAccess.GetAsync()).IsAdmin)
+        {
+            return VerifyRecordResultFactory.Build(true);
+        }
+
+        var titles = await ProjectTeamWriter.PrimaryProjectTitlesAsync(context, paraObject.Id);
+        return titles.Count > 0
+            ? VerifyRecordResultFactory.Build(false, ProjectTeamWriter.PrimaryInUseMessage(titles))
+            : VerifyRecordResultFactory.Build(true);
     }
+
+    /// <summary>
+    /// 清單上點狀態膠囊直接切換啟用狀態（0.4.105），不必進編輯視窗。
+    /// </summary>
+    public async Task<VerifyRecordResult> SetEnabledAsync(int id, bool value)
+    {
+        Logger.LogInformation("Setting Team state. Id={Id}, Value={Value}", id, value);
+
+        try
+        {
+            CleanTrackingHelper.Clean<Team>(context);
+
+            // 刻意不加 AsNoTracking：這裡要靠變更追蹤把欄位寫回去。
+            Team? item = await context.Team.FirstOrDefaultAsync(x => x.Id == id);
+            if (item == null)
+            {
+                Logger.LogWarning("Team state update rejected because record was not found. Id={Id}", id);
+                return VerifyRecordResultFactory.Build(false, "找不到要更新的團隊資料。");
+            }
+
+            item.IsEnabled = value;
+            item.UpdatedAt = DateTime.Now;
+
+            await context.SaveChangesAsync();
+            CleanTrackingHelper.Clean<Team>(context);
+
+            Logger.LogInformation("Team state updated. Id={Id}, Value={Value}", id, value);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to set Team state. Id={Id}", id);
+            return VerifyRecordResultFactory.Build(false, "更新。", ex);
+        }
+    }
+
+    public async Task<int?> GetIdByNameAsync(string name)
+    {
+        return await context.Team.AsNoTracking()
+            .Where(x => x.Name == name)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>團隊目前的成員（使用者 Id）。</summary>
+    public async Task<List<int>> GetMemberIdsAsync(int teamId)
+    {
+        return await context.UserTeam.AsNoTracking()
+            .Where(x => x.TeamId == teamId)
+            .Select(x => x.MyUserId)
+            .ToListAsync();
+    }
+
+    /// <summary>可加進團隊的帳號（啟用中），成員多選用。</summary>
+    public async Task<List<MemberOption>> GetSelectableMembersAsync()
+    {
+        return await context.MyUser.AsNoTracking()
+            .Where(x => x.Status)
+            .OrderBy(x => x.Name)
+            .Select(x => new MemberOption(x.Id, x.Name + "（" + x.Account + "）"))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// 把團隊的成員同步成 <paramref name="userIds"/>：多的移除、少的補上。
+    /// 專案的主責或協作有這個團隊時，成員就看得到那些專案。
+    /// </summary>
+    public async Task SyncMembersAsync(int teamId, IEnumerable<int> userIds)
+    {
+        var wanted = userIds.Distinct().ToList();
+        var validIds = await context.MyUser.Where(x => wanted.Contains(x.Id)).Select(x => x.Id).ToListAsync();
+        var rows = await context.UserTeam.Where(x => x.TeamId == teamId).ToListAsync();
+
+        context.UserTeam.RemoveRange(rows.Where(x => !validIds.Contains(x.MyUserId)));
+        var existing = rows.Select(x => x.MyUserId).ToHashSet();
+        context.UserTeam.AddRange(validIds.Where(id => !existing.Contains(id))
+            .Select(id => new UserTeam { MyUserId = id, TeamId = teamId }));
+        await context.SaveChangesAsync();
+        CleanTrackingHelper.Clean<UserTeam>(context);
+
+        Logger.LogInformation("Data group members synced. TeamId={TeamId}, Count={Count}", teamId, validIds.Count);
+    }
+
+    public sealed record MemberOption(int Id, string Label);
 
     /// <summary>
     /// 取得所有啟用中的團隊名稱（依名稱排序），供其他頁面下拉選取使用。

@@ -55,13 +55,20 @@
                             </span>
                         </button>
 
+                        @* 改名要修改權限、刪除要刪除權限（0.4.109）：檢視者可以提問、看內容，但不能透過問答修改或刪除。 *@
                         <div class="ai-chat-session-tools">
-                            <CrudActionButton Title="重新命名" Icon="edit"
-                                              Disabled="@IsBusy"
-                                              OnClick="@(() => OnRenameStart(session))" />
-                            <CrudActionButton Title="刪除這段對話" Icon="delete" Danger="true"
-                                              Disabled="@IsBusy"
-                                              OnClick="@(async () => await OnDeleteConversationAsync(session))" />
+                            @if (CanEdit)
+                            {
+                                <CrudActionButton Title="重新命名" Icon="edit"
+                                                  Disabled="@IsBusy"
+                                                  OnClick="@(() => OnRenameStart(session))" />
+                            }
+                            @if (CanDelete)
+                            {
+                                <CrudActionButton Title="刪除這段對話" Icon="delete" Danger="true"
+                                                  Disabled="@IsBusy"
+                                                  OnClick="@(async () => await OnDeleteConversationAsync(session))" />
+                            }
                         </div>
                     }
                 </div>
@@ -107,10 +114,13 @@
                                               Icon="content_copy"
                                               Disabled="@IsBusy"
                                               OnClick="@(() => OnCopyAsync(index))" />
-                            <CrudActionButton Title="編輯"
-                                              Icon="edit"
-                                              Disabled="@IsBusy"
-                                              OnClick="@(() => OnStartEdit(index))" />
+                            @if (CanEdit)
+                            {
+                                <CrudActionButton Title="編輯"
+                                                  Icon="edit"
+                                                  Disabled="@IsBusy"
+                                                  OnClick="@(() => OnStartEdit(index))" />
+                            }
                             @if (CanExport)
                             {
                                 <CrudActionButton Title="下載這則 PDF"
@@ -315,7 +325,10 @@
                         下載整段對話 PDF
                     </Button>
                 }
-                <Button Type="ButtonType.Link" Disabled="@IsBusy" OnClick="OnClearAsync">清空這段對話</Button>
+                @if (CanDelete)
+                {
+                    <Button Type="ButtonType.Link" Disabled="@IsBusy" OnClick="OnClearAsync">清空這段對話</Button>
+                }
             </div>
         }
     </div>

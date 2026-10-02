@@ -1,18 +1,24 @@
 ﻿# 分類清單 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.24
+- 現行系統版本：0.4.109
 - 首次實作版本：0.3.0
-- 最後核對日期：2026/08/17
+- 最後核對日期：2026/10/01
+
+> **0.4.102：分類＝「什麼資料」，只描述資料、不影響誰看得到。** 三者分工：**團隊＝誰的資料**（決定可見範圍，見 [團隊清單](團隊清單-prd.md)）、**分類＝什麼資料**、**角色＝能做什麼**。
+> - 分類重新被使用：專案表單與會議表單都有「分類」多選（啟用中的分類），以**名稱字串**存進 `Project.Categories`／`Meeting.Categories`（`TagStringHelper`）；會議頁工具列有「分類」過濾與清單欄，專案頁的選擇器旁有「依分類篩選」。
+> - 本頁多「負責團隊（參考）」多選與清單欄，存進新表 `CategoryTeam(CategoryId, TeamId)`（唯一、兩側 Cascade，migration `AddProjectPrimaryTeamAndCategories`）。**只是參考資訊**：不會帶進專案，也不影響可見性。
+> - ⚠️ 已知限制：專案與會議存的是分類**名稱**，改分類名稱**不會**連動改既有專案／會議上的標籤；刪除也沒有使用中檢查，舊標籤會變成孤兒。
 
 ## 一、目標與範圍
 
-提供「分類（Category）」主資料的維護能力，讓具權限的管理者在 `/categories` 頁面完成分類的查詢、新增、修改、刪除。分類為獨立主資料，無外鍵關聯，`Name` 唯一（不分大小寫）；亦可透過 `GetAllEnabledNamesAsync()` 供其他頁面下拉選用啟用中的分類名稱。
+提供「分類（Category）」主資料的維護能力，讓具權限的管理者在 `/categories` 頁面完成分類的查詢、新增、修改、刪除。分類為獨立主資料，`Name` 唯一（不分大小寫）；可透過 `GetAllEnabledNamesAsync()` 供其他頁面（專案、會議）下拉選用啟用中的分類名稱。0.4.102 起可另外標註「負責團隊（參考）」（`CategoryTeam`）。
 
 非範圍：
 - 不做分類的階層／樹狀結構（純平面清單）。
-- 不做與其他實體的外鍵關聯或參照完整性檢查（刪除前無被引用檢查，`BeforeDeleteCheckAsync` 直接回成功）。
+- 不做與專案／會議的外鍵關聯或參照完整性檢查（它們以名稱字串存分類；刪除前無被引用檢查，`BeforeDeleteCheckAsync` 直接回成功；改名不連動）。
+- 分類不控制任何可見性；「負責團隊（參考）」也不會帶進專案或影響可見性。
 - 不做匯入／匯出、批次操作、軟刪除（刪除為實體刪除）。
 
 ## 二、使用者與入口
@@ -35,18 +41,19 @@
 - 搜尋：關鍵字比對 `Name` 或 `Description`（`Contains`）。清空搜尋鈕在有輸入時出現。
 - 排序：可排序欄位 `Name`、`IsEnabled`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。
 - 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。
-- 清單欄位：名稱、描述、啟用狀態（啟用／停用）、更新時間、操作（修改／刪除）。
+- 清單欄位：名稱、描述、**負責團隊（參考）**（0.4.102）、啟用狀態（啟用／停用膠囊；有分類清單修改權限時可直接點擊切換，0.4.105，二次確認；`CategoryService.SetEnabledAsync`）、更新時間、操作（修改／刪除）。新增、修改、刪除按鈕依分類清單的動作權限顯示（0.4.109）。
 - 新增／編輯表單欄位：
   - 名稱 `Name`（必填，最長 100）
-  - 描述 `Description`（選填，最長 2000）
   - 啟用狀態 `IsEnabled`（Switch，預設啟用）
+  - **負責團隊（參考）**（0.4.102，多選啟用中的團隊；`CategoryService.GetSelectableTeamsAsync` 提供選項、`SyncTeamsAsync` 差異化增刪 `CategoryTeam`）
+  - 描述 `Description`（選填，最長 2000）
 - 刪除：`ConfirmAsync` 二次確認，提示不可復原。
 
 ## 四、內部系統運作
 
 - UI 路徑：`CategoryViewView` →（注入）`CategoryService` → `BackendDBContext`（Blazor Server 直接呼叫服務，不經 HTTP）。
 - API 路徑：`CategoryController` → `CategoryRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。
-- Entity `Category`（`Id/Name/Description/IsEnabled/CreatedAt/UpdatedAt`），DbSet 為 `context.Category`。
+- Entity `Category`（`Id/Name/Description/IsEnabled/CreatedAt/UpdatedAt`），DbSet 為 `context.Category`。關聯 `CategoryTeam`（分類↔團隊，0.4.102，`(CategoryId, TeamId)` 唯一、兩側 Cascade）。
 - 查詢一律 `AsNoTracking()`；新增前 `CleanTrackingHelper.Clean<Category>` 清追蹤，寫入後再清一次。
 - 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
 - 模型變更需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
@@ -79,6 +86,8 @@
 
 測試以 SQLite in-memory + `EnsureCreatedAsync` 建立隔離環境，透過 `AutoMapping` 設定 Mapper。
 
+「負責團隊（參考）」的同步與清單顯示見 `ProjectAccessTests.CategoryTeams_AreReferenceOnly_SyncAndListed`；專案的分類篩選見 `ProjectAccessTests.ProjectList_CategoryFilter_ShouldMatchAnyCategory`。
+
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Categories/CategoryPage.razor:1`
@@ -86,7 +95,7 @@
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor.cs:70`（頁面權限檢查）
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs:36`（`[HasPermission]` 動作鍵）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/CategoryService.cs:113`（AddAsync / 前置檢查）
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Category.cs:8`（Entity 欄位）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Category.cs:8`（Entity 欄位）、`CategoryTeam.cs`
 - `src/MeetingRecord/MeetingRecord.Dtos/Models/CategoryCreateUpdateDto.cs:9`、`src/MeetingRecord/MeetingRecord.Dtos/Commons/CategorySearchRequestDto.cs:6`
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:37`、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:27`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:57`

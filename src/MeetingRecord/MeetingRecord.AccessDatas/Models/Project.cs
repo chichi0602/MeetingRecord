@@ -57,6 +57,9 @@ public class Project
     /// </summary>
     public ICollection<Todo> Todos { get; set; } = [];
 
-    /// <summary>專案成員（0.4.99）。刪除專案時一併刪除。</summary>
-    public ICollection<ProjectMember> Members { get; set; } = [];
+    /// <summary>主責與協作團隊（0.4.102）。恰好一筆主責；刪除專案時一併刪除。</summary>
+    public ICollection<ProjectTeam> Teams { get; set; } = [];
+
+    /// <summary>分類標籤（0.4.102，多值，存法同 <see cref="Meeting.Categories"/>）。只描述性質，不影響誰看得到。</summary>
+    public string? Categories { get; set; }
 }

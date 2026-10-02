@@ -9,12 +9,16 @@ else
     <div>
         <div class="team-view-toolbar">
             <div class="team-view-toolbar-left">
-                <Tooltip Title="新增">
-                    <Button Type="ButtonType.Default"
-                            OnClick="@(async () => await OnAddAsync())">
-                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
-                    </Button>
-                </Tooltip>
+                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109）。 *@
+                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Create))
+                {
+                    <Tooltip Title="新增">
+                        <Button Type="ButtonType.Default"
+                                OnClick="@(async () => await OnAddAsync())">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
+                        </Button>
+                    </Tooltip>
+                }
                 <Tooltip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
@@ -52,27 +56,30 @@ else
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Name)" Title="名稱" Sortable />
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Code)" Title="代號" Sortable />
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Description)" Title="描述" />
+                <Column TData="int" DataIndex="@nameof(TeamAdapterModel.MemberCount)" Title="成員數" />
                 <Column TData="bool" DataIndex="@nameof(TeamAdapterModel.IsEnabled)" Title="啟用狀態" Sortable>
-                    @if (context.IsEnabled)
-                    {
-                        <span class="team-status team-status-enabled">啟用</span>
-                    }
-                    else
-                    {
-                        <span class="team-status team-status-disabled">停用</span>
-                    }
+                    <StatusToggleTag Enabled="@context.IsEnabled"
+                                     Name="@context.Name"
+                                     CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit)"
+                                     OnToggle="@(async () => await OnToggleEnabledAsync(context))" />
                 </Column>
                 <Column TData="DateTime" DataIndex="@nameof(TeamAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
-                        <SpaceItem>
-                            <CrudActionButton Title="修改" Icon="edit"
-                                              OnClick="@(async () => await OnEditAsync(@context))" />
-                        </SpaceItem>
-                        <SpaceItem>
-                            <CrudActionButton Title="刪除" Icon="delete" Danger
-                                              OnClick="@(async () => await OnDeleteAsync(@context))" />
-                        </SpaceItem>
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit"
+                                                  OnClick="@(async () => await OnEditAsync(@context))" />
+                            </SpaceItem>
+                        }
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                  OnClick="@(async () => await OnDeleteAsync(@context))" />
+                            </SpaceItem>
+                        }
                     </Space>
                 </ActionColumn>
             </Table>
@@ -99,7 +106,7 @@ else
                         </FormItem>
 
                         <FormItem Label="代號">
-                            <Input @bind-Value="CurrentRecord.Code" Placeholder="請輸入團隊代號（選填，有填則需唯一）" />
+                            <Input @bind-Value="CurrentRecord.Code" Placeholder="請輸入代號（選填，有填則需唯一）" />
                             <ValidationMessage For="() => CurrentRecord.Code" />
                         </FormItem>
 
@@ -107,8 +114,21 @@ else
                             <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
                         </FormItem>
 
+                        @* 成員＝看得到這個團隊主責或協作之專案的人。管理者不受限，不必加進來。 *@
+                        <FormItem Label="成員" Class="form-modal-full">
+                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.MemberIds" OnSelectedItemsChanged="OnMembersChanged"
+                                    Placeholder="選擇這個團隊的成員"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var m in selectableMembers)
+                                {
+                                    <SelectOption TItemValue="int" TItem="int" Value="@m.Id">@m.Label</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
+
                         <FormItem Label="描述" Class="form-modal-full">
-                            <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入團隊描述" />
+                            <TextArea @bind-Value="CurrentRecord.Description" Rows="4" Placeholder="請輸入描述" />
                             <ValidationMessage For="() => CurrentRecord.Description" />
                         </FormItem>
                     </div>

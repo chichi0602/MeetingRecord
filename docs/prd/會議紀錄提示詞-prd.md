@@ -2,11 +2,13 @@
 
 - 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.99
+- 現行系統版本：0.4.103
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/09/23
+- 最後核對日期：2026/09/29
 
-> **0.4.99：提示詞範本對所有人開放。** `PromptTemplateService` 拿掉團隊過濾（清單、單筆、啟用切換、`GetEnabledSelectableAsync`），編輯表單拿掉團隊欄位；範本只有管理者能維護（頁面權限），啟用中的所有人產生會議紀錄時都選得到。`Teams` 欄位保留、存檔時原值帶回。下文的團隊權控描述的是 0.4.98 以前的狀態。
+> **0.4.99：提示詞範本對所有人開放。** `PromptTemplateService` 拿掉團隊過濾（清單、單筆、啟用切換、`GetEnabledSelectableAsync`），編輯表單拿掉團隊欄位；範本的維護看角色的「提示詞清單」權限（一般使用者角色的初始權限沒有），啟用中的所有人產生會議紀錄時都選得到。~~`Teams` 欄位保留、存檔時原值帶回~~。下文的團隊權控描述的是 0.4.98 以前的狀態。
+>
+> **0.4.103：`PromptTemplate.Teams` 欄位已刪除**（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `PromptTemplateAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`PromptTemplateCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `PromptTemplateService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 
 ## 一、目標與範圍
 
@@ -45,14 +47,14 @@
 - 工具列：新增、建立內建範本、選擇內建範本＋新增此範本、重新整理、關鍵字、清空搜尋、搜尋。（分類過濾與團隊過濾已於 0.4.64 移除）
 - 排序：可排序欄位 `Name`、`IsEnabled`、`CreatedAt`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。`Content` 為長文字，刻意**不開放排序**。
 - 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。0.4.64 修正了 `Take` 只在 `dataRequest.Take != 0` 時才套用的缺陷（呼叫端一律傳 0，等於從來沒分頁）；頁碼越界時畫面端會夾回最後一頁。
-- 清單欄位：名稱、內容預覽、描述、啟用狀態（啟用／停用，可點擊切換）、更新時間、操作（修改／刪除）。（分類與團隊兩欄已於 0.4.64 移除，兩個欄位仍在編輯表單中）
+- 清單欄位：名稱、內容預覽、描述、啟用狀態（啟用／停用，可點擊切換）、更新時間、操作（修改／刪除）。（分類與團隊兩欄已於 0.4.64 移除；分類仍在編輯表單中，團隊欄位 0.4.99 從表單拿掉、0.4.103 刪除）
   - 內容預覽 `ContentPreview` 為唯讀計算屬性：將 `Content` 單行化後截斷 60 字並加上刪節號。
 - 新增／編輯表單欄位：
   - 名稱 `Name`（必填，最長 100）
   - 提示詞內容 `Content`（必填，最長 20000，14 列 `TextArea`）
   - 描述 `Description`（選填，最長 2000）
   - 分類 `Categories`（多值標籤，供檢索分群，**不影響可見性**）
-  - 團隊 `Teams`（多值標籤，Placeholder「選擇團隊（不設定表示公開）」，**決定可見範圍**）
+  - ~~團隊 `Teams`（多值標籤，Placeholder「選擇團隊（不設定表示公開）」，決定可見範圍）~~——0.4.99 從表單拿掉，**0.4.103 欄位已刪除**；範本對所有人開放
   - 啟用狀態 `IsEnabled`（Switch，預設啟用）
 - 按鈕級權限：新增／修改／刪除按鈕分別以 `CheckAccessAction(角色_提示詞清單, PermissionActions.Create/Edit/Delete)` 控制顯示（與 `ProjectViewView` 一致，較 `CategoryViewView` 多此一層）。
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是 `Content` 為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在多行欄位換行**。
@@ -75,15 +77,15 @@
 - **建立內建範本**：`PromptTemplateService.AddPresetsAsync()` 一次建立全部，**已存在同名者略過（冪等，可重複按）**，一次 `AddRange` ＋ 一次 `SaveChanges`。
 - **選擇內建範本 ＋ 新增此範本**：只建選取的那一個，走與 Modal 送出相同的 `BeforeAddCheckAsync` ＋ `AddAsync`。刻意做成兩步式而不是「選單一改就新增」——後者誤觸就多一筆且沒有取消機會，`AllowClear` 也會把 `null` 送進 handler。
 
-建出來的範本一律 `IsEnabled = true`、`Categories = null`、`Teams = null`（**不掛團隊等於公開**，否則新使用者按了按鈕仍是空清單）。
+建出來的範本一律 `IsEnabled = true`、`Categories = null`（0.4.98 以前還會設 `Teams = null`，不掛團隊等於公開；0.4.99 起範本本來就對所有人開放，0.4.103 `Teams` 欄位已刪除）。
 
 範本內容的硬性約束（`PromptTemplatePresetsTests` 守著）：**必須含 `{{transcript}}`**（`MeetingDraftJobRunner` 只做 `Render`，漏了它模型完全拿不到逐字稿**而且不會報錯**）、只能用已知變數、長度符合 `PromptTemplateAdapterModel` 的驗證上限。另外範本**不交代輸出語言**（共用 system prompt 已強制繁體中文台灣用語），且 `{{meetingDate}}` 可能被代入空字串，所以範本要附一句空值時該怎麼寫的指示。
 
-「略過」的訊息刻意提到「同名範本可能屬於其他團隊而未顯示在清單上」：**名稱唯一性是全域、可見性卻是團隊範圍**，非管理員有可能拿到「全部略過」但清單仍是空的。
+~~「略過」的訊息刻意提到「同名範本可能屬於其他團隊而未顯示在清單上」~~：0.4.98 以前名稱唯一性是全域、可見性卻是團隊範圍；0.4.99 起範本對所有人開放，這個落差已不存在，訊息只寫「已有同名提示詞」。
 
 ### 清單直接切換啟用狀態（0.4.64）
 
-「啟用狀態」欄的膠囊在有 `PermissionActions.Edit` 時是一顆按鈕，點下去經 `ConfirmAsync` 二次確認後呼叫 `PromptTemplateService.SetEnabledAsync(id, isEnabled)`（套團隊權控）。
+「啟用狀態」欄的膠囊在有 `PermissionActions.Edit` 時是一顆按鈕，點下去經 `ConfirmAsync` 二次確認後呼叫 `PromptTemplateService.SetEnabledAsync(id, isEnabled)`（0.4.98 以前套團隊權控，0.4.99 起不套）。
 
 - **啟用不套 `Danger`、停用才套**——啟用不是破壞性動作（比照 `ProjectViewView` 的「確認重新產生」）。
 - 沒有 Edit 權限時**渲染回純 `<span>`**，不是 `<button disabled>`：disabled 的按鈕不可 focus，掛在上面的 `aria-label` 狀態說明就讀不到了。
@@ -105,11 +107,11 @@
 
 - UI 路徑：`PromptTemplateViewView` →（注入）`PromptTemplateService` → `BackendDBContext`（Blazor Server 直接呼叫服務，不經 HTTP）。
 - API 路徑：`PromptTemplateController` → `PromptTemplateRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。
-- Entity `PromptTemplate`（`Id/Name/Content/Description/IsEnabled/Categories/Teams/CreatedAt/UpdatedAt`），DbSet 為 `context.PromptTemplate`。`Content` 在 SQLite 為 `TEXT`，Entity 端刻意不加長度上限，長度限制只在 AdapterModel／DTO 以 `[StringLength(20000)]` 表達。
-- 標籤欄位 `Categories`／`Teams` 以 `TagStringHelper` 的「換行包夾」格式儲存（例 `\n團隊A\n`）；AutoMapper 以 `ForMember` 搭配 `TagStringHelper.ToList` / `ToStored` 在 `List<string>` 與儲存字串之間轉換。
+- Entity `PromptTemplate`（`Id/Name/Content/Description/IsEnabled/Categories/CreatedAt/UpdatedAt`；`Teams` 0.4.103 已刪除），DbSet 為 `context.PromptTemplate`。`Content` 在 SQLite 為 `TEXT`，Entity 端刻意不加長度上限，長度限制只在 AdapterModel／DTO 以 `[StringLength(20000)]` 表達。
+- 標籤欄位 `Categories` 以 `TagStringHelper` 的「換行包夾」格式儲存（例 `\n週報\n`）；AutoMapper 以 `ForMember` 搭配 `TagStringHelper.ToList` / `ToStored` 在 `List<string>` 與儲存字串之間轉換。
 - 變數檢查在 UI 層的 `NotifyUnknownVariables()`，位於 `EditContext.Validate()` 與 `BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 都通過之後、`AddAsync`／`UpdateAsync` 之前；**刻意不放進 Service 的前置檢查流程**，因為它不阻擋儲存。判斷邏輯抽在 `PromptVariableHelper` 以便單元測試。
 - 查詢一律 `AsNoTracking()`；寫入前 `CleanTrackingHelper.Clean<PromptTemplate>` 清追蹤，寫入後再清一次。
-- 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`Clone()` 為淺複製後另建 `Categories`／`Teams` 新清單。`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
+- 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`Clone()` 為淺複製後另建 `Categories` 新清單。`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
 - 模型變更需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）；本能力對應 migration `AddPromptTemplate`（只新增 `PromptTemplate` 一張表，不影響既有表）。
 - LLM 設定：`LlmSettings` 於 `Program.cs` 以 `AddOptions<LlmSettings>().Bind(...).ValidateDataAnnotations().ValidateOnStart()` 綁定為 `IOptions<LlmSettings>`；`Providers` 為以供應商名稱為鍵的字典，`DefaultProvider` 指定預設供應商。**本版無任何呼叫端**，僅供規劃中流程預留。
 
@@ -119,20 +121,20 @@
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`提示詞清單:view`、`提示詞清單:create`、`提示詞清單:edit`、`提示詞清單:delete`。裸鍵「提示詞清單」代表該頁全部動作（向後相容）。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路（不需個別權限）。
 - UI 與 API 共用單一 RBAC 權威來源：UI 用 Cookie 驗證並以 `CheckAccessPage`（頁面鍵）控制進入頁面、以 `CheckAccessAction` 控制按鈕顯示，API 用 JWT Bearer 並以動作鍵控制個別操作。
-- **團隊列級權控只在 Blazor Service 層生效**：非管理員於 `PromptTemplateService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的提示詞；單筆讀取以 `TagStringHelper.IsTeamAccessible` 守門，越權時回空模型。**Web API 的 repository 路徑不做列級過濾**，與 `ProjectController`／`ProjectRepository` 一致（見 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §4.1）——持有有效 JWT 與 `提示詞清單:view` 的用戶端可經 API 讀到跨團隊資料，這是既有設計界線，非本次引入。
-- 0.4.98 起只有「一般使用者」一個角色；新增權限鍵要開給一般使用者時，由管理者到角色管理（`/roleviews`）勾選。
+- **提示詞範本不做列級過濾（0.4.99 起）**：UI 與 API 都對所有人開放，只看角色的「提示詞清單」動作權限。~~**團隊列級權控只在 Blazor Service 層生效**：非管理員於 `PromptTemplateService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的提示詞；單筆讀取以 `TagStringHelper.IsTeamAccessible` 守門。~~（0.4.98 以前；**0.4.103 這兩個方法與 `PromptTemplate.Teams` 已刪除**。）
+- 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
 - `LlmSettings` 的 `ApiKey` 為機敏值：版控內只放開發預設值，`appsettings.Production.json` 一併清空 `DefaultProvider` 與 `ApiKey`，正式環境須以環境變數（`LlmSettings__Providers__AzureOpenAI__ApiKey`）或 user-secrets 提供。`StartupSafetyValidator` 在 Production 啟動時檢查：指定了 `DefaultProvider` 就不允許 `ApiKey` 留空或沿用開發預設值、也不允許 `Endpoint` 留空或沿用範例值。
 
 ## 六、錯誤與邊界
 
 - 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「提示詞名稱已存在」。API 端另以 `ExistsByNameAsync` 回 409 Conflict。
-- **名稱唯一性是全域、可見性是團隊範圍**：B 團隊建立的提示詞，A 團隊使用者在清單上看不到，但用同名新增時仍會收到「提示詞名稱已存在」。這是沿用分類／團隊清單的既有語意，屬預期行為而非缺陷。
+- **名稱唯一性是全域**（不分大小寫）。~~可見性是團隊範圍：B 團隊建立的提示詞，A 團隊使用者在清單上看不到，但用同名新增時仍會收到「提示詞名稱已存在」~~——0.4.98 以前的情形，0.4.99 起範本對所有人可見。
 - 找不到資料：修改／刪除時查無記錄回「找不到要修改／刪除的提示詞資料」；API 回 404 NotFound。
 - 驗證失敗：`DataAnnotations`（名稱與內容必填、長度上限）由 `EditContext.Validate()` 於 Modal 攔截並逐條通知。
 - 內容為空白或只含空白：視為未填，走必填驗證。
 - 未知變數：**只警告不阻擋**，列出未知變數名稱與支援清單後仍完成儲存。
 - 路由 ID 與 Payload ID 不一致：API `Update` 回 400 ValidationError。
-- 非管理員且無任何有效團隊：僅能看到公開（無團隊）的提示詞。
+- 非管理員且不屬於任何團隊：仍看得到全部提示詞（0.4.99 起；0.4.98 以前只看得到公開、無團隊標籤的提示詞）。
 - 例外：Service 以 try/catch 記錄並回 `VerifyRecordResult(false, ...)`；API 以 `ApiServerError` 回 500。
 
 ## 七、驗收與測試
@@ -144,17 +146,13 @@
 - `BeforeAddCheckAsync_WithDuplicateNameDifferentCase_ShouldFail`：大小寫不同仍視為重複。
 - `BeforeUpdateCheckAsync_WithSameRecordSameName_ShouldSucceed`：同一筆用原名可通過。
 - `BeforeUpdateCheckAsync_WithNameUsedByOtherRecord_ShouldFail`：名稱被他筆占用被拒。
-- `AddAsync_ShouldPersistContentAndTagStrings`：新增後保留內容、描述、啟用狀態，且標籤欄位確實轉為 `TagStringHelper` 儲存格式（漏接轉換器會使團隊權控全面失效）。
+- `AddAsync_ShouldPersistContentAndTagStrings`：新增後保留內容、描述、啟用狀態，且標籤欄位確實轉為 `TagStringHelper` 儲存格式（0.4.103 起以 `Categories` 驗證；漏接轉換器會讓分類過濾失效）。
 - `GetAsync_ById_ShouldRoundTripTagsToList`：儲存字串可還原為標籤清單。
 - `UpdateAsync_ShouldReplaceTagsAndKeepCreatedAt`：更新換掉標籤、保留 `CreatedAt`、推進 `UpdatedAt`。
 - `AddAsync_WithMultiKilobyteContent_ShouldPersistIntact`：8192 字元內容原樣保存（防止誤植過小的長度上限）。
 - `DeleteAsync_ShouldRemoveRecord`：刪除後查不到。
 - `GetAllEnabledNamesAsync_ShouldReturnOnlyEnabledOrderedByName`：僅回啟用中並依名稱排序。
-- `GetAsync_Admin_ShouldSeeAllRecords`：管理員看得到全部。
-- `GetAsync_NonAdmin_ShouldSeeOnlyPublicOrIntersectingTeamRecords`：非管理員只看公開與團隊交集。
-- `GetAsync_NonAdminWithoutTeams_ShouldSeeOnlyPublicRecords`：無團隊者只看公開。
-- `GetById_NonAdmin_ShouldDenyRecordOutsideTeamScope`：單筆越權回空模型。
-- `GetAsync_WithTeamFilter_ShouldFilterByTeam`：團隊過濾生效。
+- `GetAsync_ShouldSeeAllRecords`：範本對所有人開放（0.4.99）。舊的團隊標籤可見性測試、`TeamFilter` 測試與「標過團隊的範本可切換啟用」測試已於 0.4.99／0.4.103 移除。
 - `GetAsync_WithKeyword_ShouldMatchContent`：關鍵字可命中提示詞內容。
 
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/PromptVariableHelperTests.cs`：
@@ -171,7 +169,7 @@
 
 `LlmSettings` 與其 Production 檢查另有 `src/MeetingRecord/MeetingRecord.Tests/LlmSettingsTests.cs` 與 `src/MeetingRecord/MeetingRecord.Tests/StartupSafetyValidatorTests.cs`。
 
-測試以 SQLite in-memory + `EnsureCreatedAsync` 建立隔離環境，透過 `AutoMapping` 設定 Mapper；團隊權控以假的 `IRecordAccessScopeProvider` 注入。注意 `EnsureCreatedAsync` 直接由模型建表、**繞過 migration**，所以測試全綠不代表 migration 存在。
+測試以 SQLite in-memory + `EnsureCreatedAsync` 建立隔離環境，透過 `AutoMapping` 設定 Mapper（0.4.99 起 `PromptTemplateService` 不再注入 `IRecordAccessScopeProvider`）。注意 `EnsureCreatedAsync` 直接由模型建表、**繞過 migration**，所以測試全綠不代表 migration 存在。
 
 ## 八、相關程式與文件
 

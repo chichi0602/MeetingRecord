@@ -32,8 +32,7 @@ public sealed class MeetingServiceTests
         var model = NewModel("第一次專案會議");
         model.MeetingDate = new DateTime(2026, 8, 21);
         model.Description = "討論里程碑";
-        model.Categories = ["專案"];
-        model.Teams = ["團隊A"];
+        model.Categories = ["專案", "客戶"];
 
         var result = await service.AddAsync(model);
 
@@ -42,9 +41,8 @@ public sealed class MeetingServiceTests
         Assert.Equal(new DateTime(2026, 8, 21), saved.MeetingDate);
         Assert.Equal("討論里程碑", saved.Description);
         // 標籤欄位必須經 TagStringHelper 轉為「以換行包夾」的儲存字串，
-        // 否則團隊列級權控的 Contains 比對會全面失效。
-        Assert.Equal(TagStringHelper.ToStored(["專案"]), saved.Categories);
-        Assert.Equal(TagStringHelper.ToStored(["團隊A"]), saved.Teams);
+        // 否則分類篩選的 Contains 比對會全面失效。
+        Assert.Equal(TagStringHelper.ToStored(["專案", "客戶"]), saved.Categories);
     }
 
     [Fact]
@@ -76,33 +74,32 @@ public sealed class MeetingServiceTests
     public async Task GetAsync_ById_ShouldRoundTripTagsToList()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
-        var existing = await fixture.AddMeetingAsync("季度檢討", categories: ["管理"], teams: ["團隊A", "團隊B"]);
+        var existing = await fixture.AddMeetingAsync("季度檢討", categories: ["管理", "週報"]);
         var service = fixture.CreateService();
 
         var model = await service.GetAsync(existing.Id);
 
         Assert.Equal("季度檢討", model.Title);
-        Assert.Equal(["管理"], model.Categories);
-        Assert.Equal(["團隊A", "團隊B"], model.Teams);
+        Assert.Equal(["管理", "週報"], model.Categories);
     }
 
     [Fact]
     public async Task UpdateAsync_ShouldReplaceTagsAndKeepCreatedAt()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
-        var existing = await fixture.AddMeetingAsync("季度檢討", teams: ["團隊A"]);
+        var existing = await fixture.AddMeetingAsync("季度檢討", categories: ["管理"]);
         var service = fixture.CreateService();
 
         var model = await service.GetAsync(existing.Id);
         model.Title = "季度檢討（修訂）";
-        model.Teams = ["團隊B"];
+        model.Categories = ["週報"];
 
         var result = await service.UpdateAsync(model);
 
         Assert.True(result.Success);
         var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
         Assert.Equal("季度檢討（修訂）", saved.Title);
-        Assert.Equal(TagStringHelper.ToStored(["團隊B"]), saved.Teams);
+        Assert.Equal(TagStringHelper.ToStored(["週報"]), saved.Categories);
         Assert.Equal(existing.CreatedAt, saved.CreatedAt);
         Assert.True(saved.UpdatedAt >= existing.UpdatedAt);
     }
@@ -745,10 +742,12 @@ public sealed class MeetingServiceTests
     [Fact]
     public async Task AttachToProjectAsync_ShouldReject_WhenTargetProjectIsNotVisible()
     {
-        // 會議是自己上傳的（看得到），但目標專案自己不是成員：不能把會議塞進別人的專案。
+        // 會議是自己上傳的（看得到），但目標專案的團隊自己不在：不能把會議塞進別人的專案。
         await using var fixture = await MeetingServiceFixture.CreateAsync();
         var user = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
         var project = await fixture.AddProjectAsync("客戶訪談專案");
+        await fixture.AddMemberAsync(project.Id, bob.Id);
         var meeting = await fixture.AddCompletedMeetingAsync("自己的會議", createdByUserId: user.Id);
         var service = fixture.CreateService(isAdmin: false, user.Id);
 
@@ -1208,20 +1207,6 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_WithTeamFilter_ShouldFilterByTeam()
-    {
-        await using var fixture = await MeetingServiceFixture.CreateAsync();
-        await fixture.SeedDefaultMeetingsAsync();
-        var service = fixture.CreateService();
-
-        var request = NewRequest();
-        request.TeamFilters = ["團隊B"];
-        var result = await service.GetAsync(request);
-
-        Assert.Equal("B專案會議", Assert.Single(result.Result).Title);
-    }
-
-    [Fact]
     public async Task GetAsync_WithKeyword_ShouldMatchMediaFileName()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
@@ -1406,7 +1391,6 @@ public sealed class MeetingServiceTests
         public async Task<Meeting> AddMeetingAsync(
             string title,
             IEnumerable<string>? categories = null,
-            IEnumerable<string>? teams = null,
             int? projectId = null,
             int? createdByUserId = null)
         {
@@ -1414,7 +1398,6 @@ public sealed class MeetingServiceTests
             {
                 Title = title,
                 Categories = TagStringHelper.ToStored(categories),
-                Teams = TagStringHelper.ToStored(teams),
                 ProjectId = projectId,
                 CreatedByUserId = createdByUserId,
             };
@@ -1430,7 +1413,6 @@ public sealed class MeetingServiceTests
             string title,
             int? projectId = null,
             DraftStatus draftStatus = DraftStatus.NotGenerated,
-            IEnumerable<string>? teams = null,
             int? createdByUserId = null)
         {
             var meeting = new Meeting
@@ -1440,7 +1422,6 @@ public sealed class MeetingServiceTests
                 TranscriptRelativePath = $"2026/08/{Guid.NewGuid():N}.txt",
                 ProjectId = projectId,
                 DraftStatus = draftStatus,
-                Teams = TagStringHelper.ToStored(teams),
                 CreatedByUserId = createdByUserId,
             };
 
@@ -1465,14 +1446,13 @@ public sealed class MeetingServiceTests
             return project;
         }
 
-        public async Task<PromptTemplate> AddPromptTemplateAsync(string name, IEnumerable<string>? teams = null)
+        public async Task<PromptTemplate> AddPromptTemplateAsync(string name)
         {
             var template = new PromptTemplate
             {
                 Name = name,
                 Content = "請根據以下逐字稿整理會議紀錄：{{transcript}}",
                 IsEnabled = true,
-                Teams = TagStringHelper.ToStored(teams),
             };
 
             Context.PromptTemplate.Add(template);
@@ -1490,15 +1470,28 @@ public sealed class MeetingServiceTests
             return user;
         }
 
-        public async Task AddMemberAsync(int projectId, int userId, ProjectMemberRole role = ProjectMemberRole.Collaborator)
+        /// <summary>
+        /// 讓使用者看得到專案（0.4.102 起靠團隊）：專案以它專屬的團隊當主責，使用者加進那個團隊。
+        /// </summary>
+        public async Task AddMemberAsync(int projectId, int userId)
         {
-            Context.ProjectMember.Add(new ProjectMember { ProjectId = projectId, MyUserId = userId, Role = role });
+            var groupName = $"專案{projectId}的團隊";
+            var team = await Context.Team.FirstOrDefaultAsync(x => x.Name == groupName);
+            if (team is null)
+            {
+                team = new Team { Name = groupName, IsEnabled = true };
+                Context.Team.Add(team);
+                await Context.SaveChangesAsync();
+                Context.ProjectTeam.Add(new ProjectTeam { ProjectId = projectId, TeamId = team.Id, IsPrimary = true });
+            }
+
+            Context.UserTeam.Add(new UserTeam { MyUserId = userId, TeamId = team.Id });
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
         }
 
         /// <summary>
-        /// 專案可見性的標準資料（0.4.99）：使用者 A 是專案 A 的成員、B 是專案 B 的成員；
+        /// 專案可見性的標準資料（0.4.102）：使用者 A 在專案 A 的主責團隊、B 在專案 B 的主責團隊；
         /// 另有 A 上傳還沒歸屬的會議，以及沒有上傳者的舊會議。
         /// </summary>
         public async Task<(int UserA, int UserB, Dictionary<string, int> Meetings)> SeedDefaultMeetingsAsync()
@@ -1507,11 +1500,11 @@ public sealed class MeetingServiceTests
             var userB = await AddUserAsync("bob");
             var projectA = await AddProjectAsync("專案A");
             var projectB = await AddProjectAsync("專案B");
-            await AddMemberAsync(projectA.Id, userA.Id, ProjectMemberRole.Owner);
-            await AddMemberAsync(projectB.Id, userB.Id, ProjectMemberRole.Owner);
+            await AddMemberAsync(projectA.Id, userA.Id);
+            await AddMemberAsync(projectB.Id, userB.Id);
 
             var a = await AddMeetingAsync("A專案會議", projectId: projectA.Id);
-            var b = await AddMeetingAsync("B專案會議", teams: ["團隊B"], projectId: projectB.Id);
+            var b = await AddMeetingAsync("B專案會議", projectId: projectB.Id);
             var mine = await AddMeetingAsync("A上傳未歸屬", createdByUserId: userA.Id);
             var legacy = await AddMeetingAsync("舊會議未歸屬");
 

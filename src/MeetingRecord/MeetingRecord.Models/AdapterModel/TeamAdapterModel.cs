@@ -21,6 +21,12 @@ public class TeamAdapterModel : ICloneable
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
+    /// <summary>成員（UserTeam）的使用者 Id；團隊頁編輯時載入、存檔時同步（0.4.101）。</summary>
+    public List<int> MemberIds { get; set; } = new();
+
+    /// <summary>清單的「成員數」欄。</summary>
+    public int MemberCount { get; set; }
+
     public TeamAdapterModel Clone()
     {
         return (TeamAdapterModel)((ICloneable)this).Clone();
@@ -28,6 +34,8 @@ public class TeamAdapterModel : ICloneable
 
     object ICloneable.Clone()
     {
-        return MemberwiseClone();
+        var clone = (TeamAdapterModel)MemberwiseClone();
+        clone.MemberIds = new List<int>(MemberIds);
+        return clone;
     }
 }

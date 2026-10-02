@@ -16,6 +16,14 @@ else
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                     </Button>
                 </Tooltip>
+                @* 上線時系統是空的：一次建好四個預設角色（0.4.108，RolePresets）。已存在同名者會略過，可重複按。 *@
+                <Tooltip Title="一次建立管理者、一般使用者、檢視者、主管四個角色，已存在的會略過">
+                    <Button Type="ButtonType.Default"
+                            Loading="@isSeedingPresets"
+                            OnClick="@(async () => await OnAddPresetsAsync())">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>建立預設角色</span></span>
+                    </Button>
+                </Tooltip>
                 <Tooltip Title="重新整理">
                     <Button Type="ButtonType.Default"
                     OnClick="@(async () => await OnRefreshAsync())">
@@ -88,8 +96,8 @@ else
                             <ValidationMessage For="() => CurrentRecord.Name" />
                         </FormItem>
 
-                        @* 0.4.99 起角色只管「能用哪些功能」，看得到哪些專案改在使用者管理逐人設定，
-                           所以拿掉「預設團隊」。DefaultTeamsJson 欄位保留、存檔時原值帶回，不會被清掉。 *@
+                        @* 角色只管「能用哪些功能」；看得到哪些專案由團隊決定（使用者管理、團隊頁設定）。
+                           0.4.101 起 DefaultTeamsJson 欄位已刪除。 *@
 
                         @* 權限矩陣跨整列：54 個核取方塊壓成半欄會擠成一團。 *@
                         <FormItem Label="角色項目" Class="form-modal-full">

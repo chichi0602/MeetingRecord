@@ -18,6 +18,17 @@ public class CategoryAdapterModel : ICloneable
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
+    /// <summary>
+    /// 通常負責這個分類的團隊（0.4.102，<c>CategoryTeam</c>）。<b>只是參考資訊</b>：
+    /// 不會帶進專案，也不影響誰看得到。
+    /// </summary>
+    public List<int> TeamIds { get; set; } = new();
+
+    /// <summary>負責團隊名稱，清單顯示用。</summary>
+    public List<string> TeamNames { get; set; } = new();
+
+    public string TeamNamesText => TeamNames.Count > 0 ? string.Join("、", TeamNames) : "—";
+
     public CategoryAdapterModel Clone()
     {
         return (CategoryAdapterModel)((ICloneable)this).Clone();
@@ -25,6 +36,9 @@ public class CategoryAdapterModel : ICloneable
 
     object ICloneable.Clone()
     {
-        return MemberwiseClone();
+        var clone = (CategoryAdapterModel)MemberwiseClone();
+        clone.TeamIds = new List<int>(TeamIds);
+        clone.TeamNames = new List<string>(TeamNames);
+        return clone;
     }
 }

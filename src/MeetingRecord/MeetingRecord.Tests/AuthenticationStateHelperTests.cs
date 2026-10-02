@@ -184,6 +184,90 @@ public sealed class AuthenticationStateHelperTests
         return new ClaimsPrincipal(identity);
     }
 
+    #region 預設角色的實際權限（0.4.109）
+
+    private static readonly string[] BusinessPages =
+        [MagicObjectHelper.角色_專案項目, MagicObjectHelper.角色_待辦事項, MagicObjectHelper.角色_會議紀錄];
+
+    private static async Task<AuthenticationStateHelper> HelperForPresetAsync(AuthenticationStateHelperFixture fixture, string roleName, bool isAdmin = false)
+    {
+        fixture.CurrentUserService.CurrentUser.IsAdmin = isAdmin;
+        fixture.CurrentUserService.CurrentUser.RoleList =
+            [.. RolePresets.All.Single(x => x.Name == roleName).PermissionKeys];
+        await Task.CompletedTask;
+        return fixture.CreateHelper();
+    }
+
+    [Fact]
+    public async Task Viewer_CanOpenBusinessPages_ButOnlyView()
+    {
+        // 0.4.108 以前的 bug：只有「頁面:view」的角色連頁面都進不去（CheckAccessPage 只認整頁鍵）。
+        await using var fixture = await AuthenticationStateHelperFixture.CreateAsync();
+        var helper = await HelperForPresetAsync(fixture, "檢視者");
+
+        foreach (var page in BusinessPages)
+        {
+            Assert.True(helper.CheckAccessPage(page), page);
+            Assert.True(helper.CheckAccessAction(page, PermissionActions.View), page);
+            Assert.False(helper.CheckAccessAction(page, PermissionActions.Create), page);
+            Assert.False(helper.CheckAccessAction(page, PermissionActions.Edit), page);
+            Assert.False(helper.CheckAccessAction(page, PermissionActions.Delete), page);
+            Assert.False(helper.CheckAccessAction(page, PermissionActions.Export), page);
+        }
+
+        Assert.True(helper.CheckAccessPage(MagicObjectHelper.角色_專案管理));
+        Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_分類清單));
+        Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_團隊清單));
+        Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_使用者管理));
+        Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_提示詞清單));
+    }
+
+    [Fact]
+    public async Task GeneralUser_CanDoEverythingButDelete_OnBusinessPages()
+    {
+        await using var fixture = await AuthenticationStateHelperFixture.CreateAsync();
+        var helper = await HelperForPresetAsync(fixture, MagicObjectHelper.預設角色);
+
+        foreach (var page in BusinessPages)
+        {
+            Assert.True(helper.CheckAccessPage(page), page);
+            Assert.True(helper.CheckAccessAction(page, PermissionActions.Create), page);
+            Assert.True(helper.CheckAccessAction(page, PermissionActions.Edit), page);
+            Assert.True(helper.CheckAccessAction(page, PermissionActions.Export), page);
+            Assert.False(helper.CheckAccessAction(page, PermissionActions.Delete), page);
+        }
+
+        Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_團隊清單));
+    }
+
+    [Fact]
+    public async Task Manager_HasAllBusinessActions_AndCategoryTeamPages()
+    {
+        await using var fixture = await AuthenticationStateHelperFixture.CreateAsync();
+        var helper = await HelperForPresetAsync(fixture, "主管");
+
+        foreach (var page in BusinessPages)
+        {
+            Assert.True(helper.CheckAccessAction(page, PermissionActions.Delete), page);
+        }
+
+        Assert.True(helper.CheckAccessPage(MagicObjectHelper.角色_分類清單));
+        Assert.True(helper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete));
+        Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_使用者管理));
+    }
+
+    [Fact]
+    public async Task AdminFlag_PassesEverything_EvenWithViewerRole()
+    {
+        await using var fixture = await AuthenticationStateHelperFixture.CreateAsync();
+        var helper = await HelperForPresetAsync(fixture, "檢視者", isAdmin: true);
+
+        Assert.True(helper.CheckAccessPage(MagicObjectHelper.角色_使用者管理));
+        Assert.True(helper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete));
+    }
+
+    #endregion
+
     private sealed class AuthenticationStateHelperFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

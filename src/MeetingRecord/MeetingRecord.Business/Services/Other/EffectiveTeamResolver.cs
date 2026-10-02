@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
-using MeetingRecord.Business.Helpers;
 
 namespace MeetingRecord.Business.Services.Other;
 
@@ -39,35 +38,7 @@ public sealed class EffectiveTeamResolver : IEffectiveTeamResolver
             AddDistinct(name, seen, result);
         }
 
-        // 2) 使用者角色（UserRole ∪ legacy RoleViewId）的預設團隊
-        var roleIds = await context.UserRole
-            .AsNoTracking()
-            .Where(x => x.MyUserId == userId)
-            .Select(x => x.RoleViewId)
-            .ToListAsync();
-
-        if (user.RoleViewId.HasValue && !roleIds.Contains(user.RoleViewId.Value))
-        {
-            roleIds.Add(user.RoleViewId.Value);
-        }
-
-        if (roleIds.Count > 0)
-        {
-            var roleTeamJsons = await context.RoleView
-                .AsNoTracking()
-                .Where(r => roleIds.Contains(r.Id))
-                .Select(r => r.DefaultTeamsJson)
-                .ToListAsync();
-
-            foreach (var json in roleTeamJsons)
-            {
-                foreach (var name in TeamJsonHelper.Deserialize(json))
-                {
-                    AddDistinct(name, seen, result);
-                }
-            }
-        }
-
+        // 0.4.101 起角色不再帶預設團隊：有效團隊＝使用者直接所屬的團隊，沒有第二個來源。
         return result;
     }
 

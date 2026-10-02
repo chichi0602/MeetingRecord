@@ -15,8 +15,8 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// 專案權控（0.4.99）：管理者看全部；一般使用者只看得到自己是成員的專案與底下的待辦；
-/// 負責人可以改專案、加減協作者；刪專案與轉移負責人只有管理者。
+/// 團隊權控（0.4.102）：團隊＝誰的資料，分類＝什麼資料，角色＝能做什麼。
+/// 專案有一個主責團隊（必填）與 0～多個協作團隊；使用者所屬團隊與主責＋協作有交集才看得到；沒有公開專案；管理者看全部。
 /// 會議那一半在 <c>MeetingServiceTests</c> 的「專案可見性」區塊。
 /// </summary>
 public sealed class ProjectAccessTests
@@ -26,7 +26,7 @@ public sealed class ProjectAccessTests
     [Fact]
     public void CanViewMeeting_UnassignedMeeting_ShouldOnlyBeVisibleToUploader()
     {
-        var access = new ProjectAccess(false, 7, [1], []);
+        var access = new ProjectAccess(false, 7, [1], [1]);
 
         Assert.True(access.CanViewMeeting(null, 7));
         Assert.False(access.CanViewMeeting(null, 8));
@@ -37,9 +37,9 @@ public sealed class ProjectAccessTests
     }
 
     [Fact]
-    public void UnresolvedUser_ShouldSeeNothing()
+    public void UnresolvedUser_ShouldNotOwnUnassignedMeetings()
     {
-        // 解析不到使用者（UserId=0）時，連上傳者為 null 的會議也不能被當成「自己的」。
+        // 解析不到使用者（UserId=0）時，上傳者為 null 的會議不能被當成「自己的」。
         var access = new ProjectAccess(false, 0, [], []);
 
         Assert.False(access.CanViewMeeting(null, null));
@@ -52,158 +52,202 @@ public sealed class ProjectAccessTests
         var access = new ProjectAccess(true, 1, [], []);
 
         Assert.True(access.CanViewProject(99));
-        Assert.True(access.CanManageProject(99));
         Assert.True(access.CanViewMeeting(null, null));
     }
 
+    [Fact]
+    public void ResolveProjectTeams_PrimaryIsRequired()
+    {
+        var access = new ProjectAccess(true, 1, [], []);
+
+        Assert.NotNull(access.ResolveProjectTeams(null, null, [2]).Error);
+    }
+
+    [Fact]
+    public void ResolveProjectTeams_NonAdmin_PrimaryMustBeOwnTeam_CollaboratorsCanBeAny()
+    {
+        // 使用者屬於 1、2。
+        var access = new ProjectAccess(false, 7, [1, 2], []);
+
+        Assert.NotNull(access.ResolveProjectTeams(null, 9, []).Error);
+
+        var ok = access.ResolveProjectTeams(null, 1, [9, 1, 3]);
+        Assert.Null(ok.Error);
+        Assert.Equal(1, ok.PrimaryTeamId);
+        // 主責不重複列在協作裡。
+        Assert.Equal([9, 3], ok.CollaboratorTeamIds);
+    }
+
+    [Fact]
+    public void ResolveProjectTeams_NonAdmin_UnchangedPrimaryIsKeptEvenIfNotOwn()
+    {
+        // 他是協作團隊的人：主責（9）不是他的團隊，但沒改主責就要能存檔。
+        var access = new ProjectAccess(false, 7, [1], []);
+
+        var result = access.ResolveProjectTeams(9, 9, [1]);
+
+        Assert.Null(result.Error);
+        Assert.Equal(9, result.PrimaryTeamId);
+    }
+
+    [Fact]
+    public void ResolveProjectTeams_Admin_CanPickAnyPrimary()
+    {
+        var access = new ProjectAccess(true, 1, [], []);
+
+        var result = access.ResolveProjectTeams(2, 9, []);
+
+        Assert.Null(result.Error);
+        Assert.Equal(9, result.PrimaryTeamId);
+    }
+
     #endregion
 
-    #region 專案
+    #region 專案可見性
 
     [Fact]
-    public async Task ProjectList_ShouldOnlyContainMemberProjects()
+    public async Task WangXiaoMing_SeesProjectsWherePrimaryOrCollaboratorIsHisTeam()
     {
+        // 使用者給的例子：王小明屬於研發部＋管理部。
         await using var fixture = await Fixture.CreateAsync();
-        var alice = await fixture.AddUserAsync("alice");
-        var mine = await fixture.AddProjectAsync("我的專案");
-        await fixture.AddProjectAsync("別人的專案");
-        await fixture.AddMemberAsync(mine.Id, alice.Id, ProjectMemberRole.Collaborator);
+        var wang = await fixture.AddUserAsync("wang");
+        var rd = await fixture.AddTeamAsync("研發部", wang.Id);
+        var admin = await fixture.AddTeamAsync("管理部", wang.Id);
+        var sales = await fixture.AddTeamAsync("業務部");
+        await fixture.AddProjectAsync("專案A", rd.Id);
+        await fixture.AddProjectAsync("專案B", admin.Id);
+        await fixture.AddProjectAsync("專案C", sales.Id);
+        await fixture.AddProjectAsync("專案D", sales.Id, rd.Id);
 
-        var projects = await fixture.CreateProjectService(alice.Id).GetSelectableAsync();
+        var projects = await fixture.CreateProjectService(wang.Id).GetSelectableAsync();
 
-        Assert.Equal(["我的專案"], projects.Select(x => x.Title).ToList());
+        Assert.Equal(["專案A", "專案B", "專案D"], projects.Select(x => x.Title).Order().ToList());
     }
 
     [Fact]
-    public async Task AddProject_CreatorShouldBecomeOwner()
+    public async Task ProjectWithoutTeams_IsNotPublic_OnlyAdminSeesIt()
     {
         await using var fixture = await Fixture.CreateAsync();
         var alice = await fixture.AddUserAsync("alice");
-        var service = fixture.CreateProjectService(alice.Id);
+        await fixture.AddTeamAsync("業務部", alice.Id);
+        await fixture.AddProjectAsync("沒掛團隊的舊專案");
 
-        var result = await service.AddAsync(new ProjectAdapterModel { Title = "新專案", Owner = "表單亂打的名字" });
+        Assert.Empty(await fixture.CreateProjectService(alice.Id).GetSelectableAsync());
+        Assert.Single(await fixture.CreateProjectService(0, isAdmin: true).GetSelectableAsync());
+    }
+
+    [Fact]
+    public async Task AddProject_NonAdmin_OwnPrimaryAndAnyCollaborator_SavesTeamsAndCategories()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var rd = await fixture.AddTeamAsync("研發部", alice.Id);
+        var sales = await fixture.AddTeamAsync("業務部");
+
+        var result = await fixture.CreateProjectService(alice.Id).AddAsync(new ProjectAdapterModel
+        {
+            Title = "成大醫療平台",
+            Owner = "王小明",
+            PrimaryTeamId = rd.Id,
+            CollaboratorTeamIds = [sales.Id],
+            Categories = [".NET", "成大"],
+        });
 
         Assert.True(result.Success);
-        var project = await fixture.Context.Project.AsNoTracking().SingleAsync();
-        var member = await fixture.Context.ProjectMember.AsNoTracking().SingleAsync();
-        Assert.Equal(alice.Id, member.MyUserId);
-        Assert.Equal(ProjectMemberRole.Owner, member.Role);
-        // 負責人姓名以帳號為準，不信任表單。
-        Assert.Equal("alice", project.Owner);
+        var project = await fixture.Context.Project.AsNoTracking().Include(x => x.Teams).SingleAsync();
+        Assert.Equal(rd.Id, project.Teams.Single(x => x.IsPrimary).TeamId);
+        Assert.Equal([sales.Id], project.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId).ToList());
+        Assert.Equal("王小明", project.Owner);
+
+        var model = await fixture.CreateProjectService(alice.Id).GetAsync(project.Id);
+        Assert.Equal([".NET", "成大"], model.Categories);
+        Assert.Equal("研發部", model.PrimaryTeamName);
+        Assert.Equal(["業務部"], model.CollaboratorTeamNames);
     }
 
     [Fact]
-    public async Task UpdateProject_CollaboratorShouldBeDenied_OwnerAllowed()
+    public async Task AddProject_NonAdmin_PrimaryOfOthersTeam_OrMissing_ShouldFail()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var owner = await fixture.AddUserAsync("owner");
-        var collaborator = await fixture.AddUserAsync("collab");
-        var project = await fixture.AddProjectAsync("專案");
-        await fixture.AddMemberAsync(project.Id, owner.Id, ProjectMemberRole.Owner);
-        await fixture.AddMemberAsync(project.Id, collaborator.Id, ProjectMemberRole.Collaborator);
+        var alice = await fixture.AddUserAsync("alice");
+        await fixture.AddTeamAsync("研發部", alice.Id);
+        var sales = await fixture.AddTeamAsync("業務部");
+        var service = fixture.CreateProjectService(alice.Id);
 
-        var denied = await fixture.CreateProjectService(collaborator.Id)
-            .UpdateAsync(new ProjectAdapterModel { Id = project.Id, Title = "協作者改的", Status = "進行中" });
-        var allowed = await fixture.CreateProjectService(owner.Id)
-            .UpdateAsync(new ProjectAdapterModel { Id = project.Id, Title = "負責人改的", Status = "進行中" });
+        var othersPrimary = await service.AddAsync(new ProjectAdapterModel { Title = "A", Owner = "x", PrimaryTeamId = sales.Id });
+        var missing = await service.AddAsync(new ProjectAdapterModel { Title = "B", Owner = "x" });
 
-        Assert.False(denied.Success);
-        Assert.True(allowed.Success);
-        Assert.Equal("負責人改的", (await fixture.Context.Project.AsNoTracking().SingleAsync()).Title);
-    }
-
-    [Fact]
-    public async Task DeleteProject_OwnerShouldBeDenied_AdminAllowed()
-    {
-        await using var fixture = await Fixture.CreateAsync();
-        var owner = await fixture.AddUserAsync("owner");
-        var project = await fixture.AddProjectAsync("專案");
-        await fixture.AddMemberAsync(project.Id, owner.Id, ProjectMemberRole.Owner);
-
-        var denied = await fixture.CreateProjectService(owner.Id).DeleteAsync(project.Id);
-        Assert.False(denied.Success);
-        Assert.True(await fixture.Context.Project.AnyAsync());
-
-        var allowed = await fixture.CreateProjectService(0, isAdmin: true).DeleteAsync(project.Id);
-        Assert.True(allowed.Success);
+        Assert.False(othersPrimary.Success);
+        Assert.False(missing.Success);
         Assert.False(await fixture.Context.Project.AnyAsync());
     }
 
-    #endregion
-
-    #region 成員
-
     [Fact]
-    public async Task Owner_CanAddAndRemoveCollaborators_ButNotRemoveOwner()
+    public async Task UpdateProject_CollaboratorTeamMember_KeepsPrimary_AndCanChangeCollaborators()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var owner = await fixture.AddUserAsync("owner");
         var bob = await fixture.AddUserAsync("bob");
-        var project = await fixture.AddProjectAsync("專案");
-        await fixture.AddMemberAsync(project.Id, owner.Id, ProjectMemberRole.Owner);
-        var service = fixture.CreateMemberService(owner.Id);
+        var sales = await fixture.AddTeamAsync("業務部");
+        var rd = await fixture.AddTeamAsync("研發部", bob.Id);
+        var admin = await fixture.AddTeamAsync("管理部");
+        var project = await fixture.AddProjectAsync("共用專案", sales.Id, rd.Id);
+        var service = fixture.CreateProjectService(bob.Id);
 
-        Assert.True((await service.AddCollaboratorAsync(project.Id, bob.Id)).Success);
-        Assert.False((await service.RemoveCollaboratorAsync(project.Id, owner.Id)).Success);
-        Assert.True((await service.RemoveCollaboratorAsync(project.Id, bob.Id)).Success);
-        Assert.Equal([owner.Id], await fixture.Context.ProjectMember.Select(x => x.MyUserId).ToListAsync());
-    }
-
-    [Fact]
-    public async Task Collaborator_CannotManageMembers()
-    {
-        await using var fixture = await Fixture.CreateAsync();
-        var collaborator = await fixture.AddUserAsync("collab");
-        var bob = await fixture.AddUserAsync("bob");
-        var project = await fixture.AddProjectAsync("專案");
-        await fixture.AddMemberAsync(project.Id, collaborator.Id, ProjectMemberRole.Collaborator);
-
-        var result = await fixture.CreateMemberService(collaborator.Id).AddCollaboratorAsync(project.Id, bob.Id);
-
-        Assert.False(result.Success);
-        Assert.Equal(1, await fixture.Context.ProjectMember.CountAsync());
-    }
-
-    [Fact]
-    public async Task SetOwner_AdminOnly_DemotesPreviousOwnerAndSyncsName()
-    {
-        await using var fixture = await Fixture.CreateAsync();
-        var oldOwner = await fixture.AddUserAsync("old");
-        var newOwner = await fixture.AddUserAsync("new");
-        var project = await fixture.AddProjectAsync("專案");
-        await fixture.AddMemberAsync(project.Id, oldOwner.Id, ProjectMemberRole.Owner);
-
-        Assert.False((await fixture.CreateMemberService(oldOwner.Id).SetOwnerAsync(project.Id, newOwner.Id)).Success);
-        Assert.True((await fixture.CreateMemberService(0, isAdmin: true).SetOwnerAsync(project.Id, newOwner.Id)).Success);
-
-        var members = await fixture.Context.ProjectMember.AsNoTracking().ToDictionaryAsync(x => x.MyUserId, x => x.Role);
-        Assert.Equal(ProjectMemberRole.Collaborator, members[oldOwner.Id]);
-        Assert.Equal(ProjectMemberRole.Owner, members[newOwner.Id]);
-        Assert.Equal("new", (await fixture.Context.Project.AsNoTracking().SingleAsync()).Owner);
-    }
-
-    [Fact]
-    public async Task SyncUserCollaborations_ShouldNotTouchOwnedProjects()
-    {
-        // 使用者管理頁把專案全部取消勾選，也不能把他負責的專案一起拔掉——負責人只能在專案頁轉移。
-        await using var fixture = await Fixture.CreateAsync();
-        var alice = await fixture.AddUserAsync("alice");
-        var owned = await fixture.AddProjectAsync("她負責的");
-        var joined = await fixture.AddProjectAsync("她協作的");
-        var newOne = await fixture.AddProjectAsync("新加入的");
-        await fixture.AddMemberAsync(owned.Id, alice.Id, ProjectMemberRole.Owner);
-        await fixture.AddMemberAsync(joined.Id, alice.Id, ProjectMemberRole.Collaborator);
-
-        var result = await fixture.CreateMemberService(0, isAdmin: true)
-            .SyncUserCollaborationsAsync(alice.Id, [newOne.Id]);
+        var model = await service.GetAsync(project.Id);
+        model.CollaboratorTeamIds = [rd.Id, admin.Id];
+        model.Categories = ["Java"];
+        var result = await service.UpdateAsync(model);
 
         Assert.True(result.Success);
-        var memberships = await fixture.Context.ProjectMember.AsNoTracking()
-            .Where(x => x.MyUserId == alice.Id)
-            .ToDictionaryAsync(x => x.ProjectId, x => x.Role);
-        Assert.Equal(2, memberships.Count);
-        Assert.Equal(ProjectMemberRole.Owner, memberships[owned.Id]);
-        Assert.Equal(ProjectMemberRole.Collaborator, memberships[newOne.Id]);
+        var links = await fixture.Context.ProjectTeam.AsNoTracking().ToListAsync();
+        Assert.Equal(sales.Id, links.Single(x => x.IsPrimary).TeamId);
+        Assert.Equal(new[] { admin.Id, rd.Id }.Order().ToList(), links.Where(x => !x.IsPrimary).Select(x => x.TeamId).Order().ToList());
+        Assert.Equal(["Java"], (await service.GetAsync(project.Id)).Categories);
+    }
+
+    [Fact]
+    public async Task UpdateAndDelete_InvisibleProject_ShouldActAsNotFound()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var rd = await fixture.AddTeamAsync("研發部");
+        var project = await fixture.AddProjectAsync("研發的專案", rd.Id);
+        var service = fixture.CreateProjectService(alice.Id);
+
+        var updated = await service.UpdateAsync(new ProjectAdapterModel { Id = project.Id, Title = "改掉", Status = "進行中", PrimaryTeamId = rd.Id });
+        var deleted = await service.DeleteAsync(project.Id);
+
+        Assert.False(updated.Success);
+        Assert.False(deleted.Success);
+        Assert.Equal("研發的專案", (await fixture.Context.Project.AsNoTracking().SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task SelectableTeams_PrimaryIsOwnForNonAdmin_CollaboratorIsAll()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        await fixture.AddTeamAsync("業務部", alice.Id);
+        await fixture.AddTeamAsync("研發部");
+        var service = fixture.CreateProjectService(alice.Id);
+
+        Assert.Equal(["業務部"], (await service.GetSelectablePrimaryTeamsAsync()).Select(x => x.Name).ToList());
+        Assert.Equal(2, (await service.GetSelectableCollaboratorTeamsAsync()).Count);
+        Assert.Equal(2, (await fixture.CreateProjectService(0, isAdmin: true).GetSelectablePrimaryTeamsAsync()).Count);
+    }
+
+    [Fact]
+    public async Task ProjectList_CategoryFilter_ShouldMatchAnyCategory()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var rd = await fixture.AddTeamAsync("研發部");
+        await fixture.AddProjectAsync("成大", [".NET", "成大"], rd.Id);
+        await fixture.AddProjectAsync("新創", ["Java", "新創"], rd.Id);
+
+        var result = await fixture.CreateProjectService(0, isAdmin: true)
+            .GetAsync(new DataRequest { CurrentPage = 1, PageSize = 50, CategoryFilters = ["成大"] });
+
+        Assert.Equal(["成大"], result.Result.Select(x => x.Title).ToList());
     }
 
     #endregion
@@ -211,13 +255,14 @@ public sealed class ProjectAccessTests
     #region 待辦
 
     [Fact]
-    public async Task Todos_ShouldOnlyListMemberProjects_AndCannotMoveIntoOthers()
+    public async Task Todos_ShouldOnlyListVisibleProjects_AndCannotMoveIntoOthers()
     {
         await using var fixture = await Fixture.CreateAsync();
         var alice = await fixture.AddUserAsync("alice");
-        var mine = await fixture.AddProjectAsync("我的專案");
-        var others = await fixture.AddProjectAsync("別人的專案");
-        await fixture.AddMemberAsync(mine.Id, alice.Id, ProjectMemberRole.Collaborator);
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id);
+        var rd = await fixture.AddTeamAsync("研發部");
+        var mine = await fixture.AddProjectAsync("我的專案", sales.Id);
+        var others = await fixture.AddProjectAsync("別人的專案", rd.Id);
         var myTodo = await fixture.AddTodoAsync("我的待辦", mine.Id);
         await fixture.AddTodoAsync("別人的待辦", others.Id);
         var service = fixture.CreateTodoService(alice.Id);
@@ -235,32 +280,201 @@ public sealed class ProjectAccessTests
 
     #endregion
 
-    #region 舊資料回填
+    #region 團隊
 
     [Fact]
-    public async Task Backfill_ShouldAssignOwnerByUniqueNameOnly()
+    public async Task SyncMembers_ShouldAddAndRemove_AndChangeVisibility()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var alice = await fixture.AddUserAsync("alice", name: "王小明");
-        await fixture.AddUserAsync("twin1", name: "陳大文");
-        await fixture.AddUserAsync("twin2", name: "陳大文");
-        var matched = await fixture.AddProjectAsync("對得上", owner: "王小明");
-        var ambiguous = await fixture.AddProjectAsync("同名兩個", owner: "陳大文");
-        var unknown = await fixture.AddProjectAsync("對不上", owner: "查無此人");
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
+        var rd = await fixture.AddTeamAsync("研發部", alice.Id);
+        await fixture.AddProjectAsync("研發的專案", rd.Id);
+        var teamService = fixture.CreateTeamService();
 
-        await fixture.CreateBackfillService().RunAsync();
-        await fixture.CreateBackfillService().RunAsync();
+        await teamService.SyncMembersAsync(rd.Id, [bob.Id, 999]);
 
-        var members = await fixture.Context.ProjectMember.AsNoTracking().ToListAsync();
-        var member = Assert.Single(members);
-        Assert.Equal(matched.Id, member.ProjectId);
-        Assert.Equal(alice.Id, member.MyUserId);
-        Assert.Equal(ProjectMemberRole.Owner, member.Role);
-        Assert.DoesNotContain(members, x => x.ProjectId == ambiguous.Id || x.ProjectId == unknown.Id);
+        Assert.Equal([bob.Id], await teamService.GetMemberIdsAsync(rd.Id));
+        Assert.Empty(await fixture.CreateProjectService(alice.Id).GetSelectableAsync());
+        Assert.Single(await fixture.CreateProjectService(bob.Id).GetSelectableAsync());
     }
 
     [Fact]
-    public async Task Backfill_ShouldTakeUploaderFromFirstTranscriptionInLedger()
+    public async Task BatchAddAndRemove_ShouldOnlyTouchSelectedUsers()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
+        var carol = await fixture.AddUserAsync("carol");
+        var sales = await fixture.AddTeamAsync("業務部", carol.Id);
+        var service = fixture.CreateMyUserService();
+
+        // carol 已經在團隊裡，不會重複加。
+        Assert.Equal(2, await service.AddUsersToTeamAsync([alice.Id, bob.Id, carol.Id], sales.Id));
+        Assert.Equal(1, await service.RemoveUsersFromTeamAsync([bob.Id], sales.Id));
+
+        var members = await fixture.Context.UserTeam.AsNoTracking()
+            .Where(x => x.TeamId == sales.Id)
+            .Select(x => x.MyUserId)
+            .OrderBy(x => x)
+            .ToListAsync();
+        Assert.Equal([alice.Id, carol.Id], members);
+    }
+
+    [Fact]
+    public async Task DeleteTeam_NonAdmin_StillPrimary_ShouldBeBlocked_CollaboratorOnly_ShouldPass()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var sales = await fixture.AddTeamAsync("業務部");
+        var rd = await fixture.AddTeamAsync("研發部");
+        await fixture.AddProjectAsync("業務的專案", sales.Id, rd.Id);
+        var service = fixture.CreateTeamService(alice.Id);
+
+        var check = await service.BeforeDeleteCheckAsync(new TeamAdapterModel { Id = sales.Id });
+        var blocked = await service.DeleteAsync(sales.Id);
+        var allowed = await service.DeleteAsync(rd.Id);
+
+        Assert.False(check.Success);
+        Assert.Contains("業務的專案", check.Message);
+        Assert.False(blocked.Success);
+        Assert.True(allowed.Success);
+        Assert.Equal([sales.Id], await fixture.Context.ProjectTeam.Select(x => x.TeamId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeleteTeam_Admin_IsNeverBlocked()
+    {
+        // 管理者要做任何事都可以（0.4.104）：主責團隊照刪，專案就沒有主責。
+        await using var fixture = await Fixture.CreateAsync();
+        var sales = await fixture.AddTeamAsync("業務部");
+        await fixture.AddProjectAsync("業務的專案", sales.Id);
+        var service = fixture.CreateTeamService(isAdmin: true);
+
+        var check = await service.BeforeDeleteCheckAsync(new TeamAdapterModel { Id = sales.Id });
+        var result = await service.DeleteAsync(sales.Id);
+
+        Assert.True(check.Success);
+        Assert.True(result.Success);
+        Assert.False(await fixture.Context.Team.AnyAsync(x => x.Id == sales.Id));
+        Assert.False(await fixture.Context.ProjectTeam.AnyAsync());
+    }
+
+    #endregion
+
+    #region 分類
+
+    [Fact]
+    public async Task CategoryTeams_AreReferenceOnly_SyncAndListed()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var rd = await fixture.AddTeamAsync("研發部");
+        var sales = await fixture.AddTeamAsync("業務部");
+        var category = new Category { Name = "成大" };
+        fixture.Context.Category.Add(category);
+        await fixture.Context.SaveChangesAsync();
+        var service = fixture.CreateCategoryService();
+
+        await service.SyncTeamsAsync(category.Id, [rd.Id, sales.Id, 999]);
+        await service.SyncTeamsAsync(category.Id, [rd.Id]);
+
+        var listed = (await service.GetAsync(new DataRequest { CurrentPage = 1, PageSize = 50 })).Result.Single();
+        Assert.Equal([rd.Id], listed.TeamIds);
+        Assert.Equal(["研發部"], listed.TeamNames);
+    }
+
+    #endregion
+
+    #region 舊資料轉換
+
+    [Fact]
+    public async Task Conversion_LegacyMembers_BecomeSameNamePrimaryTeam_AndEmptyGoesUnassigned()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
+        await fixture.AddTeamAsync("行銷案");
+        var withMembers = await fixture.AddProjectAsync("行銷案");
+        var empty = await fixture.AddProjectAsync("沒人的專案");
+        await fixture.CreateLegacyMemberTableAsync((withMembers.Id, alice.Id), (withMembers.Id, bob.Id));
+
+        await fixture.CreateConversionService().RunAsync();
+
+        var links = await fixture.Context.ProjectTeam.AsNoTracking().Include(x => x.Team).ToListAsync();
+        Assert.All(links, x => Assert.True(x.IsPrimary));
+        // 撞到既有的「行銷案」團隊，改名加尾碼。
+        var converted = links.Single(x => x.ProjectId == withMembers.Id).Team!;
+        Assert.Equal("行銷案（專案）", converted.Name);
+        var members = await fixture.Context.UserTeam.AsNoTracking()
+            .Where(x => x.TeamId == converted.Id)
+            .Select(x => x.MyUserId)
+            .OrderBy(x => x)
+            .ToListAsync();
+        Assert.Equal([alice.Id, bob.Id], members);
+
+        var unassigned = links.Single(x => x.ProjectId == empty.Id).Team!;
+        Assert.Equal(TeamConversionService.UnassignedGroupName, unassigned.Name);
+        Assert.False(await fixture.Context.UserTeam.AnyAsync(x => x.TeamId == unassigned.Id));
+
+        // 升級前後看得到的人一樣：alice 看得到行銷案，看不到沒人的專案。
+        Assert.Equal(["行銷案"], (await fixture.CreateProjectService(alice.Id).GetSelectableAsync()).Select(x => x.Title).ToList());
+    }
+
+    [Fact]
+    public async Task Conversion_0_4_101Data_GetsPrimaryFromExistingLink_OrUnassigned()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var teamA = await fixture.AddTeamAsync("A", alice.Id);
+        var teamB = await fixture.AddTeamAsync("B");
+        var linked = await fixture.AddProjectAsync("有掛團隊");
+        var publicOne = await fixture.AddProjectAsync("0.4.101 的公開專案");
+        // 0.4.101 的連結沒有主責欄位（全部 false）。
+        fixture.Context.ProjectTeam.AddRange(
+            new ProjectTeam { ProjectId = linked.Id, TeamId = teamB.Id },
+            new ProjectTeam { ProjectId = linked.Id, TeamId = teamA.Id });
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        await fixture.CreateConversionService().RunAsync();
+        await fixture.CreateConversionService().RunAsync();
+
+        var links = await fixture.Context.ProjectTeam.AsNoTracking().Include(x => x.Team).ToListAsync();
+        Assert.Equal(teamA.Id, links.Single(x => x.ProjectId == linked.Id && x.IsPrimary).TeamId);
+        Assert.Equal(TeamConversionService.UnassignedGroupName, links.Single(x => x.ProjectId == publicOne.Id && x.IsPrimary).Team!.Name);
+        Assert.Equal(3, links.Count);
+        // 升級後沒有公開專案：alice 看不到原本公開的那個。
+        Assert.Equal(["有掛團隊"], (await fixture.CreateProjectService(alice.Id).GetSelectableAsync()).Select(x => x.Title).ToList());
+    }
+
+    [Fact]
+    public async Task Conversion_ShouldDropLegacyTable_AndSecondRunDoesNothing()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var project = await fixture.AddProjectAsync("專案");
+        await fixture.CreateLegacyMemberTableAsync((project.Id, alice.Id));
+
+        await fixture.CreateConversionService().RunAsync();
+        var teamsAfterFirst = await fixture.Context.Team.CountAsync();
+        await fixture.CreateConversionService().RunAsync();
+
+        Assert.False(await fixture.LegacyTableExistsAsync());
+        Assert.Equal(teamsAfterFirst, await fixture.Context.Team.CountAsync());
+        Assert.Equal(1, await fixture.Context.ProjectTeam.CountAsync());
+    }
+
+    [Fact]
+    public void UniqueName_ShouldAppendSuffixUntilFree()
+    {
+        var used = new HashSet<string> { "A", "A（專案）" };
+
+        Assert.Equal("B", TeamConversionService.UniqueName("B", used));
+        Assert.Equal("A（專案 2）", TeamConversionService.UniqueName("A", used));
+    }
+
+    [Fact]
+    public async Task Conversion_ShouldTakeUploaderFromFirstTranscriptionInLedger()
     {
         await using var fixture = await Fixture.CreateAsync();
         var alice = await fixture.AddUserAsync("alice");
@@ -274,7 +488,7 @@ public sealed class ProjectAccessTests
         await fixture.Context.SaveChangesAsync();
         fixture.Context.ChangeTracker.Clear();
 
-        await fixture.CreateBackfillService().RunAsync();
+        await fixture.CreateConversionService().RunAsync();
 
         // 最早那一筆才是當初上傳觸發的轉錄；之後的是別人按了重新轉錄。
         Assert.Equal(alice.Id, (await fixture.Context.Meeting.AsNoTracking().SingleAsync()).CreatedByUserId);
@@ -331,38 +545,64 @@ public sealed class ProjectAccessTests
                 new AiChatStore(systemSettings, loggerFactory.CreateLogger<AiChatStore>()),
                 Access(userId, isAdmin));
 
-        public ProjectMemberService CreateMemberService(int userId, bool isAdmin = false)
-            => new(Context, Access(userId, isAdmin), loggerFactory.CreateLogger<ProjectMemberService>());
-
         public TodoService CreateTodoService(int userId, bool isAdmin = false)
             => new(Context, mapper, loggerFactory.CreateLogger<TodoService>(), Access(userId, isAdmin));
 
-        public ProjectAccessBackfillService CreateBackfillService()
-            => new(Context, loggerFactory.CreateLogger<ProjectAccessBackfillService>());
+        public TeamService CreateTeamService(int userId = 0, bool isAdmin = false)
+            => new(Context, mapper, loggerFactory.CreateLogger<TeamService>(), Access(userId, isAdmin));
 
-        public async Task<MyUser> AddUserAsync(string account, string? name = null)
+        public CategoryService CreateCategoryService()
+            => new(Context, mapper, loggerFactory.CreateLogger<CategoryService>());
+
+        public MyUserService CreateMyUserService()
+            => new(
+                Context,
+                mapper,
+                loggerFactory.CreateLogger<MyUserService>(),
+                new RbacWriteService(Context),
+                new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>()),
+                new CurrentUserService());
+
+        public TeamConversionService CreateConversionService()
+            => new(Context, loggerFactory.CreateLogger<TeamConversionService>());
+
+        public async Task<MyUser> AddUserAsync(string account)
         {
-            var user = new MyUser { Account = account, Name = name ?? account, Password = "x", Status = true };
+            var user = new MyUser { Account = account, Name = account, Password = "x", Status = true };
             Context.MyUser.Add(user);
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
             return user;
         }
 
-        public async Task<Project> AddProjectAsync(string title, string owner = "")
+        public async Task<Team> AddTeamAsync(string name, params int[] memberIds)
         {
-            var project = new Project { Title = title, Status = "進行中", Owner = owner };
+            var team = new Team { Name = name, IsEnabled = true };
+            Context.Team.Add(team);
+            await Context.SaveChangesAsync();
+            Context.UserTeam.AddRange(memberIds.Select(id => new UserTeam { MyUserId = id, TeamId = team.Id }));
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return team;
+        }
+
+        /// <summary>第一個團隊是主責，其餘是協作；沒給團隊＝升級前的舊資料（沒有任何連結）。</summary>
+        public Task<Project> AddProjectAsync(string title, params int[] teamIds)
+            => AddProjectAsync(title, [], teamIds);
+
+        public async Task<Project> AddProjectAsync(string title, string[] categories, params int[] teamIds)
+        {
+            var project = new Project
+            {
+                Title = title,
+                Status = "進行中",
+                Categories = MeetingRecord.Business.Helpers.TagStringHelper.ToStored(categories),
+                Teams = [.. teamIds.Select((id, index) => new ProjectTeam { TeamId = id, IsPrimary = index == 0 })],
+            };
             Context.Project.Add(project);
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
             return project;
-        }
-
-        public async Task AddMemberAsync(int projectId, int userId, ProjectMemberRole role)
-        {
-            Context.ProjectMember.Add(new ProjectMember { ProjectId = projectId, MyUserId = userId, Role = role });
-            await Context.SaveChangesAsync();
-            Context.ChangeTracker.Clear();
         }
 
         public async Task<Todo> AddTodoAsync(string title, int projectId)
@@ -372,6 +612,25 @@ public sealed class ProjectAccessTests
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
             return todo;
+        }
+
+        /// <summary>0.4.99～0.4.100 的專案成員表，已不在 EF 模型裡，用原生 SQL 模擬升級前的資料庫。</summary>
+        public async Task CreateLegacyMemberTableAsync(params (int ProjectId, int UserId)[] rows)
+        {
+            await Context.Database.ExecuteSqlRawAsync(
+                "CREATE TABLE \"ProjectMember\" (\"Id\" INTEGER PRIMARY KEY AUTOINCREMENT, \"ProjectId\" INTEGER NOT NULL, \"MyUserId\" INTEGER NOT NULL, \"Role\" INTEGER NOT NULL, \"CreatedAt\" TEXT NOT NULL)");
+            foreach (var (projectId, userId) in rows)
+            {
+                await Context.Database.ExecuteSqlAsync(
+                    $"INSERT INTO \"ProjectMember\" (\"ProjectId\", \"MyUserId\", \"Role\", \"CreatedAt\") VALUES ({projectId}, {userId}, 1, '2026-09-28')");
+            }
+        }
+
+        public async Task<bool> LegacyTableExistsAsync()
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ProjectMember'";
+            return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
         }
 
         public async ValueTask DisposeAsync()

@@ -33,6 +33,15 @@ public partial class MeetingViewView : IDisposable
     private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
     private readonly FileDownloadInterop fileDownloadInterop;
     private readonly IPdfRenderer pdfRenderer;
+
+    [Inject]
+    private CategoryService CategoryService { get; set; } = default!;
+
+    /// <summary>啟用中的分類名稱（表單與篩選共用）。</summary>
+    private List<string> availableCategories = [];
+
+    /// <summary>清單的分類篩選；空＝不篩選。</summary>
+    private List<string> selectedCategoryFilters = [];
     private ITable? table;
 
     private int _pageIndex = 1;
@@ -215,6 +224,7 @@ public partial class MeetingViewView : IDisposable
         progressNotifier.Changed += OnTranscriptionProgressChanged;
         draftProgressNotifier.Changed += OnDraftProgressChanged;
 
+        availableCategories = await CategoryService.GetAllEnabledNamesAsync();
         await ReloadAsync();
     }
 
@@ -291,6 +301,7 @@ public partial class MeetingViewView : IDisposable
         DataRequestResult<MeetingAdapterModel> dataRequestResult = await meetingService.GetAsync(new DataRequest
         {
             Search = searchText,
+            CategoryFilters = selectedCategoryFilters.ToList(),
             SortField = sortField,
             SortDescending = sortDirection == "Descending" ? true : sortDirection == "Ascending" ? false : (bool?)null,
             CurrentPage = _pageIndex,
@@ -360,6 +371,18 @@ public partial class MeetingViewView : IDisposable
 
         object? dataIndex = column.GetType().GetProperty("DataIndex")?.GetValue(column);
         return dataIndex?.ToString() ?? string.Empty;
+    }
+
+    private async Task OnCategoryFilterChanged(IEnumerable<string> values)
+    {
+        selectedCategoryFilters = values?.ToList() ?? [];
+        _pageIndex = 1;
+        await ReloadAsync();
+    }
+
+    private void OnRecordCategoriesChanged(IEnumerable<string> values)
+    {
+        CurrentRecord.Categories = values?.ToList() ?? [];
     }
 
     private async Task OnSearchAsync()

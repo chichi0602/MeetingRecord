@@ -24,11 +24,7 @@ public class PromptTemplateAdapterModel : ICloneable
 
     public List<string> Categories { get; set; } = [];
 
-    public List<string> Teams { get; set; } = [];
-
     public string CategoriesText => string.Join("、", Categories);
-
-    public string TeamsText => string.Join("、", Teams);
 
     /// <summary>提示詞內容的單行預覽（供清單欄位顯示，過長時截斷）</summary>
     public string ContentPreview
@@ -56,7 +52,6 @@ public class PromptTemplateAdapterModel : ICloneable
         var cloned = (PromptTemplateAdapterModel)((ICloneable)this).Clone();
         // MemberwiseClone 為淺複製，標籤清單需另建新實例，避免編輯中的修改回寫到清單資料列。
         cloned.Categories = [.. Categories];
-        cloned.Teams = [.. Teams];
         return cloned;
     }
 

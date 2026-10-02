@@ -100,7 +100,8 @@ public sealed class AuditEventsTests
     {
         await using var fixture = await Fixture.CreateAsync(actorId: 7, actorAccount: "actor7");
         var role = new RoleView { Name = "臨時角色", TabViewJson = "[]" };
-        fixture.Context.RoleView.Add(role);
+        // 0.4.110 起不能刪最後一個角色，另放一個讓它不是最後一個。
+        fixture.Context.RoleView.AddRange(role, new RoleView { Name = "保留角色", TabViewJson = "[]" });
         await fixture.Context.SaveChangesAsync();
         fixture.Context.ChangeTracker.Clear();
         var service = fixture.CreateRoleService();

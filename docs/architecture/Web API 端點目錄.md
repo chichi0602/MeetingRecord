@@ -1,10 +1,10 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.27
+- 現行系統版本：0.4.103
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/08/21
+- 最後核對日期：2026/09/29
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
@@ -32,12 +32,22 @@
 | 控制器 | 路由前綴 | 權限鍵（`MagicObjectHelper`）| 檔案 |
 |--------|----------|------------------------------|------|
 | `CategoryController` | `api/Category`、`api/v1/Category` | `角色_分類清單` | `Controllers/CategoryController.cs` |
-| `TeamController` | `api/Team`、`api/v1/Team` | `角色_團隊清單` | `Controllers/TeamController.cs` |
+| `TeamController` | `api/Team`、`api/v1/Team` | `角色_團隊清單`（0.4.101 曾改名 `角色_資料群組`，0.4.102 改回）| `Controllers/TeamController.cs` |
 | `ProjectController` | `api/Project`、`api/v1/Project` | `角色_專案項目` | `Controllers/ProjectController.cs` |
 | `PromptTemplateController` | `api/PromptTemplate`、`api/v1/PromptTemplate` | `角色_提示詞清單` | `Controllers/PromptTemplateController.cs` |
 | `MeetingController` | `api/Meeting`、`api/v1/Meeting` | `角色_會議紀錄` | `Controllers/MeetingController.cs` |
 
-> 注意：資源控制器（repository 路徑）**不做團隊列級過濾**。`PromptTemplate` 與 `Meeting` 的 `Teams` 標籤可見性只在 Blazor Service 層生效，詳見 [開發慣例與限制速查](開發慣例與限制速查.md) §4.1。**`Project` 自 0.4.39 起、`Todo` 自 0.4.66 起已無 `Teams` 欄位**，兩條路徑都不做列級過濾。
+> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
+>
+> **專案的團隊與分類（0.4.102）**：`ProjectCreateUpdateDto`／`ProjectDto` 多了選填的 `primaryTeamId`、`collaboratorTeamIds`、`categories`，專案的 GET／搜尋結果會帶回團隊 Id。
+> - `POST api/Project` 沒給 `primaryTeamId` 時，用建立者所屬、Id 最小的團隊當主責；建立者不屬於任何團隊時回 **400**「請先加入團隊，或指定主責團隊。」
+> - `PUT api/Project/{id}` 的這三個欄位為 null 時保留原值。
+> - 團隊選擇不合法（非管理者把主責改成不是自己的團隊、主責團隊不存在）回 **400**；規則與畫面共用 `ProjectAccess.ResolveProjectTeams`＋`ProjectTeamWriter`。
+> - `DELETE api/Team/{id}`：非管理者刪除還是某個專案主責團隊的團隊時回 **409**，訊息列出那些專案；只當協作團隊的可以刪。管理者不受此限（0.4.104）：照刪，受影響的專案就沒有主責團隊，之後編輯專案時再補；下次啟動時 `TeamConversionService` 會替沒有主責的專案補上（取協作團隊中 Id 最小的，沒有就掛「待分配」）。
+>
+> **會議與提示詞範本的 `teams` 欄位已移除（0.4.103）**：`MeetingCreateUpdateDto`／`PromptTemplateCreateUpdateDto` 不再有 `teams`（舊的團隊標籤字串，0.4.99 起已不影響可見性），舊客戶端仍送這個欄位會被忽略、不會報錯。分類請用 `categories`。
+>
+> 詳見 [開發慣例與限制速查](開發慣例與限制速查.md) §4.0。
 
 `MeetingController` 與其他四個的差異：
 

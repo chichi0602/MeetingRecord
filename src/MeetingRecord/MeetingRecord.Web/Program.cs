@@ -309,10 +309,10 @@ namespace MeetingRecord.Web
                         logger.LogInformation("Database created because no migrations were found.");
                     }
 
-                    #region 角色收斂為「管理者／一般使用者」（0.4.98，冪等）
+                    #region 確保「一般使用者」預設角色存在（冪等；不動任何帳號的角色）
                     // 0.4.97 以前這裡每次啟動都把預設角色覆寫成「全部權限」，一般帳號因此什麼都能做。
                     var generalRoleId = scope.ServiceProvider
-                        .GetRequiredService<RoleConsolidationService>()
+                        .GetRequiredService<DefaultRoleSeeder>()
                         .RunAsync().GetAwaiter().GetResult();
                     #endregion
 
@@ -348,7 +348,8 @@ namespace MeetingRecord.Web
                                 SecurePasswordHasher.HashPassword(bootstrapSettings.SupportPassword);
                         }
                         support.IsAdmin = true;
-                        support.RoleViewId = generalRoleId;
+                        // 只補沒有角色的情況：角色由管理者自由設定，啟動時不覆寫（0.4.101）。
+                        support.RoleViewId ??= generalRoleId;
                         dbContext.SaveChanges();
                         logger.LogDebug("Updated existing support user seed data.");
                     }
@@ -366,15 +367,15 @@ namespace MeetingRecord.Web
                     }
                     #endregion
 
-                    #region 專案權限回填（0.4.99：舊專案的負責人、舊會議的上傳者；冪等，失敗不中止啟動）
+                    #region 團隊轉換（舊專案成員轉成同名團隊、補主責團隊、舊會議補上傳者；冪等，失敗不中止啟動）
                     try
                     {
-                        scope.ServiceProvider.GetRequiredService<ProjectAccessBackfillService>()
+                        scope.ServiceProvider.GetRequiredService<TeamConversionService>()
                             .RunAsync().GetAwaiter().GetResult();
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Project access backfill failed at startup.");
+                        logger.LogError(ex, "Data group conversion failed at startup.");
                     }
                     #endregion
 

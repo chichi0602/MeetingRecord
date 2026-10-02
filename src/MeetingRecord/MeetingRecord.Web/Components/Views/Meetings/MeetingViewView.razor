@@ -31,6 +31,15 @@ else
                 </Tooltip>
             </div>
             <div class="meeting-view-toolbar-right">
+                @* 分類＝「什麼資料」（0.4.102 放回來）；只用來篩選，不影響誰看得到。團隊不放回會議頁：可見性跟著專案走。 *@
+                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                        Values="selectedCategoryFilters" OnSelectedItemsChanged="OnCategoryFilterChanged"
+                        Placeholder="分類過濾" AllowClear EnableSearch Style="min-width: 160px;">
+                    @foreach (var c in availableCategories)
+                    {
+                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                    }
+                </Select>
                 <Input class="meeting-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
@@ -66,6 +75,7 @@ else
                     </div>
                 </Column>
                 <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable />
+                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.CategoriesText)" Title="分類" />
                 <Column TData="string" Title="影音檔">
                     @if (context.HasMedia)
                     {
@@ -220,6 +230,17 @@ else
                         <FormItem Label="會議日期">
                             <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" AllowClear="true" Style="width: 100%;" />
                             <ValidationMessage For="() => CurrentRecord.MeetingDate" />
+                        </FormItem>
+
+                        <FormItem Label="分類" Class="form-modal-full">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                    Placeholder="描述會議性質（不影響誰看得到）" AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var c in availableCategories)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                                }
+                            </Select>
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">
@@ -405,5 +426,7 @@ else
                  TargetId="@aiChatTargetId"
                  Title="@aiChatTitle"
                  TargetName="@aiChatTargetName"
-                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export)" />
+                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export)"
+                 CanEdit="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)"
+                 CanDelete="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Delete)" />
 }

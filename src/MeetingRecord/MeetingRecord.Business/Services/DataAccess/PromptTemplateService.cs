@@ -60,11 +60,6 @@ public class PromptTemplateService
             dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<PromptTemplate>(x => x.Categories, dataRequest.CategoryFilters));
         }
 
-        if (dataRequest.TeamFilters.Count > 0)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<PromptTemplate>(x => x.Teams, dataRequest.TeamFilters));
-        }
-
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
         {
             // 內容（Content）為長文字，刻意不開放排序。
@@ -309,7 +304,6 @@ public class PromptTemplateService
                     Description = preset.Description,
                     IsEnabled = true,
                     Categories = null,
-                    Teams = null,
                     CreatedAt = now,
                     UpdatedAt = now,
                 })];

@@ -80,6 +80,16 @@ public class MyUserServiceLogin
                 return ("帳號或者密碼不正確", null);
             }
 
+            // 停用的帳號在這裡就擋下（0.4.113）。以前登入成功後才由 AuthenticationStateHelper 發現停用而登出，
+            // 畫面會閃進系統一秒又跳回登入頁，看起來像當機。放在密碼驗證成功之後：密碼錯誤時一律回同一句話，
+            // 不讓人藉此試探哪些帳號存在或已停用。正確密碼不算失敗次數，也不動既有的失敗計數。
+            if (!item.Status)
+            {
+                Logger.LogWarning("Login blocked because account is disabled. Account={Account}, UserId={UserId}", username, item.Id);
+                await auditLogService.WriteAsync("Login.Disabled", success: false, actorUserId: item.Id, actorAccount: username);
+                return ("此帳號已停用，請聯絡管理者。", null);
+            }
+
             bool changed = false;
             if (outcome == PasswordVerificationOutcome.SuccessRehashNeeded)
             {

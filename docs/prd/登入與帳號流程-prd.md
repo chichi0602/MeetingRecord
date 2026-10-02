@@ -2,7 +2,7 @@
 
 - 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.41
+- 現行系統版本：0.4.113
 - 首次實作版本：既有腳手架核心功能
 - 最後核對日期：2026/07/14
 
@@ -20,7 +20,7 @@
 | `/Auths/Login` | `NoFooterLayout`（靜態 SSR 表單 POST）| 匿名 | 所有人 |
 | `/Auths/Logout` | 無版面 | 已登入 | 所有登入者 |
 | `/Auths/Pending` | `NoFooterLayout` | 匿名 | Google 自動建帳待審核者 |
-| `/Profile` | 預設版面 | 已登入（`AuthenticationStateHelper.Check`）| 需設定 API 密碼者 |
+| `/Profile` | 預設版面 | 已登入（`AuthenticationStateHelper.Check`）| 需設定 API 密碼者。**0.4.113 起從右上使用者選單移除**：它寫的就是同一組登入密碼，對帳號密碼登入的人等於第二個「變更密碼」；頁面保留，之後接外部系統時再開放，目前只能直接輸入網址進入 |
 | `/ChangePassword` | 預設版面 | 已登入 | 需變更密碼者 |
 | `/api/v1/auth/login`、`/refresh` | — | 匿名（帳密換 JWT）| API 用戶端 |
 | `/api/v1/auth/me` | — | JWT Bearer | API 用戶端 |
@@ -40,7 +40,7 @@
 - **Cookie 簽發**（Login.razor.cs）：建立 `ClaimTypes.Role=User`、`Name`、`NameIdentifier=Account`、`Sid=Id`，以 `CookieAuthenticationScheme` `SignInAsync`；`IsPersistent = RememberMe`（記住我 → 持久性 Cookie），`RedirectUri` 取 `ReturnUrl` 或 `/App`。
 - **Google 登入**（`ExternalAuthController` + `ExternalLoginService.FindOrCreateAsync`）：Callback 驗證 `ExternalCookieScheme` 後，依序「GoogleId 比對 → Email 連結既有帳號 → 自動建立停用新帳號」（`Status=false`、`IsAdmin=false`、`Password=""`、`Salt=null`、指派預設角色）。`!Status` 導向 `/Auths/Pending`，否則簽發 Cookie 並導回本地安全的 `returnUrl`。
 - **登出**：`SignOutAsync(CookieScheme)` 後 `NavigateTo("/Auths/Login", forceLoad: true)`。
-- **登入後狀態**（`AuthenticationStateHelper.Check`）：驗證已登入、`Sid` 有效、使用者存在且 `Status` 啟用、具角色；`NeedChangePasswordAsync`（密碼等於 `123456`）為真且不在改密碼頁時強制導向 `/ChangePassword`。載入 `CurrentUser`，`RoleList` 以 `IPermissionChecker.GetEffectivePermissionKeysAsync`（RBAC 多角色聯集）為權威、`TeamList` 由 `EffectiveTeamResolver` 決定。
+- **登入後狀態**（`AuthenticationStateHelper.Check`）：驗證已登入、`Sid` 有效、使用者存在且 `Status` 啟用、具角色；`NeedChangePasswordAsync` 為真且不在改密碼頁時強制導向 `/ChangePassword`。0.4.113 起條件是「`MyUser.MustChangePassword` 為 true **或**密碼等於 `123456`」：管理者建立帳號、或替別人重設密碼時設旗標（改自己的不設；`support` 一律不設，因為它被禁止改密碼），本人透過任何一個改密碼入口改完就清掉。載入 `CurrentUser`，`RoleList` 以 `IPermissionChecker.GetEffectivePermissionKeysAsync`（RBAC 多角色聯集）為權威、`TeamList` 由 `EffectiveTeamResolver` 決定。
 - **API 登入**（`AuthController`）：`login` 以帳密換 `TokenResponseDto`（JWT + Refresh），`refresh` 換新 Token，`me` 回目前使用者；一律包 `ApiResult<T>`，失敗回 401。
 - **稽核**：登入寫入 `Login.Success` / `Login.Failed` / `Login.LockedOut`（`AuditLog`）。
 
@@ -48,7 +48,7 @@
 
 - 網頁 Cookie、API JWT 各自獨立；權限判定統一由 RBAC 表（`IPermissionChecker`）為單一權威，管理員短路一律通過。
 - 錯誤訊息不洩漏帳號是否存在；輸出模型不含密碼、`Salt`、Token（`MyUserService.OtherDependencyData` 清空密碼欄位）。
-- 帳號停用者於 `Check` 一律導回登出；Google 自動建帳預設停用並導向待審核，須管理者啟用。
+- **帳號停用者在登入這一步就擋下**（0.4.113，`MyUserServiceLogin.LoginAsync`）：密碼驗證**成功後**才檢查 `Status`，停用時回「此帳號已停用，請聯絡管理者。」並寫 `Login.Disabled` 稽核；密碼錯誤時一律回「帳號或者密碼不正確」，不讓人試探帳號是否存在或已停用。網頁與 API 登入共用此方法。以前要等登入成功、進系統後才由 `Check` 發現停用而登出，畫面會閃一下像當機；`Check` 的停用檢查保留作為登入期間被停用的後備。Google 自動建帳預設停用並導向待審核，須管理者啟用。
 - 密碼雜湊與儲存、記住我原理、Google 流程細節見交叉文件，本 PRD 不重述。
 
 ## 六、錯誤與邊界

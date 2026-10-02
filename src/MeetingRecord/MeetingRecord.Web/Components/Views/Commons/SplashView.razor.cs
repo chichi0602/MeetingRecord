@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Web.Components.Views.Commons;
 
@@ -14,6 +16,12 @@ public partial class SplashView
     public NavigationManager NavigationManager { get; set; } = default!;
     [Inject]
     public ILogger<SplashView> Logger { get; set; } = default!;
+    [Inject]
+    public IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
+
+    private string SystemName => SystemSettingsOptions.Value.SystemInformation.SystemName;
+
+    private string SystemVersion => SystemSettingsOptions.Value.SystemInformation.SystemVersion;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

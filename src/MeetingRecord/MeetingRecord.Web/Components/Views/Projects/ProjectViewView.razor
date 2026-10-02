@@ -1,4 +1,5 @@
 @using MeetingRecord.Share.Helpers
+@using MeetingRecord.Business.Services.DataAccess
 @using MeetingRecord.Share.Enums
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
@@ -9,13 +10,15 @@
 else
 {
     <div>
+        @* 工具列一行（0.4.106）：左邊選專案與操作，右邊篩選。窄螢幕允許換行。 *@
         <div class="project-view-picker">
+          <div class="project-view-picker-left">
             <span class="project-view-field-label">專案</span>
             <Select TItem="ProjectAdapterModel"
                     TItemValue="int"
                     Value="@selectedProjectId"
                     ValueChanged="OnProjectSelectedAsync"
-                    DataSource="@projects"
+                    DataSource="@FilteredProjects"
                     LabelName="@nameof(ProjectAdapterModel.Title)"
                     ValueName="@nameof(ProjectAdapterModel.Id)"
                     Placeholder="請選擇專案"
@@ -31,8 +34,7 @@ else
                     </Button>
                 </Tooltip>
             }
-            @* 0.4.99：編輯要負責人或管理者，刪除只有管理者——功能權限之外再疊專案身分。 *@
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit) && CanManageSelected)
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
             {
                 <Tooltip Title="編輯專案">
                     <Button Type="ButtonType.Default"
@@ -42,7 +44,7 @@ else
                     </Button>
                 </Tooltip>
             }
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete) && projectAccessInfo.IsAdmin)
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
             {
                 <Tooltip Title="刪除專案">
                     <Button Type="ButtonType.Default" Class="project-view-icon-button-danger"
@@ -52,13 +54,6 @@ else
                     </Button>
                 </Tooltip>
             }
-            <Tooltip Title="重新整理">
-                <Button Type="ButtonType.Default"
-                        OnClick="@(async () => await OnRefreshAsync())">
-                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
-                </Button>
-            </Tooltip>
-
             @* 刻意放在工具列而不是下方的 AI 生成區塊——那一整塊需要 Edit 權限，
                而問答是唯讀操作，有頁面權限就該能用。 *@
             <Tooltip Title="就整個專案的會議紀錄與附件提問">
@@ -71,6 +66,41 @@ else
                     </span>
                 </Button>
             </Tooltip>
+          </div>
+
+          @* 篩選只縮小上面的專案下拉，不影響誰看得到。MaxTagCount=1：多選時收成「+N」，寬度固定不撐開。 *@
+          <div class="project-view-picker-right">
+            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                    Values="teamFilters" OnSelectedItemsChanged="OnTeamFiltersChanged"
+                    Placeholder="團隊" MaxTagCount="1"
+                    AllowClear EnableSearch
+                    Style="width: 140px;">
+                @foreach (var t in filterTeamOptions)
+                {
+                    <SelectOption TItemValue="int" TItem="int" Value="@t.Id" Label="@t.Name" />
+                }
+            </Select>
+            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                    Values="categoryFilters" OnSelectedItemsChanged="OnCategoryFiltersChanged"
+                    Placeholder="分類" MaxTagCount="1"
+                    AllowClear EnableSearch
+                    Style="width: 140px;">
+                @foreach (var c in availableCategories)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                }
+            </Select>
+            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                    Values="statusFilters" OnSelectedItemsChanged="OnStatusFiltersChanged"
+                    Placeholder="狀態" MaxTagCount="1"
+                    AllowClear
+                    Style="width: 140px;">
+                @foreach (var s in StatusOptions)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@s">@s</SelectOption>
+                }
+            </Select>
+          </div>
         </div>
 
         @if (SelectedProject is null)
@@ -86,10 +116,24 @@ else
                     <span class="project-view-summary-key">負責人</span>
                     <span class="project-view-summary-value">
                         @(string.IsNullOrWhiteSpace(SelectedProject.Owner) ? "—" : SelectedProject.Owner)
-                        @* 成員名單所有成員都看得到；能不能調整由對話框依身分決定。 *@
-                        <button type="button" class="project-view-summary-link" @onclick="() => memberModalVisible = true">
-                            成員
-                        </button>
+                    </span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">主責團隊</span>
+                    <span class="project-view-summary-value">
+                        @(string.IsNullOrEmpty(SelectedProject.PrimaryTeamName) ? "—" : SelectedProject.PrimaryTeamName)
+                    </span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">協作團隊</span>
+                    <span class="project-view-summary-value">
+                        @(SelectedProject.CollaboratorTeamNames.Count == 0 ? "—" : string.Join("、", SelectedProject.CollaboratorTeamNames))
+                    </span>
+                </div>
+                <div class="project-view-summary-item">
+                    <span class="project-view-summary-key">分類</span>
+                    <span class="project-view-summary-value">
+                        @(SelectedProject.Categories.Count == 0 ? "—" : string.Join("、", SelectedProject.Categories))
                     </span>
                 </div>
                 <div class="project-view-summary-item">
@@ -339,7 +383,49 @@ else
                             <ValidationMessage For="() => CurrentRecord.Title" />
                         </FormItem>
 
-                        @* 負責人 0.4.99 起不能在這裡打字：新增時就是建立者，之後由管理者在「成員」轉移。 *@
+                        <FormItem Label="負責人" Required>
+                            <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人名稱" />
+                            <ValidationMessage For="() => CurrentRecord.Owner" />
+                        </FormItem>
+
+                        @* 團隊＝「誰的資料」（0.4.102）：主責＋協作團隊的人看得到；能不能改由角色決定。
+                           一般使用者的主責只能選自己所屬的團隊（主責沒變時保留原值），協作可選任何團隊。 *@
+                        <FormItem Label="主責團隊" Required>
+                            <Select TItem="ProjectService.TeamOption" TItemValue="int?"
+                                    DataSource="@PrimaryTeamOptions"
+                                    @bind-Value="CurrentRecord.PrimaryTeamId"
+                                    LabelName="@nameof(ProjectService.TeamOption.Name)"
+                                    ValueName="@nameof(ProjectService.TeamOption.Id)"
+                                    Placeholder="請選擇主責團隊"
+                                    EnableSearch Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.PrimaryTeamId" />
+                        </FormItem>
+
+                        <FormItem Label="協作團隊">
+                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.CollaboratorTeamIds" OnSelectedItemsChanged="OnCollaboratorTeamsChanged"
+                                    Placeholder="可加入其他共同參與的團隊"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var team in collaboratorTeamOptions.Where(x => x.Id != CurrentRecord.PrimaryTeamId))
+                                {
+                                    <SelectOption TItemValue="int" TItem="int" Value="@team.Id" Label="@team.Name" />
+                                }
+                            </Select>
+                        </FormItem>
+
+                        <div class="project-view-hint form-modal-full">主責與協作團隊的成員（與管理者）看得到這個專案與底下的會議紀錄、待辦。</div>
+
+                        <FormItem Label="分類" Class="form-modal-full">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                    Placeholder="描述專案性質，例如 .NET、成大（不影響誰看得到）"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var c in availableCategories)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
 
                         <FormItem Label="開始日期">
                             <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.StartDate" AllowClear="true" Style="width: 100%;" />
@@ -532,14 +618,9 @@ else
                  TargetId="@aiChatTargetId"
                  Title="@aiChatTitle"
                  TargetName="@aiChatTargetName"
-                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export)" />
-
-    <ProjectMemberModal @bind-Visible="memberModalVisible"
-                        ProjectId="@(SelectedProject?.Id ?? 0)"
-                        ProjectTitle="@(SelectedProject?.Title ?? string.Empty)"
-                        CanManage="@CanManageSelected"
-                        IsAdmin="@projectAccessInfo.IsAdmin"
-                        OnChanged="ReloadAsync" />
+                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export)"
+                 CanEdit="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)"
+                 CanDelete="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete)" />
 
     <TodoExtractionModal @bind-Visible="todoExtractVisible"
                          MeetingId="@todoExtractMeetingId"

@@ -166,16 +166,43 @@ public partial class ProjectViewView : IDisposable
 
     private ProjectAdapterModel? SelectedProject => projects.FirstOrDefault(x => x.Id == selectedProjectId);
 
-    /// <summary>目前使用者的專案權限（0.4.99），每次重新載入清單時一起更新。</summary>
-    private ProjectAccess projectAccessInfo = new(false, 0, [], []);
+    /// <summary>「主責團隊」選項（0.4.102）：管理者全部，一般使用者只有自己所屬的。開表單時才載入。</summary>
+    private List<ProjectService.TeamOption> primaryTeamOptions = [];
 
-    /// <summary>編輯專案資料、管理成員：負責人或管理者。</summary>
-    private bool CanManageSelected => SelectedProject is not null && projectAccessInfo.CanManageProject(SelectedProject.Id);
+    /// <summary>「協作團隊」選項：全部啟用中的團隊。</summary>
+    private List<ProjectService.TeamOption> collaboratorTeamOptions = [];
 
-    private bool memberModalVisible;
+    /// <summary>
+    /// 主責下拉實際顯示的選項。編輯時專案原本的主責可能不是自己的團隊（自己是協作），
+    /// 不補進來的話下拉會顯示空白，看起來像沒有主責。
+    /// </summary>
+    private IEnumerable<ProjectService.TeamOption> PrimaryTeamOptions
+        => CurrentRecord.PrimaryTeamId is { } id && primaryTeamOptions.All(x => x.Id != id)
+            ? primaryTeamOptions.Append(new ProjectService.TeamOption(id, CurrentRecord.PrimaryTeamName))
+            : primaryTeamOptions;
+
+    /// <summary>啟用中的分類名稱（表單與篩選共用）。</summary>
+    private List<string> availableCategories = [];
+
+    /// <summary>專案下拉的篩選（0.4.106）；各自空＝不篩選，三者同時成立，同一個篩選內選多個時符合任一即可。</summary>
+    private List<string> categoryFilters = [];
+    private List<int> teamFilters = [];
+    private List<string> statusFilters = [];
+
+    /// <summary>團隊篩選的選項：全部啟用中的團隊。</summary>
+    private List<ProjectService.TeamOption> filterTeamOptions = [];
+
+    private IEnumerable<ProjectAdapterModel> FilteredProjects
+        => projects.Where(p =>
+            (teamFilters.Count == 0
+                || (p.PrimaryTeamId is { } primary && teamFilters.Contains(primary))
+                || p.CollaboratorTeamIds.Any(teamFilters.Contains))
+            && (categoryFilters.Count == 0
+                || p.Categories.Any(c => categoryFilters.Contains(c, StringComparer.OrdinalIgnoreCase)))
+            && (statusFilters.Count == 0 || statusFilters.Contains(p.Status)));
 
     [Inject]
-    private ProjectAccessService ProjectAccessService { get; set; } = default!;
+    private CategoryService CategoryService { get; set; } = default!;
 
     private IReadOnlyList<string> StatusOptions => ProjectAdapterModel.StatusOptions;
 
@@ -234,6 +261,8 @@ public partial class ProjectViewView : IDisposable
 
         draftProgressNotifier.Changed += OnDraftProgressChanged;
 
+        availableCategories = await CategoryService.GetAllEnabledNamesAsync();
+        filterTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync();
         await ReloadAsync();
     }
 
@@ -272,7 +301,6 @@ public partial class ProjectViewView : IDisposable
     public async Task ReloadAsync()
     {
         projects = await projectService.GetSelectableAsync();
-        projectAccessInfo = await ProjectAccessService.GetAsync();
 
         // 選取的專案被刪掉或已不可存取時，退回第一筆。
         if (projects.All(x => x.Id != selectedProjectId))
@@ -369,20 +397,6 @@ public partial class ProjectViewView : IDisposable
     private void OnSelectedAttendeesChanged(IEnumerable<string> values)
     {
         selectedAttendees = values?.ToList() ?? [];
-    }
-
-    private async Task OnRefreshAsync()
-    {
-        logger.LogInformation("Project refresh triggered.");
-        await ReloadAsync();
-
-        _ = notificationService.Open(new NotificationConfig
-        {
-            Message = "系統訊息",
-            Description = "已更新最新資料",
-            NotificationType = NotificationType.Warning,
-            Placement = NotificationPlacement.BottomRight
-        });
     }
 
     #endregion
@@ -515,9 +529,10 @@ public partial class ProjectViewView : IDisposable
         draftContent = meeting.DraftContent;
         draftCanEdit = canEdit;
 
+        // 這是專案頁：匯出權限看專案項目，與同一列的匯出鈕一致（0.4.109 前誤用會議紀錄的鍵）。
         draftCanExport = meeting.HasDraft
             && AuthenticationStateHelper.CheckAccessAction(
-                MagicObjectHelper.角色_會議紀錄, PermissionActions.Export);
+                MagicObjectHelper.角色_專案項目, PermissionActions.Export);
 
         draftModalVisible = true;
     }
@@ -681,6 +696,7 @@ public partial class ProjectViewView : IDisposable
         isNewRecordMode = false;
         modalTitle = "修改專案";
         CurrentRecord = await projectService.GetAsync(SelectedProject.Id);
+        await LoadTeamOptionsAsync();
         pendingUploadFiles.Clear();
         removedFileIds.Clear();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingFiles());
@@ -734,13 +750,17 @@ public partial class ProjectViewView : IDisposable
         await ReloadAsync();
     }
 
-    private Task OnAddAsync(bool continueOnCapturedContext)
+    private async Task OnAddAsync(bool continueOnCapturedContext)
     {
+        await LoadTeamOptionsAsync();
+
+        // 主責預設帶入自己所屬的第一個團隊（依名稱）；沒有任何團隊時留空，存檔時會要求選擇。
         CurrentRecord = new ProjectAdapterModel
         {
             Status = StatusOptions.First(),
             CompletionPercentage = 0,
-            Files = []
+            Files = [],
+            PrimaryTeamId = primaryTeamOptions.FirstOrDefault()?.Id,
         };
 
         pendingUploadFiles.Clear();
@@ -750,7 +770,51 @@ public partial class ProjectViewView : IDisposable
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingFiles());
         modalVisible = true;
         logger.LogInformation("Opened create modal for project.");
-        return Task.CompletedTask;
+    }
+
+    private async Task LoadTeamOptionsAsync()
+    {
+        primaryTeamOptions = await projectService.GetSelectablePrimaryTeamsAsync();
+        collaboratorTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync();
+        availableCategories = await CategoryService.GetAllEnabledNamesAsync();
+    }
+
+    private void OnCollaboratorTeamsChanged(IEnumerable<int> values)
+    {
+        CurrentRecord.CollaboratorTeamIds = values?.ToList() ?? [];
+    }
+
+    private void OnRecordCategoriesChanged(IEnumerable<string> values)
+    {
+        CurrentRecord.Categories = values?.ToList() ?? [];
+    }
+
+    private Task OnCategoryFiltersChanged(IEnumerable<string> values)
+    {
+        categoryFilters = values?.ToList() ?? [];
+        return KeepSelectionInFilterAsync();
+    }
+
+    private Task OnTeamFiltersChanged(IEnumerable<int> values)
+    {
+        teamFilters = values?.ToList() ?? [];
+        return KeepSelectionInFilterAsync();
+    }
+
+    private Task OnStatusFiltersChanged(IEnumerable<string> values)
+    {
+        statusFilters = values?.ToList() ?? [];
+        return KeepSelectionInFilterAsync();
+    }
+
+    /// <summary>目前選的專案被篩掉時，切到篩選結果的第一筆；篩選結果是空的就清掉選取，畫面顯示空狀態提示。</summary>
+    private async Task KeepSelectionInFilterAsync()
+    {
+        var filtered = FilteredProjects.ToList();
+        if (filtered.All(x => x.Id != selectedProjectId))
+        {
+            await OnProjectSelectedAsync(filtered.Count > 0 ? filtered[0].Id : 0);
+        }
     }
 
     private async Task OnProjectFilesSelectedAsync(InputFileChangeEventArgs args)

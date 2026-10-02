@@ -13,7 +13,7 @@ namespace MeetingRecord.Web.Components.Commons;
 /// <para>
 /// 掛在 <c>MainLayout</c>，所以切到任何頁面都看得到。同時顯示語音轉錄與會議紀錄生成
 /// 兩種工作——兩者都固定在右下角，各做一個面板會直接重疊，因此合併成同一個。
-/// 進度資料來自兩個 Singleton 通知器；只有判斷可見性時查一次專案成員（自開 scope）。
+/// 進度資料來自兩個 Singleton 通知器；只有判斷可見性時查一次團隊（自開 scope）。
 /// </para>
 /// </summary>
 public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable

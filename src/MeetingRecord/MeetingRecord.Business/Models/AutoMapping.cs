@@ -17,33 +17,56 @@ public class AutoMapping : Profile
         #region Project
         // 多值欄位以 TagStringHelper 的換行包夾字串儲存，兩個方向都要轉。
         // ⚠️ 只加這裡不夠：ProjectService.UpdateAsync 是手抄欄位、不走 Mapper。
+        // 主責／協作團隊要查詢端 Include(Teams).ThenInclude(Team)，沒 Include 的地方就是空值。
         CreateMap<Project, ProjectAdapterModel>()
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)));
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)))
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
+            .ForMember(d => d.PrimaryTeamId, o => o.MapFrom(s => s.Teams.Where(t => t.IsPrimary).Select(t => (int?)t.TeamId).FirstOrDefault()))
+            .ForMember(d => d.PrimaryTeamName, o => o.MapFrom(s => s.Teams
+                .Where(t => t.IsPrimary && t.Team != null)
+                .Select(t => t.Team!.Name)
+                .FirstOrDefault() ?? string.Empty))
+            .ForMember(d => d.CollaboratorTeamIds, o => o.MapFrom(s => s.Teams.Where(t => !t.IsPrimary).Select(t => t.TeamId).ToList()))
+            .ForMember(d => d.CollaboratorTeamNames, o => o.MapFrom(s => s.Teams
+                .Where(t => !t.IsPrimary && t.Team != null)
+                .Select(t => t.Team!.Name)
+                .OrderBy(name => name)
+                .ToList()));
         CreateMap<ProjectAdapterModel, Project>()
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)));
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)))
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)));
         CreateMap<Project, ProjectDto>()
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)));
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)))
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
+            .ForMember(d => d.PrimaryTeamId, o => o.MapFrom(s => s.Teams.Where(t => t.IsPrimary).Select(t => (int?)t.TeamId).FirstOrDefault()))
+            .ForMember(d => d.CollaboratorTeamIds, o => o.MapFrom(s => s.Teams.Where(t => !t.IsPrimary).Select(t => t.TeamId).ToList()));
         CreateMap<ProjectDto, Project>()
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)));
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)))
+            .ForMember(d => d.Categories, o => o.MapFrom(s => s.Categories == null ? null : TagStringHelper.ToStored(s.Categories)))
+            .ForMember(d => d.Teams, o => o.Ignore());
+        // 團隊不在這裡對應：ProjectRepository 依規則自己寫 ProjectTeam（主責必填、非管理者限自己的團隊）。
         CreateMap<Project, ProjectCreateUpdateDto>()
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)));
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)))
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
+            .ForMember(d => d.PrimaryTeamId, o => o.Ignore())
+            .ForMember(d => d.CollaboratorTeamIds, o => o.Ignore());
         CreateMap<ProjectCreateUpdateDto, Project>()
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)));
+            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)))
+            .ForMember(d => d.Categories, o => o.MapFrom(s => s.Categories == null ? null : TagStringHelper.ToStored(s.Categories)));
         CreateMap<ProjectFile, ProjectFileAdapterModel>();
         CreateMap<ProjectFileAdapterModel, ProjectFile>();
         #endregion
 
         #region RoleView
-        CreateMap<RoleView, RoleViewAdapterModel>()
-            .ForMember(d => d.DefaultTeams, o => o.MapFrom(s => TeamJsonHelper.Deserialize(s.DefaultTeamsJson)));
-        CreateMap<RoleViewAdapterModel, RoleView>()
-            .ForMember(d => d.DefaultTeamsJson, o => o.MapFrom(s => TeamJsonHelper.Serialize(s.DefaultTeams)));
+        // 0.4.101 起角色只管功能權限，不再帶預設團隊（DefaultTeamsJson 已刪除）。
+        CreateMap<RoleView, RoleViewAdapterModel>();
+        CreateMap<RoleViewAdapterModel, RoleView>();
         #endregion
 
         #region Category
@@ -57,11 +80,9 @@ public class AutoMapping : Profile
 
         #region PromptTemplate
         CreateMap<PromptTemplate, PromptTemplateAdapterModel>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToList(s.Teams)));
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)));
         CreateMap<PromptTemplateAdapterModel, PromptTemplate>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToStored(s.Teams)));
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)));
         CreateMap<PromptTemplate, PromptTemplateDto>();
         CreateMap<PromptTemplateDto, PromptTemplate>();
         CreateMap<PromptTemplate, PromptTemplateCreateUpdateDto>();
@@ -89,11 +110,9 @@ public class AutoMapping : Profile
 
         #region Meeting
         CreateMap<Meeting, MeetingAdapterModel>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToList(s.Teams)));
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)));
         CreateMap<MeetingAdapterModel, Meeting>()
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)))
-            .ForMember(d => d.Teams, o => o.MapFrom(s => TagStringHelper.ToStored(s.Teams)));
+            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)));
         CreateMap<Meeting, MeetingDto>();
         CreateMap<MeetingDto, Meeting>();
         CreateMap<Meeting, MeetingCreateUpdateDto>();

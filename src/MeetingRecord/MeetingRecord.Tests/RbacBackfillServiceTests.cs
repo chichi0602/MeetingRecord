@@ -62,27 +62,33 @@ public sealed class RbacBackfillServiceTests
     }
 
     [Fact]
-    public async Task RunAsync_ShouldCreateUserTeamsFromRoleDefaultTeams()
+    public async Task RunAsync_ShouldRenameLegacyTeamListKeyWithoutLosingGrants()
     {
+        // 0.4.101 把「團隊清單」改名「資料群組」，0.4.102 改回來。已勾的角色（含動作鍵）改名後仍要有權限。
         await using var fixture = await Fixture.CreateAsync();
-        var team = await fixture.AddTeamAsync("團隊A");
-        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_會議紀錄 }, defaultTeams: new[] { "團隊A" });
-        var user = await fixture.AddUserAsync("bob", role.Id);
-        var service = fixture.CreateService();
+        var role = await fixture.AddRoleAsync("主管", new[] { "資料群組", "資料群組:edit" });
+        // 0.4.101 的資料庫：權限表裡是「資料群組」，角色已經勾了。
+        await new RbacWriteService(fixture.Context).SyncRolePermissionsAsync(role.Id, ["資料群組", "資料群組:edit"]);
+        fixture.Context.ChangeTracker.Clear();
 
-        await service.RunAsync();
+        await fixture.CreateService().RunAsync();
 
-        var userTeam = await fixture.Context.UserTeam.AsNoTracking()
-            .SingleAsync(x => x.MyUserId == user.Id);
-        Assert.Equal(team.Id, userTeam.TeamId);
+        var keys = await fixture.Context.RolePermissionMap.AsNoTracking()
+            .Where(x => x.RoleViewId == role.Id)
+            .Join(fixture.Context.Permission, m => m.PermissionId, p => p.Id, (m, p) => p.Key)
+            .ToListAsync();
+        Assert.Contains(MagicObjectHelper.角色_團隊清單, keys);
+        Assert.Contains($"{MagicObjectHelper.角色_團隊清單}:edit", keys);
+        Assert.False(await fixture.Context.Permission.AnyAsync(x => x.Key.StartsWith("資料群組")));
+        var stored = await fixture.Context.RoleView.AsNoTracking().SingleAsync(x => x.Id == role.Id);
+        Assert.DoesNotContain("資料群組", stored.TabViewJson);
     }
 
     [Fact]
     public async Task RunAsync_ShouldBeIdempotent()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var team = await fixture.AddTeamAsync("團隊A");
-        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_會議紀錄 }, defaultTeams: new[] { "團隊A" });
+        var role = await fixture.AddRoleAsync("甲", new[] { MagicObjectHelper.角色_會議紀錄 });
         var user = await fixture.AddUserAsync("bob", role.Id);
         var service = fixture.CreateService();
 
@@ -90,7 +96,6 @@ public sealed class RbacBackfillServiceTests
         await service.RunAsync();
 
         Assert.Equal(1, await fixture.Context.UserRole.CountAsync(x => x.MyUserId == user.Id));
-        Assert.Equal(1, await fixture.Context.UserTeam.CountAsync(x => x.MyUserId == user.Id));
         Assert.Equal(1, await fixture.Context.RolePermissionMap.CountAsync(x => x.RoleViewId == role.Id));
         Assert.Equal(
             1,
@@ -126,13 +131,12 @@ public sealed class RbacBackfillServiceTests
         public RbacBackfillService CreateService()
             => new(Context, new RolePermissionService(), loggerFactory.CreateLogger<RbacBackfillService>());
 
-        public async Task<RoleView> AddRoleAsync(string name, string[] permissions, string[]? defaultTeams = null)
+        public async Task<RoleView> AddRoleAsync(string name, string[] permissions)
         {
             var role = new RoleView
             {
                 Name = name,
                 TabViewJson = JsonSerializer.Serialize(permissions),
-                DefaultTeamsJson = JsonSerializer.Serialize(defaultTeams ?? Array.Empty<string>()),
             };
             Context.RoleView.Add(role);
             await Context.SaveChangesAsync();
@@ -154,15 +158,6 @@ public sealed class RbacBackfillServiceTests
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
             return user;
-        }
-
-        public async Task<Team> AddTeamAsync(string name)
-        {
-            var team = new Team { Name = name, IsEnabled = true };
-            Context.Team.Add(team);
-            await Context.SaveChangesAsync();
-            Context.ChangeTracker.Clear();
-            return team;
         }
 
         public async ValueTask DisposeAsync()

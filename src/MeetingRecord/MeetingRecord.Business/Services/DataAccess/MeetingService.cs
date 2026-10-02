@@ -18,7 +18,7 @@ namespace MeetingRecord.Business.Services.DataAccess;
 
 /// <summary>
 /// 會議紀錄的 Blazor 服務層。CRUD 骨架比照 <see cref="PromptTemplateService"/>；
-/// 資料權限 0.4.99 起改走專案成員（<see cref="ProjectAccessService"/>），取代原本的團隊標籤；
+/// 資料權限跟著專案的主責與協作團隊走（<see cref="ProjectAccessService"/>，0.4.102），取代原本的團隊標籤；
 /// 影音檔與逐字稿的實體檔案操作一律委派給 <see cref="MeetingFileStore"/>。
 /// </summary>
 public class MeetingService
@@ -115,11 +115,6 @@ public class MeetingService
         if (dataRequest.CategoryFilters.Count > 0)
         {
             dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<Meeting>(x => x.Categories, dataRequest.CategoryFilters));
-        }
-
-        if (dataRequest.TeamFilters.Count > 0)
-        {
-            dataSource = dataSource.Where(TagStringHelper.BuildContainsAnyPredicate<Meeting>(x => x.Teams, dataRequest.TeamFilters));
         }
 
         dataSource = (await projectAccess.GetAsync()).Filter(dataSource);

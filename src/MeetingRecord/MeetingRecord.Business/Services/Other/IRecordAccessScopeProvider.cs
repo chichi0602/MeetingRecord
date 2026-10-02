@@ -1,7 +1,7 @@
 namespace MeetingRecord.Business.Services.Other;
 
 /// <summary>
-/// 目前使用者對紀錄的存取範圍：是否管理員、授權團隊清單，以及使用者 Id（0.4.99，專案成員判斷用；解析不到時為 0）。
+/// 目前使用者對紀錄的存取範圍：是否管理員、授權團隊清單，以及使用者 Id（查所屬團隊與未歸屬會議的上傳者用；解析不到時為 0）。
 /// </summary>
 public sealed record RecordAccessScope(bool IsAdmin, IReadOnlyList<string> Teams, int UserId = 0);
 

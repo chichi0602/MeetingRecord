@@ -274,7 +274,6 @@ public sealed class FormDirtyHelperTests
         MeetingDate = new DateTime(2026, 9, 18),
         Description = "描述",
         Categories = ["專案會議"],
-        Teams = ["研發部"],
         DraftContent = "## 會議紀錄",
     };
 
@@ -316,7 +315,6 @@ public sealed class FormDirtyHelperTests
     {
         Id = 6,
         Name = "管理員",
-        DefaultTeams = ["研發部"],
         RolePermission = new RolePermission
         {
             Groups =

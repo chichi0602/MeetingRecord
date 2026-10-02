@@ -47,12 +47,6 @@ public class MeetingCreateUpdateDto
     public string? Categories { get; set; }
 
     /// <summary>
-    /// 團隊標籤（多值，以分隔字串儲存，可空；空值表示公開）
-    /// </summary>
-    [JsonPropertyName("teams")]
-    public string? Teams { get; set; }
-
-    /// <summary>
     /// 建立時間
     /// </summary>
     [JsonPropertyName("createdAt")]

@@ -138,7 +138,8 @@ public sealed class TeamServiceTests
             return new TeamService(
                 Context,
                 mapper,
-                loggerFactory.CreateLogger<TeamService>());
+                loggerFactory.CreateLogger<TeamService>(),
+                TestProjectAccess.Admin(Context));
         }
 
         public async Task<Team> AddTeamAsync(string name, string? code)

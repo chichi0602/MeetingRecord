@@ -29,8 +29,9 @@ public partial class BackendDBContext : DbContext
     public virtual DbSet<UserRole> UserRole { get; set; }
     public virtual DbSet<UserTeam> UserTeam { get; set; }
 
-    /// <summary>專案成員（0.4.99），專案層級資料權限的唯一來源。</summary>
-    public virtual DbSet<ProjectMember> ProjectMember { get; set; }
+    /// <summary>專案的主責與協作團隊（0.4.102），專案可見範圍的唯一來源。每個專案恰好一筆主責，沒有公開專案。</summary>
+    public virtual DbSet<ProjectTeam> ProjectTeam { get; set; }
+    public virtual DbSet<CategoryTeam> CategoryTeam { get; set; }
 
     /// <summary>AI 呼叫的用量帳本（0.4.80）。一次呼叫一列，永久保留，不回填歷史。</summary>
     public virtual DbSet<AiUsageLog> AiUsageLog { get; set; }
@@ -76,11 +77,18 @@ public partial class BackendDBContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<ProjectMember>(entity =>
+        modelBuilder.Entity<ProjectTeam>(entity =>
         {
-            entity.HasIndex(x => new { x.ProjectId, x.MyUserId }).IsUnique();
-            entity.HasOne(x => x.Project).WithMany(x => x.Members).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.MyUser).WithMany().HasForeignKey(x => x.MyUserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.ProjectId, x.TeamId }).IsUnique();
+            entity.HasOne(x => x.Project).WithMany(x => x.Teams).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CategoryTeam>(entity =>
+        {
+            entity.HasIndex(x => new { x.CategoryId, x.TeamId }).IsUnique();
+            entity.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Meeting>(entity =>

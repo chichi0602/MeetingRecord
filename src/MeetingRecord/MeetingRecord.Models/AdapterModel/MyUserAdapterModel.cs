@@ -28,11 +28,24 @@ public class MyUserAdapterModel : ICloneable
     public List<string> TeamNames { get; set; } = new();
     public string RoleViewName => RoleView?.Name ?? string.Empty;
     public string StatusText => Status ? "啟用" : "停用";
+    /// <summary>所有角色名稱（主要＋額外，取自 UserRole），清單顯示用（0.4.101）。</summary>
+    public List<string> RoleNames { get; set; } = new();
+
     /// <summary>
-    /// 清單的「角色」欄（0.4.99）。身分只有兩種，由 <see cref="IsAdmin"/> 決定；
-    /// 不用 <see cref="RoleViewName"/>——每個帳號（含管理者）的角色列都是「一般使用者」，顯示它反而誤導。
+    /// 清單的「角色」欄：列出所有角色，勾了「管理者」的再加註——管理者不看角色、一律全部放行，
+    /// 不標出來會讓人以為他的權限就是那幾個角色的聯集。
     /// </summary>
-    public string RoleText => IsAdmin ? "管理者" : "一般使用者";
+    public string RoleText
+    {
+        get
+        {
+            var roles = RoleNames.Count > 0 ? string.Join("、", RoleNames) : "—";
+            return IsAdmin ? $"管理者（{roles}）" : roles;
+        }
+    }
+
+    /// <summary>清單的「團隊」欄。</summary>
+    public string TeamNamesText => TeamNames.Count > 0 ? string.Join("、", TeamNames) : "—";
     public bool IsGoogleAccount => string.Equals(OAuthProvider, "Google", StringComparison.OrdinalIgnoreCase);
 
     public MyUserAdapterModel Clone()

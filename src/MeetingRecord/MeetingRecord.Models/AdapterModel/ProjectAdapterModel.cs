@@ -28,11 +28,28 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
     [Range(0, 100, ErrorMessage = "完成百分比 必須介於 0 到 100")]
     public int CompletionPercentage { get; set; }
 
-    /// <summary>
-    /// 負責人姓名，只做顯示（0.4.99）。實際的負責人是 <c>ProjectMember</c> 裡 Role=Owner 那一列，
-    /// 這個欄位由 <c>ProjectService</c>／<c>ProjectMemberService</c> 跟著它同步，表單不再能輸入。
-    /// </summary>
+    /// <summary>負責人，手打的描述欄位（不影響任何權限；誰看得到由主責與協作團隊決定）。</summary>
+    [Required(ErrorMessage = "負責人 不可為空白")]
     public string Owner { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 主責團隊（0.4.102，必填）。團隊＝「誰的資料」：使用者所屬團隊與主責＋協作有交集才看得到。
+    /// 存檔時由 <c>ProjectService</c> 同步成 <c>ProjectTeam</c>。
+    /// </summary>
+    [Required(ErrorMessage = "主責團隊 不可為空白")]
+    public int? PrimaryTeamId { get; set; }
+
+    /// <summary>協作團隊，0～多個。</summary>
+    public List<int> CollaboratorTeamIds { get; set; } = [];
+
+    /// <summary>主責團隊名稱，只做顯示。</summary>
+    public string PrimaryTeamName { get; set; } = string.Empty;
+
+    /// <summary>協作團隊名稱，只做顯示。</summary>
+    public List<string> CollaboratorTeamNames { get; set; } = [];
+
+    /// <summary>分類（0.4.102）。分類＝「什麼資料」，只描述性質，不影響誰看得到。</summary>
+    public List<string> Categories { get; set; } = [];
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
@@ -55,6 +72,9 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
         cloned.GlossaryTerms = [.. GlossaryTerms];
         cloned.Participants = [.. Participants];
         cloned.Files = [.. Files];
+        cloned.CollaboratorTeamIds = [.. CollaboratorTeamIds];
+        cloned.CollaboratorTeamNames = [.. CollaboratorTeamNames];
+        cloned.Categories = [.. Categories];
 
         return cloned;
     }

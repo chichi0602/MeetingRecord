@@ -40,6 +40,30 @@ else
                 </Tooltip>
             </div>
         </div>
+        @* 批次調整團隊（0.4.101）：勾選多人後一次加入或移出，不必逐一進帳號設定。 *@
+        <div class="my-user-batch">
+            <span class="my-user-batch-count">已勾選 @selectedUsers.Count() 人</span>
+            <Select TItem="string" TItemValue="string"
+                    @bind-Value="batchTeamName"
+                    Placeholder="選擇團隊"
+                    AllowClear EnableSearch
+                    Style="min-width: 200px;">
+                @foreach (var t in availableTeams)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                }
+            </Select>
+            <Button Type="ButtonType.Default"
+                    Disabled="@(!selectedUsers.Any() || string.IsNullOrEmpty(batchTeamName))"
+                    OnClick="@(async () => await OnBatchTeamAsync(add: true))">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="group_add" /><span>加入團隊</span></span>
+            </Button>
+            <Button Type="ButtonType.Default"
+                    Disabled="@(!selectedUsers.Any() || string.IsNullOrEmpty(batchTeamName))"
+                    OnClick="@(async () => await OnBatchTeamAsync(add: false))">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="group_remove" /><span>移出團隊</span></span>
+            </Button>
+        </div>
         <div class="my-user-table-wrap">
             <Table @ref="table"
                    TItem="MyUserAdapterModel"
@@ -49,12 +73,21 @@ else
                    OnChange=OnTableChange
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
-                   @bind-Total="_total">
+                   @bind-Total="_total"
+                   RowKey="x => x.Id"
+                   @bind-SelectedRows="selectedUsers">
+                <Selection />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Account)" Title="帳號" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Name)" Title="名稱" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Email)" Title="Email" Sortable />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleText)" Title="角色" Sortable />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.TeamNamesText)" Title="團隊" />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable>
+                    <StatusToggleTag Enabled="@context.Status"
+                                     Name="@context.Account"
+                                     CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_使用者管理, PermissionActions.Edit)"
+                                     OnToggle="@(async () => await OnToggleStatusAsync(context))" />
+                </Column>
                 <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.CreateAt)" Title="建立時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.UpdateAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
@@ -111,21 +144,39 @@ else
                             <ValidationMessage For="() => CurrentRecord.Email" />
                         </FormItem>
 
-                        @* 0.4.98 起沒有角色選單：身分只有「管理者」（下方勾選）與一般使用者兩種，
-                           角色一律是「一般使用者」，由 OnAddAsync／OnEditAsync 帶入。 *@
+                        @* 角色＝能做什麼，團隊＝誰的資料（看得到哪些專案），兩者分開設定、互不影響。 *@
+                        <FormItem Label="角色" Required>
+                            <Select TItem="RoleViewAdapterModel" TItemValue="int?"
+                                    DataSource="@roleViewAdapterModels"
+                                    @bind-Value="CurrentRecord.RoleViewId"
+                                    LabelName="@nameof(RoleViewAdapterModel.Name)"
+                                    ValueName="@nameof(RoleViewAdapterModel.Id)"
+                                    Placeholder="請選擇角色"
+                                    Style="width: 100%;" />
+                            <ValidationMessage For="() => CurrentRecord.RoleViewId" />
+                        </FormItem>
 
-                        @* 0.4.99：「團隊」就是專案。勾了＝那個專案的協作者；負責人的專案鎖住不能取消，
-                           要換負責人請到專案頁由管理者轉移。跨整列：專案名稱多時半欄放不下。 *@
-                        <FormItem Label="所屬團隊（專案）" Class="form-modal-full">
+                        <FormItem Label="額外角色（多角色，權限取聯集）">
                             <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
-                                    Values="selectedProjectIds" OnSelectedItemsChanged="OnUserProjectsChanged"
-                                    Placeholder="勾選這個人參與的專案；沒勾的專案他看不到（管理者不受限）"
+                                    Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
+                                    Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
                                     AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var p in availableProjects)
+                                @foreach (var r in roleViewAdapterModels)
                                 {
-                                    var isOwner = ownedProjectIds.Contains(p.Id);
-                                    <SelectOption TItemValue="int" TItem="int" Value="@p.Id" Disabled="@isOwner"
-                                                  Label="@(isOwner ? $"{p.Title}（負責人）" : p.Title)" />
+                                    <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
+                                }
+                            </Select>
+                        </FormItem>
+
+                        @* 跨整列：團隊多時半欄放不下。 *@
+                        <FormItem Label="團隊" Class="form-modal-full">
+                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
+                                    Placeholder="決定這個人看得到哪些專案：專案的主責或協作團隊有他所屬的團隊（管理者不受限）"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var t in availableTeams)
+                                {
+                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
                                 }
                             </Select>
                         </FormItem>
@@ -140,7 +191,7 @@ else
                         <FormItem>
                             <Checkbox Checked="@CurrentRecord.IsAdmin"
                                       CheckedChanged="@(value => CurrentRecord.IsAdmin = value)">
-                                管理者（擁有全部功能、看得到所有專案）
+                                管理者（不看角色與團隊，擁有全部功能、看得到所有資料）
                             </Checkbox>
                         </FormItem>
                     </div>

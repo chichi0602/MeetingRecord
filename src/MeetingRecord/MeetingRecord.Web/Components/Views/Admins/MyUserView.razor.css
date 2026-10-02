@@ -22,3 +22,16 @@
     font-size: 12px;
     margin-top: 4px;
 }
+
+/* 批次調整資料群組（0.4.101） */
+.my-user-batch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.my-user-batch-count {
+    color: var(--oat-ink-mid);
+}

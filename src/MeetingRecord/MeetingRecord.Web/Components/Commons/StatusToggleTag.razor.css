@@ -1,0 +1,37 @@
+/* 清單的啟用／停用膠囊，樣式與提示詞清單的狀態欄相同。 */
+.status-toggle-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.status-toggle-tag-enabled {
+    color: var(--oat-ok);
+    background: var(--oat-ok-bg);
+    border: 1px solid var(--oat-ok);
+}
+
+.status-toggle-tag-disabled {
+    color: var(--oat-ink-mid);
+    background: var(--oat-50);
+    border: 1px solid var(--oat-300);
+}
+
+/* 可點時是一顆按鈕：原生 button 不繼承字型，不設就會掉回瀏覽器預設。 */
+button.status-toggle-tag {
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0;
+    cursor: pointer;
+}
+
+button.status-toggle-tag:hover {
+    filter: brightness(0.96);
+}
+
+button.status-toggle-tag:focus-visible {
+    outline: 2px solid var(--oat-ink-mid);
+    outline-offset: 1px;
+}

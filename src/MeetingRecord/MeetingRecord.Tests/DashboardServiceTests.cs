@@ -68,23 +68,6 @@ public sealed class DashboardServiceTests
     }
 
     [Fact]
-    public async Task PromptTemplatesAndMeetings_ShouldCountAllTeams()
-    {
-        // 0.4.97 起儀表板是全公司同一份數字，刻意不套團隊過濾（服務也不再注入存取範圍）。
-        // 這筆守的是有人「順手」把過濾加回來：那會讓每個人看到不同的數字。
-        await using var fixture = await DashboardServiceFixture.CreateAsync();
-        await fixture.AddPromptTemplateAsync("團隊A的範本", isEnabled: true, teams: "\n團隊A\n");
-        await fixture.AddPromptTemplateAsync("團隊B的範本", isEnabled: true, teams: "\n團隊B\n");
-        await fixture.AddMeetingAsync("團隊A的會議", teams: "\n團隊A\n");
-        await fixture.AddMeetingAsync("公開會議");
-
-        var summary = await fixture.CreateService().GetSummaryAsync();
-
-        Assert.Equal(2, summary.PromptTemplates.TotalCount);
-        Assert.Equal("2", summary.Cards.Single(x => x.Title == "會議紀錄").Value);
-    }
-
-    [Fact]
     public async Task PromptTemplates_NoTemplates_ShouldReturnZeros()
     {
         await using var fixture = await DashboardServiceFixture.CreateAsync();
@@ -402,14 +385,13 @@ public sealed class DashboardServiceTests
                 loggerFactory.CreateLogger<DashboardService>());
         }
 
-        public async Task AddPromptTemplateAsync(string name, bool isEnabled, string? teams = null)
+        public async Task AddPromptTemplateAsync(string name, bool isEnabled)
         {
             await Context.PromptTemplate.AddAsync(new PromptTemplate
             {
                 Name = name,
                 Content = "內容",
                 IsEnabled = isEnabled,
-                Teams = teams,
             });
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
@@ -453,7 +435,6 @@ public sealed class DashboardServiceTests
             string title,
             long? mediaFileSize = null,
             string? draftTemplateName = null,
-            string? teams = null,
             DateTime? transcriptionStartedAt = null)
         {
             var meeting = new Meeting
@@ -464,7 +445,6 @@ public sealed class DashboardServiceTests
                 DraftStatus = draftTemplateName is null ? DraftStatus.NotGenerated : DraftStatus.Completed,
                 TranscriptionStatus = TranscriptionStatus.Completed,
                 TranscriptionStartedAt = transcriptionStartedAt,
-                Teams = teams,
             };
             await Context.Meeting.AddAsync(meeting);
             await Context.SaveChangesAsync();

@@ -1,3 +1,4 @@
+using MeetingRecord.Business.Helpers;
 using MeetingRecord.Models.Admins;
 using MeetingRecord.Share.Helpers;
 
@@ -41,7 +42,8 @@ public class RolePermissionService
             [
                 MagicObjectHelper.角色_資料定義,
                 MagicObjectHelper.角色_分類清單,
-                // 團隊清單 0.4.99 起不在選單上：專案權控改走專案成員，團隊已不影響任何資料的可見性。
+                // 團隊清單：團隊＝「誰的資料」，決定誰看得到哪些專案，一般使用者預設不給。
+                MagicObjectHelper.角色_團隊清單,
                 MagicObjectHelper.角色_提示詞清單,
             ],
             [MagicObjectHelper.角色_登出],
@@ -49,21 +51,11 @@ public class RolePermissionService
     }
 
     /// <summary>
-    /// 一般使用者的固定權限（0.4.98）。只有業務頁：會議、專案、待辦、使用說明、登出；
-    /// 系統管理與資料定義（含提示詞範本）只有管理者能用，管理者由 <c>IsAdmin</c> 短路放行，不靠權限鍵。
-    /// 群組鍵（專案管理功能、會議管理功能）也要給，否則那一區的選單不會出現。
+    /// 新建立的「一般使用者」角色的初始權限。0.4.108 起取自 <see cref="RolePresets"/>，
+    /// 與角色管理頁「建立預設角色」是同一份：業務頁可以檢視、新增、修改、匯出，不能刪除。
     /// </summary>
     public List<string> GetGeneralUserPermissionNames()
-        =>
-        [
-            MagicObjectHelper.角色_使用說明,
-            MagicObjectHelper.角色_專案管理,
-            MagicObjectHelper.角色_專案項目,
-            MagicObjectHelper.角色_待辦事項,
-            MagicObjectHelper.角色_會議管理,
-            MagicObjectHelper.角色_會議紀錄,
-            MagicObjectHelper.角色_登出,
-        ];
+        => [.. RolePresets.All.Single(x => x.Name == MagicObjectHelper.預設角色).PermissionKeys];
 
     public List<string> GetRolePermissionAllName()
     {

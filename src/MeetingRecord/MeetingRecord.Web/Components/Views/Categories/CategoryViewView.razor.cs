@@ -33,6 +33,7 @@ namespace MeetingRecord.Web.Components.Views.Categories
         string modalTitle = "分類維護";
         bool modalVisible = false;
         CategoryAdapterModel CurrentRecord = new();
+        List<CategoryService.TeamOption> selectableTeams = new();
 
         /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
         private string? formSnapshot;
@@ -197,6 +198,7 @@ namespace MeetingRecord.Web.Components.Views.Categories
             isNewRecordMode = false;
             modalTitle = "修改分類";
             CurrentRecord = categoryAdapterModel.Clone();
+            selectableTeams = await categoryService.GetSelectableTeamsAsync();
             formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened edit modal for category. CategoryId={CategoryId}, Name={Name}", categoryAdapterModel.Id, categoryAdapterModel.Name);
@@ -239,6 +241,7 @@ namespace MeetingRecord.Web.Components.Views.Categories
         async Task OnAddAsync()
         {
             CurrentRecord = new();
+            selectableTeams = await categoryService.GetSelectableTeamsAsync();
             isNewRecordMode = true;
             modalTitle = "新增分類";
             formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
@@ -289,7 +292,11 @@ namespace MeetingRecord.Web.Components.Views.Categories
                 CurrentRecord.CreatedAt = DateTime.Now;
                 CurrentRecord.UpdatedAt = DateTime.Now;
 
-                await categoryService.AddAsync(CurrentRecord);
+                var addResult = await categoryService.AddAsync(CurrentRecord);
+                if (addResult.Success)
+                {
+                    await categoryService.SyncTeamsAsync(CurrentRecord.Id, CurrentRecord.TeamIds);
+                }
                 logger.LogInformation("Category create submitted. Name={Name}", CurrentRecord.Name);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -321,7 +328,11 @@ namespace MeetingRecord.Web.Components.Views.Categories
                 }
 
                 CurrentRecord.UpdatedAt = DateTime.Now;
-                await categoryService.UpdateAsync(CurrentRecord);
+                var updateResult = await categoryService.UpdateAsync(CurrentRecord);
+                if (updateResult.Success)
+                {
+                    await categoryService.SyncTeamsAsync(CurrentRecord.Id, CurrentRecord.TeamIds);
+                }
                 logger.LogInformation("Category update submitted. CategoryId={CategoryId}, Name={Name}", CurrentRecord.Id, CurrentRecord.Name);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -386,6 +397,55 @@ namespace MeetingRecord.Web.Components.Views.Categories
             else if (FormKeyboardHelper.IsCancel(args))
             {
                 await OnModalCancelHandleAsync(new MouseEventArgs());
+            }
+        }
+
+        void OnTeamsChanged(IEnumerable<int> values)
+        {
+            CurrentRecord.TeamIds = values?.ToList() ?? new();
+        }
+
+        /// <summary>清單上點狀態膠囊直接切換（0.4.105，比照提示詞清單），先跳確認視窗。</summary>
+        async Task OnToggleEnabledAsync(CategoryAdapterModel item)
+        {
+            var willEnable = !item.IsEnabled;
+            logger.LogInformation("Category enabled toggle requested. Id={Id}, WillEnable={WillEnable}", item.Id, willEnable);
+
+            var confirmOptions = new ConfirmOptions
+            {
+                Title = willEnable ? "確認啟用" : "確認停用",
+                Content = willEnable
+                    ? $"確定要啟用「{item.Name}」嗎？啟用後可以在專案與會議上選用。"
+                    : $"確定要停用「{item.Name}」嗎？停用後不能再選用；已經貼上的資料不受影響。",
+                OkText = willEnable ? "啟用" : "停用",
+                CancelText = "取消",
+                MaskClosable = false
+            };
+
+            if (!willEnable)
+            {
+                confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+            }
+
+            if (!await modalService.ConfirmAsync(confirmOptions))
+            {
+                return;
+            }
+
+            var result = await categoryService.SetEnabledAsync(item.Id, willEnable);
+            _ = notificationService.Open(new NotificationConfig()
+            {
+                Message = "系統訊息",
+                Description = result.Success
+                    ? (willEnable ? $"已啟用「{item.Name}」。" : $"已停用「{item.Name}」。")
+                    : result.Message,
+                NotificationType = result.Success ? NotificationType.Success : NotificationType.Error,
+                Placement = NotificationPlacement.BottomRight
+            });
+
+            if (result.Success)
+            {
+                await ReloadAsync();
             }
         }
 

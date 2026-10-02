@@ -7,6 +7,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
 
@@ -14,6 +15,90 @@ namespace MeetingRecord.Tests;
 
 public sealed class MyUserServicePasswordTests
 {
+    #region 管理者給的密碼要先改（0.4.113）
+
+    private static async Task<int> AddRoleAsync(MyUserServiceFixture fixture)
+    {
+        var role = new RoleView { Name = "一般使用者", TabViewJson = "[]" };
+        fixture.Context.RoleView.Add(role);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        return role.Id;
+    }
+
+    [Fact]
+    public async Task AddAsync_NewAccount_MustChangePasswordUntilChanged()
+    {
+        await using var fixture = await MyUserServiceFixture.CreateAsync();
+        var roleId = await AddRoleAsync(fixture);
+        var service = fixture.CreateService();
+        var model = new MyUserAdapterModel { Account = "newbie", Name = "newbie", Password = "given-by-admin", RoleViewId = roleId };
+
+        Assert.True((await service.AddAsync(model)).Success);
+        Assert.True(await service.NeedChangePasswordAsync(model));
+
+        Assert.True((await service.ChangeOwnPasswordAsync(model.Id, "given-by-admin", "my-own-password", "my-own-password")).Success);
+        Assert.False(await service.NeedChangePasswordAsync(model));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AdminResetsOthersPassword_ShouldRequireChange_ButOwnEditShouldNot()
+    {
+        await using var fixture = await MyUserServiceFixture.CreateAsync();
+        var roleId = await AddRoleAsync(fixture);
+        var user = await fixture.AddUserAsync("alice", "old-password");
+        await fixture.Context.MyUser.Where(x => x.Id == user.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.RoleViewId, roleId));
+
+        // 管理者（別人）重設密碼 → 要改。
+        var adminService = fixture.CreateService(currentUserId: 999);
+        var model = await adminService.GetAsync(user.Id);
+        model.Password = "reset-by-admin";
+        Assert.True((await adminService.UpdateAsync(model)).Success);
+        Assert.True(await adminService.NeedChangePasswordAsync(model));
+
+        // 本人改完之後，再用使用者管理改自己的資料（含密碼）不會再被要求改。
+        Assert.True((await adminService.ChangeOwnPasswordAsync(user.Id, "reset-by-admin", "mine-1", "mine-1")).Success);
+        var selfService = fixture.CreateService(currentUserId: user.Id);
+        var own = await selfService.GetAsync(user.Id);
+        own.Password = "mine-2";
+        Assert.True((await selfService.UpdateAsync(own)).Success);
+        Assert.False(await selfService.NeedChangePasswordAsync(own));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WithoutNewPassword_ShouldKeepPendingFlag()
+    {
+        // 畫面模型沒有這個欄位；整筆蓋回時不能把「要改密碼」清掉。
+        await using var fixture = await MyUserServiceFixture.CreateAsync();
+        var roleId = await AddRoleAsync(fixture);
+        var service = fixture.CreateService();
+        var model = new MyUserAdapterModel { Account = "bob", Name = "bob", Password = "given", RoleViewId = roleId };
+        await service.AddAsync(model);
+
+        var edit = await service.GetAsync(model.Id);
+        edit.Name = "Bob 改名";
+        edit.Password = string.Empty;
+        Assert.True((await service.UpdateAsync(edit)).Success);
+
+        Assert.True(await service.NeedChangePasswordAsync(edit));
+    }
+
+    [Fact]
+    public async Task AddAsync_SupportAccount_ShouldNotRequireChange()
+    {
+        // support 被禁止改密碼，設了會卡在改密碼頁出不去。
+        await using var fixture = await MyUserServiceFixture.CreateAsync();
+        var roleId = await AddRoleAsync(fixture);
+        var service = fixture.CreateService();
+        var model = new MyUserAdapterModel { Account = MagicObjectHelper.開發者帳號, Name = "support", Password = "support-pass", RoleViewId = roleId };
+
+        await service.AddAsync(model);
+
+        Assert.False(await service.NeedChangePasswordAsync(model));
+    }
+
+    #endregion
+
     [Fact]
     public async Task ChangeOwnPasswordAsync_WithCorrectCurrentPassword_ShouldUpdatePassword()
     {
@@ -127,15 +212,17 @@ public sealed class MyUserServicePasswordTests
             return new MyUserServiceFixture(connection, context);
         }
 
-        public MyUserService CreateService()
+        public MyUserService CreateService(int currentUserId = 0)
         {
+            var currentUserService = new CurrentUserService();
+            currentUserService.CurrentUser.Id = currentUserId;
             return new MyUserService(
                 Context,
                 mapper,
                 loggerFactory.CreateLogger<MyUserService>(),
                 new RbacWriteService(Context),
                 new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>()),
-                new CurrentUserService());
+                currentUserService);
         }
 
         public async Task<MyUser> AddUserAsync(string account, string password)

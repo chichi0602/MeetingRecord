@@ -185,8 +185,14 @@ public class TeamController : ControllerBase
         {
             logger.LogDebug("Received team delete request. TeamId={TeamId}", id);
 
-            var success = await teamRepository.DeleteAsync(id);
-            if (!success)
+            var (found, error) = await teamRepository.DeleteAsync(id);
+            if (error is not null)
+            {
+                logger.LogWarning("Team delete request rejected because it is still a primary team. TeamId={TeamId}", id);
+                return Conflict(ApiResult.ConflictResult(error));
+            }
+
+            if (!found)
             {
                 logger.LogWarning("Team delete request could not find record. TeamId={TeamId}", id);
                 return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的團隊"));

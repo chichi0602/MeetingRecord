@@ -10,10 +10,10 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// 角色收斂成「管理者／一般使用者」（0.4.98）。重點是**收得回來**：舊的預設角色擁有全部權限，
-/// 只新增不移除的回填做法會讓一般帳號繼續看得到使用者管理、AI 用量這些頁面。
+/// 確保「一般使用者」預設角色存在（0.4.101）。重點：舊的預設角色改名當下要把權限<b>收得回來</b>
+/// （它原本擁有全部權限），但<b>不能動任何帳號的角色</b>——多角色由管理者自己設定。
 /// </summary>
-public sealed class RoleConsolidationServiceTests
+public sealed class DefaultRoleSeederTests
 {
     [Fact]
     public async Task RunAsync_ShouldRenameLegacyDefaultRoleInPlace()
@@ -23,7 +23,7 @@ public sealed class RoleConsolidationServiceTests
 
         var roleId = await fixture.CreateService().RunAsync();
 
-        // 沿用同一列：既有帳號的 RoleViewId、預設團隊都掛在它上面。
+        // 沿用同一列：既有帳號的 RoleViewId 都掛在它上面。
         Assert.Equal(legacy.Id, roleId);
         var role = await fixture.Context.RoleView.AsNoTracking().SingleAsync(x => x.Id == roleId);
         Assert.Equal(MagicObjectHelper.預設角色, role.Name);
@@ -41,8 +41,10 @@ public sealed class RoleConsolidationServiceTests
         await fixture.CreateService().RunAsync();
 
         var keys = await fixture.PermissionKeysOfAsync(legacy.Id);
-        Assert.Contains(MagicObjectHelper.角色_會議紀錄, keys);
-        Assert.Contains(MagicObjectHelper.角色_專案項目, keys);
+        // 0.4.108 起初始權限取自 RolePresets：業務頁可檢視、新增、修改、匯出，不能刪除。
+        Assert.Contains(PermissionKey.For(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit), keys);
+        Assert.Contains(PermissionKey.For(MagicObjectHelper.角色_專案項目, PermissionActions.View), keys);
+        Assert.DoesNotContain(MagicObjectHelper.角色_會議紀錄, keys);
         Assert.DoesNotContain(MagicObjectHelper.角色_使用者管理, keys);
         Assert.DoesNotContain(MagicObjectHelper.角色_AI用量分析, keys);
         Assert.DoesNotContain(MagicObjectHelper.角色_提示詞清單, keys);
@@ -66,28 +68,28 @@ public sealed class RoleConsolidationServiceTests
     }
 
     [Fact]
-    public async Task RunAsync_ShouldMoveEveryUserToGeneralRoleOnly()
+    public async Task RunAsync_ShouldNotTouchUserRoles()
     {
+        // 0.4.98～0.4.100 曾把所有人收斂成一般使用者；0.4.101 恢復多角色，啟動時不能再改任何人的角色。
         await using var fixture = await Fixture.CreateAsync();
         await fixture.AddRoleAsync(MagicObjectHelper.舊版預設角色, []);
-        var other = await fixture.AddRoleAsync("主管", [MagicObjectHelper.角色_使用者管理]);
-        var user = await fixture.AddUserAsync("alice", other.Id, isAdmin: false);
-        var admin = await fixture.AddUserAsync("root", other.Id, isAdmin: true);
+        var manager = await fixture.AddRoleAsync("主管", [MagicObjectHelper.角色_使用者管理]);
+        var viewer = await fixture.AddRoleAsync("檢視", [MagicObjectHelper.角色_會議紀錄]);
+        var user = await fixture.AddUserAsync("alice", manager.Id, isAdmin: false);
+        fixture.Context.UserRole.Add(new UserRole { MyUserId = user.Id, RoleViewId = viewer.Id });
+        await fixture.Context.SaveChangesAsync();
         await fixture.CreateBackfillService().RunAsync();
 
-        var roleId = await fixture.CreateService().RunAsync();
+        await fixture.CreateService().RunAsync();
 
-        foreach (var id in new[] { user.Id, admin.Id })
-        {
-            var stored = await fixture.Context.MyUser.AsNoTracking().SingleAsync(x => x.Id == id);
-            Assert.Equal(roleId, stored.RoleViewId);
-
-            var roles = await fixture.Context.UserRole.AsNoTracking()
-                .Where(x => x.MyUserId == id)
-                .Select(x => x.RoleViewId)
-                .ToListAsync();
-            Assert.Equal([roleId], roles);
-        }
+        var stored = await fixture.Context.MyUser.AsNoTracking().SingleAsync(x => x.Id == user.Id);
+        Assert.Equal(manager.Id, stored.RoleViewId);
+        var roles = await fixture.Context.UserRole.AsNoTracking()
+            .Where(x => x.MyUserId == user.Id)
+            .Select(x => x.RoleViewId)
+            .OrderBy(x => x)
+            .ToListAsync();
+        Assert.Equal(new[] { manager.Id, viewer.Id }.Order().ToList(), roles);
     }
 
     [Fact]
@@ -114,7 +116,7 @@ public sealed class RoleConsolidationServiceTests
 
         Assert.Equal(first, second);
         Assert.Equal(1, await fixture.Context.RoleView.CountAsync());
-        Assert.Equal(1, await fixture.Context.UserRole.CountAsync(x => x.MyUserId == user.Id));
+        Assert.Equal(0, await fixture.Context.UserRole.CountAsync(x => x.MyUserId == user.Id));
         Assert.Equal(
             new RolePermissionService().GetGeneralUserPermissionNames().Count,
             await fixture.Context.RolePermissionMap.CountAsync(x => x.RoleViewId == first));
@@ -146,12 +148,12 @@ public sealed class RoleConsolidationServiceTests
             return new Fixture(connection, context);
         }
 
-        public RoleConsolidationService CreateService()
+        public DefaultRoleSeeder CreateService()
             => new(
                 Context,
                 new RolePermissionService(),
                 new RbacWriteService(Context),
-                loggerFactory.CreateLogger<RoleConsolidationService>());
+                loggerFactory.CreateLogger<DefaultRoleSeeder>());
 
         public RbacBackfillService CreateBackfillService()
             => new(Context, new RolePermissionService(), loggerFactory.CreateLogger<RbacBackfillService>());

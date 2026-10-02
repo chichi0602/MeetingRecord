@@ -185,6 +185,60 @@ public class RoleViewService
         }
     }
 
+    /// <summary>
+    /// 一次建好 <see cref="RolePresets.All"/> 的預設角色（0.4.108），給剛上線、角色是空的系統用。
+    /// 已有同名角色就略過、不覆蓋（可能已經調過權限），所以可以重複按。
+    /// </summary>
+    public async Task<VerifyRecordResult> AddPresetsAsync()
+    {
+        Logger.LogInformation("Applying role presets. PresetCount={PresetCount}", RolePresets.All.Count);
+
+        try
+        {
+            CleanTrackingHelper.Clean<RoleView>(context);
+
+            // 在記憶體比對：與 BeforeAddCheckAsync 的名稱唯一語意一致，也不必在意 SQLite 的定序。
+            var existing = new HashSet<string>(
+                await context.RoleView.AsNoTracking().Select(x => x.Name).ToListAsync(),
+                StringComparer.OrdinalIgnoreCase);
+
+            var added = 0;
+            var (actorUserId, actorAccount) = ResolveActor();
+            foreach (var preset in RolePresets.All.Where(x => !existing.Contains(x.Name.Trim())))
+            {
+                var role = new RoleView
+                {
+                    Name = preset.Name,
+                    // TabViewJson 已不是權限來源，但角色編輯畫面以它回填勾選。
+                    TabViewJson = JsonSerializer.Serialize(preset.PermissionKeys),
+                };
+                context.RoleView.Add(role);
+                await context.SaveChangesAsync();
+                CleanTrackingHelper.Clean<RoleView>(context);
+
+                await rbacWriteService.SyncRolePermissionsAsync(role.Id, preset.PermissionKeys);
+                await auditLogService.WriteAsync(
+                    "Role.Create", success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+                    targetType: nameof(RoleView), targetId: role.Id.ToString(),
+                    detail: $"name={role.Name}; preset=true; permissionKeyCount={preset.PermissionKeys.Count}");
+                added++;
+            }
+
+            var skipped = RolePresets.All.Count - added;
+            var message = skipped == 0
+                ? $"已新增 {added} 個預設角色。"
+                : $"已新增 {added} 個預設角色，略過 {skipped} 個（已有同名角色）。";
+
+            Logger.LogInformation("Role presets applied. Added={Added}, Skipped={Skipped}", added, skipped);
+            return VerifyRecordResultFactory.Build(true, message);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to apply role presets.");
+            return VerifyRecordResultFactory.Build(false, "建立預設角色失敗。", ex);
+        }
+    }
+
     public async Task<VerifyRecordResult> UpdateAsync(RoleViewAdapterModel paraObject)
     {
         Logger.LogInformation("Updating role view. RoleViewId={RoleViewId}, Name={RoleName}", paraObject.Id, paraObject.Name);
@@ -246,16 +300,53 @@ public class RoleViewService
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的角色資料。");
             }
 
+            // 0.4.110：MyUser.RoleViewId 是 Restrict 外鍵，有人以這個角色當主要角色時資料庫會擋下刪除。
+            // 先把那些人的主要角色換掉；任何人都不能變成沒有角色——沒有角色的帳號登入時會被登出，
+            // 刪的若是管理者帳號正在用的角色，連管理者都進不了系統。
+            var remainingRoleIds = await context.RoleView.AsNoTracking()
+                .Where(x => x.Id != id)
+                .OrderBy(x => x.Id)
+                .Select(x => new { x.Id, x.Name })
+                .ToListAsync();
+            if (remainingRoleIds.Count == 0)
+            {
+                Logger.LogWarning("Role view deletion rejected because it is the last role. RoleViewId={RoleViewId}", id);
+                return VerifyRecordResultFactory.Build(false, "系統至少要保留一個角色，否則所有帳號都會無法登入。");
+            }
+
+            var fallbackRoleId = remainingRoleIds.FirstOrDefault(x => x.Name == MagicObjectHelper.預設角色)?.Id
+                ?? remainingRoleIds[0].Id;
+
+            await using var transaction = await context.Database.BeginTransactionAsync();
             CleanTrackingHelper.Clean<RoleView>(context);
+
+            var affectedUsers = await context.MyUser.Where(x => x.RoleViewId == id).ToListAsync();
+            foreach (var user in affectedUsers)
+            {
+                // 優先改用他身上還有的其他角色；沒有就改用一般使用者（或剩下的第一個角色）。
+                var otherRoleId = await context.UserRole
+                    .Where(x => x.MyUserId == user.Id && x.RoleViewId != id)
+                    .OrderBy(x => x.RoleViewId)
+                    .Select(x => (int?)x.RoleViewId)
+                    .FirstOrDefaultAsync();
+                user.RoleViewId = otherRoleId ?? fallbackRoleId;
+                if (otherRoleId is null)
+                {
+                    context.UserRole.Add(new UserRole { MyUserId = user.Id, RoleViewId = fallbackRoleId });
+                }
+            }
+
+            await context.SaveChangesAsync();
             context.Entry(item).State = EntityState.Deleted;
             await context.SaveChangesAsync();
-            CleanTrackingHelper.Clean<RoleView>(context);
+            await transaction.CommitAsync();
+            context.ChangeTracker.Clear();
 
             var (actorUserId, actorAccount) = ResolveActor();
             await auditLogService.WriteAsync(
                 "Role.Delete", success: true, actorUserId: actorUserId, actorAccount: actorAccount,
                 targetType: nameof(RoleView), targetId: id.ToString(),
-                detail: $"name={item.Name}");
+                detail: $"name={item.Name}; reassignedPrimaryUsers={affectedUsers.Count}");
 
             Logger.LogInformation("Role view deleted successfully. RoleViewId={RoleViewId}, Name={RoleName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
@@ -265,6 +356,14 @@ public class RoleViewService
             Logger.LogError(ex, "Failed to delete role view. RoleViewId={RoleViewId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除角色失敗。", ex);
         }
+    }
+
+    /// <summary>有多少人掛著這個角色（主要或額外），刪除前的確認視窗用。</summary>
+    public async Task<int> CountUsersAsync(int roleViewId)
+    {
+        return await context.MyUser.AsNoTracking()
+            .CountAsync(u => u.RoleViewId == roleViewId
+                || context.UserRole.Any(r => r.MyUserId == u.Id && r.RoleViewId == roleViewId));
     }
 
     public async Task<VerifyRecordResult> BeforeAddCheckAsync(RoleViewAdapterModel paraObject)

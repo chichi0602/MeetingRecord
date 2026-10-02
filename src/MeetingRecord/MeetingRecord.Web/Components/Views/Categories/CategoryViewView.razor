@@ -9,12 +9,16 @@ else
     <div>
         <div class="category-view-toolbar">
             <div class="category-view-toolbar-left">
-                <Tooltip Title="新增">
-                    <Button Type="ButtonType.Default"
-                            OnClick="@(async () => await OnAddAsync())">
-                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
-                    </Button>
-                </Tooltip>
+                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109）。 *@
+                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Create))
+                {
+                    <Tooltip Title="新增">
+                        <Button Type="ButtonType.Default"
+                                OnClick="@(async () => await OnAddAsync())">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
+                        </Button>
+                    </Tooltip>
+                }
                 <Tooltip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
@@ -51,27 +55,30 @@ else
                    @bind-Total="_total">
                 <Column TData="string" DataIndex="@nameof(CategoryAdapterModel.Name)" Title="名稱" Sortable />
                 <Column TData="string" DataIndex="@nameof(CategoryAdapterModel.Description)" Title="描述" />
+                <Column TData="string" DataIndex="@nameof(CategoryAdapterModel.TeamNamesText)" Title="負責團隊（參考）" />
                 <Column TData="bool" DataIndex="@nameof(CategoryAdapterModel.IsEnabled)" Title="啟用狀態" Sortable>
-                    @if (context.IsEnabled)
-                    {
-                        <span class="category-status category-status-enabled">啟用</span>
-                    }
-                    else
-                    {
-                        <span class="category-status category-status-disabled">停用</span>
-                    }
+                    <StatusToggleTag Enabled="@context.IsEnabled"
+                                     Name="@context.Name"
+                                     CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Edit)"
+                                     OnToggle="@(async () => await OnToggleEnabledAsync(context))" />
                 </Column>
                 <Column TData="DateTime" DataIndex="@nameof(CategoryAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
-                        <SpaceItem>
-                            <CrudActionButton Title="修改" Icon="edit"
-                                              OnClick="@(async () => await OnEditAsync(@context))" />
-                        </SpaceItem>
-                        <SpaceItem>
-                            <CrudActionButton Title="刪除" Icon="delete" Danger
-                                              OnClick="@(async () => await OnDeleteAsync(@context))" />
-                        </SpaceItem>
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Edit))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="修改" Icon="edit"
+                                                  OnClick="@(async () => await OnEditAsync(@context))" />
+                            </SpaceItem>
+                        }
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Delete))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" Danger
+                                                  OnClick="@(async () => await OnDeleteAsync(@context))" />
+                            </SpaceItem>
+                        }
                     </Space>
                 </ActionColumn>
             </Table>
@@ -99,6 +106,19 @@ else
 
                         <FormItem Label="啟用狀態">
                             <Switch @bind-Value="CurrentRecord.IsEnabled" CheckedChildren="啟用" UnCheckedChildren="停用" />
+                        </FormItem>
+
+                        @* 分類＝「什麼資料」。負責團隊只是參考，不會帶進專案，也不影響誰看得到（0.4.102）。 *@
+                        <FormItem Label="負責團隊（參考）" Class="form-modal-full">
+                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                    Values="CurrentRecord.TeamIds" OnSelectedItemsChanged="OnTeamsChanged"
+                                    Placeholder="通常由哪些團隊負責這類資料（只是參考，不影響誰看得到）"
+                                    AllowClear EnableSearch Style="width: 100%;">
+                                @foreach (var t in selectableTeams)
+                                {
+                                    <SelectOption TItemValue="int" TItem="int" Value="@t.Id" Label="@t.Name" />
+                                }
+                            </Select>
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">

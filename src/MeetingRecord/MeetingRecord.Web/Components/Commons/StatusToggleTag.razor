@@ -1,0 +1,47 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@* 清單「狀態」欄的啟用／停用膠囊（0.4.105），比照提示詞清單（0.4.64）的做法：
+   有修改權限就做成可點的按鈕，點了切換；沒權限就退回純文字，不要用 disabled 按鈕
+   ——disabled 的按鈕不可 focus，掛在上面的 aria-label 狀態說明就讀不到了。
+   可見文字講「狀態」、aria-label 與 title 講「動作」：把「啟用」直接當按鈕的
+   可及名稱會被讀成命令，語意與實際相反。確認視窗與實際寫入由呼叫端的 OnToggle 處理。 *@
+@if (CanToggle)
+{
+    <button type="button"
+            class="status-toggle-tag @StateClass"
+            title="@($"點擊改為{NextText}")"
+            aria-label="@($"{Name} 目前為{StateText}，點擊改為{NextText}")"
+            @onclick="HandleClickAsync">
+        @StateText
+    </button>
+}
+else
+{
+    <span class="status-toggle-tag @StateClass">@StateText</span>
+}
+
+@code {
+    [Parameter]
+    public bool Enabled { get; set; }
+
+    /// <summary>有修改權限才可點。</summary>
+    [Parameter]
+    public bool CanToggle { get; set; }
+
+    /// <summary>這一列的名稱，給螢幕閱讀器的說明用。</summary>
+    [Parameter]
+    public string Name { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback OnToggle { get; set; }
+
+    private string StateText => Enabled ? "啟用" : "停用";
+
+    private string NextText => Enabled ? "停用" : "啟用";
+
+    private string StateClass => Enabled ? "status-toggle-tag-enabled" : "status-toggle-tag-disabled";
+
+    private Task HandleClickAsync(MouseEventArgs args)
+        => OnToggle.InvokeAsync();
+}

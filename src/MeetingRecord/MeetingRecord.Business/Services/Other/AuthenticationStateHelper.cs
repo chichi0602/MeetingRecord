@@ -185,7 +185,10 @@ public class AuthenticationStateHelper
             return true;
         }
 
-        var result = currentUserService.CurrentUser.RoleList.Contains(name);
+        // 有整頁鍵（＝全部動作）或有「頁面:view」就能進頁面（0.4.109）。0.4.108 以前只認整頁鍵，
+        // 只勾部分動作的角色（例如檢視者只有 專案項目:view）連頁面與選單都看不到。
+        var roleList = currentUserService.CurrentUser.RoleList;
+        var result = roleList.Contains(name) || roleList.Contains(PermissionKey.For(name, PermissionActions.View));
         logger.LogDebug(
             "Checked page access for UserId={UserId}, Page={PageName}, Allowed={Allowed}.",
             currentUserService.CurrentUser.Id,

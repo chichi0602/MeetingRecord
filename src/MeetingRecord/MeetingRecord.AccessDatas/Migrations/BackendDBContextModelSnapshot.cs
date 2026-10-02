@@ -163,6 +163,28 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("Category");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.CategoryTeam", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("CategoryId", "TeamId")
+                        .IsUnique();
+
+                    b.ToTable("CategoryTeam");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Meeting", b =>
                 {
                     b.Property<int>("Id")
@@ -226,9 +248,6 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<int?>("ProjectId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("Teams")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -285,6 +304,9 @@ namespace MeetingRecord.AccessDatas.Migrations
 
                     b.Property<DateTime?>("LockoutEndUtc")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -354,6 +376,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Categories")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("CompletionPercentage")
                         .HasColumnType("INTEGER");
@@ -431,32 +456,29 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("ProjectFile");
                 });
 
-            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectMember", b =>
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectTeam", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("MyUserId")
+                    b.Property<bool>("IsPrimary")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("ProjectId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("Role")
+                    b.Property<int>("TeamId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MyUserId");
+                    b.HasIndex("TeamId");
 
-                    b.HasIndex("ProjectId", "MyUserId")
+                    b.HasIndex("ProjectId", "TeamId")
                         .IsUnique();
 
-                    b.ToTable("ProjectMember");
+                    b.ToTable("ProjectTeam");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.PromptTemplate", b =>
@@ -483,9 +505,6 @@ namespace MeetingRecord.AccessDatas.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Teams")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -525,10 +544,6 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreateAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DefaultTeamsJson")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
@@ -669,6 +684,25 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("UserTeam");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.CategoryTeam", b =>
+                {
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Team");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Meeting", b =>
                 {
                     b.HasOne("MeetingRecord.AccessDatas.Models.Project", "Project")
@@ -700,23 +734,23 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Navigation("Project");
                 });
 
-            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectMember", b =>
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectTeam", b =>
                 {
-                    b.HasOne("MeetingRecord.AccessDatas.Models.MyUser", "MyUser")
-                        .WithMany()
-                        .HasForeignKey("MyUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("MeetingRecord.AccessDatas.Models.Project", "Project")
-                        .WithMany("Members")
+                        .WithMany("Teams")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("MyUser");
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Project");
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.RolePermissionMap", b =>
@@ -805,7 +839,7 @@ namespace MeetingRecord.AccessDatas.Migrations
 
                     b.Navigation("Meetings");
 
-                    b.Navigation("Members");
+                    b.Navigation("Teams");
 
                     b.Navigation("Todos");
                 });

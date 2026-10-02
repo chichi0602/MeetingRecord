@@ -8,17 +8,23 @@
             </div>
 
             <div class="splash-brand-copy">
-                <p class="splash-eyebrow">Welcome</p>
-                <h1 class="splash-title">Blazor 開發啟動範本專案</h1>
+                <p class="splash-eyebrow">歡迎回來</p>
+                @* 系統名稱與版本以設定檔為單一來源（與側邊欄相同），不寫死在標記裡。 *@
+                <h1 class="splash-title">@SystemName</h1>
                 <p class="splash-description">
-                    以清楚的模組結構、權限控管與後台管理流程，協助團隊快速進入系統。
+                    上傳會議錄音，自動產出逐字稿與會議紀錄；依專案整理歷次會議、追蹤待辦，還能用 AI 問答快速找到重點。
                 </p>
             </div>
         </div>
 
         <div class="splash-status" aria-live="polite">
             <span class="splash-status-dot"></span>
-            <span>系統載入中，正在為你準備工作環境...</span>
+            <span>系統載入中，正在為你準備工作環境…</span>
         </div>
+
+        @if (!string.IsNullOrWhiteSpace(SystemVersion))
+        {
+            <p class="splash-version">版本 @SystemVersion</p>
+        }
     </div>
 </section>

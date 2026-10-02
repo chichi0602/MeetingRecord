@@ -94,8 +94,7 @@ public sealed class PromptTemplateServiceTests
         var model = NewModel("會議摘要");
         model.Content = "請依 {{transcript}} 產生會議紀錄。";
         model.Description = "標準摘要範本";
-        model.Categories = ["會議"];
-        model.Teams = ["團隊A"];
+        model.Categories = ["會議", "週報"];
 
         var result = await service.AddAsync(model);
 
@@ -105,40 +104,39 @@ public sealed class PromptTemplateServiceTests
         Assert.Equal("標準摘要範本", saved.Description);
         Assert.True(saved.IsEnabled);
         // 標籤欄位必須經 TagStringHelper 轉為「以換行包夾」的儲存字串，
-        // 否則團隊列級權控的 Contains 比對會全面失效。
-        Assert.Equal(TagStringHelper.ToStored(["會議"]), saved.Categories);
-        Assert.Equal(TagStringHelper.ToStored(["團隊A"]), saved.Teams);
+        // 否則分類篩選的 Contains 比對會全面失效。
+        Assert.Equal(TagStringHelper.ToStored(["會議", "週報"]), saved.Categories);
     }
 
     [Fact]
     public async Task GetAsync_ById_ShouldRoundTripTagsToList()
     {
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        var existing = await fixture.AddPromptAsync("會議摘要", categories: ["會議", "週報"], teams: ["團隊A"]);
+        var existing = await fixture.AddPromptAsync("會議摘要", categories: ["會議", "週報"]);
         var service = fixture.CreateService();
 
         var model = await service.GetAsync(existing.Id);
 
         Assert.Equal(["會議", "週報"], model.Categories);
-        Assert.Equal("團隊A", model.TeamsText);
+        Assert.Equal("會議、週報", model.CategoriesText);
     }
 
     [Fact]
     public async Task UpdateAsync_ShouldReplaceTagsAndKeepCreatedAt()
     {
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        var existing = await fixture.AddPromptAsync("會議摘要", teams: ["團隊A"]);
+        var existing = await fixture.AddPromptAsync("會議摘要", categories: ["會議"]);
         var originalCreatedAt = existing.CreatedAt;
         var service = fixture.CreateService();
 
         var model = await service.GetAsync(existing.Id);
-        model.Teams = ["團隊B"];
+        model.Categories = ["週報"];
         model.Content = "更新後的提示詞內容";
         var result = await service.UpdateAsync(model);
 
         Assert.True(result.Success);
         var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
-        Assert.Equal(TagStringHelper.ToStored(["團隊B"]), saved.Teams);
+        Assert.Equal(TagStringHelper.ToStored(["週報"]), saved.Categories);
         Assert.Equal("更新後的提示詞內容", saved.Content);
         Assert.Equal(originalCreatedAt, saved.CreatedAt);
         Assert.True(saved.UpdatedAt >= originalCreatedAt);
@@ -194,9 +192,9 @@ public sealed class PromptTemplateServiceTests
     #region 對所有人開放（0.4.99 起不再套團隊過濾）
 
     [Fact]
-    public async Task GetAsync_ShouldSeeAllRecordsRegardlessOfTeams()
+    public async Task GetAsync_ShouldSeeAllRecords()
     {
-        // 範本只有管理者能維護，啟用中的所有人都選得到；標過團隊的舊範本不能因此消失。
+        // 範本對所有人開放，清單不套任何團隊過濾。
         await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
         await fixture.SeedDefaultPromptsAsync();
         var service = fixture.CreateService();
@@ -204,32 +202,6 @@ public sealed class PromptTemplateServiceTests
         var result = await service.GetAsync(NewRequest());
 
         Assert.Equal(3, result.Count);
-    }
-
-    [Fact]
-    public async Task GetById_ShouldReturnTeamTaggedRecord()
-    {
-        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        var ids = await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService();
-
-        var model = await service.GetAsync(ids["團隊B提示詞"]);
-
-        Assert.Equal("團隊B提示詞", model.Name);
-    }
-
-    [Fact]
-    public async Task GetAsync_WithTeamFilter_ShouldFilterByTeam()
-    {
-        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        await fixture.SeedDefaultPromptsAsync();
-        var service = fixture.CreateService();
-
-        var request = NewRequest();
-        request.TeamFilters = ["團隊B"];
-        var result = await service.GetAsync(request);
-
-        Assert.Equal(["團隊B提示詞"], result.Result.Select(x => x.Name).ToList());
     }
 
     #endregion
@@ -297,21 +269,6 @@ public sealed class PromptTemplateServiceTests
         Assert.False(result.Success);
     }
 
-    [Fact]
-    public async Task SetEnabledAsync_TeamTaggedRecord_ShouldSucceed()
-    {
-        // 0.4.98 以前這裡會被團隊擋掉；範本改為所有人開放後，團隊標籤不再影響任何操作。
-        await using var fixture = await PromptTemplateServiceFixture.CreateAsync();
-        var prompt = await fixture.AddPromptAsync("團隊B提示詞", teams: ["團隊B"]);
-        var service = fixture.CreateService();
-
-        var result = await service.SetEnabledAsync(prompt.Id, false);
-
-        Assert.True(result.Success);
-        var saved = await fixture.Context.PromptTemplate.AsNoTracking().SingleAsync(x => x.Id == prompt.Id);
-        Assert.False(saved.IsEnabled);
-    }
-
     #endregion
 
     #region 內建範本
@@ -343,9 +300,6 @@ public sealed class PromptTemplateServiceTests
         Assert.All(saved, item =>
         {
             Assert.True(item.IsEnabled);
-            // 不掛團隊等於公開：一鍵建立出來的範本必須所有人都看得到，
-            // 否則新使用者按了按鈕卻還是空清單。
-            Assert.Null(item.Teams);
             Assert.Null(item.Categories);
             Assert.Contains("{{transcript}}", item.Content);
         });
@@ -527,8 +481,7 @@ public sealed class PromptTemplateServiceTests
             string name,
             string content = "請依會議逐字稿產生會議紀錄。",
             bool isEnabled = true,
-            IEnumerable<string>? categories = null,
-            IEnumerable<string>? teams = null)
+            IEnumerable<string>? categories = null)
         {
             var promptTemplate = new PromptTemplate
             {
@@ -536,7 +489,6 @@ public sealed class PromptTemplateServiceTests
                 Content = content,
                 IsEnabled = isEnabled,
                 Categories = TagStringHelper.ToStored(categories),
-                Teams = TagStringHelper.ToStored(teams),
             };
 
             Context.PromptTemplate.Add(promptTemplate);
@@ -548,8 +500,8 @@ public sealed class PromptTemplateServiceTests
         public async Task<Dictionary<string, int>> SeedDefaultPromptsAsync()
         {
             var pub = await AddPromptAsync("公開提示詞");
-            var teamA = await AddPromptAsync("團隊A提示詞", teams: ["團隊A"]);
-            var teamB = await AddPromptAsync("團隊B提示詞", teams: ["團隊B"]);
+            var teamA = await AddPromptAsync("團隊A提示詞");
+            var teamB = await AddPromptAsync("團隊B提示詞");
 
             return new Dictionary<string, int>
             {

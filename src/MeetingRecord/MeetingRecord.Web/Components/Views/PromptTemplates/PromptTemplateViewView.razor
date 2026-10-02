@@ -165,8 +165,6 @@ else
                             </Select>
                         </FormItem>
 
-                        @* 團隊欄位 0.4.99 起拿掉：範本對所有人開放。既有的 Teams 值存檔時原樣帶回。 *@
-
                         <FormItem Label="描述" Class="form-modal-full">
                             <TextArea @bind-Value="CurrentRecord.Description" Rows="2" Placeholder="請輸入提示詞用途說明" />
                             <ValidationMessage For="() => CurrentRecord.Description" />

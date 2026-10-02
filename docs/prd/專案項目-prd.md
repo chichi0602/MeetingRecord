@@ -1,18 +1,28 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.6
+- 文件版本：4.8
 - 文件狀態：已實作
-- 現行系統版本：0.4.99
+- 現行系統版本：0.4.107
 - 首次實作版本：既有腳手架核心功能（0.4.31 頁面全面改版）
-- 最後核對日期：2026/09/23
+- 最後核對日期：2026/10/01
 
-> **0.4.99：專案改由「專案成員」控管可見性。** 一般使用者只看得到自己是成員（負責人或協作者）的專案；任何人都能建專案、建立者就是負責人（`ProjectService.AddAsync` 寫入 `ProjectMember`，`Owner` 姓名取自帳號、不信任表單）。編輯專案資料與加減協作者要負責人或管理者，**刪除專案只有管理者**。表單的負責人欄位拿掉，摘要列多一個「成員」連結開 `ProjectMemberModal`。附件下載、AI 問答、抽出待辦都跟著專案成員資格。判斷一律經 `ProjectAccessService`，API 的 `ProjectRepository` 也套。下文「專案不再有列級可見性控管」「檢查團隊權限」等段落描述的是 0.4.98 以前的狀態。
+> **0.4.102：專案改由「主責團隊＋協作團隊」控管可見性，並加回「分類」**（取代 0.4.101 的「資料群組」與 0.4.99～0.4.100 的專案成員制）。團隊＝誰的資料（部門），分類＝什麼資料，角色＝能做什麼。
+> - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
+> - 表單「主責團隊」單選：管理者列全部啟用中的團隊、一般使用者只列自己所屬的；新專案預設帶入建立者依名稱排序的第一個團隊。一般使用者只能把主責設成自己的團隊，但**編輯時主責沒改就原樣保留**，協作團隊的人也能存檔。
+> - 表單「協作團隊」多選：全部啟用中的團隊，任何人都能選；主責不重複列入。
+> - 規則在 `ProjectAccess.ResolveProjectTeams`，驗證與寫入在 `ProjectTeamWriter`，UI（`ProjectService`）與 API（`ProjectRepository`）共用。錯誤訊息：「請選擇主責團隊。」「主責團隊只能選擇自己所屬的團隊。」「找不到選擇的主責團隊。」
+> - 表單「分類」多選（啟用中的分類，存 `Project.Categories`），不影響可見性；專案選擇列右側有分類篩選（0.4.106 起與團隊、狀態篩選並列），縮小下拉清單（`ProjectService.GetAsync` 的 `CategoryFilters`）。
+> - 摘要列顯示主責團隊、協作團隊、分類。
+> - 「負責人」是手打文字欄位、不涉及權限；編輯／刪除專案**只看角色的動作權限**（`edit`／`delete`）。附件下載、AI 問答、抽出待辦都跟著專案可見性。判斷一律經 `ProjectAccessService`。
+> - API：DTO 多選填的 `primaryTeamId`／`collaboratorTeamIds`／`categories`；新增沒給主責用建立者 Id 最小的團隊（沒有團隊回 400「請先加入團隊，或指定主責團隊。」），更新時 null 保留原值。
+>
+> 0.4.101 曾用「資料群組」（沒掛群組＝公開、新專案帶入建立者全部群組）；0.4.99 的「成員」連結、`ProjectMemberModal`、`ProjectMemberService` 與 `ProjectMember` 表都已移除。下文「專案不再有列級可見性控管」「檢查團隊權限」等段落描述的是 0.4.98 以前的狀態。
 
 ## 一、目標與範圍
 
 提供「專案項目（Project）」的建立、查詢、修改、刪除與附件管理能力，同時作為新增其他領域 CRUD 模組時的參考樣板。
 
-- 範圍：專案選擇與單筆維護（含表單驗證）、多檔附件上傳／下載／刪除、動作級授權與團隊可見範圍控管；**0.4.31 起**另含「挑一份逐字稿以 AI 產生會議紀錄」與本專案的歷史會議紀錄清單（檢視／編修）。**0.4.82 起本頁是「已歸屬專案的會議」唯一能編修與下載 PDF 的地方**——那裡才有常用名詞與與會人員的脈絡，PDF 表頭也要帶專案名稱。
+- 範圍：專案選擇與單筆維護（含表單驗證）、多檔附件上傳／下載／刪除、動作級授權與主責／協作團隊可見範圍控管、分類標籤與篩選；**0.4.31 起**另含「挑一份逐字稿以 AI 產生會議紀錄」與本專案的歷史會議紀錄清單（檢視／編修）。**0.4.82 起本頁是「已歸屬專案的會議」唯一能編修與下載 PDF 的地方**——那裡才有常用名詞與與會人員的脈絡，PDF 表頭也要帶專案名稱。
 - 非範圍：專案間的相依關係／甘特圖、工時統計、跨專案報表、附件線上預覽；待辦事項的抽取與管理（TodoList 尚未實作）。
 
 > **0.4.31 版面變更**：本頁由分頁表格 CRUD 改為以專案為中心的操作介面（專案選擇器 + 摘要列 + AI 區塊 + 歷史會議紀錄）。**副作用是分頁、分類過濾、團隊過濾與關鍵字搜尋隨表格一併移除**，改以專案下拉的搜尋替代；專案數量成長到數百筆時這個版面要重新檢討。設計依據見 [會議記錄流程 Wireframe 設計規格](../superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)。
@@ -31,16 +41,19 @@
 
 ## 三、畫面與欄位
 
-- 專案選擇列：可搜尋的專案下拉（`ProjectService.GetSelectableAsync`，依標題排序、不分頁）＋ 新增／編輯／刪除／重新整理四顆 Material Icon 按鈕。
-- 專案摘要列：負責人、期程、狀態、完成度、本專案的會議紀錄份數、**附件份數（0.4.43 起，可點開檢視與下載）**。
+- 專案選擇列（0.4.106 起一行排版）：
+  - **左側**：可搜尋的專案下拉（寬 200px；`ProjectService.GetSelectableAsync`，依標題排序、不分頁）＋ 新增／編輯／刪除／AI 問答。「重新整理」按鈕已移除。
+  - **右側**：團隊、分類、狀態三個多選篩選（各寬 140px，`MaxTagCount=1` 收成「+N」不撐寬）。三者同時成立，同一篩選內符合任一即可；團隊比對主責或協作團隊。只在畫面端縮小下拉清單，不影響誰看得到。目前專案被篩掉時自動切到結果第一筆，結果為空時清掉選取並顯示空狀態提示。
+  - 窄螢幕時左右兩組各自換行。
+- 專案摘要列：負責人、**主責團隊、協作團隊、分類（0.4.102 起）**、期程、狀態、完成度、本專案的會議紀錄份數、**附件份數（0.4.43 起，可點開檢視與下載）**。
 - AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生。**0.4.65 起一律先跳費用確認對話框**（首次生成也跳，理由是會產生 API 費用），已有草稿時額外套紅色確認鈕並說明會覆蓋人工編修過的內容；按鈕在該筆已排入或生成中時停用（`CanGenerateDraft`），避免重複入列而重複計費。 **0.4.71 起提示詞下拉左邊多一個「與會人員」多選**，選項來自本專案的與會人員名冊（`Project.Participants`），用來勾選這場會議實際到場的人；名冊是空的時候欄位停用但不隱藏。勾選結果以快照存進 `Meeting.DraftAttendees`，連同專案的常用名詞一起餵給模型校正語音辨識聽錯的人名。與會人員是**選填**，不影響按鈕是否可按。
 - 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（檢視／編修草稿、**匯出 PDF**、**抽出待辦**、AI 問答）。不分頁。**0.4.82 起逐字稿的預覽與編修整個移除**（0.4.55 曾提供）——檔案仍是生成與 AI 問答的輸入，只是不再有人直接讀／改的介面。STT 聽錯人名的補救改走「常用名詞名冊 ＋ 重新產生」或「直接改會議紀錄」，取捨見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.82 起「檢視／編修會議紀錄」共用 `Components/Commons/MarkdownEditorModal`**（左改右看 ＋ 常駐搜尋／取代列）；清單列上的「匯出 PDF」**保留**，視窗裡另有一顆。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。 **0.4.72 起操作欄多一顆「從專案移除」**（`link_off`，受 `delete` 權限管控）：清掉歸屬與 AI 草稿，但**影音檔與逐字稿保留**，那份逐字稿會回到可選清單，可以改指到正確的專案重跑——這是「生成錯專案」唯一的出口（先前只能整筆刪除，等於要重新上傳並重新付一次轉錄費用）。生成中（`Pending`／`Processing`）不准移除，否則背景工作結束時會把草稿寫回已經移除的紀錄。
 - **匯出 PDF**（0.4.40，取代 0.4.34 的 Markdown 匯出）：把表頭（專案、會議、日期、使用提示詞、產生時間）加上會議紀錄內文組成 HTML（Markdown 經 Markdig 轉換，支援表格），再以**系統既有的 Edge／Chrome 無頭列印**產生 PDF，經 JS interop 直接推給瀏覽器下載，**檔案不落地、不新增 HTTP 檔案輸出面**。內容不含逐字稿。檔名為 `會議紀錄_{標題}_{產生日}.pdf`。
   - 中文字型由瀏覽器處理（實測 Edge 會把微軟正黑體以子集嵌入，含 `Identity-H` 與 `ToUnicode`，文字可複製可搜尋），**專案不需放任何字型檔**。
   - 產生期間按鈕顯示「匯出中…」並停用，避免重複點擊啟動多個瀏覽器程序。
 - Icon 一律使用 Material Icons Outlined，不使用 emoji。
-- 編輯表單欄位：標題（必填）、開始日期、結束日期、狀態（必填，`StatusOptions`）、完成百分比（0-100）、負責人（必填）、專案附件。 **0.4.71 新增「常用名詞」與「常用與會人員」兩個標籤輸入**（`SelectMode.Tags`，都跨整列），以 `TagStringHelper` 的換行包夾字串存在 `Project.GlossaryTerms` / `Project.Participants`。兩者都只影響 AI 產生會議紀錄時的提示詞，不參與搜尋或排序。
-  - **0.4.39 起，描述、優先級、分類、團隊四個欄位已從系統中完全移除**——不只是表單，實體、`ProjectAdapterModel`、DTO、服務層、API 搜尋與排序都已清除，並以 migration `RemoveProjectDescriptionPriorityCategoriesTeams` 刪除四個資料庫欄位。0.4.37 只移除表單，這一版才是徹底移除。
+- 編輯表單欄位：標題（必填）、開始日期、結束日期、狀態（必填，`StatusOptions`）、完成百分比（0-100）、負責人（必填，純文字）、**主責團隊（0.4.102，單選、必填）**、**協作團隊（多選）**、**分類（多選）**、專案附件。 **0.4.71 新增「常用名詞」與「常用與會人員」兩個標籤輸入**（`SelectMode.Tags`，都跨整列），以 `TagStringHelper` 的換行包夾字串存在 `Project.GlossaryTerms` / `Project.Participants`。兩者都只影響 AI 產生會議紀錄時的提示詞，不參與搜尋或排序。
+  - **0.4.39 起，描述、優先級、分類、團隊四個欄位已從系統中完全移除**——不只是表單，實體、`ProjectAdapterModel`、DTO、服務層、API 搜尋與排序都已清除，並以 migration `RemoveProjectDescriptionPriorityCategoriesTeams` 刪除四個資料庫欄位。0.4.37 只移除表單，這一版才是徹底移除。**0.4.102 以新欄位 `Project.Categories` 加回分類**（純描述標籤），團隊則改走 `ProjectTeam` 關聯表（migration `AddProjectPrimaryTeamAndCategories`）。
   - 完成百分比自 **0.4.42** 起改用滑桿（0／25／50／75／100 刻度），不再是數字輸入框。
 - 附件：`專案附件` 一次可多選，單檔上限 1GB；待上傳清單可移除，已上傳檔案可下載或標記移除。
 - 附件查看（**0.4.43 起**）：摘要列多一格「附件 N 份」，點下去開附件視窗，列出檔名、大小、上傳時間並可下載。在此之前**主畫面完全沒有附件入口**，只有編輯視窗看得到（而且那裡的下載連結是壞的）。
@@ -63,7 +76,8 @@
 
 - 動作級授權：`ProjectController` 各端點標註 `[HasPermission(角色_專案項目, 動作)]`（`ProjectController.cs:36,67,113,152,201`）；無權限回 403 且維持 `ApiResult` 結構；管理員短路。
 - UI 與 API 共用同一 RBAC 權威（`IPermissionChecker`）。
-- **專案沒有列級可見性控管**（0.4.39 起）：只要具備「專案項目」頁面權限就看得到所有專案，動作（新增／修改／刪除／匯出）另以 `[HasPermission("resource:action")]` 與 `CheckAccessAction` 控管。這是刻意的設計——**角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**。
+- **角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**：動作（新增／修改／刪除／匯出）以 `[HasPermission("resource:action")]` 與 `CheckAccessAction` 控管。
+- **資料可見範圍由主責＋協作團隊決定**（0.4.102 起；0.4.39～0.4.98 沒有列級控管、0.4.99～0.4.100 為專案成員制、0.4.101 為資料群組）：使用者所屬團隊與專案的主責或協作團隊有交集才看得到，沒有公開專案；看不到的專案當成不存在（UI 找不到、API 404）。規則見 [開發慣例與限制速查 §4.0](../architecture/開發慣例與限制速查.md)。
 
 ### 0.4.39：四個欄位與列級權限已徹底移除
 
@@ -82,9 +96,9 @@
 | 資料庫 | migration `RemoveProjectDescriptionPriorityCategoriesTeams`（四個 `DropColumn`） |
 | 測試 | `ProjectServiceTeamAccessTests` 整檔刪除；`TodoServiceTests` 的專案越界測試刪除 |
 
-**保留未動**：Meeting、PromptTemplate、Todo 各自的 `Categories`/`Teams` 與其列級權限判斷（`MeetingService.RequestDraftAsync` 對逐字稿與提示詞的兩處守門仍在）、`TagStringHelper`、`DataRequest.CategoryFilters/TeamFilters`、`IRecordAccessScopeProvider` 的 DI 註冊、專案附件功能。
+**保留未動**：Meeting、PromptTemplate、Todo 各自的 `Categories`/`Teams` 與其列級權限判斷（`MeetingService.RequestDraftAsync` 對逐字稿與提示詞的兩處守門仍在）、`TagStringHelper`、`DataRequest.CategoryFilters/TeamFilters`、`IRecordAccessScopeProvider` 的 DI 註冊、專案附件功能。（此為 0.4.39 當時的狀態：Todo 的兩欄 0.4.66 移除；Meeting／PromptTemplate 的 `Teams` 0.4.99 起不再作用，**0.4.103 連同 `DataRequest.TeamFilters`、`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible` 一起刪除**。）
 
-結果：**只要具備「專案項目」頁面權限就看得到所有專案**，動作層級的授權（新增／修改／刪除／匯出）不受影響。
+結果（0.4.39～0.4.98）：**只要具備「專案項目」頁面權限就看得到所有專案**，動作層級的授權（新增／修改／刪除／匯出）不受影響。0.4.101 起改以 `ProjectTeam` 關聯表（而非字串欄位）重新控管可見性，0.4.102 起分主責與協作團隊，見上。
 
 ## 六、錯誤與邊界
 
@@ -98,6 +112,7 @@
 
 
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`、`RbacBackfillServiceTests.cs`：動作級授權鍵與 RBAC 回填涵蓋「專案項目」。
+- `ProjectAccessTests`（0.4.102 改寫）：主責＋協作可見規則（含王小明例：研發部＋管理部看得到 A、B、D，看不到 C）、沒有公開專案、主責／協作選擇規則（協作團隊的人沒改主責也能存檔）、分類篩選、刪除主責團隊被擋、`CategoryTeam` 同步、舊專案成員與 0.4.101 資料的主責轉換、批次與成員同步；`ApiIntegrationTests.ProjectApi_OtherTeamsProject_ShouldBeHidden_AndCreatorTeamBecomesPrimary`：API 看不到別團隊的專案、新增的專案以建立者的團隊為主責。
 
 ## 八、相關程式與文件
 
@@ -111,4 +126,4 @@
 
 > 備註（0.4.43 更正）：先前記載的 `/api/project-files/{id}/download` **端點從來沒有存在過**，所以附件下載一直是壞的；而且就算補上 controller 也會 401——API 全是 JWT Bearer，瀏覽器導航帶的是 Cookie。
 >
-> 現行做法：UI 呼叫 `ProjectService.GetFileDownloadAsync`（在此之前是零呼叫端），再經 `FileDownloadInterop.SaveStreamAsync` 走 JS interop 推給瀏覽器，**不開對外端點**。`GetFileDownloadAsync` 只依檔案 Id 查、**沒有**團隊權控守門（先前的記載有誤）——這與 0.4.39 移除專案列級權控後的現況一致，且 Id 只可能來自使用者已載入的專案附件清單。
+> 現行做法：UI 呼叫 `ProjectService.GetFileDownloadAsync`（在此之前是零呼叫端），再經 `FileDownloadInterop.SaveStreamAsync` 走 JS interop 推給瀏覽器，**不開對外端點**。`GetFileDownloadAsync` 在 0.4.43～0.4.98 只依檔案 Id 查、**沒有**團隊權控守門（先前的記載有誤）；0.4.99 起附件下載跟著專案可見性（0.4.102 起即主責＋協作團隊）。

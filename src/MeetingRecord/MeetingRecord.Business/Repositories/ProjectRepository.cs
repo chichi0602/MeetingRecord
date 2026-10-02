@@ -3,7 +3,6 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers.Searchs;
 using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Share.Enums;
 using MeetingRecord.Dtos.Commons;
 using System;
 using System.Collections.Generic;
@@ -13,8 +12,8 @@ using System.Text;
 namespace MeetingRecord.Business.Repositories;
 
 /// <summary>
-/// 專案的 Web API 資料存取。0.4.99 起與 <c>ProjectService</c> 套同一套專案權限：
-/// 看不到的專案當成不存在（控制器回 404）；修改要負責人或管理者，刪除只有管理者。
+/// 專案的 Web API 資料存取。與 <c>ProjectService</c> 套同一套團隊規則（0.4.102，主責＋協作團隊）：
+/// 看不到的專案當成不存在（控制器回 404）；能不能改、能不能刪由角色的動作權限（<c>[HasPermission]</c>）決定。
 /// </summary>
 public class ProjectRepository
 {
@@ -34,7 +33,8 @@ public class ProjectRepository
     /// </summary>
     public async Task<Project?> GetByIdAsync(int id, bool includeRelatedData = false)
     {
-        var query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking());
+        // 團隊一併載入：ProjectDto 要回傳主責與協作團隊。
+        IQueryable<Project> query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking()).Include(x => x.Teams);
 
         if (includeRelatedData)
         {
@@ -48,7 +48,8 @@ public class ProjectRepository
         ProjectSearchRequestDto request,
         bool includeRelatedData = false)
     {
-        var query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking());
+        // 團隊一併載入：ProjectDto 要回傳主責與協作團隊。
+        IQueryable<Project> query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking()).Include(x => x.Teams);
 
         #region 建立過濾條件
         Expression<Func<Project, bool>>? predicate = null;
@@ -174,28 +175,34 @@ public class ProjectRepository
     #region 新增方法
 
     /// <summary>
-    /// 新增專案
+    /// 新增專案。團隊規則與畫面相同（0.4.102）：主責必填、非管理者的主責限自己所屬的團隊、協作可選任何團隊。
+    /// 沒指定主責時用建立者所屬、Id 最小的團隊；建立者沒有任何團隊時回傳錯誤（沒有「公開」專案）。
     /// </summary>
-    public async Task<Project> AddAsync(Project project)
+    public async Task<(Project? Project, string? Error)> AddAsync(Project project, int? primaryTeamId, IEnumerable<int>? collaboratorTeamIds)
     {
         project.CreatedAt = DateTime.Now;
         project.UpdatedAt = DateTime.Now;
 
-        // 建立者就是負責人（0.4.99），與 ProjectService.AddAsync 同一條規則。
         var access = await projectAccess.GetAsync();
-        var creator = access.UserId == 0
-            ? null
-            : await context.MyUser.AsNoTracking().FirstOrDefaultAsync(x => x.Id == access.UserId);
-        if (creator is not null)
+        var primary = primaryTeamId ?? (access.TeamIds.Count > 0 ? access.TeamIds.Min() : null);
+        if (primary is null)
         {
-            project.Owner = creator.Name;
-            project.Members = [new ProjectMember { MyUserId = creator.Id, Role = ProjectMemberRole.Owner }];
+            return (null, "請先加入團隊，或指定主責團隊。");
         }
+
+        var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(null, primary, collaboratorTeamIds ?? []));
+        if (teams.Error is not null)
+        {
+            return (null, teams.Error);
+        }
+
+        project.Teams = [];
+        ProjectTeamWriter.Apply(project, teams);
 
         await context.Project.AddAsync(project);
         await context.SaveChangesAsync();
 
-        return project;
+        return (project, null);
     }
 
     /// <summary>
@@ -219,14 +226,31 @@ public class ProjectRepository
     #region 更新方法
 
     /// <summary>
-    /// 更新專案
+    /// 更新專案。看不到的當成不存在（<c>Found = false</c>）；團隊選擇不合法時回傳 <c>Error</c>。
+    /// <paramref name="primaryTeamId"/>／<paramref name="collaboratorTeamIds"/> 傳 null＝保留原值。
     /// </summary>
-    public async Task<bool> UpdateAsync(Project project)
+    public async Task<(bool Found, string? Error)> UpdateAsync(Project project, int? primaryTeamId, IEnumerable<int>? collaboratorTeamIds)
     {
-        var existingProject = await context.Project.FindAsync(project.Id);
-        if (existingProject == null || !(await projectAccess.GetAsync()).CanManageProject(project.Id))
+        var access = await projectAccess.GetAsync();
+        var existingProject = await context.Project.Include(x => x.Teams).FirstOrDefaultAsync(x => x.Id == project.Id);
+        if (existingProject == null || !access.CanViewProject(project.Id))
         {
-            return false;
+            return (false, null);
+        }
+
+        if (primaryTeamId is not null || collaboratorTeamIds is not null)
+        {
+            var existingPrimary = existingProject.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
+            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(
+                existingPrimary,
+                primaryTeamId ?? existingPrimary,
+                collaboratorTeamIds ?? existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId)));
+            if (teams.Error is not null)
+            {
+                return (true, teams.Error);
+            }
+
+            ProjectTeamWriter.Apply(existingProject, teams);
         }
 
         project.UpdatedAt = DateTime.Now;
@@ -240,14 +264,12 @@ public class ProjectRepository
         // 但畫面走的是 ProjectService.UpdateAsync 那條，清得掉。
         project.GlossaryTerms ??= existingProject.GlossaryTerms;
         project.Participants ??= existingProject.Participants;
-
-        // 負責人姓名跟著 ProjectMember 走，不接受 API 直接改（改了也不會真的換負責人）。
-        project.Owner = existingProject.Owner;
+        project.Categories ??= existingProject.Categories;
 
         context.Entry(existingProject).CurrentValues.SetValues(project);
         await context.SaveChangesAsync();
 
-        return true;
+        return (true, null);
     }
 
     /// <summary>
@@ -256,7 +278,7 @@ public class ProjectRepository
     public async Task<bool> UpdateStatusAsync(int id, string status)
     {
         var project = await context.Project.FindAsync(id);
-        if (project == null || !(await projectAccess.GetAsync()).CanManageProject(id))
+        if (project == null || !(await projectAccess.GetAsync()).CanViewProject(id))
         {
             return false;
         }
@@ -279,7 +301,7 @@ public class ProjectRepository
         }
 
         var project = await context.Project.FindAsync(id);
-        if (project == null || !(await projectAccess.GetAsync()).CanManageProject(id))
+        if (project == null || !(await projectAccess.GetAsync()).CanViewProject(id))
         {
             return false;
         }
@@ -300,9 +322,9 @@ public class ProjectRepository
     /// </summary>
     public async Task<bool> DeleteAsync(int id)
     {
-        // 刪除會連帶刪掉待辦與附件，只給管理者（0.4.99）。
+        // 能不能刪由角色的刪除權限決定（[HasPermission]）；這裡只擋看不到的專案。
         var project = await context.Project.FindAsync(id);
-        if (project == null || !(await projectAccess.GetAsync()).IsAdmin)
+        if (project == null || !(await projectAccess.GetAsync()).CanViewProject(id))
         {
             return false;
         }
@@ -318,12 +340,8 @@ public class ProjectRepository
     /// </summary>
     public async Task<int> DeleteRangeAsync(List<int> ids)
     {
-        if (!(await projectAccess.GetAsync()).IsAdmin)
-        {
-            return 0;
-        }
-
-        var projects = await context.Project
+        // 只刪看得到的；看不到的當成不存在。
+        var projects = await (await projectAccess.GetAsync()).Filter(context.Project)
             .Where(p => ids.Contains(p.Id))
             .ToListAsync();
 

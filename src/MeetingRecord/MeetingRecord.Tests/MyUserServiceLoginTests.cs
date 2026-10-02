@@ -46,6 +46,36 @@ public sealed class MyUserServiceLoginTests
     }
 
     [Fact]
+    public async Task LoginAsync_DisabledAccount_WithCorrectPassword_ShouldBeBlockedWithDisabledMessage()
+    {
+        // 0.4.113：停用帳號在登入這一步就擋下，不再先登入成功、進系統後才被登出。
+        await using var fixture = await LoginFixture.CreateAsync();
+        var created = await fixture.AddUserAsync("dave", "secret-password", legacy: false);
+        await fixture.Context.MyUser.Where(x => x.Id == created.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, false));
+        var service = fixture.CreateService();
+
+        var (error, user) = await service.LoginAsync("dave", "secret-password");
+
+        Assert.Equal("此帳號已停用，請聯絡管理者。", error);
+        Assert.Null(user);
+    }
+
+    [Fact]
+    public async Task LoginAsync_DisabledAccount_WithWrongPassword_ShouldNotRevealDisabled()
+    {
+        // 密碼錯誤時一律回同一句話，不讓人藉此試探帳號是否存在或已停用。
+        await using var fixture = await LoginFixture.CreateAsync();
+        var created = await fixture.AddUserAsync("erin", "secret-password", legacy: false);
+        await fixture.Context.MyUser.Where(x => x.Id == created.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, false));
+        var service = fixture.CreateService();
+
+        var (error, user) = await service.LoginAsync("erin", "wrong-password");
+
+        Assert.Equal("帳號或者密碼不正確", error);
+        Assert.Null(user);
+    }
+
+    [Fact]
     public async Task LoginAsync_WithWrongPassword_ShouldFail()
     {
         await using var fixture = await LoginFixture.CreateAsync();

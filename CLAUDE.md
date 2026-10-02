@@ -83,7 +83,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - 本系統**只支援 SQLite**；模型變更要在 `MeetingRecord.AccessDatas/Migrations/` 產生 migration（0.4.24 起已移除 SQL Server 軌道）。
 - 分層依賴一律向上：Web → Business → AccessDatas；`Share`/`Models`/`Dtos` 不相依其他專案；UI 不直接 `using BackendDBContext`。
 - Web API 一律回傳 `ApiResult<T>`，分頁包 `PagedResult<T>`；UI 用 Cookie 驗證、API 用 JWT Bearer。受保護 CRUD 另以 `[HasPermission("resource:action")]` + `IPermissionChecker` 做動作級授權（無權限回 403，維持 `ApiResult`；管理員短路）；UI 與 API 共用此單一 RBAC 權威來源。
-- 資料權限（0.4.99 起）一律經 `ProjectAccessService`：一般使用者只看得到自己是成員的專案與底下的會議、待辦、附件、AI 問答；未歸屬專案的會議只有上傳者看得到。服務層與 API Repository 都要套，看不到的當成不存在。儀表板是刻意的例外（全公司彙總、不放明細）。
+- **角色＝能做什麼，團隊＝誰的資料，分類＝什麼資料**（0.4.102），三者不要混用。資料權限一律經 `ProjectAccessService`：每個專案有 1 個主責團隊（必填）＋0～多個協作團隊（`ProjectTeam.IsPrimary`），使用者所屬團隊（`UserTeam`）與主責＋協作有交集才看得到，**沒有公開專案**；非管理者的主責限自己的團隊、協作可選任何團隊（`ProjectAccess.ResolveProjectTeams`，寫入走 `ProjectTeamWriter`）；會議、待辦、附件、AI 問答跟著專案走；未歸屬專案的會議只有上傳者看得到；管理者看全部。分類只是標籤、不影響可見性。服務層與 API Repository 都要套，看不到的當成不存在。儀表板是刻意的例外（全公司彙總、不放明細）。
 - Blazor 檢視編輯前 `Clone()`、Update/Delete 前以 `CleanTrackingHelper` 清除追蹤。
 - 新增頁面權限採**宣告式**：`Menu.json`（每項唯一 `id`）＋ `SidebarMenuService.MenuPermissionMap`（`id→權限鍵`）＋ `MagicObjectHelper` 權限鍵常數；以 id 對應、重排 `Menu.json` 不錯位（舊「位置索引三處同步」已移除）。
 - 單一版本來源 `SystemSettings.SystemInformation.SystemVersion`（每次異動一律 Patch +1，例：`0.4.0 → 0.4.1`；格式 `Major.Minor.Patch (YYYY/MM/DD)`）。

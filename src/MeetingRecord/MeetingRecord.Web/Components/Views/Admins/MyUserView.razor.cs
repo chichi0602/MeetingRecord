@@ -21,15 +21,8 @@ namespace MeetingRecord.Web.Components.Views.Admins
         private readonly ModalService modalService;
         private readonly MessageService messageService;
         private readonly NotificationService notificationService;
-        private readonly ProjectService projectService;
-        private readonly ProjectMemberService projectMemberService;
-        List<ProjectAdapterModel> availableProjects = new();
-
-        /// <summary>表單上勾選的專案（負責人的專案也在裡面，但選項是鎖住的）。</summary>
-        List<int> selectedProjectIds = new();
-
-        /// <summary>這個人擔任負責人的專案。存檔時不會被移除，只能在專案頁轉移。</summary>
-        HashSet<int> ownedProjectIds = new();
+        private readonly TeamService teamService;
+        List<string> availableTeams = new();
         ITable? table;
         int _pageIndex = 1;
         int _pageSize = MagicObjectHelper.PageSize;
@@ -39,6 +32,13 @@ namespace MeetingRecord.Web.Components.Views.Admins
         string sortDirection = "None";
 
         List<MyUserAdapterModel> myUserAdapterModels = new();
+        List<RoleViewAdapterModel> roleViewAdapterModels = new();
+
+        /// <summary>清單上勾選的人（批次調整團隊用，0.4.101）。</summary>
+        IEnumerable<MyUserAdapterModel> selectedUsers = [];
+
+        /// <summary>批次操作要套用的團隊名稱。</summary>
+        string? batchTeamName;
 
         string modalTitle = "使用者維護";
         bool modalVisible = false;
@@ -71,8 +71,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
             ModalService modalService,
             MessageService messageService,
             NotificationService notificationService,
-            ProjectService projectService,
-            ProjectMemberService projectMemberService)
+            TeamService teamService)
         {
             this.logger = logger;
             this.myUserService = myUserService;
@@ -80,8 +79,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
             this.modalService = modalService;
             this.messageService = messageService;
             this.notificationService = notificationService;
-            this.projectService = projectService;
-            this.projectMemberService = projectMemberService;
+            this.teamService = teamService;
         }
 
         protected override async Task OnInitializedAsync()
@@ -101,7 +99,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 return;
             }
 
-            availableProjects = await projectService.GetSelectableAsync();
+            availableTeams = await teamService.GetAllEnabledNamesAsync();
 
             await ReloadAsync();
         }
@@ -211,15 +209,14 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
         async Task OnEditAsync(MyUserAdapterModel myUserAdapterModel)
         {
+            await LoadRoleViewsAsync();
+
             isNewRecordMode = false;
             modalTitle = "修改使用者";
             CurrentRecord = (await myUserService.GetAsync(myUserAdapterModel.Id)).Clone();
-            var (_, teamNames) = await myUserService.GetUserAssignmentsAsync(myUserAdapterModel.Id);
+            var (additionalRoleIds, teamNames) = await myUserService.GetUserAssignmentsAsync(myUserAdapterModel.Id);
+            CurrentRecord.AdditionalRoleIds = additionalRoleIds;
             CurrentRecord.TeamNames = teamNames;
-            await ApplyGeneralRoleAsync();
-            availableProjects = await projectService.GetSelectableAsync();
-            selectedProjectIds = await projectMemberService.GetUserProjectIdsAsync(myUserAdapterModel.Id);
-            ownedProjectIds = [.. await projectMemberService.GetUserOwnedProjectIdsAsync(myUserAdapterModel.Id)];
             formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
             modalVisible = true;
             logger.LogInformation("Opened edit modal for user. UserId={UserId}, Account={Account}", myUserAdapterModel.Id, myUserAdapterModel.Account);
@@ -261,11 +258,27 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
         async Task OnAddAsync(bool continueOnCapturedContext)
         {
+            await LoadRoleViewsAsync();
+
             CurrentRecord = new();
-            await ApplyGeneralRoleAsync();
-            availableProjects = await projectService.GetSelectableAsync();
-            selectedProjectIds = new();
-            ownedProjectIds = new();
+            RoleViewAdapterModel? defaultRole = null;
+            try
+            {
+                defaultRole = await roleViewService.Get預設新建帳號角色Async();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to load default role for new user creation.");
+            }
+
+            if (defaultRole is not null && defaultRole.Id != 0)
+            {
+                CurrentRecord.RoleViewId = defaultRole.Id;
+            }
+            else if (roleViewAdapterModels.Any())
+            {
+                CurrentRecord.RoleViewId = roleViewAdapterModels.First().Id;
+            }
 
             isNewRecordMode = true;
             modalTitle = "新增使用者";
@@ -335,7 +348,6 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 CurrentRecord.UpdateAt = DateTime.Now;
 
                 await myUserService.AddAsync(CurrentRecord);
-                await SaveProjectsAsync(CurrentRecord.Id);
                 logger.LogInformation("User create submitted. Account={Account}", CurrentRecord.Account);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -369,7 +381,6 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 CurrentRecord.UpdateAt = DateTime.Now;
 
                 await myUserService.UpdateAsync(CurrentRecord);
-                await SaveProjectsAsync(CurrentRecord.Id);
                 logger.LogInformation("User update submitted. UserId={UserId}, Account={Account}", CurrentRecord.Id, CurrentRecord.Account);
 
                 _ = notificationService.Open(new NotificationConfig()
@@ -435,60 +446,115 @@ namespace MeetingRecord.Web.Components.Views.Admins
             }
         }
 
+        /// <summary>清單上點狀態膠囊直接切換（0.4.105，比照提示詞清單），先跳確認視窗。</summary>
+        async Task OnToggleStatusAsync(MyUserAdapterModel item)
+        {
+            var willEnable = !item.Status;
+            logger.LogInformation("User status toggle requested. Id={Id}, WillEnable={WillEnable}", item.Id, willEnable);
+
+            var confirmOptions = new ConfirmOptions
+            {
+                Title = willEnable ? "確認啟用" : "確認停用",
+                Content = willEnable
+                    ? $"確定要啟用「{item.Account}」嗎？啟用後這個帳號可以登入。"
+                    : $"確定要停用「{item.Account}」嗎？停用後這個帳號無法登入。",
+                OkText = willEnable ? "啟用" : "停用",
+                CancelText = "取消",
+                MaskClosable = false
+            };
+
+            if (!willEnable)
+            {
+                confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+            }
+
+            if (!await modalService.ConfirmAsync(confirmOptions))
+            {
+                return;
+            }
+
+            var result = await myUserService.SetStatusAsync(item.Id, willEnable);
+            _ = notificationService.Open(new NotificationConfig()
+            {
+                Message = "系統訊息",
+                Description = result.Success
+                    ? (willEnable ? $"已啟用「{item.Account}」。" : $"已停用「{item.Account}」。")
+                    : result.Message,
+                NotificationType = result.Success ? NotificationType.Success : NotificationType.Error,
+                Placement = NotificationPlacement.BottomRight
+            });
+
+            if (result.Success)
+            {
+                await ReloadAsync();
+            }
+        }
+
         public void OnEditContestChanged(EditContext context)
         {
             LocalEditContext = context;
         }
 
-        private void OnUserProjectsChanged(IEnumerable<int> values)
+        private void OnAdditionalRolesChanged(IEnumerable<int> values)
         {
-            selectedProjectIds = values?.ToList() ?? new List<int>();
+            CurrentRecord.AdditionalRoleIds = values?.ToList() ?? new List<int>();
+        }
+
+        private void OnUserTeamsChanged(IEnumerable<string> values)
+        {
+            CurrentRecord.TeamNames = values?.ToList() ?? new List<string>();
+        }
+
+        private async Task LoadRoleViewsAsync()
+        {
+            roleViewAdapterModels = await myUserService.GetRoleViewsAsync();
+            logger.LogDebug("Loaded role views for user view. Count={Count}", roleViewAdapterModels.Count);
         }
 
         /// <summary>
-        /// 把勾選的專案存成協作者身分。帳號本身已經存好了才呼叫——新增時要等 AddAsync 回填 Id。
+        /// 把勾選的人一次加入或移出某個團隊（0.4.101）。調整一批人的可見範圍靠這裡，不是靠改角色。
         /// </summary>
-        private async Task SaveProjectsAsync(int userId)
+        private async Task OnBatchTeamAsync(bool add)
         {
-            if (userId == 0)
+            var users = selectedUsers.ToList();
+            if (users.Count == 0 || string.IsNullOrEmpty(batchTeamName))
             {
                 return;
             }
 
-            var result = await projectMemberService.SyncUserCollaborationsAsync(userId, selectedProjectIds);
-            if (!result.Success)
+            var teamId = await teamService.GetIdByNameAsync(batchTeamName);
+            if (teamId is null)
             {
-                logger.LogWarning("Saving user projects failed. UserId={UserId}, Message={Message}", userId, result.Message);
-                _ = notificationService.Open(new NotificationConfig()
-                {
-                    Message = "系統訊息",
-                    Description = result.Message,
-                    NotificationType = NotificationType.Error,
-                    Placement = NotificationPlacement.BottomRight
-                });
+                _ = messageService.ErrorAsync($"找不到團隊「{batchTeamName}」。");
+                return;
             }
-        }
 
-        /// <summary>
-        /// 角色一律是「一般使用者」（0.4.98 起沒有角色選單）。額外角色清空，
-        /// 否則舊帳號編輯後存檔會把殘留的多角色再寫回 UserRole。
-        /// </summary>
-        private async Task ApplyGeneralRoleAsync()
-        {
-            CurrentRecord.AdditionalRoleIds = new List<int>();
+            var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+            {
+                Title = add ? "批次加入團隊" : "批次移出團隊",
+                Content = add
+                    ? $"把勾選的 {users.Count} 人加入「{batchTeamName}」？他們會看得到這個團隊主責或協作的專案。"
+                    : $"把勾選的 {users.Count} 人移出「{batchTeamName}」？他們將看不到只有這個團隊參與的專案。",
+                OkText = add ? "加入" : "移出",
+                CancelText = "取消",
+                OkButtonProps = new ButtonProps { Danger = !add },
+                MaskClosable = false
+            });
+            if (!ok)
+            {
+                return;
+            }
 
-            try
-            {
-                var generalRole = await roleViewService.Get預設新建帳號角色Async();
-                if (generalRole is not null && generalRole.Id != 0)
-                {
-                    CurrentRecord.RoleViewId = generalRole.Id;
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to load general user role for user form.");
-            }
+            var userIds = users.Select(x => x.Id);
+            var changed = add
+                ? await myUserService.AddUsersToTeamAsync(userIds, teamId.Value)
+                : await myUserService.RemoveUsersFromTeamAsync(userIds, teamId.Value);
+
+            _ = messageService.SuccessAsync(add
+                ? $"已加入 {changed} 人（其餘原本就在團隊裡）"
+                : $"已移出 {changed} 人");
+            selectedUsers = [];
+            await ReloadAsync();
         }
     }
 }

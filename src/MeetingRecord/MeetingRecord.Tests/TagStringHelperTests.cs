@@ -66,32 +66,4 @@ public sealed class TagStringHelperTests
 
         Assert.Equal(2, rows.Where(predicate).Count());
     }
-
-    [Fact]
-    public void IsTeamAccessible_Admin_ShouldAlwaysBeTrue()
-    {
-        Assert.True(TagStringHelper.IsTeamAccessible(TagStringHelper.ToStored(["機密團隊"]), [], isAdmin: true));
-    }
-
-    [Fact]
-    public void IsTeamAccessible_PublicRecord_ShouldBeVisibleToEveryone()
-    {
-        Assert.True(TagStringHelper.IsTeamAccessible(null, [], isAdmin: false));
-        Assert.True(TagStringHelper.IsTeamAccessible(string.Empty, ["團隊A"], isAdmin: false));
-    }
-
-    [Fact]
-    public void IsTeamAccessible_WithIntersectingTeam_ShouldBeVisible()
-    {
-        var stored = TagStringHelper.ToStored(["團隊A", "團隊B"]);
-        Assert.True(TagStringHelper.IsTeamAccessible(stored, ["團隊B"], isAdmin: false));
-    }
-
-    [Fact]
-    public void IsTeamAccessible_WithoutIntersectingTeam_ShouldBeHidden()
-    {
-        var stored = TagStringHelper.ToStored(["團隊A"]);
-        Assert.False(TagStringHelper.IsTeamAccessible(stored, ["團隊C"], isAdmin: false));
-        Assert.False(TagStringHelper.IsTeamAccessible(stored, [], isAdmin: false));
-    }
 }

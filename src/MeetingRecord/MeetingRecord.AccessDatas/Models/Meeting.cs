@@ -28,9 +28,6 @@ public class Meeting
     /// <summary>分類標籤（多值，以分隔字串儲存，可空）</summary>
     public string? Categories { get; set; }
 
-    /// <summary>團隊標籤（多值，以分隔字串儲存，可空）</summary>
-    public string? Teams { get; set; }
-
     #region 影音檔中繼資料（尚未上傳時全為 null）
 
     /// <summary>使用者上傳時的原始檔名</summary>

@@ -129,7 +129,13 @@ public class ProjectController : ControllerBase
             }
 
             var project = mapper.Map<Project>(projectDto);
-            var createdProject = await projectRepository.AddAsync(project);
+            var (createdProject, error) = await projectRepository.AddAsync(project, projectDto.PrimaryTeamId, projectDto.CollaboratorTeamIds);
+            if (error is not null)
+            {
+                logger.LogWarning("Project create request rejected by team rules. Title={Title}, Reason={Reason}", projectDto.Title, error);
+                return BadRequest(ApiResult<ProjectDto>.ValidationError(error));
+            }
+
             var createdProjectDto = mapper.Map<ProjectDto>(createdProject);
 
             logger.LogInformation(
@@ -177,9 +183,15 @@ public class ProjectController : ControllerBase
             }
 
             var project = mapper.Map<Project>(projectDto);
-            var success = await projectRepository.UpdateAsync(project);
+            var (found, error) = await projectRepository.UpdateAsync(project, projectDto.PrimaryTeamId, projectDto.CollaboratorTeamIds);
 
-            if (!success)
+            if (error is not null)
+            {
+                logger.LogWarning("Project update request rejected by team rules. ProjectId={ProjectId}, Reason={Reason}", id, error);
+                return BadRequest(ApiResult.ValidationError(error));
+            }
+
+            if (!found)
             {
                 logger.LogWarning("Project update request could not find record. ProjectId={ProjectId}", id);
                 return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的專案"));

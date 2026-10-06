@@ -69,9 +69,10 @@ public sealed class RolePresetsTests : IAsyncDisposable
         Assert.Contains(PermissionKey.For(MagicObjectHelper.角色_專案項目, PermissionActions.View), viewer);
         Assert.DoesNotContain(PermissionKey.For(MagicObjectHelper.角色_專案項目, PermissionActions.Create), viewer);
 
-        // 主管多了分類清單與團隊清單。
+        // 主管多了分類清單（全部動作）與團隊清單（只能檢視，0.4.114）。
         var manager = await PermissionKeysOfAsync("主管");
-        Assert.Contains(MagicObjectHelper.角色_團隊清單, manager);
+        Assert.Contains(PermissionKey.For(MagicObjectHelper.角色_團隊清單, PermissionActions.View), manager);
+        Assert.DoesNotContain(MagicObjectHelper.角色_團隊清單, manager);
         Assert.Contains(MagicObjectHelper.角色_分類清單, manager);
 
         // 管理者角色有全部頁面。

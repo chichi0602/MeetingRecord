@@ -97,6 +97,43 @@ public sealed class MyUserServicePasswordTests
         Assert.False(await service.NeedChangePasswordAsync(model));
     }
 
+    [Fact]
+    public async Task UpdateAsync_WithoutNewPassword_ShouldKeepLockoutAndTwoFactor_ButPasswordResetUnlocks()
+    {
+        // 0.4.115：以前管理者只要編輯一次（例如改名字），就會把被鎖定的帳號解鎖、兩步驟驗證清空。
+        await using var fixture = await MyUserServiceFixture.CreateAsync();
+        var roleId = await AddRoleAsync(fixture);
+        var user = await fixture.AddUserAsync("locked", "pw");
+        var lockoutEnd = DateTime.UtcNow.AddMinutes(10);
+        await fixture.Context.MyUser.Where(x => x.Id == user.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.RoleViewId, roleId)
+            .SetProperty(x => x.AccessFailedCount, 5)
+            .SetProperty(x => x.LockoutEndUtc, lockoutEnd)
+            .SetProperty(x => x.TwoFactorEnabled, true)
+            .SetProperty(x => x.TwoFactorSecret, "secret"));
+        var service = fixture.CreateService(currentUserId: 999);
+
+        var rename = await service.GetAsync(user.Id);
+        rename.Name = "改名";
+        rename.Password = string.Empty;
+        Assert.True((await service.UpdateAsync(rename)).Success);
+
+        var kept = await fixture.Context.MyUser.AsNoTracking().FirstAsync(x => x.Id == user.Id);
+        Assert.Equal(5, kept.AccessFailedCount);
+        Assert.NotNull(kept.LockoutEndUtc);
+        Assert.True(kept.TwoFactorEnabled);
+        Assert.Equal("secret", kept.TwoFactorSecret);
+
+        var reset = await service.GetAsync(user.Id);
+        reset.Password = "new-password";
+        Assert.True((await service.UpdateAsync(reset)).Success);
+
+        var unlocked = await fixture.Context.MyUser.AsNoTracking().FirstAsync(x => x.Id == user.Id);
+        Assert.Equal(0, unlocked.AccessFailedCount);
+        Assert.Null(unlocked.LockoutEndUtc);
+        Assert.True(unlocked.TwoFactorEnabled);
+    }
+
     #endregion
 
     [Fact]

@@ -55,6 +55,27 @@ public sealed record ProjectAccess(
         return new ProjectTeamResolution(primary, collaborators, null);
     }
 
+    /// <summary>
+    /// 待辦的來源會議看不到時拿掉導覽屬性（0.4.115），對應出來的 MeetingTitle 就是空的。
+    /// 會議被改歸屬到別的專案後，留在原專案的待辦不能再帶出那場會議的標題。
+    /// ⚠️ 只能用在 AsNoTracking 查回的實體——追蹤中的實體被清掉導覽屬性，存檔時會連外鍵一起改掉。
+    /// </summary>
+    public void HideInvisibleSourceMeetings(IEnumerable<Todo> todos)
+    {
+        if (IsAdmin)
+        {
+            return;
+        }
+
+        foreach (var todo in todos)
+        {
+            if (todo.Meeting is { } meeting && !CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
+            {
+                todo.Meeting = null;
+            }
+        }
+    }
+
     public IQueryable<Project> Filter(IQueryable<Project> query)
     {
         if (IsAdmin)

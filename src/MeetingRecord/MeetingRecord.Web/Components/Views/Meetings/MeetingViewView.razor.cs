@@ -454,7 +454,14 @@ public partial class MeetingViewView : IDisposable
             return;
         }
 
-        await meetingService.DeleteAsync(meetingAdapterModel.Id);
+        // 0.4.115 以前不看結果，失敗（包括背景工作進行中被擋下）也顯示「刪除成功」。
+        var deleteResult = await meetingService.DeleteAsync(meetingAdapterModel.Id);
+        if (!deleteResult.Success)
+        {
+            NotifyError(deleteResult.Message);
+            return;
+        }
+
         logger.LogInformation("Meeting delete completed. MeetingId={MeetingId}", meetingAdapterModel.Id);
 
         _ = notificationService.Open(new NotificationConfig()
@@ -468,13 +475,29 @@ public partial class MeetingViewView : IDisposable
         await ReloadAsync();
     }
 
+    /// <summary>存檔中（0.4.115）：擋重複送出。isUploading 只涵蓋上傳階段，新增那一步連按兩下會建出兩筆會議。</summary>
+    private bool isSaving;
+
     private async Task OnModalOKHandleAsync(MouseEventArgs args)
     {
-        if (isUploading)
+        if (isUploading || isSaving)
         {
             return;
         }
 
+        isSaving = true;
+        try
+        {
+            await SaveModalAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task SaveModalAsync()
+    {
         if (LocalEditContext?.Validate() == false)
         {
             IEnumerable<string> allErrors = LocalEditContext.GetValidationMessages();
@@ -618,7 +641,7 @@ public partial class MeetingViewView : IDisposable
     private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
         // 上傳中根本不該關窗，這道早退要留在最前面（先於 dirty 判斷）。
-        if (isUploading)
+        if (isUploading || isSaving)
         {
             return;
         }
@@ -689,12 +712,17 @@ public partial class MeetingViewView : IDisposable
         if (!MeetingMediaPolicy.IsAllowedFileName(file.Name))
         {
             NotifyError($"「{file.Name}」不是支援的影音格式，允許的格式：{MeetingMediaPolicy.AllowedExtensionsText}。");
+
+            // 先前挑的檔案要一起清掉（0.4.115）：InputFile 已經換成這個不合法的檔，舊的 IBrowserFile 讀不到了，
+            // 留著的話畫面仍顯示「待上傳」，上傳卻一定失敗。
+            ClearPendingMediaFile();
             return Task.CompletedTask;
         }
 
         if (file.Size > MeetingMediaPolicy.MaxUploadFileSize)
         {
             NotifyError($"「{file.Name}」超過單檔上限 {MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)}。");
+            ClearPendingMediaFile();
             return Task.CompletedTask;
         }
 

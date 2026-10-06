@@ -215,13 +215,11 @@ public class TeamService
 
             // 主責必填：還是某個專案的主責時，非管理者不能刪（0.4.102）；管理者不受限（0.4.104）。
             // 畫面有先檢查，這裡再擋一次。
-            var primaryOf = (await projectAccess.GetAsync()).IsAdmin
-                ? []
-                : await ProjectTeamWriter.PrimaryProjectTitlesAsync(context, id);
-            if (primaryOf.Count > 0)
+            var inUse = await ProjectTeamWriter.PrimaryInUseMessageAsync(context, id, await projectAccess.GetAsync());
+            if (inUse is not null)
             {
-                Logger.LogWarning("Team deletion rejected because it is still a primary team. TeamId={TeamId}, Projects={Count}", id, primaryOf.Count);
-                return VerifyRecordResultFactory.Build(false, ProjectTeamWriter.PrimaryInUseMessage(primaryOf));
+                Logger.LogWarning("Team deletion rejected because it is still a primary team. TeamId={TeamId}", id);
+                return VerifyRecordResultFactory.Build(false, inUse);
             }
 
             CleanTrackingHelper.Clean<Team>(context);
@@ -318,15 +316,10 @@ public class TeamService
     {
         Logger.LogDebug("Running pre-delete validation for team. TeamId={TeamId}, Name={TeamName}", paraObject.Id, paraObject.Name);
         // 管理者不受限（0.4.104）：照刪，受影響的專案就沒有主責，之後編輯時再補。
-        if ((await projectAccess.GetAsync()).IsAdmin)
-        {
-            return VerifyRecordResultFactory.Build(true);
-        }
-
-        var titles = await ProjectTeamWriter.PrimaryProjectTitlesAsync(context, paraObject.Id);
-        return titles.Count > 0
-            ? VerifyRecordResultFactory.Build(false, ProjectTeamWriter.PrimaryInUseMessage(titles))
-            : VerifyRecordResultFactory.Build(true);
+        var inUse = await ProjectTeamWriter.PrimaryInUseMessageAsync(context, paraObject.Id, await projectAccess.GetAsync());
+        return inUse is null
+            ? VerifyRecordResultFactory.Build(true)
+            : VerifyRecordResultFactory.Build(false, inUse);
     }
 
     /// <summary>

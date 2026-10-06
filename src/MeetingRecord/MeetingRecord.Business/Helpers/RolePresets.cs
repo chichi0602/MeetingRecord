@@ -54,7 +54,8 @@ public static class RolePresets
             MagicObjectHelper.角色_會議紀錄,
             MagicObjectHelper.角色_資料定義,
             MagicObjectHelper.角色_分類清單,
-            MagicObjectHelper.角色_團隊清單,
+            // 團隊只能檢視（0.4.114）：改別的部門的團隊或成員，會影響別的部門看得到什麼，交給管理者維護。
+            .. Actions(MagicObjectHelper.角色_團隊清單, PermissionActions.View),
             MagicObjectHelper.角色_登出,
         ]),
     ];

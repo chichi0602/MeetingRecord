@@ -257,7 +257,7 @@ public class AiChatStore
     {
         try
         {
-            var lines = await File.ReadAllLinesAsync(fullPath, cancellationToken);
+            var lines = await ReadLinesSharedAsync(fullPath, cancellationToken);
 
             string? explicitTitle = null;
             string? createdBy = null;
@@ -439,7 +439,7 @@ public class AiChatStore
                 return UpdateOutcome.NotFound;
             }
 
-            var lines = (await File.ReadAllLinesAsync(fullPath, cancellationToken)).ToList();
+            var lines = (await ReadLinesSharedAsync(fullPath, cancellationToken)).ToList();
             var metaIndex = lines.FindIndex(x =>
                 TryParseStored(x, logMalformed: false) is { } stored
                 && string.Equals(stored.Role, MetaRole, StringComparison.Ordinal));
@@ -566,6 +566,29 @@ public class AiChatStore
     }
 
     /// <summary>把一輪問答（兩則訊息）接到對話尾端。</summary>
+    /// <summary>
+    /// 以共用模式讀出所有行（0.4.115）。<c>File.ReadAllLinesAsync</c> 開檔時不讓別人寫，
+    /// 同一段對話是大家共用的：A 的答案要寫回時，B 剛好在列清單或讀歷史，A 的寫入就會失敗，付費的答案就丟了。
+    /// </summary>
+    private static async Task<string[]> ReadLinesSharedAsync(string fullPath, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096, useAsync: true);
+        using var reader = new StreamReader(stream, FileEncoding, detectEncodingFromByteOrderMarks: true);
+        var lines = new List<string>();
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            lines.Add(line);
+        }
+
+        return [.. lines];
+    }
+
+    /// <summary>對話檔是否存在（提問前確認，避免替已刪除的對話付費產生答案）。</summary>
+    public bool ConversationExists(AiChatScope scope, int targetId, string conversationId)
+        => File.Exists(GetFullPath(scope, targetId, conversationId));
+
     public async Task AppendTurnAsync(
         AiChatScope scope,
         int targetId,
@@ -574,7 +597,8 @@ public class AiChatStore
         string? askedBy,
         string answer,
         CancellationToken cancellationToken = default,
-        IReadOnlyList<AiChatAttachment>? attachments = null)
+        IReadOnlyList<AiChatAttachment>? attachments = null,
+        bool mustExist = false)
     {
         var now = DateTime.Now;
         var lines = new StringBuilder();
@@ -589,14 +613,36 @@ public class AiChatStore
             new StoredMessage(AiChatService.AssistantRole, answer, null, now), SerializerOptions));
 
         var fullPath = GetFullPath(scope, targetId, conversationId);
-        EnsureParentDirectory(fullPath);
+        if (!mustExist)
+        {
+            EnsureParentDirectory(fullPath);
+        }
 
         var gate = writeLocks.GetOrAdd(fullPath, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
         try
         {
+            // 提問路徑（mustExist）：對話在等答案的期間被別人刪掉，就不能再寫——寫了會讓整段對話復活，
+            // 專案或會議被刪時還會把目錄重建成沒人清的孤兒（0.4.115）。
+            if (mustExist && !File.Exists(fullPath))
+            {
+                throw new InvalidOperationException("這段對話已經被刪除，請開新對話再提問。");
+            }
+
             // AppendAllText 只在檔案位置為 0 時寫 BOM，所以既有檔案不會被重複插入前置碼。
-            await File.AppendAllTextAsync(fullPath, lines.ToString(), FileEncoding, cancellationToken);
+            // 讀取端已改成共用模式；萬一仍撞到短暫的鎖定（防毒、備份程式），稍等重試，不讓付費的答案白白丟掉。
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await File.AppendAllTextAsync(fullPath, lines.ToString(), FileEncoding, cancellationToken);
+                    break;
+                }
+                catch (IOException) when (attempt < 5)
+                {
+                    await Task.Delay(100 * attempt, cancellationToken);
+                }
+            }
         }
         finally
         {
@@ -623,7 +669,7 @@ public class AiChatStore
             return [];
         }
 
-        var lines = await File.ReadAllLinesAsync(fullPath, cancellationToken);
+        var lines = await ReadLinesSharedAsync(fullPath, cancellationToken);
         var items = new List<AiChatMessageItem>(lines.Length);
 
         foreach (var raw in lines)
@@ -727,7 +773,7 @@ public class AiChatStore
                 return UpdateOutcome.NotFound;
             }
 
-            var lines = await File.ReadAllLinesAsync(fullPath, cancellationToken);
+            var lines = await ReadLinesSharedAsync(fullPath, cancellationToken);
             var map = MapValidLineIndexes(lines);
 
             // 先全部驗過再動手，確保「兩行同時改」不會出現只改到一半的中間態。

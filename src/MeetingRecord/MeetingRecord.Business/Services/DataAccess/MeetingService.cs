@@ -238,6 +238,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to create meeting. Title={Title}", paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "新增會議紀錄失敗。", ex);
         }
@@ -314,6 +316,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update meeting. MeetingId={MeetingId}, Title={Title}", paraObject.Id, paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "修改會議紀錄失敗。", ex);
         }
@@ -346,6 +350,14 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限刪除這筆會議紀錄。");
             }
 
+            // 背景工作還在跑就不能刪（0.4.115）：工作不會因此停下，跑完寫出的逐字稿檔
+            // 找不到資料列可以掛，就永遠留在磁碟上；轉錄也會繼續計費。
+            if (IsJobActive(item))
+            {
+                Logger.LogWarning("Meeting deletion rejected because a background job is active. MeetingId={MeetingId}", id);
+                return VerifyRecordResultFactory.Build(false, "這筆會議正在轉錄或產生會議紀錄，請等它完成，或從右下角的進度面板取消後再刪除。");
+            }
+
             var mediaRelativePath = item.MediaRelativePath;
             var transcriptRelativePath = item.TranscriptRelativePath;
 
@@ -365,12 +377,19 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to delete meeting. MeetingId={MeetingId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除會議紀錄失敗。", ex);
         }
     }
 
     #endregion
+
+    /// <summary>轉錄或會議紀錄生成正在排隊或執行中。</summary>
+    private static bool IsJobActive(Meeting meeting)
+        => meeting.TranscriptionStatus is TranscriptionStatus.Pending or TranscriptionStatus.Processing
+           || meeting.DraftStatus is DraftStatus.Pending or DraftStatus.Processing;
 
     #region 前置檢查
 
@@ -442,6 +461,8 @@ public class MeetingService
                 $"影音檔大小不可超過 {MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)}。");
         }
 
+        StoredMediaFile? stored = null;
+        var committed = false;
         try
         {
             CleanTrackingHelper.Clean<Meeting>(context);
@@ -459,10 +480,18 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
             }
 
+            // 背景工作還在跑就不能換檔（0.4.115，比照重新轉錄）：舊檔那趟轉錄不會停，
+            // 跑完會把舊錄音的逐字稿和「已完成」寫到已經換成新檔的會議上；生成中的會議紀錄也正在讀舊逐字稿。
+            if (IsJobActive(meeting))
+            {
+                Logger.LogWarning("Meeting media upload rejected because a background job is active. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, "這筆會議正在轉錄或產生會議紀錄，請等它完成，或從右下角的進度面板取消後再替換影音檔。");
+            }
+
             var previousMediaRelativePath = meeting.MediaRelativePath;
             var previousTranscriptRelativePath = meeting.TranscriptRelativePath;
 
-            var stored = await fileStore.SaveMediaAsync(meeting.CreatedAt, uploadFile, progress, cancellationToken);
+            stored = await fileStore.SaveMediaAsync(meeting.CreatedAt, uploadFile, progress, cancellationToken);
 
             meeting.MediaOriginalFileName = stored.OriginalFileName;
             meeting.MediaStoredFileName = stored.StoredFileName;
@@ -482,6 +511,7 @@ public class MeetingService
 
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
+            committed = true;
 
             // 新檔案登錄成功後才清掉舊的影音檔與逐字稿。
             fileStore.TryDeleteMedia(previousMediaRelativePath);
@@ -496,7 +526,15 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", meetingId);
+
+            // 資料庫沒寫進去，剛落地的新檔就沒有任何資料列指向它（0.4.115）。
+            if (!committed && stored is not null)
+            {
+                fileStore.TryDeleteMedia(stored.RelativePath);
+            }
             return VerifyRecordResultFactory.Build(false, "影音檔上傳失敗。", ex);
         }
     }
@@ -553,6 +591,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to requeue transcription. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "重新轉錄失敗。", ex);
         }
@@ -649,6 +689,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to attach meeting to project. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "歸屬會議紀錄失敗。", ex);
         }
@@ -731,6 +773,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to detach meeting from project. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "移除會議紀錄失敗。", ex);
         }
@@ -848,6 +892,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to request meeting draft. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "排入會議紀錄生成失敗。", ex);
         }
@@ -927,6 +973,8 @@ public class MeetingService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update meeting draft. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "修改會議紀錄失敗。", ex);
         }

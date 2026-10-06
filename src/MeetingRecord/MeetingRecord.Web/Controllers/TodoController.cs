@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Repositories;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
+using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Filters;
 
@@ -30,6 +31,24 @@ public class TodoController : ControllerBase
         this.logger = logger;
         this.todoRepository = todoRepository;
         this.mapper = mapper;
+    }
+
+    /// <summary>
+    /// 與畫面相同的選項（0.4.115）：以前收任意字串，面板各狀態加總對不上，編輯時下拉也會空白。
+    /// </summary>
+    private static string? ValidateBusinessRules(TodoCreateUpdateDto dto)
+    {
+        if (!TodoAdapterModel.StatusOptions.Contains(dto.Status))
+        {
+            return $"狀態必須是：{string.Join("、", TodoAdapterModel.StatusOptions)}";
+        }
+
+        if (!TodoAdapterModel.PriorityOptions.Contains(dto.Priority))
+        {
+            return $"優先度必須是：{string.Join("、", TodoAdapterModel.PriorityOptions)}";
+        }
+
+        return null;
     }
 
     [HttpGet("{id}")]
@@ -106,6 +125,11 @@ public class TodoController : ControllerBase
         {
             logger.LogDebug("Received todo create request. Title={Title}, ProjectId={ProjectId}", todoDto.Title, todoDto.ProjectId);
 
+            if (ValidateBusinessRules(todoDto) is { } createRuleError)
+            {
+                return BadRequest(ApiResult<TodoDto>.ValidationError(createRuleError));
+            }
+
             if (!await todoRepository.ProjectExistsAsync(todoDto.ProjectId))
             {
                 logger.LogWarning("Todo create request rejected because project was not found. ProjectId={ProjectId}", todoDto.ProjectId);
@@ -122,6 +146,12 @@ public class TodoController : ControllerBase
 
             logger.LogInformation("Todo created successfully. TodoId={TodoId}, Title={Title}", createdDto.Id, createdDto.Title);
             return Ok(ApiResult<TodoDto>.SuccessResult(createdDto, "新增待辦事項成功"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // TodoRepository.AddAsync 擋下看不到的專案或來源會議（0.4.114），屬於請求錯誤而不是伺服器錯誤。
+            logger.LogWarning("Todo create request rejected. Title={Title}, Reason={Reason}", todoDto.Title, ex.Message);
+            return BadRequest(ApiResult<TodoDto>.ValidationError(ex.Message));
         }
         catch (Exception ex)
         {
@@ -142,6 +172,11 @@ public class TodoController : ControllerBase
             {
                 logger.LogWarning("Todo update request rejected because route id and payload id do not match. RouteId={RouteId}, PayloadId={PayloadId}", id, todoDto.Id);
                 return BadRequest(ApiResult.ValidationError("路由 ID 與資料 ID 不一致"));
+            }
+
+            if (ValidateBusinessRules(todoDto) is { } updateRuleError)
+            {
+                return BadRequest(ApiResult.ValidationError(updateRuleError));
             }
 
             if (!await todoRepository.ProjectExistsAsync(todoDto.ProjectId))

@@ -202,10 +202,14 @@ public class ProjectService
             await context.Project.AddAsync(itemParameter);
             await context.SaveChangesAsync();
 
+            // 回填 Id（0.4.114）：畫面用它選取剛建立的專案；附件失敗時也靠它切成編輯模式，重送才不會再建一筆。
+            paraObject.Id = itemParameter.Id;
+
             var saveFilesResult = await SaveNewFilesAsync(itemParameter, uploadFiles);
             if (!saveFilesResult.Success)
             {
-                return saveFilesResult;
+                context.ChangeTracker.Clear();
+                return VerifyRecordResultFactory.Build(false, "專案已建立，但附件儲存失敗，請在編輯中重新上傳附件。");
             }
 
             Logger.LogInformation("Project created successfully. ProjectId={ProjectId}, Title={Title}", itemParameter.Id, itemParameter.Title);
@@ -213,6 +217,8 @@ public class ProjectService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條 Blazor 連線共用的：失敗留下的追蹤實體會在下一次任何人 SaveChanges 時被寫進去。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to create project. Title={Title}", paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "新增專案失敗。", ex);
         }
@@ -247,20 +253,23 @@ public class ProjectService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的專案資料。");
             }
 
+            // 主責沒變時照原樣保留（就算不是自己的團隊，協作團隊的人也要能存檔）；改主責才檢查是不是自己的團隊。
+            // ⚠️ 一定要在改欄位之前驗證（0.4.114）：currentItem 是被追蹤的，先改欄位再 return 的話，
+            //    被拒絕的修改會留在共用的 DbContext 裡，下一次任何人 SaveChanges 就被寫進資料庫。
+            var existingPrimary = currentItem.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
+            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(existingPrimary, paraObject.PrimaryTeamId, paraObject.CollaboratorTeamIds));
+            if (teams.Error is not null)
+            {
+                context.ChangeTracker.Clear();
+                return VerifyRecordResultFactory.Build(false, teams.Error);
+            }
+
             currentItem.Title = paraObject.Title;
             currentItem.StartDate = paraObject.StartDate;
             currentItem.EndDate = paraObject.EndDate;
             currentItem.Status = paraObject.Status;
             currentItem.CompletionPercentage = paraObject.CompletionPercentage;
             currentItem.Owner = paraObject.Owner;
-
-            // 主責沒變時照原樣保留（就算不是自己的團隊，協作團隊的人也要能存檔）；改主責才檢查是不是自己的團隊。
-            var existingPrimary = currentItem.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
-            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(existingPrimary, paraObject.PrimaryTeamId, paraObject.CollaboratorTeamIds));
-            if (teams.Error is not null)
-            {
-                return VerifyRecordResultFactory.Build(false, teams.Error);
-            }
 
             ProjectTeamWriter.Apply(currentItem, teams);
 
@@ -277,12 +286,14 @@ public class ProjectService
             var saveFilesResult = await SaveNewFilesAsync(currentItem, uploadFiles);
             if (!saveFilesResult.Success)
             {
-                return saveFilesResult;
+                context.ChangeTracker.Clear();
+                return VerifyRecordResultFactory.Build(false, "專案資料已儲存，但附件儲存失敗，請重新上傳附件。");
             }
 
             var removeFilesResult = await RemoveProjectFilesAsync(currentItem, removedFileIds);
             if (!removeFilesResult.Success)
             {
+                context.ChangeTracker.Clear();
                 return removeFilesResult;
             }
 
@@ -291,6 +302,7 @@ public class ProjectService
         }
         catch (Exception ex)
         {
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update project. ProjectId={ProjectId}, Title={Title}", paraObject.Id, paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "修改專案失敗。", ex);
         }
@@ -320,14 +332,16 @@ public class ProjectService
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的專案資料。");
             }
 
-            foreach (var file in item.Files.ToList())
-            {
-                DeletePhysicalFile(file);
-            }
-
+            // 先寫資料庫、成功後才刪實體檔（0.4.114）：反過來的話資料庫失敗時檔案已經不見，資料列卻還在。
+            var physicalFiles = item.Files.ToList();
             context.Project.Remove(item);
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Project>(context);
+
+            foreach (var file in physicalFiles)
+            {
+                DeletePhysicalFile(file);
+            }
 
             // 0.4.60 起對話存在檔案系統，資料表已移除，Cascade 不會再幫我們清掉它。
             chatStore.TryDelete(AiChatScope.Project, id);
@@ -337,6 +351,7 @@ public class ProjectService
         }
         catch (Exception ex)
         {
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to delete project. ProjectId={ProjectId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除專案失敗。", ex);
         }
@@ -504,13 +519,18 @@ public class ProjectService
 
         foreach (var file in filesToRemove)
         {
-            DeletePhysicalFile(file);
             context.ProjectFile.Remove(file);
         }
 
         if (filesToRemove.Count > 0)
         {
             await context.SaveChangesAsync();
+        }
+
+        // 資料庫寫入成功後才刪實體檔（0.4.114）。
+        foreach (var file in filesToRemove)
+        {
+            DeletePhysicalFile(file);
         }
 
         return VerifyRecordResultFactory.Build(true);
@@ -611,11 +631,16 @@ public class ProjectService
             .ToListAsync();
     }
 
-    /// <summary>專案表單「協作團隊」的選項：全部啟用中的團隊，任何人都可以拉別的部門進來協作。</summary>
-    public async Task<List<TeamOption>> GetSelectableCollaboratorTeamsAsync()
+    /// <summary>
+    /// 專案表單「協作團隊」的選項：全部啟用中的團隊，任何人都可以拉別的部門進來協作。
+    /// <paramref name="alsoInclude"/>：編輯時專案已掛著的團隊（可能已停用）也列進來（0.4.114），
+    /// 否則多選框裡沒有對應選項，使用者一動這個欄位，那些團隊就被默默拿掉，可見範圍跟著改變。
+    /// </summary>
+    public async Task<List<TeamOption>> GetSelectableCollaboratorTeamsAsync(IEnumerable<int>? alsoInclude = null)
     {
+        var keep = alsoInclude?.ToList() ?? [];
         return await context.Team.AsNoTracking()
-            .Where(x => x.IsEnabled)
+            .Where(x => x.IsEnabled || keep.Contains(x.Id))
             .OrderBy(x => x.Name)
             .Select(x => new TeamOption(x.Id, x.Name))
             .ToListAsync();

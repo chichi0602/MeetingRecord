@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Repositories;
-using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Share.Helpers;
@@ -27,18 +27,18 @@ public class MeetingController : ControllerBase
 {
     private readonly ILogger<MeetingController> logger;
     private readonly MeetingRepository meetingRepository;
-    private readonly MeetingFileStore meetingFileStore;
+    private readonly MeetingService meetingService;
     private readonly IMapper mapper;
 
     public MeetingController(
         ILogger<MeetingController> logger,
         MeetingRepository meetingRepository,
-        MeetingFileStore meetingFileStore,
+        MeetingService meetingService,
         IMapper mapper)
     {
         this.logger = logger;
         this.meetingRepository = meetingRepository;
-        this.meetingFileStore = meetingFileStore;
+        this.meetingService = meetingService;
         this.mapper = mapper;
     }
 
@@ -171,16 +171,22 @@ public class MeetingController : ControllerBase
         {
             logger.LogDebug("Received meeting delete request. MeetingId={MeetingId}", id);
 
-            var deleted = await meetingRepository.DeleteAsync(id);
-            if (deleted == null)
+            // 看不到的當成不存在。
+            if (await meetingRepository.GetByIdAsync(id) is null)
             {
                 logger.LogWarning("Meeting delete request could not find record. MeetingId={MeetingId}", id);
                 return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的會議紀錄"));
             }
 
-            // 資料列由 repository 刪除，實體檔案要另外清掉（沒有 Cascade 可以依賴）。
-            meetingFileStore.TryDeleteMedia(deleted.MediaRelativePath);
-            meetingFileStore.TryDeleteTranscript(deleted.TranscriptRelativePath);
+            // 刪除走 MeetingService（0.4.115）：和畫面同一套，一併清掉影音檔、逐字稿與 AI 問答對話，
+            // 背景工作進行中也會擋下。以前 API 只刪資料列與兩個實體檔，對話檔留在磁碟上，
+            // 配合新增時照抄 Id，別人就能用同一個 Id 讀回已刪會議的問答內容。
+            var result = await meetingService.DeleteAsync(id);
+            if (!result.Success)
+            {
+                logger.LogWarning("Meeting delete request rejected. MeetingId={MeetingId}, Reason={Reason}", id, result.Message);
+                return BadRequest(ApiResult.ValidationError(result.Message));
+            }
 
             logger.LogInformation("Meeting deleted successfully. MeetingId={MeetingId}", id);
             return Ok(ApiResult.SuccessResult("刪除會議紀錄成功"));

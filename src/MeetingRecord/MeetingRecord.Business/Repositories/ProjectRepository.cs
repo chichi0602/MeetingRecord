@@ -102,7 +102,12 @@ public class ProjectRepository
         }
 
         #region 根據 request.SortBy 及  request.Descending 進行排序
-        if (!string.IsNullOrEmpty(request.SortBy))
+        // 沒指定排序時也要有固定順序（0.4.114），否則 Skip/Take 分頁結果不穩定。
+        if (string.IsNullOrEmpty(request.SortBy))
+        {
+            query = query.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.Id);
+        }
+        else
         {
             query = request.SortBy.ToLower() switch
             {
@@ -139,6 +144,10 @@ public class ProjectRepository
             // Project currently has no related data included by this API shape.
         }
 
+        // 頁碼、筆數下限保護（0.4.114）：0 或負數會讓 Skip 變負數而回 500。
+        request.PageIndex = Math.Max(1, request.PageIndex);
+        request.PageSize = Math.Clamp(request.PageSize, 1, 200);
+
         var items = await query
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -160,7 +169,8 @@ public class ProjectRepository
     /// </summary>
     public async Task<bool> ExistsByNameAsync(string name, int? excludeId = null)
     {
-        var query = context.Project.Where(p => p.Title == name);
+        // 只比對看得到的專案（0.4.114）：對全部專案查的話，409 與 404 的差別會洩漏看不到的專案名稱。
+        var query = (await projectAccess.GetAsync()).Filter(context.Project).Where(p => p.Title == name);
 
         if (excludeId.HasValue)
         {
@@ -180,6 +190,8 @@ public class ProjectRepository
     /// </summary>
     public async Task<(Project? Project, string? Error)> AddAsync(Project project, int? primaryTeamId, IEnumerable<int>? collaboratorTeamIds)
     {
+        // 新增一律由資料庫配號（0.4.114）：DTO 的 Id 被照抄的話，帶已存在的 Id 會撞主鍵回 500，帶沒用過的 Id 會被採用。
+        project.Id = 0;
         project.CreatedAt = DateTime.Now;
         project.UpdatedAt = DateTime.Now;
 

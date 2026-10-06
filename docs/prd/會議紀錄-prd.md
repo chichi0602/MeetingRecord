@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.3
+- 文件版本：2.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.103
+- 現行系統版本：0.4.115
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/09/29
+- 最後核對日期：2026/10/02
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -77,7 +77,9 @@
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - 修改（`edit`）、刪除（`delete`）
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
-- 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。
+- 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。
+- **背景工作進行中不能刪、不能換檔**（0.4.115）：轉錄或會議紀錄生成在排隊或執行中時，`DeleteAsync` 與 `SaveMediaAsync` 一律拒絕，提示等它完成或從進度面板取消。原因：工作不會因此停下，跑完會把舊錄音的逐字稿寫到已換新檔的會議上，或寫出沒有資料列可掛、永遠留在磁碟上的逐字稿。轉錄存不進資料庫時刪掉剛寫出的逐字稿，上傳存不進資料庫時刪掉剛落地的影音檔。
+- 進度面板的「取消」要有 `會議紀錄:edit`（0.4.115）。只看得到那筆會議的人仍看得到進度，但沒有取消鈕。
 - **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。
   版面是左邊 `<textarea>`、右邊 Markdown 即時預覽，上方一列常駐的搜尋／取代（搜尋、上一個／下一個、取代、全部取代，顯示「第 n / 共 m 筆」）。
   - 搜尋取代的邏輯全在 `Business/Helpers/TextSearchHelper`（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
@@ -101,7 +103,7 @@
 ## 四、內部系統運作
 
 - UI 路徑：`MeetingViewView` →（注入）`MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`（Blazor Server 直接呼叫服務，不經 HTTP）。
-- API 路徑：`MeetingController` → `MeetingRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。
+- API 路徑：`MeetingController` → `MeetingRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。**刪除例外，走 `MeetingService.DeleteAsync`**（0.4.115）：和畫面同一套，一併清影音、逐字稿與 AI 問答對話，背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
 - Entity `Meeting`（DbSet 為 `context.Meeting`）。**刻意不叫 `MeetingRecord`**——會與根命名空間 `MeetingRecord` 衝突；`Meeting` 也與 0.4.24 移除前的舊表同名。
   因為「一筆會議只有一個影音檔」，媒體欄位直接內嵌，**不另開附件子表**，省掉 Cascade 與附件集合的整套機制。
 - 標籤欄位 `Categories` 以 `TagStringHelper` 的「換行包夾」格式儲存；AutoMapper 以 `ForMember` 搭配 `ToList`／`ToStored` 轉換（`Teams` 0.4.103 已刪除）。

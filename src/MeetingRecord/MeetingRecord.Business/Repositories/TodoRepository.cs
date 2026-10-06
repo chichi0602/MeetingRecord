@@ -27,10 +27,17 @@ public class TodoRepository
 
     public async Task<Todo?> GetByIdAsync(int id)
     {
-        return await (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
+        var access = await projectAccess.GetAsync();
+        var todo = await access.Filter(context.Todo.AsNoTracking())
             .Include(x => x.Project)
             .Include(x => x.Meeting)
             .FirstOrDefaultAsync(x => x.Id == id);
+        if (todo is not null)
+        {
+            access.HideInvisibleSourceMeetings([todo]);
+        }
+
+        return todo;
     }
 
     public async Task<PagedResult<Todo>> GetPagedAsync(TodoSearchRequestDto request)
@@ -80,6 +87,7 @@ public class TodoRepository
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync();
+        (await projectAccess.GetAsync()).HideInvisibleSourceMeetings(items);
 
         return new PagedResult<Todo>
         {
@@ -103,12 +111,31 @@ public class TodoRepository
 
     public async Task<Todo> AddAsync(Todo todo)
     {
+        // 一律由資料庫配號（0.4.115）：照抄用戶端的 Id 會撞主鍵回 500，可以拿來試探哪些 Id 存在。
+        todo.Id = 0;
         todo.CreatedAt = DateTime.Now;
         todo.UpdatedAt = DateTime.Now;
 
-        if (!(await projectAccess.GetAsync()).CanViewProject(todo.ProjectId))
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewProject(todo.ProjectId))
         {
             throw new InvalidOperationException("找不到指定的專案項目。");
+        }
+
+        // 來源會議也要檢查（0.4.114）：要看得到、而且屬於同一個專案。原本只檢查專案，
+        // 用戶端可以把看不到的會議掛上來，之後讀回的 MeetingTitle 就洩漏了那場會議的標題。
+        if (todo.MeetingId is { } meetingId)
+        {
+            var meeting = await context.Meeting.AsNoTracking()
+                .Where(x => x.Id == meetingId)
+                .Select(x => new { x.ProjectId, x.CreatedByUserId })
+                .FirstOrDefaultAsync();
+            if (meeting is null
+                || !access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId)
+                || meeting.ProjectId != todo.ProjectId)
+            {
+                throw new InvalidOperationException("找不到指定的來源會議，或它不屬於這個專案。");
+            }
         }
 
         await context.Todo.AddAsync(todo);
@@ -128,8 +155,8 @@ public class TodoRepository
 
         todo.UpdatedAt = DateTime.Now;
         todo.CreatedAt = existing.CreatedAt;
-        // 來源會議紀錄由系統寫入，不開放 API 用戶端覆寫。
-        todo.MeetingId = existing.MeetingId;
+        // 來源會議紀錄由系統寫入，不開放 API 用戶端覆寫；搬到別的專案時清掉（0.4.115）。
+        todo.MeetingId = existing.ProjectId == todo.ProjectId ? existing.MeetingId : null;
 
         context.Entry(existing).CurrentValues.SetValues(todo);
         await context.SaveChangesAsync();

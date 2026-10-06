@@ -127,12 +127,10 @@ public class TeamRepository
             return (false, null);
         }
 
-        var primaryOf = (await projectAccess.GetAsync()).IsAdmin
-            ? []
-            : await ProjectTeamWriter.PrimaryProjectTitlesAsync(context, id);
-        if (primaryOf.Count > 0)
+        var inUse = await ProjectTeamWriter.PrimaryInUseMessageAsync(context, id, await projectAccess.GetAsync());
+        if (inUse is not null)
         {
-            return (true, ProjectTeamWriter.PrimaryInUseMessage(primaryOf));
+            return (true, inUse);
         }
 
         context.Team.Remove(team);

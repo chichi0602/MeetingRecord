@@ -104,6 +104,20 @@ public sealed class PermissionCheckerTests
         Assert.True(await checker.HasPermissionAsync(user.Id, "專案項目"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HasPermissionAsync_ForDisabledUser_ShouldReturnFalse_EvenForAdmin(bool isAdmin)
+    {
+        // 0.4.115：以前不看狀態，被停用的人在手上的權杖到期前仍能呼叫 API。
+        await using var fixture = await Fixture.CreateAsync();
+        var user = await fixture.AddUserAsync("disabled", isAdmin: isAdmin, permissions: new[] { "專案項目" });
+        await fixture.Context.MyUser.Where(x => x.Id == user.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, false));
+        var checker = new PermissionChecker(fixture.Context);
+
+        Assert.False(await checker.HasPermissionAsync(user.Id, "專案項目"));
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

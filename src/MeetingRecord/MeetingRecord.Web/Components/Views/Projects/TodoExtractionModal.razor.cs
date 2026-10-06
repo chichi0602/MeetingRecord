@@ -240,6 +240,9 @@ public partial class TodoExtractionModal : ComponentBase
                 if (result.Success)
                 {
                     added++;
+
+                    // 成功的就從清單拿掉（0.4.115）：部分失敗時它若還勾著，再按一次「加入」會重複建立。
+                    candidates.Remove(candidate);
                 }
                 else
                 {

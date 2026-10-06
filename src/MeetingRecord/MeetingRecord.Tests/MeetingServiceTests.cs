@@ -180,9 +180,54 @@ public sealed class MeetingServiceTests
         Assert.False(await fixture.Context.Meeting.AnyAsync(x => x.Id == existing.Id));
     }
 
+    [Theory]
+    [InlineData(TranscriptionStatus.Pending, DraftStatus.NotGenerated)]
+    [InlineData(TranscriptionStatus.Processing, DraftStatus.NotGenerated)]
+    [InlineData(TranscriptionStatus.Completed, DraftStatus.Pending)]
+    [InlineData(TranscriptionStatus.Completed, DraftStatus.Processing)]
+    public async Task DeleteAsync_ShouldReject_WhileBackgroundJobIsActive(TranscriptionStatus transcription, DraftStatus draft)
+    {
+        // 0.4.115：工作不會因為刪除而停下，跑完寫出的逐字稿檔沒有資料列可掛，會永遠留在磁碟上。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("跑到一半的會議");
+        existing.TranscriptionStatus = transcription;
+        existing.DraftStatus = draft;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await fixture.CreateService().DeleteAsync(existing.Id);
+
+        Assert.False(result.Success);
+        Assert.True(await fixture.Context.Meeting.AnyAsync(x => x.Id == existing.Id));
+    }
+
     #endregion
 
     #region 影音檔上傳
+
+    [Theory]
+    [InlineData(TranscriptionStatus.Pending, DraftStatus.NotGenerated)]
+    [InlineData(TranscriptionStatus.Processing, DraftStatus.NotGenerated)]
+    [InlineData(TranscriptionStatus.Completed, DraftStatus.Processing)]
+    public async Task SaveMediaAsync_ShouldReject_WhileBackgroundJobIsActive(TranscriptionStatus transcription, DraftStatus draft)
+    {
+        // 0.4.115：舊檔那趟轉錄不會停，跑完會把舊錄音的逐字稿寫到已經換成新檔的會議上。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("轉錄中的會議");
+        existing.TranscriptionStatus = transcription;
+        existing.DraftStatus = draft;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await fixture.CreateService().SaveMediaAsync(
+            existing.Id, NewUpload("新錄音.mp3", Encoding.UTF8.GetBytes("new-audio")));
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.Queue.Enqueued);
+        Assert.False(Directory.Exists(fixture.MediaRoot) && Directory.EnumerateFiles(fixture.MediaRoot, "*", SearchOption.AllDirectories).Any());
+    }
 
     [Fact]
     public async Task SaveMediaAsync_ShouldStoreFileMarkPendingAndEnqueue()

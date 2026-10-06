@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.113
+- 現行系統版本：0.4.115
 - 首次實作版本：既有腳手架核心功能
-- 最後核對日期：2026/07/14
+- 最後核對日期：2026/10/02
 
 ## 一、目標與範圍
 
@@ -42,6 +42,9 @@
 - **登出**：`SignOutAsync(CookieScheme)` 後 `NavigateTo("/Auths/Login", forceLoad: true)`。
 - **登入後狀態**（`AuthenticationStateHelper.Check`）：驗證已登入、`Sid` 有效、使用者存在且 `Status` 啟用、具角色；`NeedChangePasswordAsync` 為真且不在改密碼頁時強制導向 `/ChangePassword`。0.4.113 起條件是「`MyUser.MustChangePassword` 為 true **或**密碼等於 `123456`」：管理者建立帳號、或替別人重設密碼時設旗標（改自己的不設；`support` 一律不設，因為它被禁止改密碼），本人透過任何一個改密碼入口改完就清掉。載入 `CurrentUser`，`RoleList` 以 `IPermissionChecker.GetEffectivePermissionKeysAsync`（RBAC 多角色聯集）為權威、`TeamList` 由 `EffectiveTeamResolver` 決定。
 - **API 登入**（`AuthController`）：`login` 以帳密換 `TokenResponseDto`（JWT + Refresh），`refresh` 換新 Token，`me` 回目前使用者；一律包 `ApiResult<T>`，失敗回 401。
+  - 0.4.115：`login` 對需要改密碼的帳號（同 `NeedChangePasswordAsync` 的條件）回 401「請先登入網頁變更密碼後，再使用 API。」以前強制改密碼只在網頁生效。
+  - 0.4.115：`refresh` 換發前以 `MyUserServiceLogin.GetUserForTokenRefreshAsync` 重查資料庫，停用、鎖定、刪除或待改密碼都回 401，身分以資料庫為準。以前只看舊權杖的內容，被停用的人在 7 天內都能一直換到新權杖。
+  - 0.4.115：`PermissionChecker` 對停用的帳號一律回 false（管理者也一樣），手上的存取權杖在到期前也不能再呼叫受保護 API。
 - **稽核**：登入寫入 `Login.Success` / `Login.Failed` / `Login.LockedOut`（`AuditLog`）。
 
 ## 五、權限與安全
@@ -54,7 +57,7 @@
 ## 六、錯誤與邊界
 
 - 驗證碼錯誤／欄位空白：停留登入頁並重新產生驗證碼。
-- 連續 5 次失敗鎖定 15 分鐘；鎖定到期後（`LockoutEndUtc` 過期）可再次登入。
+- 連續 5 次失敗鎖定 15 分鐘；鎖定到期後（`LockoutEndUtc` 過期）可再次登入。管理者**重設密碼即解鎖**；只編輯其他欄位不會解鎖（0.4.115，見 [使用者管理](使用者管理-prd.md)）。
 - Google Callback 缺 `subject`／`email`：登出外部身分並導回登入頁。
 - `support` 帳號於 `/Profile`、`/ChangePassword` 一律被拒；Google 帳號首次設 API 密碼免驗舊密碼。
 - 使用者無角色、`RoleView` 為 null 或 `TabViewJson` 解析失敗：導向登出。

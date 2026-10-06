@@ -19,7 +19,9 @@ public sealed class PermissionChecker : IPermissionChecker
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == userId);
 
-        if (user is null)
+        // 停用的帳號一律沒有權限（0.4.115），管理者也一樣。以前不看狀態，
+        // 被停用的人在手上的權杖到期前仍能呼叫 API。
+        if (user is null || !user.Status)
         {
             return false;
         }

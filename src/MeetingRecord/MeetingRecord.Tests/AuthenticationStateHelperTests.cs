@@ -252,7 +252,11 @@ public sealed class AuthenticationStateHelperTests
         }
 
         Assert.True(helper.CheckAccessPage(MagicObjectHelper.角色_分類清單));
-        Assert.True(helper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete));
+        // 0.4.114：主管對團隊只能檢視——改別的部門的團隊或成員，會影響別的部門看得到什麼。
+        Assert.True(helper.CheckAccessPage(MagicObjectHelper.角色_團隊清單));
+        Assert.False(helper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Create));
+        Assert.False(helper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit));
+        Assert.False(helper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete));
         Assert.False(helper.CheckAccessPage(MagicObjectHelper.角色_使用者管理));
     }
 

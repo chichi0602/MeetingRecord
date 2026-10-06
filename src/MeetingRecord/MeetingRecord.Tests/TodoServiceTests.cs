@@ -212,6 +212,24 @@ public sealed class TodoServiceTests
     #region 負責人工作量
 
     [Fact]
+    public async Task GetByOwnerAsync_ShouldMatchSummaryCount_WhenOwnerHasFullWidthOrTabWhitespace()
+    {
+        // 0.4.115：清單以前在 SQL 用 trim()，SQLite 只去半形空白——面板算 3 筆、點下去只出現 1 筆。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        await fixture.AddTodoAsync("一", project.Id, owner: "陳大文");
+        await fixture.AddTodoAsync("二", project.Id, owner: "陳大文　");
+        await fixture.AddTodoAsync("三", project.Id, owner: "\t陳大文");
+        var service = fixture.CreateService();
+
+        var summary = Assert.Single(await service.GetOwnerSummariesAsync(null));
+        var items = await service.GetByOwnerAsync("陳大文", null);
+
+        Assert.Equal(3, summary.Total);
+        Assert.Equal(3, items.Count);
+    }
+
+    [Fact]
     public async Task GetOwnerSummariesAsync_ShouldGroupByOwner()
     {
         await using var fixture = await TodoServiceFixture.CreateAsync();

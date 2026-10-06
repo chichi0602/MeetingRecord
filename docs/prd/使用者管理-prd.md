@@ -1,10 +1,10 @@
 ﻿# 使用者管理 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.113
+- 現行系統版本：0.4.115
 - 首次實作版本：既有腳手架核心功能
-- 最後核對日期：2026/10/01
+- 最後核對日期：2026/10/02
 
 > **0.4.102：「資料群組」改回「團隊」。** 團隊就是部門（例如業務部、管理部、研發部），一個人可以屬於多個；使用者看得到專案的條件是「他的任一團隊是該專案的主責或協作團隊」，**不再有公開專案**。欄位、清單欄與批次按鈕都改稱「團隊」，行為不變。
 >
@@ -42,7 +42,7 @@
 View（`MyUserView`）→ `MyUserService` → `BackendDBContext`：
 
 - **新增**（`AddAsync`）：`CleanTrackingHelper.Clean` 清追蹤；產生 `Salt`、以 `SecurePasswordHasher.HashPassword` 雜湊密碼，並設 `MustChangePassword = true`（0.4.113，帳號密碼是管理者提供的，第一次登入要改成自己的；`support` 不設）；存檔後 `SyncAssignmentsAsync` 雙寫角色與團隊；寫 `User.Create` 稽核。
-- **修改**（`UpdateAsync`）：清追蹤、以 `Entry(...).State = Modified` 更新；先帶回原本的 `MustChangePassword`（畫面模型沒有這欄，整筆蓋回會被清掉）；密碼留白時沿用既有 `Password`／`Salt`，否則重新雜湊，且**替別人**重設時設 `MustChangePassword = true`（改自己的、`support` 不設）；再 `SyncAssignmentsAsync`；寫 `User.Update` 稽核。
+- **修改**（`UpdateAsync`）：清追蹤、以 `Entry(...).State = Modified` 更新；先帶回畫面模型沒有的欄位：`MustChangePassword`，以及 0.4.115 起的 `AccessFailedCount`、`LockoutEndUtc`、`TwoFactorEnabled`、`TwoFactorSecret`（以前整筆蓋回，管理者改個名字就把被鎖的帳號解鎖、兩步驟驗證清空）；密碼留白時沿用既有 `Password`／`Salt`，否則重新雜湊，且**替別人**重設時設 `MustChangePassword = true`（改自己的、`support` 不設）；重設密碼時清掉失敗次數與鎖定（0.4.115，這是管理者解鎖的方法）；再 `SyncAssignmentsAsync`；寫 `User.Update` 稽核。
 - **刪除**（`DeleteAsync`）：`Entry(...).State = Deleted`；寫 `User.Delete` 稽核（含帳號）。
 - **RBAC 雙寫**（`SyncAssignmentsAsync` → `RbacWriteService`）：`SyncUserRolesAsync` 以 `UserRole` 反映主要＋額外角色（去重）；團隊名稱先解析為 `Team.Id`，`SyncUserTeamsAsync` 以 `UserTeam` 差異化增刪。
 - **回填**（`GetUserAssignmentsAsync`）：由 `UserRole` 扣除主要角色得額外角色、由 `UserTeam` join `Team` 得團隊名稱。

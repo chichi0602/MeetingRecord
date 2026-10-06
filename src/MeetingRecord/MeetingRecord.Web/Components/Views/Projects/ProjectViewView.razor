@@ -232,15 +232,18 @@ else
 
                         <div class="project-view-ai-field">
                             <span class="project-view-field-label">提示詞</span>
-                            <Select TItem="PromptTemplateAdapterModel"
-                                    TItemValue="int"
+                            @* 0.4.114：改用 SelectOption 子元素。DataSource 在每次換專案時重新指派，
+                               和主責欄一樣可能出現「畫面空白但帶著值」。 *@
+                            <Select TItem="int" TItemValue="int"
                                     @bind-Value="selectedPromptTemplateId"
-                                    DataSource="@promptTemplates"
-                                    LabelName="@nameof(PromptTemplateAdapterModel.Name)"
-                                    ValueName="@nameof(PromptTemplateAdapterModel.Id)"
                                     Placeholder="請選擇提示詞"
                                     EnableSearch
-                                    Style="min-width: 190px;" />
+                                    Style="min-width: 190px;">
+                                @foreach (var template in promptTemplates)
+                                {
+                                    <SelectOption TItemValue="int" TItem="int" Value="@template.Id" Label="@template.Name" />
+                                }
+                            </Select>
                         </div>
 
                         @* 按鈕包在與兩個下拉相同的欄位堆疊裡，上面墊一個佔位標籤。
@@ -368,6 +371,7 @@ else
            Class="form-modal-large"
            @bind-Visible="@modalVisible"
            Keyboard="true"
+           ConfirmLoading="@(isSaving || isReadingFiles)"
            OnOk="OnModalOKHandleAsync"
            OnCancel="OnModalCancelHandleAsync">
         <div>
@@ -391,17 +395,26 @@ else
                         @* 團隊＝「誰的資料」（0.4.102）：主責＋協作團隊的人看得到；能不能改由角色決定。
                            一般使用者的主責只能選自己所屬的團隊（主責沒變時保留原值），協作可選任何團隊。 *@
                         <FormItem Label="主責團隊" Required>
-                            <Select TItem="ProjectService.TeamOption" TItemValue="int?"
-                                    DataSource="@PrimaryTeamOptions"
-                                    @bind-Value="CurrentRecord.PrimaryTeamId"
-                                    LabelName="@nameof(ProjectService.TeamOption.Name)"
-                                    ValueName="@nameof(ProjectService.TeamOption.Id)"
-                                    Placeholder="請選擇主責團隊"
-                                    EnableSearch Style="width: 100%;" />
+                            @* 0.4.114：改用 SelectOption 子元素（和協作、分類多選同寫法）。原本 DataSource 繫結在選項
+                               開視窗前一刻才載入時，預設值不會顯示——畫面看起來空白、背後卻帶著值，專案就默默存到別的團隊。 *@
+                            @* 下拉與日期欄包一層擋掉 Enter 冒泡（0.4.114）：在搜尋框按 Enter 選項目時，
+                               外層 EditForm 的 @onkeydown 會把它當成送出。 *@
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="int?" TItemValue="int?"
+                                        @bind-Value="CurrentRecord.PrimaryTeamId"
+                                        Placeholder="請選擇主責團隊"
+                                        AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var team in PrimaryTeamOptions)
+                                    {
+                                        <SelectOption TItemValue="int?" TItem="int?" Value="@((int?)team.Id)" Label="@team.Name" />
+                                    }
+                                </Select>
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.PrimaryTeamId" />
                         </FormItem>
 
                         <FormItem Label="協作團隊">
+                            <div @onkeydown:stopPropagation="true">
                             <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
                                     Values="CurrentRecord.CollaboratorTeamIds" OnSelectedItemsChanged="OnCollaboratorTeamsChanged"
                                     Placeholder="可加入其他共同參與的團隊"
@@ -411,29 +424,36 @@ else
                                     <SelectOption TItemValue="int" TItem="int" Value="@team.Id" Label="@team.Name" />
                                 }
                             </Select>
+                            </div>
                         </FormItem>
 
                         <div class="project-view-hint form-modal-full">主責與協作團隊的成員（與管理者）看得到這個專案與底下的會議紀錄、待辦。</div>
 
                         <FormItem Label="分類" Class="form-modal-full">
+                            <div @onkeydown:stopPropagation="true">
                             <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
                                     Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
                                     Placeholder="描述專案性質，例如 .NET、成大（不影響誰看得到）"
                                     AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var c in availableCategories)
+                                @foreach (var c in FormCategoryOptions)
                                 {
                                     <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
                                 }
                             </Select>
+                            </div>
                         </FormItem>
 
                         <FormItem Label="開始日期">
-                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.StartDate" AllowClear="true" Style="width: 100%;" />
+                            <div @onkeydown:stopPropagation="true">
+                                <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.StartDate" AllowClear="true" Style="width: 100%;" />
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.StartDate" />
                         </FormItem>
 
                         <FormItem Label="結束日期">
-                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.EndDate" AllowClear="true" Style="width: 100%;" />
+                            <div @onkeydown:stopPropagation="true">
+                                <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.EndDate" AllowClear="true" Style="width: 100%;" />
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.EndDate" />
                         </FormItem>
 
@@ -535,7 +555,7 @@ else
                                     @foreach (var file in pendingUploadFiles)
                                     {
                                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            <span>@file.File.Name (@FormatFileSize(file.File.Size))</span>
+                                            <span>@file.Name (@FormatFileSize(file.Size))</span>
                                             <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemovePendingFile(file.Id)">移除</button>
                                         </li>
                                     }

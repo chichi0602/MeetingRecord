@@ -37,6 +37,29 @@ public class MyUserServiceLogin
         this.auditLogService = auditLogService;
     }
 
+    /// <summary>
+    /// API 換發權杖前重查帳號（0.4.115）。以前只看換發權杖本身的內容，不查資料庫：
+    /// 被停用、鎖定或刪除的人，在換發權杖有效的 7 天內都能一直換到新的存取權杖，
+    /// 管理者身分也照舊權杖重簽。回傳 null 表示不能換發。
+    /// </summary>
+    public async Task<MyUser?> GetUserForTokenRefreshAsync(int userId)
+    {
+        var user = await context.MyUser
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == userId);
+
+        if (user is null
+            || !user.Status
+            || user.MustChangePassword
+            || (user.LockoutEndUtc.HasValue && user.LockoutEndUtc.Value > DateTime.UtcNow))
+        {
+            Logger.LogWarning("Token refresh rejected by account state. UserId={UserId}", userId);
+            return null;
+        }
+
+        return user;
+    }
+
     public async Task<(string, MyUser?)> LoginAsync(string username, string password)
     {
         Logger.LogInformation("Login attempt started for Account={Account}.", username);

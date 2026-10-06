@@ -164,6 +164,7 @@ public class TodoService
             .Take(dataRequest.PageSize);
 
         List<Todo> records = await dataSource.ToListAsync();
+        (await projectAccess.GetAsync()).HideInvisibleSourceMeetings(records);
         result.Result = Mapper.Map<List<TodoAdapterModel>>(records);
         Logger.LogDebug("Loaded todos successfully. Count={Count}", result.Count);
         return result;
@@ -179,12 +180,14 @@ public class TodoService
             .Include(x => x.Meeting)
             .FirstOrDefaultAsync(x => x.Id == id);
 
-        if (item is null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
+        var access = await projectAccess.GetAsync();
+        if (item is null || !access.CanViewProject(item.ProjectId))
         {
             Logger.LogWarning("Todo not found or not visible. TodoId={TodoId}", id);
             return new TodoAdapterModel();
         }
 
+        access.HideInvisibleSourceMeetings([item]);
         return Mapper.Map<TodoAdapterModel>(item);
     }
 
@@ -217,6 +220,8 @@ public class TodoService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to create todo. Title={TodoTitle}", paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "新增待辦事項失敗。", ex);
         }
@@ -250,8 +255,9 @@ public class TodoService
             Todo itemData = Mapper.Map<Todo>(paraObject);
             itemData.CreatedAt = item.CreatedAt;
             itemData.UpdatedAt = DateTime.Now;
-            // 來源會議紀錄不開放從畫面修改，一律沿用既有值。
-            itemData.MeetingId = item.MeetingId;
+            // 來源會議紀錄不開放從畫面修改，一律沿用既有值；但搬到別的專案時清掉（0.4.115）——
+            // 來源會議屬於原專案，留著的話新專案的人會看到他們看不到的會議標題。
+            itemData.MeetingId = item.ProjectId == paraObject.ProjectId ? item.MeetingId : null;
 
             CleanTrackingHelper.Clean<Todo>(context);
             context.Entry(itemData).State = EntityState.Modified;
@@ -263,6 +269,8 @@ public class TodoService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update todo. TodoId={TodoId}, Title={TodoTitle}", paraObject.Id, paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "修改待辦事項失敗。", ex);
         }
@@ -297,6 +305,8 @@ public class TodoService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to set todo completion. TodoId={TodoId}", id);
             return VerifyRecordResultFactory.Build(false, "更新完成狀態失敗。", ex);
         }
@@ -329,6 +339,8 @@ public class TodoService
         }
         catch (Exception ex)
         {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to delete todo. TodoId={TodoId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除待辦事項失敗。", ex);
         }
@@ -426,7 +438,7 @@ public class TodoService
         var pending = TodoAdapterModel.StatusOptions[0];
 
         var summaries = rows
-            .GroupBy(x => string.IsNullOrWhiteSpace(x.Owner) ? UnassignedOwner : x.Owner.Trim())
+            .GroupBy(x => OwnerKey(x.Owner))
             .Select(group => new TodoOwnerSummary(
                 group.Key,
                 group.Count(),
@@ -468,18 +480,23 @@ public class TodoService
             query = query.Where(x => x.ProjectId == projectFilter);
         }
 
-        // 比對前先 Trim，與 GetOwnerSummariesAsync 的分組鍵用同一個規則。
-        query = owner == UnassignedOwner
-            ? query.Where(x => x.Owner == null || x.Owner.Trim() == string.Empty)
-            : query.Where(x => x.Owner != null && x.Owner.Trim() == owner);
-
         var records = await query
             .OrderBy(x => x.DueDate == null)
             .ThenBy(x => x.DueDate)
             .ThenByDescending(x => x.Id)
             .ToListAsync(cancellationToken);
 
+        // 在記憶體比對，與 GetOwnerSummariesAsync 的分組鍵用同一個函式（0.4.115）。
+        // 以前在 SQL 裡用 trim()，SQLite 只去掉半形空白：負責人尾巴帶全形空白或 Tab 時，
+        // 面板算 5 筆、點下去只出現 4 筆。
+        records = records.Where(x => OwnerKey(x.Owner) == owner).ToList();
+
         return Mapper.Map<List<TodoAdapterModel>>(records);
+    }
+
+    private static string OwnerKey(string? owner)
+    {
+        return string.IsNullOrWhiteSpace(owner) ? UnassignedOwner : owner.Trim();
     }
 
     #endregion

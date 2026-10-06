@@ -485,7 +485,11 @@ public partial class AiChatModal : ComponentBase
             errorMessage = $"回答失敗：{ex.Message}";
 
             // 失敗時把樂觀加入的那則提問收回來，避免畫面上留下一則沒有回應的問題。
-            messages.RemoveAt(messages.Count - 1);
+            // 先檢查（0.4.115）：清單是空的時候 RemoveAt 會拋例外，事件處理器沒接住就整條連線斷掉。
+            if (messages.Count > 0)
+            {
+                messages.RemoveAt(messages.Count - 1);
+            }
         }
         finally
         {
@@ -930,6 +934,13 @@ public partial class AiChatModal : ComponentBase
 
     private async Task OnCancelAsync()
     {
+        // 處理中不讓關（0.4.115）：關掉再開另一個對象，前一題的串流答案會出現在新視窗裡。
+        if (IsBusy)
+        {
+            _ = MessageService.WarningAsync("AI 正在處理中，請等它完成再關閉視窗。");
+            return;
+        }
+
         // 讓下次開啟時重新載入（可能是另一個對象，或期間有人問了新問題）。
         loadedTarget = null;
         CancelEditState();

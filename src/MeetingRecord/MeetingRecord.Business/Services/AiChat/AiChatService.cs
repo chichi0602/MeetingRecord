@@ -216,6 +216,12 @@ public class AiChatService
         var pending = attachments ?? [];
         ValidateAttachments(pending);
 
+        // 對話已被別人刪掉就不要再花錢產生答案（0.4.115）。寫入時在鎖內還會再確認一次。
+        if (!chatStore.ConversationExists(scope, targetId, conversationId))
+        {
+            throw new InvalidOperationException("這段對話已經被刪除，請開新對話再提問。");
+        }
+
         var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
 
         // 附件先落地再生成：文件要從檔案擷取文字，而且「這次的」與「歷史的」附件走同一條讀取路徑。
@@ -230,7 +236,7 @@ public class AiChatService
                 scope, targetId, conversationId, question, history, saved, onDelta, cancellationToken);
 
             await chatStore.AppendTurnAsync(
-                scope, targetId, conversationId, question, ResolveCurrentUserName(), answer, cancellationToken, saved);
+                scope, targetId, conversationId, question, ResolveCurrentUserName(), answer, cancellationToken, saved, mustExist: true);
         }
         catch
         {
@@ -617,8 +623,7 @@ public class AiChatService
         foreach (var image in images)
         {
             var label = $"使用者圖片：{image.FileName}";
-            await EnsureAccessAsync(scope, targetId, cancellationToken);
-        var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, image.StoredName);
+            var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, image.StoredName);
             var mediaType = AiChatAttachmentPolicy.GetImageMediaType(image.FileName);
 
             if (mediaType is null || !File.Exists(fullPath))
@@ -642,6 +647,9 @@ public class AiChatService
         AiChatAttachment attachment,
         CancellationToken cancellationToken = default)
     {
+        // 讀附件前也要檢查權限（0.4.114）：開著的視窗在權限被收回後仍讀得到。
+        // 這行原本誤放在 LoadImagesAsync 的迴圈裡（那條路徑在提問時已經檢查過），每張圖都多查一次資料庫。
+        await EnsureAccessAsync(scope, targetId, cancellationToken);
         var fullPath = chatStore.GetAttachmentFullPath(scope, targetId, conversationId, attachment.StoredName);
         return File.Exists(fullPath) ? await File.ReadAllBytesAsync(fullPath, cancellationToken) : null;
     }

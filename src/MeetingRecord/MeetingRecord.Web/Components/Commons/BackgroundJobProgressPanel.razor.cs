@@ -4,6 +4,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Components.Commons;
 
@@ -35,6 +36,15 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
 
     [Inject]
     public ILogger<BackgroundJobProgressPanel> Logger { get; set; } = default!;
+
+    [Inject]
+    public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
+
+    /// <summary>
+    /// 取消要有會議紀錄的修改權限（0.4.115）。看得到通知只代表看得到那筆會議；
+    /// 只有檢視權限的同團隊成員，以前也能中止別人正在跑的轉錄（已送出的段落照樣計費）。
+    /// </summary>
+    private bool CanCancel => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit);
 
     private List<JobRow> visibleJobs = [];
     private bool isCollapsed;
@@ -118,6 +128,11 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
     /// </summary>
     private void CancelJob(JobRow job)
     {
+        if (!CanCancel)
+        {
+            return;
+        }
+
         var kind = job.Kind == JobKind.Transcription
             ? BackgroundJobKind.Transcription
             : BackgroundJobKind.MeetingDraft;

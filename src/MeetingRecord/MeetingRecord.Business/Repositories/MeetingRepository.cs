@@ -83,6 +83,9 @@ public class MeetingRepository
 
     public async Task<Meeting> AddAsync(Meeting meeting)
     {
+        // 一律由資料庫配號（0.4.115）：照抄用戶端的 Id，可以用來探測別人的會議 Id 是否存在，
+        // 也能接手已刪除會議的 Id。
+        meeting.Id = 0;
         meeting.CreatedAt = DateTime.Now;
         meeting.UpdatedAt = DateTime.Now;
 
@@ -141,22 +144,7 @@ public class MeetingRepository
         return true;
     }
 
-    /// <summary>
-    /// 刪除資料列並回傳剛被刪除的實體，讓呼叫端可以接著移除實體檔案。
-    /// </summary>
-    public async Task<Meeting?> DeleteAsync(int id)
-    {
-        var meeting = await context.Meeting.FindAsync(id);
-        if (meeting == null || !(await projectAccess.GetAsync()).CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
-        {
-            return null;
-        }
-
-        context.Meeting.Remove(meeting);
-        await context.SaveChangesAsync();
-
-        return meeting;
-    }
+    // 刪除不放在這裡（0.4.115）：一律走 MeetingService.DeleteAsync，才會一併清掉實體檔與 AI 問答對話。
 
     #endregion
 }

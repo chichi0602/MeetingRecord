@@ -165,6 +165,27 @@ public sealed class MyUserServiceLoginTests
         Assert.NotNull(user);
     }
 
+    [Fact]
+    public async Task GetUserForTokenRefreshAsync_ShouldRejectDisabledLockedAndPendingPasswordChange()
+    {
+        // 0.4.115：以前換發權杖不查資料庫，被停用的人在 7 天內都能一直換到新的存取權杖。
+        await using var fixture = await LoginFixture.CreateAsync();
+        var ok = await fixture.AddUserAsync("ok", "pw", legacy: false);
+        var disabled = await fixture.AddUserAsync("disabled", "pw", legacy: false);
+        var locked = await fixture.AddUserAsync("locked", "pw", legacy: false);
+        var pending = await fixture.AddUserAsync("pending", "pw", legacy: false);
+        await fixture.Context.MyUser.Where(x => x.Id == disabled.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, false));
+        await fixture.Context.MyUser.Where(x => x.Id == locked.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.LockoutEndUtc, DateTime.UtcNow.AddMinutes(10)));
+        await fixture.Context.MyUser.Where(x => x.Id == pending.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.MustChangePassword, true));
+        var service = fixture.CreateService();
+
+        Assert.NotNull(await service.GetUserForTokenRefreshAsync(ok.Id));
+        Assert.Null(await service.GetUserForTokenRefreshAsync(disabled.Id));
+        Assert.Null(await service.GetUserForTokenRefreshAsync(locked.Id));
+        Assert.Null(await service.GetUserForTokenRefreshAsync(pending.Id));
+        Assert.Null(await service.GetUserForTokenRefreshAsync(987654));
+    }
+
     private sealed class LoginFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

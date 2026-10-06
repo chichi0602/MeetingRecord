@@ -36,6 +36,31 @@ public sealed class AiChatStoreTests : IDisposable
     #region 寫入與讀回
 
     [Fact]
+    public async Task AppendTurn_MustExist_OnDeletedConversation_ShouldThrow_AndNotRecreateIt()
+    {
+        // 0.4.115：對話在等答案的期間被刪掉，以前照寫，整段對話復活，被刪的專案目錄也會被重建成孤兒。
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.AppendTurnAsync(AiChatScope.Project, 77, Conv, "問題", "王小明", "答案", mustExist: true));
+
+        Assert.False(store.ConversationExists(AiChatScope.Project, 77, Conv));
+        Assert.False(Directory.Exists(Path.Combine(rootPath, "project", "77")));
+    }
+
+    [Fact]
+    public async Task AppendTurn_WhileAnotherReaderHasFileOpen_ShouldSucceed()
+    {
+        // 0.4.115：讀取端以前開檔時不讓別人寫，別人剛好在讀歷史時，付費的答案就寫不進去。
+        await store.AppendTurnAsync(AiChatScope.Meeting, 5, Conv, "第一題", "王小明", "第一個答案");
+        var file = Directory.EnumerateFiles(Path.Combine(rootPath, "meeting", "5"), "*.jsonl").Single();
+
+        await using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            await store.AppendTurnAsync(AiChatScope.Meeting, 5, Conv, "第二題", "王小明", "第二個答案", mustExist: true);
+            Assert.Equal(4, (await store.ReadHistoryAsync(AiChatScope.Meeting, 5, Conv)).Count);
+        }
+    }
+
+    [Fact]
     public async Task AppendTurn_ThenRead_ShouldRoundTripBothMessages()
     {
         await store.AppendTurnAsync(AiChatScope.Meeting, 12, Conv, "這次會議結論是什麼", "王小明", "依據會議紀錄，結論是…");

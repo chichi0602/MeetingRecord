@@ -40,6 +40,18 @@ public partial class ProjectViewView : IDisposable
     /// <summary>已因「生成結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
     private readonly HashSet<int> reloadedFinishedMeetingIds = [];
 
+    /// <summary>存檔中（0.4.114）：擋重複送出，也讓背景事件延後重新載入（不能和存檔同時用同一個 DbContext）。</summary>
+    private bool isSaving;
+
+    /// <summary>附件讀進暫存檔中；讀完之前不能存檔。</summary>
+    private bool isReadingFiles;
+
+    /// <summary>存檔期間背景事件要求的重新載入，存完再做。</summary>
+    private bool pendingContextReload;
+
+    /// <summary>編輯時原本的主責團隊；就算不是自己的團隊、使用者暫時換掉，也要留在選項裡能改回來。</summary>
+    private ProjectService.TeamOption? originalPrimaryOption;
+
     private List<ProjectAdapterModel> projects = [];
     private int selectedProjectId;
 
@@ -177,9 +189,13 @@ public partial class ProjectViewView : IDisposable
     /// 不補進來的話下拉會顯示空白，看起來像沒有主責。
     /// </summary>
     private IEnumerable<ProjectService.TeamOption> PrimaryTeamOptions
-        => CurrentRecord.PrimaryTeamId is { } id && primaryTeamOptions.All(x => x.Id != id)
-            ? primaryTeamOptions.Append(new ProjectService.TeamOption(id, CurrentRecord.PrimaryTeamName))
+        => originalPrimaryOption is { } original && primaryTeamOptions.All(x => x.Id != original.Id)
+            ? [.. primaryTeamOptions, original]
             : primaryTeamOptions;
+
+    /// <summary>表單的分類選項：啟用中的分類，加上專案已貼著、但已停用的分類（不加的話一動欄位就被默默拿掉）。</summary>
+    private IEnumerable<string> FormCategoryOptions
+        => availableCategories.Concat(CurrentRecord.Categories.Where(c => !availableCategories.Contains(c))).ToList();
 
     /// <summary>啟用中的分類名稱（表單與篩選共用）。</summary>
     private List<string> availableCategories = [];
@@ -285,12 +301,23 @@ public partial class ProjectViewView : IDisposable
                 .Select(x => x.MeetingId)
                 .ToList();
 
+            // 同一份逐字稿重新產生時，它會先回到進行中——要從「已處理」移除，第二次完成才會再重新載入（0.4.114）。
+            reloadedFinishedMeetingIds.RemoveWhere(id => !finishedIds.Contains(id));
+
             // 用 Count 而非 Any——Any 會短路，漏掉同時完成的其他筆。
             var newlyFinishedCount = finishedIds.Count(reloadedFinishedMeetingIds.Add);
 
             if (newlyFinishedCount > 0)
             {
-                await ReloadProjectContextAsync();
+                // 存檔中不能同時用頁面的 DbContext 查詢（會拋「第二個操作已在此內容上啟動」），存完再載。
+                if (isSaving)
+                {
+                    pendingContextReload = true;
+                }
+                else
+                {
+                    await ReloadProjectContextAsync();
+                }
             }
 
             StateHasChanged();
@@ -302,10 +329,15 @@ public partial class ProjectViewView : IDisposable
     {
         projects = await projectService.GetSelectableAsync();
 
-        // 選取的專案被刪掉或已不可存取時，退回第一筆。
-        if (projects.All(x => x.Id != selectedProjectId))
+        // 選取的專案被刪掉、已不可存取、或被目前的篩選排除時，退回篩選結果的第一筆（0.4.114 起看篩選結果，
+        // 不然下拉框裡沒有那個值而顯示空白，摘要卻還是那個專案）。
+        var filtered = FilteredProjects.ToList();
+        if (filtered.All(x => x.Id != selectedProjectId))
         {
-            selectedProjectId = projects.FirstOrDefault()?.Id ?? 0;
+            selectedProjectId = filtered.FirstOrDefault()?.Id ?? 0;
+            // 名冊、逐字稿選擇是專案私有的，換專案一定要清掉。
+            selectedTranscriptId = 0;
+            selectedAttendees = [];
         }
 
         await ReloadProjectContextAsync();
@@ -696,8 +728,11 @@ public partial class ProjectViewView : IDisposable
         isNewRecordMode = false;
         modalTitle = "修改專案";
         CurrentRecord = await projectService.GetAsync(SelectedProject.Id);
-        await LoadTeamOptionsAsync();
-        pendingUploadFiles.Clear();
+        originalPrimaryOption = CurrentRecord.PrimaryTeamId is { } primaryId
+            ? new ProjectService.TeamOption(primaryId, CurrentRecord.PrimaryTeamName)
+            : null;
+        await LoadTeamOptionsAsync(CurrentRecord.CollaboratorTeamIds);
+        ClearPendingFiles();
         removedFileIds.Clear();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingFiles());
         modalVisible = true;
@@ -722,9 +757,9 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        var content = projectMeetings.Count > 0
-            ? $"確定要刪除「{project.Title}」嗎？此操作無法復原。底下 {projectMeetings.Count} 份會議紀錄不會被刪除，只會解除歸屬。"
-            : $"確定要刪除「{project.Title}」嗎？此操作無法復原。";
+        // 待辦是 Cascade（隨專案刪除），會議是 SetNull（只解除歸屬）——兩件事都要先講清楚（0.4.114）。
+        var content = $"確定要刪除「{project.Title}」嗎？此操作無法復原。專案底下的待辦事項會一併刪除"
+            + (projectMeetings.Count > 0 ? $"；{projectMeetings.Count} 份會議紀錄不會被刪除，只會解除歸屬。" : "。");
 
         var ok = await modalService.ConfirmAsync(new ConfirmOptions
         {
@@ -742,7 +777,15 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        await projectService.DeleteAsync(project.Id);
+        var deleteResult = await projectService.DeleteAsync(project.Id);
+        if (!deleteResult.Success)
+        {
+            // 0.4.114 以前不看結果，失敗也顯示「刪除成功」。
+            logger.LogWarning("Project delete failed. ProjectId={ProjectId}, Message={Message}", project.Id, deleteResult.Message);
+            NotifyError(deleteResult.Message);
+            return;
+        }
+
         logger.LogInformation("Project delete completed. ProjectId={ProjectId}", project.Id);
 
         selectedProjectId = 0;
@@ -754,16 +797,18 @@ public partial class ProjectViewView : IDisposable
     {
         await LoadTeamOptionsAsync();
 
-        // 主責預設帶入自己所屬的第一個團隊（依名稱）；沒有任何團隊時留空，存檔時會要求選擇。
         CurrentRecord = new ProjectAdapterModel
         {
             Status = StatusOptions.First(),
             CompletionPercentage = 0,
             Files = [],
-            PrimaryTeamId = primaryTeamOptions.FirstOrDefault()?.Id,
+            // 主責不預設（0.4.114）：一定要自己選，沒選由 [Required] 驗證擋下。以前預設帶第一個團隊
+            // （管理者依名稱排序是「待分配」），畫面上卻沒顯示，專案會默默存到使用者沒選的團隊。
+            PrimaryTeamId = null,
         };
 
-        pendingUploadFiles.Clear();
+        originalPrimaryOption = null;
+        ClearPendingFiles();
         removedFileIds.Clear();
         isNewRecordMode = true;
         modalTitle = "新增專案";
@@ -772,10 +817,10 @@ public partial class ProjectViewView : IDisposable
         logger.LogInformation("Opened create modal for project.");
     }
 
-    private async Task LoadTeamOptionsAsync()
+    private async Task LoadTeamOptionsAsync(IEnumerable<int>? existingCollaboratorIds = null)
     {
         primaryTeamOptions = await projectService.GetSelectablePrimaryTeamsAsync();
-        collaboratorTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync();
+        collaboratorTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync(existingCollaboratorIds);
         availableCategories = await CategoryService.GetAllEnabledNamesAsync();
     }
 
@@ -817,7 +862,28 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
+    /// <summary>
+    /// 選檔當下就把內容讀進伺服器暫存檔（0.4.114）。
+    /// Blazor 的 InputFile 每次 change 都會清掉前一批檔案的參照（blazor.web.js 的 _blazorFilesById），
+    /// 重建 input（Reset）也會讓舊元素上的檔案失效——所以「分兩次挑檔」或「移除其中一個」之後，
+    /// 先前挑的檔案在存檔時就讀不到了。讀進暫存檔之後與瀏覽器端的 input 無關。
+    /// </summary>
     private async Task OnProjectFilesSelectedAsync(InputFileChangeEventArgs args)
+    {
+        isReadingFiles = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await ReadSelectedFilesAsync(args);
+        }
+        finally
+        {
+            isReadingFiles = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ReadSelectedFilesAsync(InputFileChangeEventArgs args)
     {
         foreach (var file in args.GetMultipleFiles(1000))
         {
@@ -833,17 +899,98 @@ public partial class ProjectViewView : IDisposable
                 continue;
             }
 
+            var tempPath = Path.Combine(PendingUploadTempDirectory, $"{Guid.NewGuid():N}.tmp");
+            try
+            {
+                Directory.CreateDirectory(PendingUploadTempDirectory);
+                await using (var source = file.OpenReadStream(ProjectService.MaxUploadFileSize))
+                await using (var target = File.Create(tempPath))
+                {
+                    await source.CopyToAsync(target);
+                }
+            }
+            catch (Exception ex)
+            {
+                TryDeleteTempFile(tempPath);
+                logger.LogError(ex, "Failed to read selected project file. FileName={FileName}", file.Name);
+                NotifyError($"{file.Name} 讀取失敗，請重新選擇。");
+                continue;
+            }
+
             pendingUploadFiles.Add(new PendingUploadFileItem
             {
                 Id = Guid.NewGuid(),
-                File = file
+                Name = file.Name,
+                Size = file.Size,
+                ContentType = file.ContentType,
+                TempPath = tempPath,
             });
         }
+    }
 
-        await InvokeAsync(StateHasChanged);
+    private static string PendingUploadTempDirectory
+        => Path.Combine(Path.GetTempPath(), "MeetingRecord", "pending-uploads");
+
+    /// <summary>清掉待上傳清單，連同暫存檔。</summary>
+    private void ClearPendingFiles()
+    {
+        foreach (var file in pendingUploadFiles)
+        {
+            TryDeleteTempFile(file.TempPath);
+        }
+
+        pendingUploadFiles.Clear();
+    }
+
+    private void TryDeleteTempFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to delete pending upload temp file. Path={Path}", path);
+        }
     }
 
     private async Task OnModalOKHandleAsync(MouseEventArgs args)
+    {
+        // 防重複送出（0.4.114）：上傳大附件時再按一次確定、或連按兩下 Enter，會建出兩筆專案。
+        if (isSaving)
+        {
+            return;
+        }
+
+        if (isReadingFiles)
+        {
+            NotifyError("附件還在讀取中，請稍候再存檔。");
+            modalVisible = true;
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            await SaveModalAsync();
+        }
+        finally
+        {
+            isSaving = false;
+            if (pendingContextReload)
+            {
+                pendingContextReload = false;
+                await ReloadProjectContextAsync();
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveModalAsync()
     {
         if (LocalEditContext?.Validate() == false)
         {
@@ -872,13 +1019,13 @@ public partial class ProjectViewView : IDisposable
         {
             foreach (var pendingUploadFile in pendingUploadFiles)
             {
-                var stream = pendingUploadFile.File.OpenReadStream(ProjectService.MaxUploadFileSize);
+                var stream = File.OpenRead(pendingUploadFile.TempPath);
                 uploadStreams.Add(stream);
                 uploadInputs.Add(new ProjectUploadFileInput
                 {
-                    FileName = pendingUploadFile.File.Name,
-                    ContentType = pendingUploadFile.File.ContentType,
-                    FileSize = pendingUploadFile.File.Size,
+                    FileName = pendingUploadFile.Name,
+                    ContentType = pendingUploadFile.ContentType,
+                    FileSize = pendingUploadFile.Size,
                     Content = stream
                 });
             }
@@ -920,13 +1067,22 @@ public partial class ProjectViewView : IDisposable
 
             if (!actionResult.Success)
             {
+                // 新增時專案已經建好、只有附件失敗（0.4.114）：切成編輯模式，重送就是修改這一筆而不是再建一筆。
+                if (isNewRecordMode && CurrentRecord.Id > 0)
+                {
+                    isNewRecordMode = false;
+                    modalTitle = "修改專案";
+                    selectedProjectId = CurrentRecord.Id;
+                    await ReloadAsync();
+                }
+
                 NotifyError(actionResult.Message);
                 modalVisible = true;
                 return;
             }
 
             // 附件已經讀完上傳完了，這時才可以重建 input。
-            pendingUploadFiles.Clear();
+            ClearPendingFiles();
             removedFileIds.Clear();
             attachmentDropZone?.Reset();
 
@@ -935,10 +1091,15 @@ public partial class ProjectViewView : IDisposable
             if (isNewRecordMode)
             {
                 _ = messageService.SuccessAsync("新增成功");
-                // 新增後把選取切到剛建立的專案，使用者才不用自己再選一次。
+                // 新增後把選取切到剛建立的專案，使用者才不用自己再選一次。用 Id 而不是標題（可以同名，0.4.114）；
+                // 篩選先清掉，否則新專案不符合篩選時會被退回別的專案。
+                teamFilters = [];
+                categoryFilters = [];
+                statusFilters = [];
+                selectedProjectId = CurrentRecord.Id;
+                selectedTranscriptId = 0;
+                selectedAttendees = [];
                 await ReloadAsync();
-                selectedProjectId = projects.FirstOrDefault(x => x.Title == CurrentRecord.Title)?.Id ?? selectedProjectId;
-                await ReloadProjectContextAsync();
             }
             else
             {
@@ -971,7 +1132,7 @@ public partial class ProjectViewView : IDisposable
     /// </para>
     /// </summary>
     private string DescribePendingFiles()
-        => string.Join('|', pendingUploadFiles.Select(x => $"{x.File.Name}:{x.File.Size}"));
+        => string.Join('|', pendingUploadFiles.Select(x => $"{x.Name}:{x.Size}"));
 
     private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
@@ -1004,7 +1165,7 @@ public partial class ProjectViewView : IDisposable
 
         modalVisible = false;
         formSnapshot = null;
-        pendingUploadFiles.Clear();
+        ClearPendingFiles();
         removedFileIds.Clear();
         attachmentDropZone?.Reset();
         logger.LogDebug("Project modal cancelled.");
@@ -1038,6 +1199,7 @@ public partial class ProjectViewView : IDisposable
         if (file is not null)
         {
             pendingUploadFiles.Remove(file);
+            TryDeleteTempFile(file.TempPath);
 
             // 移除之後重建 input，「拖錯 → 移除 → 再拖同一個」才會再觸發 change。
             attachmentDropZone?.Reset();
@@ -1265,12 +1427,23 @@ public partial class ProjectViewView : IDisposable
 
     #endregion
 
-    public void Dispose() => draftProgressNotifier.Changed -= OnDraftProgressChanged;
+    public void Dispose()
+    {
+        draftProgressNotifier.Changed -= OnDraftProgressChanged;
+        ClearPendingFiles();
+    }
 
+    /// <summary>待上傳附件：內容已讀進伺服器暫存檔（0.4.114），不再持有瀏覽器端的 IBrowserFile。</summary>
     private sealed class PendingUploadFileItem
     {
         public Guid Id { get; set; }
 
-        public IBrowserFile File { get; set; } = default!;
+        public string Name { get; set; } = string.Empty;
+
+        public long Size { get; set; }
+
+        public string ContentType { get; set; } = string.Empty;
+
+        public string TempPath { get; set; } = string.Empty;
     }
 }

@@ -210,7 +210,7 @@ else
            Class="meeting-view-modal"
            @bind-Visible="@modalVisible"
            Keyboard="true"
-           ConfirmLoading="@isUploading"
+           ConfirmLoading="@(isUploading || isSaving)"
            MaskClosable="false"
            OnOk="OnModalOKHandleAsync"
            OnCancel="OnModalCancelHandleAsync">

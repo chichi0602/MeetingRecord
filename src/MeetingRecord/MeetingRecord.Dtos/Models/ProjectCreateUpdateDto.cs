@@ -34,14 +34,15 @@ public class ProjectCreateUpdateDto
     /// </summary>
     [Required(ErrorMessage = "開始日期 不可為空白")]
     [JsonPropertyName("startDate")]
-    public DateTime StartDate { get; set; }
+    // 可為 null 才讓 [Required] 真的生效（0.4.114）：不可為 null 的 DateTime 沒帶時會變成 0001/01/01 而通過驗證。
+    public DateTime? StartDate { get; set; }
 
     /// <summary>
     /// 專案結束日期
     /// </summary>
     [Required(ErrorMessage = "結束日期 不可為空白")]
     [JsonPropertyName("endDate")]
-    public DateTime EndDate { get; set; }
+    public DateTime? EndDate { get; set; }
 
     /// <summary>
     /// 專案狀態 (未開始/進行中/已完成/已暫停/已取消)
@@ -60,6 +61,7 @@ public class ProjectCreateUpdateDto
     /// <summary>
     /// 專案擁有者
     /// </summary>
+    [Required(ErrorMessage = "負責人 不可為空白")]
     [JsonPropertyName("owner")]
     public string? Owner { get; set; }
 

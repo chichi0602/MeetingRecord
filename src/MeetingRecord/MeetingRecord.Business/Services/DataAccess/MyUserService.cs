@@ -276,8 +276,15 @@ public class MyUserService
             MyUser itemData = Mapper.Map<MyUser>(paraObject);
             itemData.RoleView = null;
 
-            // 畫面模型沒有這個欄位，整筆蓋回時要先帶回原值，否則會被清成 false。
+            // 畫面模型沒有這些欄位，整筆蓋回時要先帶回原值，否則會被清掉。
             itemData.MustChangePassword = currentItem.MustChangePassword;
+
+            // 0.4.115：以前沒帶回，管理者只要編輯一次（例如改名字）就會把被鎖定的帳號解鎖、
+            // 失敗次數歸零、兩步驟驗證設定清空。重設密碼時才解鎖（見下方）。
+            itemData.AccessFailedCount = currentItem.AccessFailedCount;
+            itemData.LockoutEndUtc = currentItem.LockoutEndUtc;
+            itemData.TwoFactorEnabled = currentItem.TwoFactorEnabled;
+            itemData.TwoFactorSecret = currentItem.TwoFactorSecret;
 
             if (string.IsNullOrWhiteSpace(paraObject.Password))
             {
@@ -288,6 +295,10 @@ public class MyUserService
             {
                 itemData.Salt = string.IsNullOrWhiteSpace(currentItem.Salt) ? Guid.NewGuid().ToString() : currentItem.Salt;
                 itemData.Password = SecurePasswordHasher.HashPassword(paraObject.Password);
+
+                // 重設密碼就是解鎖的方法：使用者忘記密碼被鎖住，管理者給新密碼後要能立刻登入。
+                itemData.AccessFailedCount = 0;
+                itemData.LockoutEndUtc = null;
 
                 // 管理者替別人重設密碼：對方下次登入要改（0.4.113）。改自己的不設；
                 // support 被禁止改密碼，設了會卡在改密碼頁出不去。

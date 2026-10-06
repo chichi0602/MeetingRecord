@@ -152,6 +152,82 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 
     [Fact]
+    public async Task ProjectApi_Create_ShouldRejectMissingDatesOwnerAndBadRules()
+    {
+        // 0.4.114：日期原本是不可為 null 的 DateTime，沒帶時存成 0001/01/01；負責人沒帶會在 SaveChanges 爆 500。
+        using var client = factory.CreateClient();
+        await AuthorizeAsync(client);
+        var teamId = await SeedTeamAsync();
+
+        var noDates = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 0, Title = $"沒日期-{Guid.NewGuid():N}", Status = "進行中", Owner = "x", PrimaryTeamId = teamId,
+        });
+        var noOwner = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 0, Title = $"沒負責人-{Guid.NewGuid():N}", StartDate = DateTime.Today, EndDate = DateTime.Today,
+            Status = "進行中", PrimaryTeamId = teamId,
+        });
+        var badStatus = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 0, Title = $"亂狀態-{Guid.NewGuid():N}", StartDate = DateTime.Today, EndDate = DateTime.Today,
+            Status = "不存在的狀態", Owner = "x", PrimaryTeamId = teamId,
+        });
+        var endBeforeStart = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 0, Title = $"日期顛倒-{Guid.NewGuid():N}", StartDate = DateTime.Today, EndDate = DateTime.Today.AddDays(-1),
+            Status = "進行中", Owner = "x", PrimaryTeamId = teamId,
+        });
+        // 帶一個不存在的 Id：要由資料庫配號，不能照抄（原本會用這個 Id 寫入）。
+        var forcedId = await client.PostAsJsonAsync("/api/Project", new ProjectCreateUpdateDto
+        {
+            Id = 987654, Title = $"指定Id-{Guid.NewGuid():N}", StartDate = DateTime.Today, EndDate = DateTime.Today,
+            Status = "進行中", Owner = "x", PrimaryTeamId = teamId,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, noDates.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, noOwner.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, badStatus.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, endBeforeStart.StatusCode);
+        var created = await ReadApiResultAsync<ProjectDto>(forcedId);
+        Assert.True(created.Success);
+        Assert.NotEqual(987654, created.Data!.Id);
+    }
+
+    [Fact]
+    public async Task TodoApi_Create_WithMeetingFromAnotherProject_ShouldReturnBadRequest()
+    {
+        // 0.4.114：來源會議要屬於同一個專案；原本只檢查專案，可以把別的專案（甚至看不到的）會議掛上來。
+        int projectAId;
+        int meetingInBId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var team = new Team { Name = $"待辦團隊-{Guid.NewGuid():N}", IsEnabled = true };
+            var projectA = new Project { Title = $"A-{Guid.NewGuid():N}", Status = "進行中", Owner = "x" };
+            var projectB = new Project { Title = $"B-{Guid.NewGuid():N}", Status = "進行中", Owner = "x" };
+            projectA.Teams.Add(new ProjectTeam { Team = team, IsPrimary = true });
+            projectB.Teams.Add(new ProjectTeam { Team = team, IsPrimary = true });
+            db.Project.AddRange(projectA, projectB);
+            await db.SaveChangesAsync();
+            var meeting = new Meeting { Title = "B 的會議", ProjectId = projectB.Id };
+            db.Meeting.Add(meeting);
+            await db.SaveChangesAsync();
+            projectAId = projectA.Id;
+            meetingInBId = meeting.Id;
+        }
+
+        using var client = factory.CreateClient();
+        await AuthorizeAsync(client);
+        var response = await client.PostAsJsonAsync("/api/Todo", new TodoCreateUpdateDto
+        {
+            Id = 0, Title = "掛錯會議的待辦", ProjectId = projectAId, MeetingId = meetingInBId, Priority = "中", Status = "待辦",
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ProjectApi_ViewerPreset_CanRead_ButCannotCreateEditDelete()
     {
         // 0.4.109：預設角色「檢視者」配給使用者後，限制要真的生效——讀得到、改不了（API 回 403）。
@@ -275,6 +351,8 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         {
             Id = 0,
             Title = $"自己的專案-{Guid.NewGuid():N}",
+            StartDate = DateTime.Today,
+            EndDate = DateTime.Today.AddDays(7),
             Status = "進行中",
             Owner = "表單隨便填",
         });
@@ -668,7 +746,12 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
                 ["SystemSettings:ExternalFileSystem:DatabasePath"] = Path.Combine(rootPath, "DB"),
             ["SystemSettings:ExternalFileSystem:DownloadPath"] = Path.Combine(rootPath, "Download"),
             ["SystemSettings:ExternalFileSystem:UploadPath"] = Path.Combine(rootPath, "Upload"),
-            ["SystemSettings:ExternalFileSystem:ProjectFilePath"] = Path.Combine(rootPath, "ProjectFile")
+            ["SystemSettings:ExternalFileSystem:ProjectFilePath"] = Path.Combine(rootPath, "ProjectFile"),
+            // 0.4.115：以前沒設，沿用 appsettings.json 的 C:\temp\MeetingRecord\…——API 刪除專案或會議時，
+            // 會用測試資料庫的編號去刪本機開發環境同編號的 AI 對話與實體檔。
+            ["SystemSettings:ExternalFileSystem:MeetingMediaPath"] = Path.Combine(rootPath, "MeetingMedia"),
+            ["SystemSettings:ExternalFileSystem:MeetingTranscriptPath"] = Path.Combine(rootPath, "MeetingTranscript"),
+            ["SystemSettings:ExternalFileSystem:AiChatPath"] = Path.Combine(rootPath, "AiChat")
         };
     }
 }

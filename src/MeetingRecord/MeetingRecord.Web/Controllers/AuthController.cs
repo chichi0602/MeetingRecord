@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
-using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Auths;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Filters;
 
@@ -41,6 +41,14 @@ public class AuthController : ControllerBase
             return Unauthorized(ApiResult<TokenResponseDto>.UnauthorizedResult(message));
         }
 
+        // 強制改密碼在 API 也要生效（0.4.115）：以前只有網頁會導到改密碼頁，
+        // 管理者剛發的初始密碼可以直接拿來用 API，永遠不必改。
+        if (user.MustChangePassword || request.Password == MagicObjectHelper.NeedChangePassword)
+        {
+            logger.LogWarning("API login rejected because password change is required. Account={Account}, UserId={UserId}", user.Account, user.Id);
+            return Unauthorized(ApiResult<TokenResponseDto>.UnauthorizedResult("請先登入網頁變更密碼後，再使用 API。"));
+        }
+
         var tokenResponse = jwtTokenService.CreateTokenResponse(user);
         logger.LogInformation("API login succeeded. Account={Account}, UserId={UserId}", user.Account, user.Id);
         return Ok(ApiResult<TokenResponseDto>.SuccessResult(tokenResponse, "登入成功"));
@@ -48,19 +56,19 @@ public class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
-    public ActionResult<ApiResult<TokenResponseDto>> Refresh([FromBody] RefreshTokenRequestDto request)
+    public async Task<ActionResult<ApiResult<TokenResponseDto>>> Refresh([FromBody] RefreshTokenRequestDto request)
     {
         try
         {
             var currentUser = jwtTokenService.ValidateRefreshToken(request.RefreshToken);
-            var user = new MyUser
+
+            // 以資料庫為準重簽（0.4.115）：停用、鎖定、刪除或待改密碼的帳號不換發，
+            // 管理者身分、名稱也用資料庫現值，不沿用舊權杖裡的內容。
+            var user = await userServiceLogin.GetUserForTokenRefreshAsync(currentUser.Id);
+            if (user is null)
             {
-                Id = currentUser.Id,
-                Account = currentUser.Account,
-                Name = currentUser.Name,
-                Email = currentUser.Email,
-                IsAdmin = currentUser.IsAdmin
-            };
+                return Unauthorized(ApiResult<TokenResponseDto>.UnauthorizedResult("帳號狀態已變更，請重新登入。"));
+            }
 
             var tokenResponse = jwtTokenService.CreateTokenResponse(user);
             return Ok(ApiResult<TokenResponseDto>.SuccessResult(tokenResponse, "Token 更新成功"));

@@ -518,6 +518,12 @@ public partial class TodoViewView : IAsyncDisposable
     /// <summary>清單上的勾選框。完成與否只寫 Status 一個欄位。</summary>
     private async Task OnCompletedChangedAsync(TodoAdapterModel todo, bool isCompleted)
     {
+        // 勾選框沒權限時只是停用，處理器仍掛著；這裡再擋一次（0.4.115）。
+        if (!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))
+        {
+            return;
+        }
+
         var result = await todoService.SetCompletedAsync(todo.Id, isCompleted);
         if (!result.Success)
         {
@@ -527,8 +533,11 @@ public partial class TodoViewView : IAsyncDisposable
         await ReloadAsync();
     }
 
-    private Task OnAddAsync()
+    private async Task OnAddAsync()
     {
+        // 開表單前重載可選專案（0.4.115）：有人替你加了協作團隊後，清單已經看得到新專案的待辦，
+        // 這裡沒更新的話，編輯那筆時「所屬專案」會是空白。
+        availableProjects = await projectService.GetSelectableAsync();
         CurrentRecord = new TodoAdapterModel
         {
             Status = StatusOptions[0],
@@ -544,18 +553,17 @@ public partial class TodoViewView : IAsyncDisposable
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;
         logger.LogInformation("Opened create modal for todo.");
-        return Task.CompletedTask;
     }
 
-    private Task OnEditAsync(TodoAdapterModel todoAdapterModel)
+    private async Task OnEditAsync(TodoAdapterModel todoAdapterModel)
     {
+        availableProjects = await projectService.GetSelectableAsync();
         isNewRecordMode = false;
         modalTitle = "修改待辦事項";
         CurrentRecord = todoAdapterModel.Clone();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;
         logger.LogInformation("Opened edit modal for todo. TodoId={TodoId}", todoAdapterModel.Id);
-        return Task.CompletedTask;
     }
 
     private async Task OnDeleteAsync(TodoAdapterModel todoAdapterModel)
@@ -597,7 +605,28 @@ public partial class TodoViewView : IAsyncDisposable
         await ReloadAsync();
     }
 
+    /// <summary>存檔中（0.4.115）：擋重複送出——連按確定或連按 Enter 會建出兩筆待辦。</summary>
+    private bool isSaving;
+
     private async Task OnModalOKHandleAsync(MouseEventArgs args)
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            await SaveModalAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task SaveModalAsync()
     {
         if (LocalEditContext?.Validate() == false)
         {

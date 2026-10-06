@@ -192,7 +192,17 @@ public class TranscriptionJobRunner
             meeting.TranscriptionError = null;
             meeting.TranscriptionCompletedAt = DateTime.Now;
             meeting.UpdatedAt = DateTime.Now;
-            await context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            catch
+            {
+                // 存不進去（例如會議剛被刪掉）就沒有任何資料列指向這份逐字稿，
+                // 不刪的話一份機密逐字稿會永遠留在磁碟上（0.4.115）。
+                fileStore.TryDeleteTranscript(transcriptRelativePath);
+                throw;
+            }
 
             progressNotifier.ReportCompleted(meetingId);
 

@@ -306,6 +306,7 @@ else
            Class="form-modal-standard"
            @bind-Visible="@modalVisible"
            Keyboard="true"
+           ConfirmLoading="@isSaving"
            OnOk="OnModalOKHandleAsync"
            OnCancel="OnModalCancelHandleAsync">
         <div>
@@ -322,15 +323,21 @@ else
                         </FormItem>
 
                         <FormItem Label="所屬專案" Required>
-                            <Select TItem="ProjectAdapterModel"
+                            @* 0.4.115：改用 SelectOption 子元素（和專案頁同寫法）。DataSource 繫結在選項晚到時，
+                               會出現「有值卻顯示空白」。 *@
+                            <Select TItem="int"
                                     TItemValue="int"
                                     @bind-Value="CurrentRecord.ProjectId"
-                                    DataSource="@availableProjects"
-                                    LabelName="@nameof(ProjectAdapterModel.Title)"
-                                    ValueName="@nameof(ProjectAdapterModel.Id)"
                                     Placeholder="請選擇專案"
                                     EnableSearch
-                                    Style="width: 100%;" />
+                                    Style="width: 100%;">
+                                <SelectOptions>
+                                    @foreach (var project in availableProjects)
+                                    {
+                                        <SelectOption TItem="int" TItemValue="int" Value="@project.Id" Label="@project.Title" />
+                                    }
+                                </SelectOptions>
+                            </Select>
                             <ValidationMessage For="() => CurrentRecord.ProjectId" />
                         </FormItem>
 

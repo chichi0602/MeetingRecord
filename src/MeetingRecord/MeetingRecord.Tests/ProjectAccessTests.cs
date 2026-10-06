@@ -326,7 +326,8 @@ public sealed class ProjectAccessTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var alice = await fixture.AddUserAsync("alice");
-        var sales = await fixture.AddTeamAsync("業務部");
+        // alice 屬於業務部，看得到「業務的專案」，訊息才會列出它的名稱。
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id);
         var rd = await fixture.AddTeamAsync("研發部");
         await fixture.AddProjectAsync("業務的專案", sales.Id, rd.Id);
         var service = fixture.CreateTeamService(alice.Id);
@@ -340,6 +341,55 @@ public sealed class ProjectAccessTests
         Assert.False(blocked.Success);
         Assert.True(allowed.Success);
         Assert.Equal([sales.Id], await fixture.Context.ProjectTeam.Select(x => x.TeamId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeleteTeam_BlockedMessage_ShouldNotRevealInvisibleProjectNames()
+    {
+        // 0.4.114：看不到的專案只給數量，不列名稱。
+        await using var fixture = await Fixture.CreateAsync();
+        var outsider = await fixture.AddUserAsync("outsider");
+        var sales = await fixture.AddTeamAsync("業務部");
+        await fixture.AddProjectAsync("機密專案", sales.Id);
+
+        var check = await fixture.CreateTeamService(outsider.Id).BeforeDeleteCheckAsync(new TeamAdapterModel { Id = sales.Id });
+
+        Assert.False(check.Success);
+        Assert.DoesNotContain("機密專案", check.Message);
+        Assert.Contains("另有 1 個你看不到的專案", check.Message);
+    }
+
+    [Fact]
+    public async Task UpdateProject_Rejected_ShouldNotLeakChangesIntoLaterSaves()
+    {
+        // 0.4.114：DbContext 是整條 Blazor 連線共用的。被拒絕的修改不能留在追蹤裡，
+        // 否則下一次任何服務 SaveChanges 時會被一起寫進資料庫。
+        await using var fixture = await Fixture.CreateAsync();
+        var rd = await fixture.AddTeamAsync("研發部");
+        var project = await fixture.AddProjectAsync("原本的標題", rd.Id);
+        var service = fixture.CreateProjectService(0, isAdmin: true);
+
+        var model = await service.GetAsync(project.Id);
+        model.Title = "被拒絕的標題";
+        model.PrimaryTeamId = 99999; // 不存在的團隊 → 驗證失敗
+        var result = await service.UpdateAsync(model);
+        await fixture.Context.SaveChangesAsync(); // 模擬同一條連線上別的服務存檔
+
+        Assert.False(result.Success);
+        Assert.Equal("原本的標題", (await fixture.Context.Project.AsNoTracking().SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task AddProject_ShouldWriteBackNewId()
+    {
+        // 畫面靠它選取剛建立的專案（同名專案時用標題找會選錯）。
+        await using var fixture = await Fixture.CreateAsync();
+        var rd = await fixture.AddTeamAsync("研發部");
+        var model = new ProjectAdapterModel { Title = "新專案", Owner = "x", PrimaryTeamId = rd.Id };
+
+        await fixture.CreateProjectService(0, isAdmin: true).AddAsync(model);
+
+        Assert.Equal((await fixture.Context.Project.AsNoTracking().SingleAsync()).Id, model.Id);
     }
 
     [Fact]
@@ -492,6 +542,66 @@ public sealed class ProjectAccessTests
 
         // 最早那一筆才是當初上傳觸發的轉錄；之後的是別人按了重新轉錄。
         Assert.Equal(alice.Id, (await fixture.Context.Meeting.AsNoTracking().SingleAsync()).CreatedByUserId);
+    }
+
+    #endregion
+
+    #region 待辦的來源會議（0.4.115）
+
+    [Fact]
+    public async Task TodoSourceMeeting_InAnotherTeamsProject_ShouldHideTitle_ButAdminSeesIt()
+    {
+        // 會議改歸屬到別的團隊的專案後，留在原專案的待辦不能再帶出那場會議的標題。
+        await using var fixture = await Fixture.CreateAsync();
+        var bob = await fixture.AddUserAsync("bob");
+        var sales = await fixture.AddTeamAsync("業務部", bob.Id);
+        var rd = await fixture.AddTeamAsync("研發部");
+        var salesProject = await fixture.AddProjectAsync("業務專案", sales.Id);
+        var rdProject = await fixture.AddProjectAsync("研發機密專案", rd.Id);
+        var meeting = new Meeting { Title = "研發機密會議", ProjectId = rdProject.Id };
+        fixture.Context.Meeting.Add(meeting);
+        await fixture.Context.SaveChangesAsync();
+        var todo = new Todo { Title = "跟進", ProjectId = salesProject.Id, MeetingId = meeting.Id, Status = "待辦", Priority = "中" };
+        fixture.Context.Todo.Add(todo);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var bobService = fixture.CreateTodoService(bob.Id);
+        var single = await bobService.GetAsync(todo.Id);
+        var list = (await bobService.GetAsync(new DataRequest { CurrentPage = 1, PageSize = 50 })).Result;
+
+        Assert.Equal("跟進", single.Title);
+        Assert.True(string.IsNullOrEmpty(single.MeetingTitle));
+        Assert.True(string.IsNullOrEmpty(Assert.Single(list).MeetingTitle));
+        Assert.Equal("研發機密會議", (await fixture.CreateTodoService(0, isAdmin: true).GetAsync(todo.Id)).MeetingTitle);
+    }
+
+    [Fact]
+    public async Task TodoUpdate_MovedToAnotherProject_ShouldDropSourceMeeting()
+    {
+        // 來源會議屬於原專案；搬到別的專案還留著，新專案的人就會看到他們看不到的會議標題。
+        await using var fixture = await Fixture.CreateAsync();
+        var team = await fixture.AddTeamAsync("研發部");
+        var projectA = await fixture.AddProjectAsync("專案A", team.Id);
+        var projectB = await fixture.AddProjectAsync("專案B", team.Id);
+        var meeting = new Meeting { Title = "A 的會議", ProjectId = projectA.Id };
+        fixture.Context.Meeting.Add(meeting);
+        await fixture.Context.SaveChangesAsync();
+        var todo = new Todo { Title = "抽出的待辦", ProjectId = projectA.Id, MeetingId = meeting.Id, Status = "待辦", Priority = "中" };
+        fixture.Context.Todo.Add(todo);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var service = fixture.CreateTodoService(0, isAdmin: true);
+
+        var sameProject = await service.GetAsync(todo.Id);
+        sameProject.Title = "改標題";
+        Assert.True((await service.UpdateAsync(sameProject)).Success);
+        Assert.Equal(meeting.Id, (await fixture.Context.Todo.AsNoTracking().FirstAsync(x => x.Id == todo.Id)).MeetingId);
+
+        var moved = await service.GetAsync(todo.Id);
+        moved.ProjectId = projectB.Id;
+        Assert.True((await service.UpdateAsync(moved)).Success);
+        Assert.Null((await fixture.Context.Todo.AsNoTracking().FirstAsync(x => x.Id == todo.Id)).MeetingId);
     }
 
     #endregion

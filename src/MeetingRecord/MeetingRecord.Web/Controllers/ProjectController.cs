@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Repositories;
+using MeetingRecord.Business.Services.DataAccess;
+using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Share.Helpers;
@@ -20,16 +22,35 @@ public class ProjectController : ControllerBase
 {
     private readonly ILogger<ProjectController> logger;
     private readonly ProjectRepository projectRepository;
+    private readonly ProjectService projectService;
     private readonly IMapper mapper;
 
     public ProjectController(
         ILogger<ProjectController> logger,
         ProjectRepository projectRepository,
+        ProjectService projectService,
         IMapper mapper)
     {
         this.logger = logger;
         this.projectRepository = projectRepository;
+        this.projectService = projectService;
         this.mapper = mapper;
+    }
+
+    /// <summary>與畫面相同的商業規則（0.4.114）：狀態要在選項內、結束日期不得早於開始日期。</summary>
+    private static string? ValidateBusinessRules(ProjectCreateUpdateDto dto)
+    {
+        if (!ProjectAdapterModel.StatusOptions.Contains(dto.Status))
+        {
+            return $"狀態必須是：{string.Join("、", ProjectAdapterModel.StatusOptions)}";
+        }
+
+        if (dto.StartDate is { } start && dto.EndDate is { } end && end < start)
+        {
+            return "結束日期 不可早於開始日期";
+        }
+
+        return null;
     }
 
     [HttpGet("{id}")]
@@ -120,6 +141,11 @@ public class ProjectController : ControllerBase
                 projectDto.Owner,
                 projectDto.Status);
 
+            if (ValidateBusinessRules(projectDto) is { } createRuleError)
+            {
+                return BadRequest(ApiResult<ProjectDto>.ValidationError(createRuleError));
+            }
+
             if (await projectRepository.ExistsByNameAsync(projectDto.Title))
             {
                 logger.LogWarning(
@@ -173,6 +199,11 @@ public class ProjectController : ControllerBase
                 return BadRequest(ApiResult.ValidationError("路由 ID 與資料 ID 不一致"));
             }
 
+            if (ValidateBusinessRules(projectDto) is { } updateRuleError)
+            {
+                return BadRequest(ApiResult.ValidationError(updateRuleError));
+            }
+
             if (await projectRepository.ExistsByNameAsync(projectDto.Title, id))
             {
                 logger.LogWarning(
@@ -215,12 +246,19 @@ public class ProjectController : ControllerBase
         {
             logger.LogDebug("Received project delete request. ProjectId={ProjectId}", id);
 
-            var success = await projectRepository.DeleteAsync(id);
-
-            if (!success)
+            // 看不到的當成不存在。刪除本身走 ProjectService（0.4.114）：和畫面同一套，
+            // 會一併刪掉附件實體檔與 AI 問答對話；原本只刪資料列，磁碟上留下孤兒檔。
+            if (await projectRepository.GetByIdAsync(id) is null)
             {
                 logger.LogWarning("Project delete request could not find record. ProjectId={ProjectId}", id);
                 return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的專案"));
+            }
+
+            var result = await projectService.DeleteAsync(id);
+            if (!result.Success)
+            {
+                logger.LogWarning("Project delete request failed. ProjectId={ProjectId}, Reason={Reason}", id, result.Message);
+                return this.ApiServerError("刪除專案失敗", result.Exception);
             }
 
             logger.LogInformation("Project deleted successfully. ProjectId={ProjectId}", id);

@@ -463,6 +463,7 @@ public class MeetingService
 
         StoredMediaFile? stored = null;
         var committed = false;
+        var uploadStarted = false;
         try
         {
             CleanTrackingHelper.Clean<Meeting>(context);
@@ -488,10 +489,27 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "這筆會議正在轉錄或產生會議紀錄，請等它完成，或從右下角的進度面板取消後再替換影音檔。");
             }
 
+            // 上傳中還沒寫進資料庫，上面那道擋不到——同一筆會議在另一個視窗上傳到一半時，要靠通知器擋（0.4.117）。
+            if (progressNotifier.Find(meetingId) is { Phase: TranscriptionPhase.Uploading })
+            {
+                Logger.LogWarning("Meeting media upload rejected because another upload is in progress. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, "這筆會議正在其他視窗上傳影音檔，請等它完成。");
+            }
+
             var previousMediaRelativePath = meeting.MediaRelativePath;
             var previousTranscriptRelativePath = meeting.TranscriptRelativePath;
 
-            stored = await fileStore.SaveMediaAsync(meeting.CreatedAt, uploadFile, progress, cancellationToken);
+            // 上傳進度也寫進共用通知器（0.4.117）：同一個帳號的其他頁籤、瀏覽器、電腦，
+            // 以及看得到這筆會議的其他人，右下角面板與清單都看得到「上傳中 xx%」。
+            progressNotifier.StartUpload(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
+            uploadStarted = true;
+            var sharedProgress = new ForwardingProgress(percent =>
+            {
+                progressNotifier.ReportUpload(meetingId, percent);
+                progress?.Report(percent);
+            });
+
+            stored = await fileStore.SaveMediaAsync(meeting.CreatedAt, uploadFile, sharedProgress, cancellationToken);
 
             meeting.MediaOriginalFileName = stored.OriginalFileName;
             meeting.MediaStoredFileName = stored.StoredFileName;
@@ -542,6 +560,12 @@ public class MeetingService
             if (!committed && stored is not null)
             {
                 fileStore.TryDeleteMedia(stored.RelativePath);
+            }
+
+            // 其他視窗正看著「上傳中 xx%」，不標成失敗就會永遠卡在那個百分比（0.4.117）。
+            if (uploadStarted && !committed)
+            {
+                progressNotifier.ReportFailed(meetingId, "影音檔上傳失敗，請重新上傳。");
             }
             return VerifyRecordResultFactory.Build(false, "影音檔上傳失敗。", ex);
         }
@@ -1006,4 +1030,13 @@ public class MeetingService
     }
 
     #endregion
+
+    /// <summary>
+    /// 同步轉發的進度回報。不用 <see cref="Progress{T}"/>：它會把回呼丟回建立當下的同步內容，
+    /// 在 Blazor 裡等於排隊等 UI 執行緒，進度會落後甚至在上傳結束後才補送。
+    /// </summary>
+    private sealed class ForwardingProgress(Action<int> onReport) : IProgress<int>
+    {
+        public void Report(int value) => onReport(value);
+    }
 }

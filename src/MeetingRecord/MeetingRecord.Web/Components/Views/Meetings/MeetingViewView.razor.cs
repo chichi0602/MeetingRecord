@@ -266,10 +266,26 @@ public partial class MeetingViewView : IDisposable
     private void OnTranscriptionProgressChanged()
         => _ = InvokeAsync(async () =>
         {
+            // 本頁正在存檔／上傳時只重繪：那條流程最後自己會重載。上傳失敗時通知器也會發「失敗」，
+            // 兩邊同時重載會在同一個 DbContext 上併發查詢（0.4.117）。這裡不記「已重載過」，之後的事件會補上。
+            if (isSaving || isUploading)
+            {
+                StateHasChanged();
+                return;
+            }
+
+            var snapshot = progressNotifier.GetSnapshot();
+
+            // 重新上傳或重新轉錄的會議又回到進行中了，要從「已重載過」移除，這一趟結束時才會再重載（0.4.117）。
+            // 以前只有重新轉錄會踩到；上傳失敗也會留下「失敗」項目後，重傳的那一趟結束時清單就不會更新。
+            foreach (var running in snapshot.Where(x => x.IsRunning))
+            {
+                reloadedFinishedMeetingIds.Remove(running.MeetingId);
+            }
+
             // 已完成的項目會留在通知器裡直到使用者關閉，所以要記下已處理過的 Id，
             // 否則之後每一次進度變動都會再重新載入一次。
-            var finishedIds = progressNotifier
-                .GetSnapshot()
+            var finishedIds = snapshot
                 .Where(x => x.Phase is TranscriptionPhase.Completed or TranscriptionPhase.Failed)
                 .Select(x => x.MeetingId)
                 .ToList();
@@ -898,6 +914,7 @@ public partial class MeetingViewView : IDisposable
 
     private static string DescribeProgressPhase(TranscriptionProgressItem item) => item.Phase switch
     {
+        TranscriptionPhase.Uploading => "上傳中",
         TranscriptionPhase.Queued => "排隊中",
         TranscriptionPhase.Converting => "轉檔中",
         TranscriptionPhase.Transcribing => $"轉錄中（第 {item.CompletedSegments}/{item.TotalSegments} 段）",

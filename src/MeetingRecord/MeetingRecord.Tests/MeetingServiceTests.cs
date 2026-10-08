@@ -258,6 +258,64 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task SaveMediaAsync_ShouldShareUploadProgressThroughNotifier()
+    {
+        // 0.4.117：其他頁籤、瀏覽器、電腦要看得到上傳中的百分比，所以上傳進度也寫進共用通知器。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("要上傳的會議");
+        var phases = new List<(TranscriptionPhase Phase, int Percent)>();
+        fixture.ProgressNotifier.Changed += () =>
+        {
+            var item = fixture.ProgressNotifier.Find(existing.Id);
+            if (item is not null)
+            {
+                phases.Add((item.Phase, item.Percent));
+            }
+        };
+
+        var result = await fixture.CreateService().SaveMediaAsync(
+            existing.Id, NewUpload("錄音.mp3", Encoding.UTF8.GetBytes("fake-audio-bytes")));
+
+        Assert.True(result.Success);
+        Assert.Contains((TranscriptionPhase.Uploading, 100), phases);
+        Assert.Equal(TranscriptionPhase.Queued, fixture.ProgressNotifier.Find(existing.Id)!.Phase);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_ShouldMarkNotifierFailed_WhenUploadStreamBreaks()
+    {
+        // 上傳那個頁籤斷線時，其他視窗不能永遠卡在「上傳中 xx%」。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("會斷線的上傳");
+        var upload = NewUpload("錄音.mp3", [1, 2, 3]);
+        upload.Content = new ThrowingStream();
+
+        var result = await fixture.CreateService().SaveMediaAsync(existing.Id, upload);
+
+        Assert.False(result.Success);
+        var item = fixture.ProgressNotifier.Find(existing.Id)!;
+        Assert.Equal(TranscriptionPhase.Failed, item.Phase);
+        Assert.False(item.IsRunning);
+        Assert.Empty(fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_ShouldReject_WhileAnotherWindowIsUploading()
+    {
+        // 上傳中還沒寫進資料庫，IsJobActive 擋不到，要靠通知器擋。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("另一個視窗正在上傳");
+        fixture.ProgressNotifier.StartUpload(existing.Id, existing.Title, existing.ProjectId, existing.CreatedByUserId);
+
+        var result = await fixture.CreateService().SaveMediaAsync(
+            existing.Id, NewUpload("錄音.mp3", [1, 2, 3]));
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.Queue.Enqueued);
+        Assert.Equal(TranscriptionPhase.Uploading, fixture.ProgressNotifier.Find(existing.Id)!.Phase);
+    }
+
+    [Fact]
     public async Task SaveMediaAsync_ShouldFillMeetingDate_WhenNotProvided()
     {
         // 使用者常常只丟檔案不填日期，此時以上傳當天為準，之後可再手動更正。
@@ -1296,6 +1354,15 @@ public sealed class MeetingServiceTests
         PageSize = 50,
         Take = 0,
     };
+
+    /// <summary>模擬上傳中途斷線：一讀就丟例外，就像 Blazor 讀檔串流逾時。</summary>
+    private sealed class ThrowingStream : MemoryStream
+    {
+        public override int Read(byte[] buffer, int offset, int count) => throw new TimeoutException("Did not receive any data in the allotted time.");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => throw new TimeoutException("Did not receive any data in the allotted time.");
+    }
 
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue
     {

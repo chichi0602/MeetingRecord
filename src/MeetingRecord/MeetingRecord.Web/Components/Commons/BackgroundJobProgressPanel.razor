@@ -48,7 +48,7 @@
                             {
                                 <span class="job-progress-panel-percent">@job.Percent%</span>
                             }
-                            @if (job.IsRunning && CanCancel)
+                            @if (job.CanBeCancelled && CanCancel)
                             {
                                 @* 「關閉」只是移除通知、工作照跑，所以真正的取消得是另一顆按鈕。 *@
                                 <button type="button"

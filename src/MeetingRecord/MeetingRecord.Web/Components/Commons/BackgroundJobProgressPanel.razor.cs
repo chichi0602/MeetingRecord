@@ -128,7 +128,7 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
     /// </summary>
     private void CancelJob(JobRow job)
     {
-        if (!CanCancel)
+        if (!CanCancel || !job.CanBeCancelled)
         {
             return;
         }
@@ -190,8 +190,15 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
         bool IsRunning,
         bool IsCompleted,
         bool IsFailed,
-        string? ErrorMessage)
+        string? ErrorMessage,
+        bool IsUploading = false)
     {
+        /// <summary>
+        /// 能不能顯示「取消」（0.4.117）：上傳中不行。上傳不在背景佇列裡，<c>RequestCancel</c> 找不到執行中的工作，
+        /// 會留下「待取消」標記，等上傳完成入列，那趟轉錄就被默默跳過。要停上傳只能關掉上傳的那個頁籤。
+        /// </summary>
+        public bool CanBeCancelled => IsRunning && !IsUploading;
+
         /// <summary>同一筆會議可能同時有轉錄與生成兩種工作，所以 key 要帶上種類。</summary>
         public string Key => $"{Kind}-{MeetingId}";
 
@@ -214,7 +221,8 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
             item.IsRunning,
             item.Phase == TranscriptionPhase.Completed,
             item.Phase == TranscriptionPhase.Failed,
-            item.ErrorMessage);
+            item.ErrorMessage,
+            item.Phase == TranscriptionPhase.Uploading);
 
         public static JobRow FromDraft(MeetingDraftProgressItem item) => new(
             JobKind.Draft,
@@ -229,6 +237,7 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
 
         private static string DescribeTranscriptionPhase(TranscriptionProgressItem item) => item.Phase switch
         {
+            TranscriptionPhase.Uploading => "上傳中",
             TranscriptionPhase.Queued => "排隊中",
             TranscriptionPhase.Converting => "轉檔中",
             TranscriptionPhase.Transcribing => $"轉錄中（第 {item.CompletedSegments}/{item.TotalSegments} 段）",

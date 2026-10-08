@@ -173,6 +173,72 @@ public sealed class TranscriptionProgressNotifierTests
 
     #endregion
 
+    #region 上傳中（0.4.117）
+
+    [Fact]
+    public void StartUpload_ShouldBeRunningAtZeroPercent()
+    {
+        // 上傳進度放進共用通知器，其他頁籤、瀏覽器、電腦才看得到。
+        var notifier = new TranscriptionProgressNotifier();
+
+        notifier.StartUpload(8, "上傳中的會議", projectId: 12, createdByUserId: 34);
+
+        var item = notifier.Find(8)!;
+        Assert.Equal(TranscriptionPhase.Uploading, item.Phase);
+        Assert.Equal(0, item.Percent);
+        Assert.True(item.IsRunning);
+        Assert.Equal(12, item.ProjectId);
+        Assert.Equal(34, item.CreatedByUserId);
+    }
+
+    [Fact]
+    public void ReportUpload_ShouldUpdatePercent_AndEnqueuedShouldTakeOver()
+    {
+        var notifier = new TranscriptionProgressNotifier();
+        notifier.StartUpload(8, "會議", projectId: null, createdByUserId: null);
+
+        notifier.ReportUpload(8, 37);
+        Assert.Equal(37, notifier.Find(8)!.Percent);
+
+        // 上傳完成入列後，同一筆變成排隊中，百分比改走轉錄的算法。
+        notifier.Enqueued(8, "會議", projectId: null, createdByUserId: null);
+        var queued = notifier.Find(8)!;
+        Assert.Equal(TranscriptionPhase.Queued, queued.Phase);
+        Assert.Equal(0, queued.Percent);
+        Assert.Single(notifier.GetSnapshot());
+    }
+
+    [Fact]
+    public void ReportUpload_ShouldNotifyOnlyWhenPercentChanges()
+    {
+        var notifier = new TranscriptionProgressNotifier();
+        notifier.StartUpload(8, "會議", projectId: null, createdByUserId: null);
+        var count = 0;
+        notifier.Changed += () => count++;
+
+        notifier.ReportUpload(8, 10);
+        notifier.ReportUpload(8, 10);
+        notifier.ReportUpload(8, 11);
+
+        Assert.Equal(2, count);
+    }
+
+    [Fact]
+    public void ReportUpload_ShouldBeIgnored_WhenNotUploading()
+    {
+        // 已經入列（或沒有這筆）就不該被遲到的上傳回報拉回「上傳中」。
+        var notifier = new TranscriptionProgressNotifier();
+        notifier.Enqueued(8, "會議", projectId: null, createdByUserId: null);
+
+        notifier.ReportUpload(8, 50);
+        notifier.ReportUpload(99, 50);
+
+        Assert.Equal(TranscriptionPhase.Queued, notifier.Find(8)!.Phase);
+        Assert.Null(notifier.Find(99));
+    }
+
+    #endregion
+
     #region 變更通知
 
     [Fact]

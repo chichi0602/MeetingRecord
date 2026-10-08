@@ -19,6 +19,12 @@ public enum TranscriptionPhase
 
     /// <summary>失敗。</summary>
     Failed = 4,
+
+    /// <summary>
+    /// 影音檔正從瀏覽器上傳到伺服器（0.4.117）。放進共用通知器，其他頁籤、瀏覽器、電腦才看得到；
+    /// 上傳完成入列後會被 <see cref="ITranscriptionProgressNotifier.Enqueued"/> 覆蓋成排隊中。
+    /// </summary>
+    Uploading = 5,
 }
 
 /// <summary>單一轉錄工作的即時進度快照。</summary>
@@ -31,6 +37,7 @@ public enum TranscriptionPhase
 /// <param name="TotalSegments">總段數（轉檔完成前為 0）。</param>
 /// <param name="ErrorMessage">失敗訊息。</param>
 /// <param name="CompletedAt">完成或失敗的時間。</param>
+/// <param name="UploadPercent">上傳百分比（0.4.117），只在 <see cref="TranscriptionPhase.Uploading"/> 時有意義。</param>
 public sealed record TranscriptionProgressItem(
     int MeetingId,
     string Title,
@@ -40,13 +47,16 @@ public sealed record TranscriptionProgressItem(
     int CompletedSegments,
     int TotalSegments,
     string? ErrorMessage,
-    DateTime? CompletedAt)
+    DateTime? CompletedAt,
+    int UploadPercent = 0)
 {
     /// <summary>目前進度百分比。</summary>
-    public int Percent => TranscriptionProgressNotifier.CalculatePercent(Phase, CompletedSegments, TotalSegments);
+    public int Percent => Phase == TranscriptionPhase.Uploading
+        ? UploadPercent
+        : TranscriptionProgressNotifier.CalculatePercent(Phase, CompletedSegments, TotalSegments);
 
-    /// <summary>是否仍在進行中（排隊、轉檔或轉錄）。</summary>
-    public bool IsRunning => Phase is TranscriptionPhase.Queued or TranscriptionPhase.Converting or TranscriptionPhase.Transcribing;
+    /// <summary>是否仍在進行中（上傳、排隊、轉檔或轉錄）。</summary>
+    public bool IsRunning => Phase is TranscriptionPhase.Uploading or TranscriptionPhase.Queued or TranscriptionPhase.Converting or TranscriptionPhase.Transcribing;
 }
 
 /// <summary>
@@ -77,6 +87,12 @@ public interface ITranscriptionProgressNotifier
 
     /// <summary>會議排入佇列。同一個 Id 重新入列（重新轉錄）會覆蓋舊項目。</summary>
     void Enqueued(int meetingId, string title, int? projectId, int? createdByUserId);
+
+    /// <summary>開始上傳影音檔（0.4.117）。同一個 Id 已有項目時覆蓋。</summary>
+    void StartUpload(int meetingId, string title, int? projectId, int? createdByUserId);
+
+    /// <summary>回報上傳百分比；百分比沒變就不通知。</summary>
+    void ReportUpload(int meetingId, int percent);
 
     /// <summary>開始 ffmpeg 轉檔切段。</summary>
     void ReportConverting(int meetingId);
@@ -123,6 +139,36 @@ public sealed class TranscriptionProgressNotifier : ITranscriptionProgressNotifi
             CompletedAt: null);
 
         Notify();
+    }
+
+    public void StartUpload(int meetingId, string title, int? projectId, int? createdByUserId)
+    {
+        items[meetingId] = new TranscriptionProgressItem(
+            meetingId,
+            title,
+            projectId,
+            createdByUserId,
+            TranscriptionPhase.Uploading,
+            CompletedSegments: 0,
+            TotalSegments: 0,
+            ErrorMessage: null,
+            CompletedAt: null,
+            UploadPercent: 0);
+
+        Notify();
+    }
+
+    public void ReportUpload(int meetingId, int percent)
+    {
+        // 每個百分比都會從上傳端回報上來；沒變就不通知，免得每個訂閱的頁籤白白重繪。
+        if (!items.TryGetValue(meetingId, out var current)
+            || current.Phase != TranscriptionPhase.Uploading
+            || current.UploadPercent == percent)
+        {
+            return;
+        }
+
+        Update(meetingId, item => item with { UploadPercent = percent });
     }
 
     public void ReportConverting(int meetingId)

@@ -611,6 +611,11 @@ public partial class MeetingViewView : IDisposable
         // 主資料存好之後才上傳影音檔——新增模式下要等資料庫給 Id 才知道檔案掛在哪一筆。
         if (pendingMediaFile is not null)
         {
+            // ⚠️ 這是 Modal 的 OnOk，AntDesign 會自己把視窗關掉——上傳進度條就在視窗裡，關掉就什麼都看不到（0.4.116）。
+            //    先把視窗留住，並先重載清單讓新會議出現在背後，大檔上傳期間使用者才知道系統在動。
+            modalVisible = true;
+            await ReloadAsync();
+
             var uploadSucceeded = await UploadPendingMediaAsync();
             if (!uploadSucceeded)
             {
@@ -758,6 +763,9 @@ public partial class MeetingViewView : IDisposable
         uploadPercent = 0;
         StateHasChanged();
 
+        // 先記下這趟上傳的會議 Id：上傳期間 CurrentRecord 可能被換成別筆，錯誤紀錄會記錯會議（0.4.116）。
+        var meetingId = CurrentRecord.Id;
+
         try
         {
             await using var stream = pendingMediaFile.OpenReadStream(MeetingMediaPolicy.MaxUploadFileSize);
@@ -769,7 +777,7 @@ public partial class MeetingViewView : IDisposable
             });
 
             var result = await meetingService.SaveMediaAsync(
-                CurrentRecord.Id,
+                meetingId,
                 new MeetingMediaUploadInput
                 {
                     FileName = pendingMediaFile.Name,
@@ -793,7 +801,7 @@ public partial class MeetingViewView : IDisposable
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", CurrentRecord.Id);
+            logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", meetingId);
             NotifyError($"影音檔上傳失敗：{ex.Message}");
             return false;
         }

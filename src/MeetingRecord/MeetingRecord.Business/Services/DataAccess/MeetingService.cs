@@ -527,7 +527,15 @@ public class MeetingService
         catch (Exception ex)
         {
             // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
-            context.ChangeTracker.Clear();
+            // ⚠️ 大檔上傳中 Blazor 連線被終止時，DbContext 已隨之釋放，Clear 會再丟 ObjectDisposedException，
+            //    蓋掉真正的錯誤、也跳過下面的紀錄與孤兒檔清理（0.4.116）。連線都沒了，也沒有追蹤要清。
+            try
+            {
+                context.ChangeTracker.Clear();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
             Logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", meetingId);
 
             // 資料庫沒寫進去，剛落地的新檔就沒有任何資料列指向它（0.4.115）。

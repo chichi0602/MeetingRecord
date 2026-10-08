@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.4
+- 文件版本：2.5
 - 文件狀態：已實作
-- 現行系統版本：0.4.115
+- 現行系統版本：0.4.116
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/10/02
+- 最後核對日期：2026/10/08
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -65,7 +65,7 @@
   - ~~團隊 `Teams`~~ —— **0.4.35 已從表單移除**且不再恢復，可見性跟著專案走。資料庫欄位 **0.4.103 已刪除**；當時的影響見下方「0.4.35 的權限副作用」（歷史）
   - 影音檔（單檔，**0.4.77 起改用共用的 `FileDropZone`，可拖拉或點擊**；`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生，⚠️ 但 `accept` 對「拖入」不可信，副檔名把關以服務層的 `IsAllowedFileName` 為準）
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
-- **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。
+- **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。**0.4.116 起**主資料存好、開始上傳前，先把 Modal 留住並重新整理清單：先前 AntDesign 在確定鈕按下後就把 Modal 關掉，進度列跟著看不見，清單也要等上傳完才出現新會議，使用者只看到「新增成功」與一片沒變的畫面。
 - 操作按鈕：
   - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
   - **AI 轉會議紀錄（0.4.73，`edit`）**：開對話框選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員。按確定會再跳一次費用確認
@@ -197,6 +197,7 @@
 ### 已知限制
 
 - 1GB 檔案經 Blazor Server 的 SignalR 傳輸相當慢，進度列會如實反映；這是 Blazor Server 的架構天花板，不在本版處理範圍。
+- **大檔上傳可能整條連線中斷**（0.4.116 記錄）：IIS Production 上 127MB 的 mp4 傳到第 11 秒，Blazor 讀檔串流判定逾時並終止連線，整頁空白，會議已建立但沒有影音檔（可重新整理後編輯該筆再上傳）。根本原因尚未確認，先檢查 IIS 是否啟用 WebSocket；若啟用後仍中斷，改走 HTTP 上傳 API。見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)。
 - 清單上的轉錄狀態**不會自動更新**，需要按「重新整理」才會看到背景轉錄的最新進度。
 - `gpt-4o-transcribe` 需要比文字生成更新的 API 版本，因此 `TranscriptionApiVersion` 獨立於 `ApiVersion`；實際可用版本以目標 Azure 資源為準。
 

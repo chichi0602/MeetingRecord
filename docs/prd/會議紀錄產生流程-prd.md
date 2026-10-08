@@ -1,10 +1,10 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.4
+- 文件版本：3.5
 - 文件狀態：已實作
-- 現行系統版本：0.4.103
+- 現行系統版本：0.4.118
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
-- 最後核對日期：2026/09/29
+- 最後核對日期：2026/10/08
 
 > 本文件描述**跨越多個版本的完整流程**。0.4.27 完成前半段（音檔上傳 → 轉錄 → 逐字稿），詳見 [會議紀錄 PRD](會議紀錄-prd.md)；0.4.31 完成後半段（套用提示詞 → LLM → 會議紀錄），入口在 [專案項目 PRD](專案項目-prd.md) 描述的 `/projects` 頁面。
 
@@ -142,11 +142,11 @@
 
 ## 六、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/ITextGenerationProvider.cs:1`（換廠商的擴充點）
-- `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/MeetingDraftJobRunner.cs:1`（生成工作流程與 map-reduce）
-- `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/TranscriptChunker.cs:1`（分段純函式）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs:1`（轉錄端的對照組）
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/PromptVariableHelper.cs:1`（變數偵測與代入）
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/NameGuidancePromptHelper.cs:1`（名詞與人名對照區塊，純函式）
-- `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs:1`（provider-aware 設定）
+- `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/ITextGenerationProvider.cs`（`ITextGenerationProvider`：換廠商的擴充點；`TextGenerationResult`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/MeetingDraftJobRunner.cs`（`MeetingDraftJobRunner.RunAsync`：生成工作流程與 map-reduce）
+- `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/TranscriptChunker.cs`（`TranscriptChunker.Split`：分段純函式）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs`（`ITranscriptionProvider`：轉錄端的對照組）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/PromptVariableHelper.cs`（`PromptVariableHelper.FindUnknownVariables`／`Render`：變數偵測與代入）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/NameGuidancePromptHelper.cs`（`NameGuidancePromptHelper.Build`：名詞與人名對照區塊，純函式）
+- `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs`（`LlmSettings`／`LlmProviderSettings`：provider-aware 設定）
 - 交叉連結：[會議紀錄 PRD](會議紀錄-prd.md)、[會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)、[專案項目 PRD](專案項目-prd.md)、[../features/檔案上傳機制.md](../features/檔案上傳機制.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

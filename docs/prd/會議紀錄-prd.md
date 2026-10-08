@@ -1,8 +1,8 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.6
+- 文件版本：2.7
 - 文件狀態：已實作
-- 現行系統版本：0.4.117
+- 現行系統版本：0.4.118
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/10/08
 
@@ -10,7 +10,7 @@
 >
 > **0.4.102：分類加回來（團隊沒有）。** 工具列恢復「分類」過濾、清單恢復「分類」欄、編輯表單恢復「分類」多選（啟用中的分類，以名稱存進 `Meeting.Categories`）。分類＝「什麼資料」，只用來篩選，**不影響誰看得到**；團隊欄位**刻意不放回會議頁**，可見性仍跟著專案走（已歸屬的看專案的主責＋協作團隊）。
 >
-> **0.4.99：會議改跟著專案走，團隊標籤不再作用。** 已歸屬專案的會議跟著專案的可見範圍（0.4.102 起看專案的主責＋協作團隊；0.4.101 看專案的資料群組；0.4.99～0.4.100 看專案成員）；**未歸屬的只有上傳者（新欄位 `Meeting.CreatedByUserId`）與管理者看得到**。`MeetingService` 原本 11 處團隊檢查全部換成 `ProjectAccess.CanViewMeeting`，另補上原本沒有檢查的 `UpdateAsync`／`DeleteAsync`；歸屬到專案、產生會議紀錄時，目標專案也要看得到。提示詞範本不再檢查團隊。API 的 `MeetingRepository` 套同一條規則，並修掉「API 更新一次就把 `ProjectId` 清成 null」的舊問題。下文第五節的團隊權控描述的是 0.4.98 以前的狀態；「把團隊守門補進 `AiChatService`」這條規劃已由專案權控完成。
+> **0.4.99：會議改跟著專案走，團隊標籤不再作用。** 已歸屬專案的會議跟著專案的可見範圍（0.4.102 起看專案的主責＋協作團隊；0.4.101 看專案的資料群組；0.4.99～0.4.100 看專案成員）；**未歸屬的只有上傳者（新欄位 `Meeting.CreatedByUserId`）與管理者看得到**。`MeetingService` 原本 11 處團隊檢查全部換成 `ProjectAccess.CanViewMeeting`，另補上原本沒有檢查的 `UpdateAsync`／`DeleteAsync`；歸屬到專案、產生會議紀錄時，目標專案也要看得到。提示詞範本不再檢查團隊。API 的 `MeetingRepository` 套同一條規則，並修掉「API 更新一次就把 `ProjectId` 清成 null」的舊問題。第五節已改寫為現行規則，舊團隊權控只留歷史註記；「把團隊守門補進 `AiChatService`」這條規劃已由專案權控完成。
 
 ## 一、目標與範圍
 
@@ -39,8 +39,8 @@
 | --- | --- |
 | 路由 | `/meetings`（`MeetingPage.razor`，`MainLayout`） |
 | REST API | `api/Meeting`、`api/v1/Meeting`（`GET {id}`／`POST search`／`POST`／`PUT {id}`／`DELETE {id}`） |
-| 選單路徑 | 會議管理（id=6）> 會議紀錄（id=61，`url=/meetings`，icon `mic`；群組 icon `event`） |
-| 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[6] = 角色_會議管理`、`[61] = 角色_會議紀錄` |
+| 選單路徑 | 側邊欄「核心功能」區的頂層項目「會議紀錄」（id=61，`url=/meetings`，icon `mic`；0.4.33 起不再有「會議管理」群組） |
+| 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[61] = 角色_會議紀錄` |
 | UI 頁面權限 | 頁面鍵「會議紀錄」（`AuthenticationStateHelper.CheckAccessPage`；管理員短路） |
 | API 動作級權限 | `會議紀錄:view` / `會議紀錄:create` / `會議紀錄:edit` / `會議紀錄:delete` |
 | 主要使用者 | 具「會議紀錄」角色權限的後台使用者；系統管理員無條件可存取 |
@@ -66,7 +66,7 @@
   - 會議日期 `MeetingDate`（選填，`DatePicker`）。**0.4.35 起：留空時於影音檔上傳成功當下自動帶入上傳當天**（`MeetingService.SaveMediaAsync` 以 `??=` 補值，已填的不覆蓋），要更正仍可從畫面編輯
   - 描述 `Description`（選填，最長 2000，3 列 `TextArea`）
   - **分類 `Categories`**（0.4.102 恢復）：多選啟用中的分類，跨整列（`.form-modal-full`），只描述資料、不影響可見性。
-  - ~~團隊 `Teams`~~ —— **0.4.35 已從表單移除**且不再恢復，可見性跟著專案走。資料庫欄位 **0.4.103 已刪除**；當時的影響見下方「0.4.35 的權限副作用」（歷史）
+  - ~~團隊 `Teams`~~ —— **0.4.35 已從表單移除**且不再恢復，可見性跟著專案走。資料庫欄位 **0.4.103 已刪除**；當時的影響（0.4.35～0.4.98 新建會議一律公開）見第五節的歷史註記
   - 影音檔（單檔，**0.4.77 起改用共用的 `FileDropZone`，可拖拉或點擊**；`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生，⚠️ 但 `accept` 對「拖入」不可信，副檔名把關以服務層的 `IsAllowedFileName` 為準）
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。**0.4.116 起**主資料存好、開始上傳前，先把 Modal 留住並重新整理清單：先前 AntDesign 在確定鈕按下後就把 Modal 關掉，進度列跟著看不見，清單也要等上傳完才出現新會議，使用者只看到「新增成功」與一片沒變的畫面。
@@ -149,8 +149,8 @@
 
 - `ITranscriptionQueue` 是行程內 `Channel<int>`（Singleton），**不做持久化**——本專案是單一實例假設（SQLite 檔案資料庫 + 本機磁碟儲存）。
 - 單一 worker：轉錄同時受外部 API 速率限制與 FFmpeg 的 CPU 佔用影響，併發只會互相拖慢。
-- 應用程式重啟時，`Program.cs` 的啟動修復區塊會把殘留在「處理中」的紀錄一律改為「失敗」（訊息「應用程式重啟導致轉錄中斷，請重新執行轉錄。」），避免永久卡住。
-- 停留在「待處理」的紀錄重啟後不會自動重跑，由使用者按「重新轉錄」重新入列。
+- 應用程式重啟時，`Program.cs` 的 `#region 轉錄狀態修復` 會把殘留在「處理中」**與「待處理」**的紀錄一律改為「失敗」（訊息「應用程式重啟導致轉錄中斷，請重新執行轉錄。」），避免永久卡住——佇列不持久化，已入列但還沒被 worker 撿走的同樣沒有人會接手。
+- 重啟後不會自動重跑，由使用者按「重新轉錄」重新入列。
 - `TranscriptionJobRunner` 全程 try/catch，失敗寫入 `TranscriptionError` 供畫面顯示；背景服務再加一層保險，單筆例外不會讓整個 worker 停掉。
 
 ## 五、權限與安全
@@ -159,24 +159,15 @@
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`會議紀錄:view`、`會議紀錄:create`、`會議紀錄:edit`、`會議紀錄:delete`。裸鍵「會議紀錄」代表該頁全部動作（向後相容）。
 - **上傳影音檔與重新轉錄歸在 `edit`**，不新增動作類型。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路。
-- **資料可見範圍（0.4.99 起）**：`MeetingService` 與 API 的 `MeetingRepository` 一律經 `ProjectAccessService`（`ProjectAccess.CanViewMeeting`／`Filter`）判斷——已歸屬看專案的主責＋協作團隊，未歸屬只有上傳者與管理者；看不到的當成不存在。
-- ~~**團隊列級權控只在 Blazor Service 層生效**：非管理員於 `MeetingService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的會議；單筆讀取、上傳影音檔、重新轉錄皆以 `TagStringHelper.IsTeamAccessible` 守門。~~（0.4.98 以前；**0.4.103 這兩個方法與 `Meeting.Teams` 已刪除**。）
-
-  ⚠️ （歷史，0.4.99 已由專案權控解決）**0.4.82 起逐字稿沒有任何列級守門。**先前唯一有守門的讀取路徑 `MeetingService.ReadTranscriptAsync` 隨著逐字稿預覽一起移除了，
-  現在讀逐字稿原文的唯一路徑是 **AI 問答**（`AiChatService`），而該服務全檔沒有 `IsTeamAccessible`／`accessScope`——
-  **那條路徑比被刪掉的預覽路徑更鬆。**要不要補守門是待決事項，見下方「待決事項」。**Web API 的 repository 路徑不做列級過濾**，與 `ProjectController`／`PromptTemplateController` 一致（見 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §4.1）。
-- 逐字稿內容為高敏感資料：預覽走 Blazor 服務層（Cookie 驗證 + 團隊守門），**沒有任何可直接下載檔案的 HTTP 端點**。
-
-### ⚠️ 0.4.35 的權限副作用（刻意為之，非 bug；歷史——0.4.99 起會議改跟著專案走，0.4.103 `Meeting.Teams` 已刪除）
-
-0.4.35 依使用者要求把「分類／團隊」從清單欄位、工具列過濾與新增/編輯表單**全部移除**，理由是會議紀錄頁只負責「上傳音檔 → 產出逐字稿」，歸屬與分類改到專案項目頁處理。
-
-副作用是 **`Teams` 是會議唯一的列權限來源**（沒有 owner 欄位，`ProjectId` 可為空無法替代），而 `TagStringHelper.ToStored([])` 回傳 `null`、predicate 把 `null` 視為公開，因此：
-
-- **0.4.35 之後新建的會議一律是公開的**，任何有「會議紀錄」頁權限的人都看得到，**包含透過 AI 問答讀到的逐字稿內容**。
-- 0.4.35 之前已標團隊的舊資料**維持原本的可見範圍**——DB 欄位與服務層 11 處權限判斷都沒有動。
-
-~~要把團隊控管收回來，只需要把表單那個團隊 `Select` 加回 `MeetingViewView.razor`，服務層不必改。~~（0.4.103 起欄位與服務層判斷都已刪除，此路不通；可見性一律走專案權控。）
+- **資料可見範圍（現行規則，0.4.99 起；0.4.102 起為主責＋協作團隊）**：會議**跟著專案走**，一律經 `ProjectAccessService.GetAsync()` 取得的 `ProjectAccess` 判斷（記憶體版 `ProjectAccess.CanViewMeeting`、SQL 版 `ProjectAccess.Filter(IQueryable<Meeting>)`，兩者是同一條規則，要一起改）：
+  - **已歸屬專案**：使用者所屬團隊（`UserTeam`）與該專案的主責或協作團隊有交集才看得到，沒有公開專案。
+  - **未歸屬專案**：只有上傳者（`Meeting.CreatedByUserId`）看得到；上傳者為 null（0.4.80 以前、啟動回填也推不回來的舊會議）時只有管理者看得到。
+  - **管理者**（`MyUser.IsAdmin`）看全部。
+  - 看不到的當成不存在：UI 找不到、API 回 404。
+  - 套用範圍：`MeetingService` 的清單、單筆、修改、刪除、上傳影音檔、重新轉錄、歸屬到專案、產生會議紀錄（目標專案也要看得到），API 的 `MeetingRepository`，以及讀逐字稿原文的 **AI 問答**（`AiChatService.EnsureAccessAsync`，見 [AI 問答 PRD](AI問答-prd.md)）。分類只是標籤，不影響可見性。
+- 逐字稿內容為高敏感資料：0.4.82 起沒有逐字稿預覽，讀逐字稿原文的唯一路徑是 AI 問答（Blazor 服務層、Cookie 驗證，經上述專案權控守門）；**沒有任何可直接下載檔案的 HTTP 端點**。
+- 歷史（已失效，僅供對照）：
+  - ~~0.4.98 以前以 `Meeting.Teams` 做團隊列級權控（`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`，無團隊＝公開）~~；0.4.35 從表單移除團隊欄位後，~~0.4.35～0.4.98 新建的會議一律公開~~，0.4.82 移除逐字稿預覽後 AI 問答一度沒有列級守門。0.4.99 改為專案權控解決，**0.4.103 `Meeting.Teams` 與上述兩個方法已刪除**。
 - 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
 - 會議逐字稿會外送第三方 LLM 供應商，導入前應確認資料處理、留存與跨境政策符合組織要求。
 
@@ -275,7 +266,7 @@
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/MeetingRegistrationTests.cs`（守住宣告式權限註冊三件組）：
 
 - `RolePermissionCatalog_ShouldContainMeetingPage`、`RolePermissionCatalog_ShouldPlaceMeetingUnderMeetingManagementGroup`：權限鍵登記於「會議管理」群組。
-- `MenuJson_ShouldContainMeetingGroupNode`、`MenuJson_ShouldContainMeetingNode`：`Menu.json` 有 id=6 群組與 id=61 子項、名稱與 url 正確。
+- `MenuJson_ShouldContainMeetingNode`、`MenuJson_ShouldPlaceMeetingAtTopLevelInCoreSection`：`Menu.json` 有 id=61 節點、名稱與 url 正確，且位於「核心功能」區的頂層。
 
 `src/MeetingRecord/MeetingRecord.Tests/MenuIconTests.cs` 的 `AllowedIcons` 已加入 `event` 與 `mic`；未加入會使整套測試失敗。
 
@@ -310,30 +301,31 @@
 
 ## 十、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Meetings/MeetingPage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor.cs:1`（頁面權限、上傳進度、會議紀錄編修入口）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs:1`（`[HasPermission]` 動作鍵）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MeetingService.cs:1`（CRUD、專案權控、上傳與重新轉錄）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MeetingFileStore.cs:1`（實體檔案存取與上傳進度回報）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs:1`（換廠商的擴充點）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/AzureOpenAiTranscriptionProvider.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/FfmpegMediaConverter.cs:1`（轉檔與切段）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionJobRunner.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionQueue.cs:1`
-- `src/MeetingRecord/MeetingRecord.Web/BackgroundServices/TranscriptionBackgroundService.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/MeetingMediaPolicy.cs:1`（允收政策）
-- `src/MeetingRecord/MeetingRecord.Business/Repositories/MeetingRepository.cs:1`（API 路徑，0.4.99 起同樣經 `ProjectAccessService` 過濾）
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Meeting.cs:1`、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs:1`（DbSet）
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Migrations/20260821090356_AddMeeting.cs:1`
-- `src/MeetingRecord/MeetingRecord.Share/Enums/TranscriptionStatus.cs:1`
-- `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs:1`、`MediaSettings.cs:1`、`MeetingMediaUploadInput.cs:1`
-- `src/MeetingRecord/MeetingRecord.Models/AdapterModel/MeetingAdapterModel.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs:1`（標籤欄位轉換）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:1`、`PermissionKeys.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs:1`（權限矩陣登記）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:1`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:1`
-- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs:1`（`AddApplicationServices`／`AddTranscriptionServices`／`AddConfiguredOptions`）
-- `src/MeetingRecord/MeetingRecord.Web/Program.cs:1`（目錄準備、Options 綁定、啟動時的轉錄狀態修復）
-- `src/MeetingRecord/MeetingRecord.Web/Configuration/StartupSafetyValidator.cs:1`（Production 檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Meetings/MeetingPage.razor`（`@page "/meetings"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor.cs`（`MeetingViewView`：`OnInitializedAsync` 頁面權限、上傳進度、會議紀錄編修入口）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs`（`MeetingController` 各端點的 `[HasPermission]` 動作鍵）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MeetingService.cs`（`MeetingService`：CRUD、專案權控、`SaveMediaAsync` 上傳、`RequeueTranscriptionAsync` 重新轉錄、`AttachToProjectAsync`／`DetachFromProjectAsync`、`RequestDraftAsync`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MeetingFileStore.cs`（`MeetingFileStore`：實體檔案存取與上傳進度回報）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（`ProjectAccess.CanViewMeeting`、`ProjectAccess.Filter(IQueryable<Meeting>)`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs`（`ITranscriptionProvider`，換廠商的擴充點）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/AzureOpenAiTranscriptionProvider.cs`（`AzureOpenAiTranscriptionProvider`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/FfmpegMediaConverter.cs`（`FfmpegMediaConverter`：轉檔與切段）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionJobRunner.cs`（`TranscriptionJobRunner`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionQueue.cs`（`ITranscriptionQueue`／`TranscriptionQueue`）
+- `src/MeetingRecord/MeetingRecord.Web/BackgroundServices/TranscriptionBackgroundService.cs`（`TranscriptionBackgroundService`）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/MeetingMediaPolicy.cs`（`MeetingMediaPolicy`：允收政策）
+- `src/MeetingRecord/MeetingRecord.Business/Repositories/MeetingRepository.cs`（`MeetingRepository`：API 路徑，0.4.99 起同樣經 `ProjectAccessService` 過濾）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Meeting.cs`（`Meeting`）、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs`（`BackendDBContext.Meeting` DbSet）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Migrations/20260821090356_AddMeeting.cs`（`AddMeeting`）
+- `src/MeetingRecord/MeetingRecord.Share/Enums/TranscriptionStatus.cs`（`TranscriptionStatus`、`TranscriptionStatusText`）
+- `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs`（`LlmSettings`）、`MediaSettings.cs`（`MediaSettings`）、`MeetingMediaUploadInput.cs`（`MeetingMediaUploadInput`）
+- `src/MeetingRecord/MeetingRecord.Models/AdapterModel/MeetingAdapterModel.cs`（`MeetingAdapterModel`）
+- `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs`（`AutoMapping` 的 `#region Meeting`：標籤欄位轉換）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_會議管理`、`角色_會議紀錄`）、`PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`GetRoleListPermissionAllName` 權限矩陣登記）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap[61]`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 61）
+- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddApplicationServices`／`AddTranscriptionServices`／`AddConfiguredOptions`）
+- `src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 系統使用的目錄準備`、`#region 加入設定強型別注入宣告`、`#region 轉錄狀態修復`）
+- `src/MeetingRecord/MeetingRecord.Web/Configuration/StartupSafetyValidator.cs`（`StartupSafetyValidator`：Production 檢查）
 - 交叉連結：[會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../features/檔案上傳機制.md](../features/檔案上傳機制.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../architecture/Web API 端點目錄.md](../architecture/Web%20API%20端點目錄.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)、[../operations/正式部署與安全檢查清單.md](../operations/正式部署與安全檢查清單.md)

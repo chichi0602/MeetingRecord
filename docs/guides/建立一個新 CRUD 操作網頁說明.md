@@ -1,10 +1,10 @@
 ﻿# 以 `RoleViewView` 為藍本手動開發新 CRUD 頁面的計畫
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.23
+- 現行系統版本：0.4.118
 - 首次實作版本：—（未追溯，約 0.1.x 初始腳手架）
-- 最後核對日期：2026/07/14
+- 最後核對日期：2026/10/08
 
 > 目標：完整複刻 `RoleViewView` 的「新增、查詢、更新、刪除、過濾、排序、分頁、驗證、通知」行為，並保留同等結構（Page + View + Service + AdapterModel + Entity + 註冊 + 樣式）。
 
@@ -24,8 +24,9 @@
    - 新增 `Entity <-> AdapterModel` 雙向映射。
 
 4. **確認 DI 註冊與路由入口**
-   - 在 `Program.cs` 加入對應 Service。
+   - 在 `MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs` 的 `AddApplicationServices()` 加入對應 Service（`Program.cs` 只在 `#region 客製服務註冊` 呼叫它，不在 `Program.cs` 直接 `AddScoped`）。
    - 建立對應 `Page.razor` 並放入 `<YourEntityView />`。
+   - 規劃頁面權限鍵與側邊選單項目（見第 4 節步驟 10）。
 
 ---
 
@@ -114,12 +115,18 @@
 2. 建立 `AdapterModel`（Models/AdapterModel）+ DataAnnotations。
 3. 在 `AutoMapping` 加入雙向映射。
 4. 建立 `YourEntityService`（Business/Services/DataAccess）並完成 CRUD + 查詢排序過濾分頁。
-5. 在 `Program.cs` 註冊 `AddScoped<YourEntityService>()`。
+5. 在 `Extensions/ServiceCollectionExtensions.cs` 的 `AddApplicationServices()` 註冊 `services.AddScoped<YourEntityService>()`。
 6. 建立 `YourEntityView.razor`（照 RoleViewView 版型）。
 7. 建立 `YourEntityView.razor.cs`（照 RoleViewView 的狀態與事件流程）。
 8. 建立 `YourEntityView.razor.css`（先複製同命名 class，再微調）。
 9. 建立 `YourEntityPage.razor` 與 `@page` 路由。
-10. 本機驗證（新增/查詢/修改/刪除/過濾/排序/分頁/驗證提示）。
+10. 接上頁面權限與側邊選單（**宣告式、以 `id` 對應**，重排 `Menu.json` 不會錯位）：
+    1. `MeetingRecord.Share/Helpers/MagicObjectHelper.cs` 新增權限鍵常數（例：`角色_Xxx`）。
+    2. `MeetingRecord.Business/Services/Other/RolePermissionService.cs` 的 `GetRoleListPermissionAllName()` 把常數放進對應群組，角色管理頁的權限矩陣才勾得到。
+    3. `MeetingRecord.Web/Datas/Menu.json` 新增選單項目，給一個**全檔唯一**的 `id`。
+    4. `MeetingRecord.Web/Components/Layout/SidebarMenuService.cs` 的 `MenuPermissionMap` 加上 `[id] = MagicObjectHelper.角色_Xxx`。
+    5. View 的 `OnInitializedAsync` 以 `AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_Xxx)` 守門（可參考 `CategoryViewView.razor.cs`）。
+11. 本機驗證（新增/查詢/修改/刪除/過濾/排序/分頁/驗證提示）。
 
 ---
 
@@ -167,8 +174,9 @@
 4. **通用機制樣板**
    - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/InputWatcher.cs`
    - `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs`
-   - `src/MeetingRecord/MeetingRecord.Web/Program.cs`
+   - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddApplicationServices()`）
    - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor`
+   - `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`、`src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`
 
 ---
 

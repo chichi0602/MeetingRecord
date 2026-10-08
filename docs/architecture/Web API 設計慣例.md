@@ -1,13 +1,13 @@
 ﻿# Web API 設計慣例
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.23
+- 現行系統版本：0.4.118
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/07/14
+- 最後核對日期：2026/10/08
 
 ## 目的
-本文件記錄腳手架 Web API 的固定設計規範，未來新增 API 時應遵守同一套 contract，讓前端與外部用戶端能用一致格式處理成功、失敗、驗證錯誤、授權錯誤與例外。
+本文件記錄 MeetingRecord Web API 的固定設計規範（沿用自本系統源頭 NET10-Blazor-Starter 樣板），未來新增 API 時應遵守同一套 contract，讓前端與外部用戶端能用一致格式處理成功、失敗、驗證錯誤、授權錯誤與例外。
 
 ## Controller 規範
 - API Controller 放在 `src/MeetingRecord/MeetingRecord.Web/Controllers/`。

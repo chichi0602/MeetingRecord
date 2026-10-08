@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.115
-- 首次實作版本：既有腳手架核心功能
-- 最後核對日期：2026/10/02
+- 現行系統版本：0.4.118
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
+- 最後核對日期：2026/10/08
 
 ## 一、目標與範圍
 
@@ -72,12 +72,12 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor:38`、`Login.razor.cs:65`（登入表單與 Cookie 簽發）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Logout.razor.cs:23`、`Pending.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Profile.razor:120`、`ChangePassword.razor:110`
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MyUserServiceLogin.cs:40`（鎖定、PBKDF2、升級、稽核）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/ExternalLoginService.cs:26`（Google 查找／建立）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:43`（登入後檢查與 RBAC 載入）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/AuthController.cs:33`、`ExternalAuthController.cs:36`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor`（`<EditForm FormName="login">` 登入表單）、`Login.razor.cs`（`Login.LoginUser`：驗證與 Cookie 簽發）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Logout.razor.cs`（`Logout.OnInitializedAsync`：登出）、`Pending.razor`（`@page "/Auths/Pending"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Profile.razor`（`OnSubmitAsync`）、`ChangePassword.razor`（`OnSubmitAsync`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MyUserServiceLogin.cs`（`MyUserServiceLogin.LoginAsync`：鎖定、PBKDF2、升級、稽核）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/ExternalLoginService.cs`（`ExternalLoginService.FindOrCreateAsync`：Google 查找／建立）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs`（`AuthenticationStateHelper.Check`：登入後檢查與 RBAC 載入）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/AuthController.cs`（`AuthController.Login`／`Refresh`／`Me`）、`ExternalAuthController.cs`（`ExternalAuthController.Login`／`Callback`）
 - 交叉連結：[使用者管理](使用者管理-prd.md)、[角色管理](角色管理-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 - 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[密碼種類與儲存機制](../security/密碼種類與儲存機制.md)、[Google OAuth2 第三方登入](../security/Google%20OAuth2%20第三方登入.md)、[記住我登入原理說明](../security/記住我登入原理說明.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)

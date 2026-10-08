@@ -1,10 +1,10 @@
 ﻿# 系統健康監控 PRD
 
-- 文件版本：2.0
+- 文件版本：2.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.93
-- 首次實作版本：既有腳手架核心功能（0.4.93 擴充為「系統健康度」）
-- 最後核對日期：2026/09/22
+- 現行系統版本：0.4.118
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.93 擴充為「系統健康度」）
+- 最後核對日期：2026/10/08
 
 ## 一、目標與範圍
 
@@ -66,12 +66,12 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/SystemHealthPage.razor:113`（頁面權限守門）、`:120`（日誌僅管理員）、`:124`（重新檢查）
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthService.cs:86`（`GetReportAsync`）、`:254`（檔案系統）、`:283`（主機資源）、`:352`～`:437`（本系統功能六項）
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthChecks.cs:19`（`SystemHealthWeights`）、`:49`（判斷純函式）
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs:1`（計分與燈號門檻）
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthModels.cs:1`（報告、項目、分組）
-- `src/MeetingRecord/MeetingRecord.Web/Health/HealthLogReader.cs:85`（`IsErrorLine`）、`DatabaseHealthCheck.cs:1`
-- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs:296`（`AddConfiguredHealthChecks`，探針 tag `live`/`ready`）
-- `src/MeetingRecord/MeetingRecord.Web/Program.cs:492`（`MapHealthChecks` `/health/live`、`/health/ready`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/SystemHealthPage.razor`（`OnInitializedAsync`：`CheckAccessPage` 頁面權限守門、`CheckIsAdmin` 日誌僅管理員；`RefreshAsync` 重新檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthService.cs`（`SystemHealthService.GetReportAsync`、`CheckFileSystem` 檔案系統、`CheckHostResources` 主機資源；本系統功能六項 `CheckAiProvider`、`CheckTranscription`、`CheckPdfExport`、`CheckExchangeRate`、`CheckBackgroundJobsAsync`、`CheckRecentErrorsAsync`）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthChecks.cs`（`SystemHealthWeights`；`SystemHealthChecks` 判斷純函式 `EvaluateAiProvider`／`EvaluateTranscription`／`EvaluatePdfExport`／`EvaluateExchangeRate`／`EvaluateBackgroundJobs`／`EvaluateRecentErrors`）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs`（`SystemHealthScoreCalculator`：計分與燈號門檻）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthModels.cs`（`SystemHealthReport`、`SystemHealthItem`、`SystemHealthGroups`）
+- `src/MeetingRecord/MeetingRecord.Web/Health/HealthLogReader.cs`（`HealthLogReader.IsErrorLine`）、`DatabaseHealthCheck.cs`（`DatabaseHealthCheck`）
+- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddConfiguredHealthChecks`，探針 tag `live`/`ready`）
+- `src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 註冊中介軟體` 內的 `app.MapHealthChecks` `/health/live`、`/health/ready`）
 - 交叉連結：[系統健康監控（機制）](../features/系統健康監控.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)

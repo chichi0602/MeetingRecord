@@ -75,7 +75,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
-## 專案速查與文件入口（NET10-Blazor-Starter）
+## 專案速查與文件入口（MeetingRecord）
 
 動手改本專案前，請先讀 **`docs/architecture/開發慣例與限制速查.md`**（相對 repo 根目錄）—— 集中列出設計慣例、不變量與踩雷點；完整文件索引見 `docs/README.md`。
 

@@ -1,10 +1,10 @@
 ﻿# 角色管理 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.114
-- 首次實作版本：既有腳手架核心功能
-- 最後核對日期：2026/10/01
+- 現行系統版本：0.4.118
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
+- 最後核對日期：2026/10/08
 
 > **0.4.102：權限矩陣的「資料群組」改回「團隊清單」。** 0.4.101 的「資料群組」權限鍵（含 `資料群組:edit` 這類動作鍵）由 `RbacBackfillService.RenameLegacyPermissionKeysAsync` 啟動時就地改回「團隊清單」，原本有的角色照樣有。角色本身的行為與 0.4.101 相同。三者分工：**角色＝能做什麼，團隊＝誰的資料，分類＝什麼資料**。
 >
@@ -90,14 +90,14 @@ View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor:103`（權限矩陣）、`RoleViewView.razor.cs:368`（矩陣互動）、`:394`（動作欄定義）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs:155`（Add）、`:188`（Update）、`:321`（回填矩陣）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs:95`（`SetPermissionInput`）、`:116`（`GetPermissionInput`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs:16`（`SyncRolePermissionsAsync`）、`:84`（`EnsurePermissionsAsync`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/PermissionChecker.cs:16`（判定）、`RbacBackfillService.cs:35`（權限目錄）
-- `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs:31`（API 403）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`（`PermissionActions`／`PermissionKey`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor`（`@page "/roleviews"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor`（「角色項目」權限矩陣 `CurrentRecord.RolePermission.Groups`）、`RoleViewView.razor.cs`（矩陣互動 `OnPermissionGroupChanged`／`OnPermissionItemChanged`／`OnPermissionActionChanged`、`GetActionChecked`；動作欄定義 `PermissionActionItems`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs`（`RoleViewService.AddAsync`、`UpdateAsync`、`AddPresetsAsync`；`OtherDependencyData` 回填矩陣）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`RolePermissionService.SetPermissionInput`、`GetPermissionInput`、`GetRoleListPermissionAllName`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs`（`RbacWriteService.SyncRolePermissionsAsync`、`EnsurePermissionsAsync`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/PermissionChecker.cs`（`PermissionChecker.HasPermissionAsync` 判定）、`RbacBackfillService.cs`（`RbacBackfillService.BackfillPermissionCatalogAsync` 權限目錄）
+- `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs`（`HasPermissionAttribute.OnAuthorizationAsync`：API 403）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
 - RBAC 資料表：`RoleView`、`Permission`、`RolePermissionMap`、`UserRole`（`src/MeetingRecord/MeetingRecord.AccessDatas/Models/`）
 - 交叉連結：[使用者管理](使用者管理-prd.md)、[登入與帳號流程](登入與帳號流程-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 - 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)

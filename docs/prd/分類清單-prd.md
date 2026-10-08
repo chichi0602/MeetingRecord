@@ -1,10 +1,10 @@
 ﻿# 分類清單 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.109
+- 現行系統版本：0.4.118
 - 首次實作版本：0.3.0
-- 最後核對日期：2026/10/01
+- 最後核對日期：2026/10/08
 
 > **0.4.102：分類＝「什麼資料」，只描述資料、不影響誰看得到。** 三者分工：**團隊＝誰的資料**（決定可見範圍，見 [團隊清單](團隊清單-prd.md)）、**分類＝什麼資料**、**角色＝能做什麼**。
 > - 分類重新被使用：專案表單與會議表單都有「分類」多選（啟用中的分類），以**名稱字串**存進 `Project.Categories`／`Meeting.Categories`（`TagStringHelper`）；會議頁工具列有「分類」過濾與清單欄，專案頁的選擇器旁有「依分類篩選」。
@@ -90,14 +90,14 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Categories/CategoryPage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor.cs:70`（頁面權限檢查）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs:36`（`[HasPermission]` 動作鍵）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/CategoryService.cs:113`（AddAsync / 前置檢查）
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Category.cs:8`（Entity 欄位）、`CategoryTeam.cs`
-- `src/MeetingRecord/MeetingRecord.Dtos/Models/CategoryCreateUpdateDto.cs:9`、`src/MeetingRecord/MeetingRecord.Dtos/Commons/CategorySearchRequestDto.cs:6`
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:37`、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:27`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:57`
-- `src/MeetingRecord/MeetingRecord.Tests/CategoryServiceTests.cs:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Categories/CategoryPage.razor`（`@page "/categories"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor.cs`（`OnInitializedAsync` 頁面權限檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs`（`CategoryController` 各端點的 `[HasPermission]` 動作鍵）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/CategoryService.cs`（`CategoryService.AddAsync`、`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 前置檢查、`SyncTeamsAsync`）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Category.cs`（`Category` Entity 欄位）、`CategoryTeam.cs`
+- `src/MeetingRecord/MeetingRecord.Dtos/Models/CategoryCreateUpdateDto.cs`（`CategoryCreateUpdateDto`）、`src/MeetingRecord/MeetingRecord.Dtos/Commons/CategorySearchRequestDto.cs`（`CategorySearchRequestDto`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_分類清單`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap[51]`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 51）
+- `src/MeetingRecord/MeetingRecord.Tests/CategoryServiceTests.cs`
 - 交叉連結：[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../superpowers/specs/2026-06-22-category-team-pages-design.md](../superpowers/specs/2026-06-22-category-team-pages-design.md)、[../prd/紀錄分類與團隊權控-prd.md](../prd/紀錄分類與團隊權控-prd.md)

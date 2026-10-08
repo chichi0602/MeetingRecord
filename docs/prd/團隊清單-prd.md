@@ -1,10 +1,10 @@
 ﻿# 團隊清單 PRD
 
-- 文件版本：2.1
+- 文件版本：2.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.109
+- 現行系統版本：0.4.118
 - 首次實作版本：0.3.0
-- 最後核對日期：2026/10/01
+- 最後核對日期：2026/10/08
 
 > **0.4.102：名稱改回「團隊清單」，團隊＝部門＝「誰的資料」。** 三者分工：**團隊＝誰的資料**（例如業務部、管理部、研發部，決定看得到哪些專案）、**分類＝什麼資料**（描述用標籤，見 [分類清單](分類清單-prd.md)）、**角色＝能做什麼**（見 [角色管理](角色管理-prd.md)）。每個專案恰好一個**主責團隊**加 0～多個**協作團隊**，**沒有公開專案**。團隊還是某專案的主責團隊時不能刪。
 >
@@ -102,14 +102,14 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Teams/TeamPage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Teams/TeamViewView.razor.cs:70`（頁面權限檢查）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/TeamController.cs:36`（`[HasPermission]` 動作鍵）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TeamService.cs:122`（AddAsync / 前置檢查含代號唯一、刪除保護）
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Team.cs:8`（Entity 欄位）、`UserTeam.cs`、`ProjectTeam.cs`、`CategoryTeam.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Teams/TeamPage.razor`（`@page "/teams"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Teams/TeamViewView.razor.cs`（`OnInitializedAsync` 頁面權限檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/TeamController.cs`（`TeamController` 各端點的 `[HasPermission]` 動作鍵）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TeamService.cs`（`TeamService.AddAsync`、`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 含代號唯一、`BeforeDeleteCheckAsync` 刪除保護、`SyncMembersAsync`）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Team.cs`（`Team` Entity 欄位）、`UserTeam.cs`、`ProjectTeam.cs`、`CategoryTeam.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（可見規則的唯一入口）、`ProjectTeamWriter.cs`（主責團隊寫入與刪除保護）
-- `src/MeetingRecord/MeetingRecord.Dtos/Models/TeamCreateUpdateDto.cs:9`、`src/MeetingRecord/MeetingRecord.Dtos/Commons/TeamSearchRequestDto.cs:6`
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:38`、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:28`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:63`
-- `src/MeetingRecord/MeetingRecord.Tests/TeamServiceTests.cs:1`
+- `src/MeetingRecord/MeetingRecord.Dtos/Models/TeamCreateUpdateDto.cs`（`TeamCreateUpdateDto`）、`src/MeetingRecord/MeetingRecord.Dtos/Commons/TeamSearchRequestDto.cs`（`TeamSearchRequestDto`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_團隊清單`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap[52]`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 52）
+- `src/MeetingRecord/MeetingRecord.Tests/TeamServiceTests.cs`
 - 交叉連結：[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../superpowers/specs/2026-06-22-category-team-pages-design.md](../superpowers/specs/2026-06-22-category-team-pages-design.md)、[../prd/紀錄分類與團隊權控-prd.md](../prd/紀錄分類與團隊權控-prd.md)

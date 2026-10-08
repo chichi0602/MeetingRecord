@@ -1,10 +1,10 @@
 ﻿# 首頁與導覽 PRD
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：0.4.102
-- 首次實作版本：既有腳手架核心功能（「關於」對話窗為 0.4.24 新增）
-- 最後核對日期：2026/09/29
+- 現行系統版本：0.4.118
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（「關於」對話窗為 0.4.24 新增）
+- 最後核對日期：2026/10/08
 
 ## 一、目標與範圍
 
@@ -22,21 +22,22 @@
 | `/` | 非選單（landing） | 無（`EmptyLayout`，任何人） | 未登入訪客 |
 | `/dashboard` | 選單 id=11「儀表板」 | 無，登入即可看（0.4.97 起；列在 `PublicMenuIds`） | 已登入使用者（0.4.54 新增） |
 | `/meetings` | 選單 id=61「會議紀錄」 | 頁面鍵「會議紀錄」（管理員豁免） | 已登入使用者（0.4.45 起的登入降落點） |
+| `/help` | 選單 id=12「使用說明」 | 頁面鍵「使用說明」（管理員豁免） | 已登入使用者 |
 | 側邊選單 | — | 各項目依 `MenuPermissionMap` 對應之權限鍵過濾 | 已登入使用者 |
 
 ## 三、畫面與欄位
 
-- Landing（`/` → `Home.razor` → `SplashView`）：品牌圖示、標題「Blazor 開發啟動範本專案」、說明文字與「系統載入中」狀態列；採 `EmptyLayout`，不含側邊選單。
+- Landing（`/` → `Home.razor` → `SplashView`）：品牌圖示、「歡迎回來」眉標、標題（0.4.112 起顯示 `@SystemName`，讀 `SystemSettings.SystemInformation.SystemName`，不寫死）、系統說明文字、「系統載入中」狀態列與版本（`SystemVersion`）；採 `EmptyLayout`，不含側邊選單。
 - 登入降落（0.4.45 起）：帳密登入、Google 登入、根路徑 `/` 的啟動畫面三條路都導向 `/meetings`（會議紀錄）。原本的 `/App` 頁面已刪除。
 - 側邊選單（`NavMenu.razor` + `SidebarMenuNode`）：
   - 依 `Menu.json` 階層渲染，支援展開與「收合」兩種型態（收合時以圖示 flyout 呈現）。
   - 每項含 `name`、`icon`（Material 圖示）、`url` 或子選單 `subMenu`。
   - 無任何可用項目時顯示「尚無可用選單」。
-  - 0.4.33 起分為兩個區塊：**核心功能**（儀表板／會議紀錄／專案項目／待辦事項，皆為頂層項；儀表板為 0.4.54 新增）與**功能選單**（系統管理〔使用者管理／角色管理〕、資料定義〔分類清單／團隊清單／提示詞清單；「團隊清單」0.4.99～0.4.100 曾移除、0.4.101 以「資料群組」之名放回、0.4.102 改回原名〕、登出）。區塊由 `Menu.json` 頂層節點的 `section` 欄位宣告，加新區塊不需改程式。
+  - 0.4.33 起分為兩個區塊：**核心功能**（儀表板 `/dashboard`／會議紀錄 `/meetings`／專案項目 `/projects`／待辦事項 `/todos`／使用說明 `/help`，皆為頂層項；儀表板為 0.4.54 新增）與**功能選單**（系統管理〔使用者管理 `/myusers`／角色管理 `/roleviews`／AI 用量分析 `/ai-usage`／系統健康度 `/system-health`〕、資料定義〔分類清單／團隊清單／提示詞清單；「團隊清單」0.4.99～0.4.100 曾移除、0.4.101 以「資料群組」之名放回、0.4.102 改回原名〕、登出）。區塊由 `Menu.json` 頂層節點的 `section` 欄位宣告，加新區塊不需改程式。
   - **標題區（0.4.44 改版，0.4.47～0.4.49 調整尺寸）**：專案標誌（與登入頁、`favicon.svg` 同一份三橢圓「AI」線稿，以 `currentColor` 描邊）＋ 系統名稱 ＋ 副標「管理後台功能清單」。系統名稱讀 `SystemSettings.SystemInformation.SystemName`，**不寫死**。收合態只留標誌（0.4.46：標題文字改用 `display: none`，`opacity`／`width` 歸零會留下高度把標題列撐長）。**標誌尺寸略大於該狀態的選單圖示**（展開 2rem、收合 2.5rem；等大會顯得單薄，且 SVG 的 viewBox 已收緊為 `5 5 110 110` 去掉四周空白），頁首高度與底線則與 `MainLayout` 的 `.top-row` 完全相同（`min-height: 4.5rem` ＋ 1px 底線），兩區的頁首邊界才會切齊。
   - **收合鈕（0.4.44 起移出側邊欄）**：改由 `MainLayout.razor` 渲染，浮在側邊欄右邊界上、垂直置中，收合／展開時跟著滑動。放在 `.sidebar` 外面是因為 `.sidebar` 有 `overflow: hidden`，擺在裡面沒辦法跨出邊界。
   - **選中樣式（0.4.45 定案）**：`--oat-300`（#D4BDA8）圓角色塊，比側邊欄底色深一階，文字與圖示皆為深棕（對比 6.4:1），無色條、無陰影；hover 用淺一階的 `--oat-200` 以資區別。收合態的圖示按鈕套同一套。
-- 右上角使用者選單（`MainLayout.razor`）：顯示目前使用者名稱與「管理員」標記，展開後含「變更密碼」「設定 API 密碼」「關於」「登出」四項。
+- 右上角使用者選單（`MainLayout.razor`）：顯示目前使用者名稱與「管理員」標記，展開後含「變更密碼」「關於」「登出」三項。「設定 API 密碼」已於 0.4.113 從選單移除（`/Profile` 頁面保留，只能直接輸入網址進入）。
 - 「關於」對話窗（`MainLayout.razor` 之 `about-modal`）：以 AntDesign `Modal`（寬 520、無 Footer）呈現七列唯讀系統資訊。
 
   | 項目 | 來源 |
@@ -63,7 +64,7 @@
 
 - 頁面權限採宣告式三件組：`Menu.json`（每項唯一 `id`）＋ `SidebarMenuService.MenuPermissionMap`（id→權限鍵）＋ `MagicObjectHelper` 權限鍵常數。
 - 免權限頁面：`SidebarMenuService.PublicMenuIds`（目前只有 11「儀表板」，0.4.97 起）。這類頁面不放進 `MenuPermissionMap`，也不列在角色管理的權限矩陣。
-- id→權限鍵對應（節錄）：21→`角色_專案項目`「專案項目」、22→`角色_待辦事項`「待辦事項」、61→`角色_會議紀錄`「會議紀錄」、3→`角色_系統管理`「系統管理功能」、31→`角色_使用者管理`「使用者管理」、32→`角色_角色管理`「角色管理」、5→`角色_資料定義`「資料定義管理功能」、51→`角色_分類清單`「分類清單」、52→`角色_團隊清單`「團隊清單」、53→`角色_提示詞清單`「提示詞清單」、4→`角色_登出`「登出」。
+- id→權限鍵對應：12→`角色_使用說明`「使用說明」、21→`角色_專案項目`「專案項目」、22→`角色_待辦事項`「待辦事項」、61→`角色_會議紀錄`「會議紀錄」、3→`角色_系統管理`「系統管理功能」、31→`角色_使用者管理`「使用者管理」、32→`角色_角色管理`「角色管理」、33→`角色_AI用量分析`「AI 用量分析」、34→`角色_系統健康度`「系統健康度」、5→`角色_資料定義`「資料定義管理功能」、51→`角色_分類清單`「分類清單」、52→`角色_團隊清單`「團隊清單」、53→`角色_提示詞清單`「提示詞清單」、4→`角色_登出`「登出」。
 - 選單過濾僅隱藏無權項目，並非授權邊界；實際資料存取由 API 端 `[HasPermission]` 與團隊可見範圍（`ProjectAccessService`，專案的主責＋協作團隊）把關（見「紀錄分類與團隊權控 PRD」與「團隊清單 PRD」）。
 - 管理員（`IsAdmin`）於 `CheckAccessPage` 短路，選單全可見。
 - 右上角使用者選單與「關於」對話窗不做權限過濾：任何已登入者皆可開啟；內容僅為系統識別資訊，不含連線字串、金鑰或其他機敏設定。
@@ -83,14 +84,14 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Home.razor:1`（`/` landing）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Commons/SplashView.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:16`（`MenuPermissionMap`）、`:46`（載入與過濾）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/NavMenu.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor:1`（使用者選單與「關於」對話窗）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor.cs:1`（`OnAboutClick`）
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemStartupState.cs:1`（啟動時間來源）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:179`（`CheckAccessPage`）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:27`（角色權限鍵常數）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Home.razor`（`/` landing）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Commons/SplashView.razor`、`SplashView.razor.cs`（`SystemName`／`SystemVersion`）
+- `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap`、`PublicMenuIds`、`LoadAuthorizedMenuItemsAsync` 載入與過濾）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/NavMenu.razor`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor`（使用者選單與「關於」對話窗）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/MainLayout.razor.cs`（`OnAboutClick`）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemStartupState.cs`（啟動時間來源）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs`（`CheckAccessPage`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`角色_*` 角色權限鍵常數）
 - 交叉連結：[紀錄分類與團隊權控 PRD](紀錄分類與團隊權控-prd.md)、[認證授權與權限機制](../security/認證授權與權限機制.md)

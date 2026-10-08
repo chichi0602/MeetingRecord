@@ -1,6 +1,8 @@
-﻿# NET10-Blazor-Starter
+﻿# MeetingRecord — AI 會議記錄小助手
 
-一份基於 **.NET 10** 與 **Blazor Server**（全域 SSR）所建立的企業級應用程式樣板，預先整合 Ant Design Blazor、EF Core、Cookie 認證、角色權限、多語系、檔案上傳、Swagger 與 NLog，協助開發團隊以最低成本啟動內部管理類系統。
+以 **.NET 10** 與 **Blazor Server** 打造的 AI 會議紀錄系統：上傳會議影音檔，系統以 FFmpeg 轉檔切段後呼叫 **Azure OpenAI 語音轉文字**產生逐字稿，再套用提示詞範本由 LLM 整理成會議紀錄草稿；會議依「專案」歸檔，可從紀錄抽出待辦事項、對專案或單一會議做 AI 問答，並以儀表板與 AI 用量分析掌握全貌。
+
+本系統源自內部樣板 NET10-Blazor-Starter（0.4.25 更名為 MeetingRecord），沿用其分層架構、Cookie／JWT 認證、RBAC 與 Ant Design Blazor 介面基礎。
 
 當前版本資訊定義在 [`src/MeetingRecord/MeetingRecord.Web/appsettings.json`](src/MeetingRecord/MeetingRecord.Web/appsettings.json) 之 `SystemSettings.SystemInformation.SystemVersion` 欄位。
 
@@ -8,9 +10,10 @@
 
 ## 1. 專案介紹
 
-- **定位**：可立即啟動、預先配置、易於擴充的 Blazor Server 樣板。
-- **適用情境**：管理後台、內部營運系統、專案追蹤平台。
-- **設計理念**：分層清晰、慣例優先、模板可複刻（CRUD 模板可直接套用至新實體）。
+- **定位**：公司內部的會議紀錄與追蹤系統 —— 影音轉逐字稿、AI 整理會議紀錄、抽出待辦、專案層級 AI 問答。
+- **適用情境**：專案例會、客戶會議、內部討論的紀錄與後續追蹤。
+- **資料權限**：角色＝能做什麼、團隊＝誰的資料（專案主責＋協作團隊）、分類＝什麼資料（只是標籤）；會議、待辦、附件、AI 問答跟著專案走，詳見[紀錄分類與團隊權控 PRD](docs/prd/紀錄分類與團隊權控-prd.md)。
+- **功能全貌**：見[系統功能總覽](docs/architecture/系統功能總覽.md)；終端使用者操作見[系統使用說明](docs/guides/系統使用說明.md)（也是系統內 `/help` 頁的內容）。
 
 ---
 
@@ -56,15 +59,28 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 
 ## 4. 主要功能
 
-- 使用者帳號 CRUD（含預設開發者帳號自動 Seed）
-- 角色管理（`RoleView`）與二維權限樹（對應 `Menu.json`）
-- 登入 / 登出（Cookie 驗證、記住我、4 位數驗證碼、玻璃擬態 UI）
-- 專案領域實體 CRUD（可作為新增其他領域模組的樣板）
-- 資料定義主資料：分類清單（Category）、團隊清單（Team）管理頁面與 Web API
-- 會議紀錄提示詞（PromptTemplate）：維護多組提示詞範本（名稱／內容／描述／啟用狀態／分類・團隊標籤），內容支援 `{{transcript}}`／`{{meetingTitle}}`／`{{meetingDate}}` 變數，供日後產生會議紀錄時套用（**「套用提示詞產生草稿」尚未實作**）
-- 會議紀錄（Meeting）：CRUD + 上傳一個影音檔（mp3／wma／mp4／mkv… 上限 1GB，含百分比進度列），系統以 FFmpeg 轉 mp3 並切段後呼叫 **Azure OpenAI 語音轉文字**，逐字稿存入檔案系統並可在畫面預覽；轉錄走行程內背景佇列，狀態可追蹤、失敗可重跑（見 [會議紀錄 PRD](docs/prd/會議紀錄-prd.md)）
-- AI 供應商可換：`ITranscriptionProvider` 為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
-- 紀錄分類/團隊標籤：專案可標記分類與團隊，並支援以角色為基礎的團隊行級權控（非管理員僅見公開或團隊交集紀錄）
+**核心功能**（側邊欄「核心功能」區）
+
+- **儀表板**（`/dashboard`）：全員可看、全公司同一份彙總數字（待辦、專案、會議時數、提示詞範本、儲存空間），刻意不放明細（見[儀表板 PRD](docs/prd/儀表板-prd.md)）
+- **會議紀錄**（`/meetings`）：上傳一個影音檔（mp3／wma／mp4／mkv… 上限 1GB，可拖拉上傳），以 FFmpeg 轉 mp3 切段後呼叫 **Azure OpenAI 語音轉文字**；套用提示詞範本由 LLM 產生會議紀錄草稿（串流進度、逐字稿雜訊過濾），可在左右同步捲動的編修器修訂，匯出 PDF；轉錄與草稿產生走行程內背景佇列，可追蹤、可取消、失敗可重跑（見[會議紀錄 PRD](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程 PRD](docs/prd/會議紀錄產生流程-prd.md)）
+- **專案項目**（`/projects`）：會議的歸檔單位；主責團隊（必填）＋協作團隊決定誰看得到，常用名詞與與會人員名冊餵給 AI 校正人名，可附加多個附件（見[專案項目 PRD](docs/prd/專案項目-prd.md)）
+- **待辦事項**（`/todos`）：手動新增或由 AI 從會議紀錄抽出（標示重複項目），負責人面板與膠囊篩選（見[待辦事項 PRD](docs/prd/待辦事項-prd.md)）
+- **AI 問答**：針對整個專案或單一會議提問，多段對話、可附加圖片與檔案、回答以 Markdown 呈現並可下載 PDF；對話存檔案系統（見[AI 問答 PRD](docs/prd/AI問答-prd.md)）
+- **使用說明**（`/help`）：系統內的白話操作手冊與 FAQ，內容即 [`docs/guides/系統使用說明.md`](docs/guides/系統使用說明.md)
+- **付費動作一律二次確認**：轉錄、產生草稿、抽出待辦、AI 問答等會花錢的動作送出前都會提示
+
+**系統管理與資料定義**
+
+- 使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
+- **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
+- **系統健康度**（`/system-health`）：健康百分比、紅黃綠燈號與最後 100 筆日誌
+- 資料定義：分類清單、團隊清單、提示詞清單（內建範本、`{{transcript}}` 等變數、啟用狀態就地切換）
+- AI 供應商可換：`ITranscriptionProvider` 與文字生成供應商為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
+
+**平台能力（沿用樣板）**
+
+- 登入 / 登出（Cookie 驗證、記住我、4 位數驗證碼、燕麥奶茶色系登入頁）、Google OAuth2 第三方登入
+- RBAC：`RoleView` 權限樹（對應 `Menu.json` 的唯一 `id`），受保護 API 以 `[HasPermission]` 動作級授權
 - 每筆紀錄可附加多檔案，自動依年月分目錄存放
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
 - 平行 API 路由：保留 `/api/...`，新增 `/api/v1/...` 作為新用戶端標準入口
@@ -134,19 +150,24 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ├── AGENTS.md / CLAUDE.md           ← LLM 協作行為準則與專案速查入口
 ├── docs/                           ← 系統設計與規範文件（依特性分類，見第 9 節）
 │   ├── README.md                   ← 文件目錄索引與分類規則
-│   ├── planning/                   ← 專案規劃、TODO、路線圖
-│   ├── architecture/               ← 架構、資料模型、API/DTO 規範、開發慣例速查
+│   ├── planning/                   ← 專案規劃、Meeting Ink 對標、樣板期 TODO（已封存）
+│   ├── architecture/               ← 架構、資料模型、API/DTO 規範、開發慣例速查、介面與對話窗設計規範
 │   ├── security/                   ← 認證、授權、密碼與機密金鑰
 │   ├── features/                   ← 個別功能機制（快取、多語系、上傳、健康監控）
-│   ├── guides/                     ← 開發/操作教學（CRUD、EFCore、測試）
-│   ├── operations/                 ← 維護、部署、設定檔、CI/CD
+│   ├── guides/                     ← 開發/操作教學（CRUD、EFCore、測試、畫面與欄位字典、系統使用說明）
+│   ├── operations/                 ← 啟動停止、維護、部署、設定檔、CI/CD
+│   ├── prd/                        ← 產品需求文件（PRD 主控台與各能力 PRD）
+│   ├── superpowers/                ← brainstorming 設計規格
 │   └── changelog/                  ← 變更紀錄
+├── scripts/                        ← Test-DocsEncoding.ps1、Backfill-AiUsageCost.mjs、樣板遺留腳本
 └── src/MeetingRecord/
     ├── MeetingRecord.slnx              ← 方案檔（新版 .slnx 格式）
     ├── MeetingRecord.Web/              ← Blazor Server 宿主
     │   ├── Components/             ← Pages / Views / Layout / Auths / Commons
-    │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Auth …）
-    │   ├── BackgroundServices/     ← TranscriptionBackgroundService（轉錄 worker）
+    │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Todo / PromptTemplate / Auth …）
+    │   ├── BackgroundServices/     ← 轉錄、會議紀錄草稿產生、匯率更新三個背景服務
+    │   ├── Extensions/             ← 服務註冊與 middleware（ServiceCollectionExtensions 等）
+    │   ├── Health/                 ← 系統健康度檢查項
     │   ├── Localization/           ← AntDesignLocaleFactory
     │   ├── Datas/Menu.json         ← Sidebar 導覽與權限定義
     │   ├── Filters/                ← ApiValidationFilter 等
@@ -156,6 +177,12 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     │   ├── Services/DataAccess/    ← Domain Service（CRUD）
     │   ├── Services/Other/         ← AuthenticationStateHelper、MeetingFileStore 等
     │   ├── Services/Transcription/ ← 語音轉錄管線（供應商抽象、FFmpeg、佇列、JobRunner）
+    │   ├── Services/TextGeneration/← 會議紀錄草稿產生（LLM、串流進度）
+    │   ├── Services/TodoExtraction/← AI 從會議紀錄抽出待辦
+    │   ├── Services/AiChat/        ← AI 問答（對話存檔案系統、附件）
+    │   ├── Services/AiUsage/       ← AI 用量帳本、計價與匯率
+    │   ├── Services/Dashboard/     ← 儀表板彙總
+    │   ├── Services/Export/        ← 會議紀錄／AI 問答 PDF 匯出
     │   ├── Repositories/           ← API 層使用的 Repository
     │   └── Models/AutoMapping.cs   ← AutoMapper Profile
     ├── MeetingRecord.AccessDatas/
@@ -185,7 +212,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
-| `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`。**語音轉錄已實際呼叫；文字生成端仍無呼叫端**。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
+| `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成：會議紀錄草稿、抽出待辦、AI 問答）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`；`Currency` 與 `Pricing.<模型>`（每百萬 token 或每分鐘音訊單價）供 AI 用量計價。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
+| `ExchangeRateSettings` | AI 用量換算新台幣的匯率來源：`Enabled`、`SourceUrl`、`TargetCurrency`（預設 `TWD`）、`RefreshIntervalHours`（預設 24）、`FallbackRate`（抓不到時的備援匯率）；由 `ExchangeRateBackgroundService` 定期更新。 |
 | `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑，預設 `ffmpeg`（走 PATH）。語音轉錄前一律用它把影音檔轉成 mp3 並切段。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。 |
 | `ExportSettings.BrowserPath` | 產生會議紀錄 PDF 用的瀏覽器執行檔（Edge 或 Chrome）。**留空即自動偵測**常見安裝位置，Windows 內建 Edge 因此通常不必設定。找不到時啟動記 WARN，匯出當下會回明確錯誤。 |
 | `SystemSettings.ConnectionStrings.SQLiteDefaultConnection` | SQLite 連線範本；實際連線字串由 `MagicObjectHelper.GetSQLiteConnectionString` 結合 `DatabasePath` 產生。 |
@@ -198,6 +226,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `SystemSettings.ExternalFileSystem.ProjectFilePath` | 專案附件根目錄（再依年/月細分）。 |
 | `SystemSettings.ExternalFileSystem.MeetingMediaPath` | 會議影音檔根目錄（再依年/月細分）；不對外服務。 |
 | `SystemSettings.ExternalFileSystem.MeetingTranscriptPath` | 會議逐字稿根目錄（再依年/月細分）；不對外服務，也沒有下載端點。 |
+| `SystemSettings.ExternalFileSystem.AiChatPath` | AI 問答對話與附件的存放根目錄（0.4.60 起對話改存檔案系統）；不對外服務。 |
 | `AutoMapper:LicenseKey` | AutoMapper 商業授權金鑰（可留空）。 |
 
 各區段詳解見 [docs/operations/日誌與設定檔說明.md](docs/operations/日誌與設定檔說明.md)。
@@ -224,7 +253,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
    `docs/` 下所有 `.md` 一律使用 **UTF-8 含 BOM**（CI 以 [`scripts/Test-DocsEncoding.ps1`](scripts/Test-DocsEncoding.ps1) 遞迴強制，缺 BOM 或含亂碼即失敗）；其餘原始碼、設定檔採 UTF-8 即可。提交前需自行確認繁體中文無亂碼。
 
 4. **撰寫文件時請對應實際 codebase**：
-   引用程式檔請使用 `相對路徑:行號` 格式，避免假設、推測或外部連結失效。
+   引用程式檔請寫「相對路徑＋類別／方法／區塊名稱」的錨點，**不要寫 `檔案:行號`**（行號會隨程式漂移）；表頭與封存規則見 [維護規範](docs/operations/維護規範.md) 第 6 節。
 
 ---
 
@@ -234,19 +263,22 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 ### 架構與設計（architecture）
 
-- [開發慣例與限制速查](docs/architecture/開發慣例與限制速查.md) — **AI/開發者必讀**：分層、SQLite migration、追蹤清理、權限同步等不變量速查。
-- [架構總覽](docs/architecture/架構總覽.md) — 6 個專案分層、依賴方向、啟動流程、DI 註冊清單。
+- [開發慣例與限制速查](docs/architecture/開發慣例與限制速查.md) — **AI/開發者必讀**：分層、SQLite migration、追蹤清理、權限同步、資料權控等不變量速查。
+- [架構總覽](docs/architecture/架構總覽.md) — 6 個專案分層、依賴方向、啟動流程、DI 註冊清單、背景服務。
 - [系統功能總覽](docs/architecture/系統功能總覽.md) — 功能面全貌：端到端流程、每個選單頁在做什麼、權限與背景工作、已知問題與限制。
 - [資料模型與資料庫](docs/architecture/資料模型與資料庫.md) — `BackendDBContext`、主要 Entity、關聯與刪除政策。
 - [DTO 與模型邊界規範](docs/architecture/DTO%20與模型邊界規範.md) — API / UI / Business / Entity 資料邊界原則與新 CRUD 模組待辦。
 - [Web API 設計慣例](docs/architecture/Web%20API%20設計慣例.md) — Controller 樣板、`ApiResult<T>`、`PagedResult<T>`、Search DTO。
 - [Web API 端點目錄](docs/architecture/Web%20API%20端點目錄.md) — 全部 controller 的實際路由、授權與回傳型別對照表。
+- [介面視覺設計規範](docs/architecture/介面視覺設計規範.md) — 常駐介面：燕麥奶茶色票（`--oat-*`）、樣式位置與載入順序、側邊欄、表格、按鈕與狀態膠囊。
+- [對話窗 UI 設計規範](docs/architecture/對話窗%20UI%20設計規範.md) — 浮層：`FormModalHelper` 尺寸類別與雙欄版型、取消確認、付費二次確認、確認窗與通知。
 - [API Versioning 策略](docs/architecture/API%20Versioning%20策略.md) — `/api/...` 與 `/api/v1/...` 平行路由、Swagger v1 分組與後續導入策略。
 
 ### 認證與安全（security）
 
-- [認證授權與權限機制](docs/security/認證授權與權限機制.md) — Cookie scheme、Claims、`RoleView` JSON、`Menu.json` 權限樹。
-- [密碼種類與儲存機制](docs/security/密碼種類與儲存機制.md) — 密碼種類盤點、`MyUser.Password` 雜湊、API 密碼、種子密碼與機密金鑰。
+- [權限授權現況評估與改善路線](docs/security/權限授權現況評估與改善路線.md) — 角色／團隊／分類分工後的權控現況評估與後續改善項目。
+- [認證授權與權限機制](docs/security/認證授權與權限機制.md) — Cookie scheme、Claims、`RoleView` JSON、`Menu.json` 權限樹、`ProjectAccessService` 資料權控。
+- [密碼種類與儲存機制](docs/security/密碼種類與儲存機制.md) — 密碼種類盤點、`MyUser.Password` 雜湊、首次登入強制改密碼、種子密碼與機密金鑰。
 - [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md) — Google SSO 設定、自動建帳與審核、串接權控與 API（JWT）。
 - [記住我登入原理說明](docs/security/記住我登入原理說明.md) — Cookie + RememberMe 完整原理。
 
@@ -254,55 +286,46 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [分散式快取機制](docs/features/分散式快取機制.md) — `ICacheService`、Memory ↔ Redis 切換、選單快取與失效行為。
 - [多語系與本地化](docs/features/多語系與本地化.md) — `RequestLocalization` 設定、`AntDesignLocaleFactory`、支援文化。
-- [檔案上傳機制](docs/features/檔案上傳機制.md) — 三類附件、年月目錄、刪除同步、容量上限。
+- [檔案上傳機制](docs/features/檔案上傳機制.md) — 專案附件、會議影音、AI 問答附件、年月目錄、刪除同步、容量上限。
 - [系統健康監控](docs/features/系統健康監控.md) — 健康百分比、紅黃綠燈號、部署探針與最後 100 筆日誌。
 
 ### 開發與操作指南（guides）
 
+- [系統使用說明](docs/guides/系統使用說明.md) — ⚠️ 寫給終端使用者，同時是系統內 `/help` 頁的內容來源。
+- [畫面與欄位字典](docs/guides/畫面與欄位字典.md) — 每個畫面、每個欄位的意義、對應程式屬性與坑（給開發與測試）。
+- [上架前人工測試清單](docs/guides/上架前人工測試清單.md) — 上線前逐項人工驗收的流程清單。
 - [建立一個新 CRUD 操作網頁說明](docs/guides/建立一個新%20CRUD%20操作網頁說明.md) — 以 `RoleViewView` 為藍本複刻新 CRUD 頁面。
-- [腳手架新專案啟動流程](docs/guides/腳手架新專案啟動流程.md) — 從本腳手架複製成新系統的改名與設定檢查清單。
-- [EFCore 指令備忘](docs/guides/EFCore.md) — Migration 指令範本。
-- [測試指南](docs/guides/測試指南.md) — 測試類別、本機執行、整合測試與覆蓋率。
-- `scripts/New-StarterProject.ps1` — 從本腳手架複製新專案並替換 namespace / project 名稱。
-- `scripts/New-CrudModule.ps1` — 產生新 CRUD 模組所需檔案骨架。
+- [EFCore 指令備忘](docs/guides/EFCore.md) — Migration 指令範本（SQLite 單軌）。
+- [測試指南](docs/guides/測試指南.md) — 測試類別涵蓋矩陣、本機執行、整合測試與覆蓋率。
+- [腳手架新專案啟動流程](docs/guides/腳手架新專案啟動流程.md) — 🗄️ 已封存：樣板時期「複製成新系統」的檢查清單。
+- `scripts/New-StarterProject.ps1`、`scripts/New-CrudModule.ps1` — 樣板遺留工具，本系統日常開發不需使用。
 
 ### 維運與部署（operations）
 
-- [維護規範](docs/operations/維護規範.md) — 版本 bump、文件同步、commit 前自我檢查清單。
+- [啟動與停止系統](docs/operations/啟動與停止系統.md) — `run.cmd` 一鍵啟動、安全停止實例、與 Visual Studio 並用的注意事項。
+- [維護規範](docs/operations/維護規範.md) — 版本 bump、文件同步表、表頭與封存規則、commit 前自我檢查清單。
 - [正式部署與安全檢查清單](docs/operations/正式部署與安全檢查清單.md) — 上線前 JWT、預設帳號、Swagger、例外揭露等必查項目。
-- [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md) — NLog 配置、各層級用法、`appsettings.json` 全表。
+- [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md) — NLog 配置、各層級用法、`appsettings.json` 全表、AI 用量回補腳本。
 - [CI-CD 與品質檢查](docs/operations/CI-CD與品質檢查.md) — GitHub Actions 流程、文件編碼檢查、弱點掃描。
 
 ### 產品需求文件（prd）
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
-- 11 份已實作能力 PRD：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
-- 部分實作：[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md) — 音檔上傳→轉錄→套用提示詞→產出會議紀錄的完整流程。**前半段（上傳→轉錄→逐字稿）已於 0.4.27 實作**，後半段（套用提示詞→LLM→草稿）仍未實作。
+- 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 用量分析](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
 
 ### 設計規格（superpowers）
 
-- [docs/superpowers/](docs/superpowers/) — 以 brainstorming 流程產出的設計規格（分類/團隊頁面、紀錄權控、會議記錄流程 Wireframe）。
+- [docs/superpowers/](docs/superpowers/README.md) — 以 brainstorming 流程產出的設計規格（會議記錄流程 Wireframe；樣板時期的分類/團隊頁面與紀錄權控規格已封存）。
 
 ### 變更紀錄（changelog）
 
-- [Login 頁面改版紀錄](docs/changelog/login-redesign.md) — 玻璃擬態登入頁、RememberMe、驗證碼導入紀錄。
-- [抑制 SQLite 已知弱點 CVE-2025-6965（0.2.9）](docs/changelog/2026-06-22-抑制SQLite-CVE-2025-6965.md) — 遞移相依 SQLitePCLRaw 2.1.11 弱點之抑制與理由。
-- [新增「分類清單」與「團隊清單」管理頁面（0.3.0）](docs/changelog/2026-06-22-分類與團隊清單.md) — 以母專案為藍本移植的階段一主資料管理頁面與 API。
-- [紀錄分類/團隊標籤與團隊權控（0.4.0）](docs/changelog/2026-06-22-紀錄分類團隊與權控.md) — 三大紀錄掛上分類/團隊標籤，導入以角色為基礎的團隊行級權控。
-- [版本號規則調整為每次異動 Patch +1（0.4.1）](docs/changelog/2026-06-22-版本號規則調整.md) — 統一版號遞增規則為最後一碼 +1。
-- [移植母專案通用型改善（0.4.2）](docs/changelog/2026-06-22-通用型改善移植.md) — SignalR 上限、Circuit 日誌、CrudActionButton 圖示操作欄、Menu 圖示驗證測試。
-- [側邊欄收合飛出 hover 修正與日誌補缺（0.4.3）](docs/changelog/2026-06-22-側邊欄收合修正與日誌補缺.md) — 收合飛出改自訂橋接、補 2 處日誌缺口。
-- [側邊欄群組圖示依名稱各自顯示（0.4.4）](docs/changelog/2026-06-22-側邊欄群組圖示.md) — 移除群組強制 folder_open，群組圖示改用 Menu.json 各自有效圖示。
-- [移除工作項目、會議記錄與 SQL Server 支援，新增「關於」對話窗（0.4.24）](docs/changelog/2026-08-17-移除工作項目會議記錄與MSSQL支援.md) — 兩項領域作業下架、資料庫收斂為單一 SQLite 軌道、使用者選單新增系統資訊對話窗。
-- [專案更名：MyProject → MeetingRecord（0.4.25）](docs/changelog/2026-08-19-專案更名為MeetingRecord.md) — 佔位符 `MyProject` 全面更名為 `MeetingRecord`，範本轉為會議紀錄系統的開發基底。
-- [新增「會議紀錄提示詞」管理頁面與 LLM 設定區段（0.4.26）](docs/changelog/2026-08-19-會議紀錄提示詞.md) — 提示詞範本 CRUD（含分類/團隊標籤與團隊行級權控），並新增 provider-aware `LlmSettings` 強型別設定骨架，尚未串接任何 LLM／轉錄 API。
-- [新增「會議紀錄」管理頁面與影音語音轉文字（0.4.27）](docs/changelog/2026-08-21-會議紀錄與影音轉錄.md) — 會議紀錄 CRUD、影音檔上傳（含進度列）、FFmpeg 轉檔切段、Azure OpenAI 語音轉錄、逐字稿落檔與預覽；新增行程內背景佇列與 `ITranscriptionProvider` 供應商抽象。
-- [FFmpeg 啟動期檢查與設定改走 PATH（0.4.29）](docs/changelog/2026-08-27-FFmpeg啟動檢查.md) — FFmpeg 存在性改在啟動時驗證（Production 中止、其他環境記 WARN），`FfmpegPath` 預設值改為 `ffmpeg`。
-- [登入頁品牌識別改為 AI 會議記錄小助手（0.4.30）](docs/changelog/2026-08-28-登入頁品牌識別.md) — 登入頁名稱、slogan、LOGO 與分頁 icon 換成產品自身識別，新增 SVG favicon。
+- [docs/changelog/](docs/changelog/README.md) — 全部改版紀錄的單一索引（依版本新→舊）。
+  此處刻意不重複列舉，避免三處索引長期不同步。
 
 ### 專案規劃（planning）
 
-- [docs/planning/](docs/planning/) — 專案總覽、架構盤點、缺口與風險、補強路線圖等 TODO 與進度追蹤文件。
+- [docs/planning/](docs/planning/README.md) — Meeting Ink 對標分析與決策清單（進行中）；樣板時期的 `01`～`06` TODO 為已封存快照。
 
 ---
 
@@ -318,4 +341,4 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 ## 11. 授權與貢獻
 
-本專案為內部樣板，請依團隊約定條款使用。提交異動前請確認已遵守第 8 節「版本管理與維護規範」全部要求。
+本專案為公司內部系統，請依團隊約定條款使用。提交異動前請確認已遵守第 8 節「版本管理與維護規範」全部要求。

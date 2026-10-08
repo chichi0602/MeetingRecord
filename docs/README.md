@@ -1,42 +1,43 @@
 ﻿# 文件目錄索引
 
-- 文件版本：6.21
+- 文件版本：6.22
 - 文件狀態：維護中
-- 現行系統版本：0.4.115
+- 現行系統版本：0.4.118
 - 首次實作版本：0.2.8
-- 最後核對日期：2026/10/02
+- 最後核對日期：2026/10/08
 
-本目錄收錄 NET10-Blazor-Starter 的所有設計、規範與教學文件。文件依「特性」分類到下列子目錄；新增文件時請先依特性歸入既有分類，**若沒有任何分類適用，請自動新增一個語意明確的英文小寫分類目錄**，並同步更新本檔與主 [`readme.md`](../readme.md) 第 9 節「文件索引」。
+本目錄收錄 MeetingRecord（AI 會議記錄小助手）的所有設計、規範與教學文件（本系統源自 NET10-Blazor-Starter 樣板，樣板時期的規劃與規格已標記封存）。文件依「特性」分類到下列子目錄；新增文件時請先依特性歸入既有分類，**若沒有任何分類適用，請自動新增一個語意明確的英文小寫分類目錄**，並同步更新本檔與主 [`readme.md`](../readme.md) 第 9 節「文件索引」。
 
-所有 `.md` 一律 UTF-8 **含 BOM**，CI 以 `scripts/Test-DocsEncoding.ps1`（遞迴）強制檢查。
+所有 `.md` 一律 UTF-8 **含 BOM**，CI 以 `scripts/Test-DocsEncoding.ps1`（遞迴）強制檢查。每份文件的五行表頭、更新與封存規則見[維護規範](operations/維護規範.md)第 6 節。
 
 ## 分類規則
 
 | 目錄 | 收納特性 | 範例 |
 |------|----------|------|
-| [`planning/`](planning/) | 專案規劃、進度追蹤、TODO、路線圖 | 專案總覽、架構盤點、缺口與風險、補強路線圖 |
-| [`architecture/`](architecture/) | 系統架構、資料模型、API / DTO 設計規範、開發慣例 | 開發慣例速查、架構總覽、資料模型、Web API 設計慣例、API Versioning |
+| [`planning/`](planning/) | 專案規劃、進度追蹤、TODO、路線圖 | Meeting Ink 對標分析與決策清單；樣板期 TODO（已封存） |
+| [`architecture/`](architecture/) | 系統架構、資料模型、API / DTO 設計規範、UI 設計規範、開發慣例 | 開發慣例速查、架構總覽、系統功能總覽、資料模型、Web API、介面視覺與對話窗設計規範 |
 | [`security/`](security/) | 認證、授權、登入、密碼與機密金鑰機制 | 認證授權、Google OAuth2、記住我、密碼儲存 |
 | [`features/`](features/) | 個別功能機制說明 | 分散式快取、多語系、檔案上傳、健康監控 |
-| [`guides/`](guides/) | 開發 / 操作教學、how-to、流程指南 | 新 CRUD 頁面、新專案啟動、EFCore、測試 |
+| [`guides/`](guides/) | 開發 / 操作教學、how-to、流程指南 | 系統使用說明、畫面與欄位字典、上架前測試清單、新 CRUD 頁面、EFCore、測試 |
 | [`operations/`](operations/) | 部署、維運、設定檔、上線檢查、CI/CD | 啟動與停止、維護規範、部署安全清單、日誌與設定檔、CI-CD |
 | [`prd/`](prd/) | 產品需求文件（功能 PRD）| PRD 主控台、各能力 PRD |
-| [`superpowers/`](superpowers/) | brainstorming 設計流程產出的規格 | 分類/團隊頁面設計、紀錄權控設計 |
-| [`changelog/`](changelog/) | 改版與變更紀錄 | 登入頁改版紀錄 |
+| [`superpowers/`](superpowers/) | brainstorming 設計流程產出的規格 | 會議記錄流程 Wireframe |
+| [`changelog/`](changelog/) | 改版與變更紀錄 | 每次版本異動一篇 |
 
 > 每個子目錄都有自己的 `README.md` 作為該目錄索引；點上方分類連結即可進入並看到該目錄清單。
 
 ## 各分類文件
 
 ### planning — 專案規劃與進度追蹤
+- [07-MeetingInk-產品分析與自建藍圖](planning/07-MeetingInk-產品分析與自建藍圖.md)
+- [08-MeetingInk-對標項目決策清單](planning/08-MeetingInk-對標項目決策清單.md) ← **現行活文件**
+- 以下 `01`～`06` 為樣板規劃階段的已封存快照，不再維護：
 - [01-專案總覽與定位-TODO](planning/01-專案總覽與定位-TODO.md)
 - [02-現有架構盤點-TODO](planning/02-現有架構盤點-TODO.md)
 - [03-缺口與風險清單-TODO](planning/03-缺口與風險清單-TODO.md)
 - [04-WebAPI-JWT-ApiResult-設計-TODO](planning/04-WebAPI-JWT-ApiResult-設計-TODO.md)
 - [05-腳手架補強實作路線圖-TODO](planning/05-腳手架補強實作路線圖-TODO.md)
 - [06-開發與文件維護規範-TODO](planning/06-開發與文件維護規範-TODO.md)
-- [07-MeetingInk-產品分析與自建藍圖](planning/07-MeetingInk-產品分析與自建藍圖.md)
-- [08-MeetingInk-對標項目決策清單](planning/08-MeetingInk-對標項目決策清單.md)
 
 ### architecture — 系統架構與設計規範
 - [開發慣例與限制速查（AI/開發者必讀）](architecture/開發慣例與限制速查.md)
@@ -46,6 +47,8 @@
 - [DTO 與模型邊界規範](architecture/DTO%20與模型邊界規範.md)
 - [Web API 設計慣例](architecture/Web%20API%20設計慣例.md)
 - [Web API 端點目錄](architecture/Web%20API%20端點目錄.md)
+- [介面視覺設計規範](architecture/介面視覺設計規範.md)
+- [對話窗 UI 設計規範](architecture/對話窗%20UI%20設計規範.md)
 - [API Versioning 策略](architecture/API%20Versioning%20策略.md)
 
 ### security — 認證、授權與安全
@@ -62,14 +65,15 @@
 - [系統健康監控](features/系統健康監控.md)
 
 ### guides — 開發與操作指南
+- [系統使用說明](guides/系統使用說明.md) ⚠️ 寫給終端使用者，同時是系統內 `/help` 頁的內容來源
+- [畫面與欄位字典](guides/畫面與欄位字典.md)
+- [上架前人工測試清單](guides/上架前人工測試清單.md)
 - [建立一個新 CRUD 操作網頁說明](guides/建立一個新%20CRUD%20操作網頁說明.md)
-- [腳手架新專案啟動流程](guides/腳手架新專案啟動流程.md)
 - [EFCore 指令備忘](guides/EFCore.md)
 - [測試指南](guides/測試指南.md)
-- [上架前人工測試清單](guides/上架前人工測試清單.md)
-- [系統使用說明](guides/系統使用說明.md) ⚠️ 寫給終端使用者，同時是系統內 `/help` 頁的內容來源
+- [腳手架新專案啟動流程](guides/腳手架新專案啟動流程.md)（已封存：樣板時期指南）
 
-> 腳手架腳本：`scripts/New-StarterProject.ps1`（複製新專案並替換 namespace / project 名稱）、`scripts/New-CrudModule.ps1`（產生新 CRUD 模組骨架）。
+> 樣板遺留腳本：`scripts/New-StarterProject.ps1`（複製新專案並替換 namespace / project 名稱）、`scripts/New-CrudModule.ps1`（產生新 CRUD 模組骨架），本系統日常開發不需使用。其他腳本：`scripts/Test-DocsEncoding.ps1`（文件編碼檢查）、`scripts/Backfill-AiUsageCost.mjs`（AI 用量費用回補，見[日誌與設定檔說明](operations/日誌與設定檔說明.md)）。
 
 ### operations — 維運與部署
 - [啟動與停止系統](operations/啟動與停止系統.md)
@@ -84,6 +88,10 @@
 - [登入與帳號流程 PRD](prd/登入與帳號流程-prd.md)
 - [專案項目 PRD](prd/專案項目-prd.md)
 - [待辦事項 PRD](prd/待辦事項-prd.md)
+- [AI 問答 PRD](prd/AI問答-prd.md)
+- [儀表板 PRD](prd/儀表板-prd.md)
+- [使用說明 PRD](prd/使用說明-prd.md)
+- [AI 用量分析 PRD](prd/AI用量分析-prd.md)
 - [使用者管理 PRD](prd/使用者管理-prd.md)
 - [角色管理 PRD](prd/角色管理-prd.md)
 - [分類清單 PRD](prd/分類清單-prd.md)
@@ -95,9 +103,9 @@
 - [紀錄分類與團隊權控 PRD](prd/紀錄分類與團隊權控-prd.md)
 
 ### superpowers — 設計規格
-- [分類清單 / 團隊清單管理頁面（階段一）](superpowers/specs/2026-06-22-category-team-pages-design.md)
-- [紀錄分類/團隊標籤與團隊權控（階段二）](superpowers/specs/2026-06-22-record-tags-team-access-design.md)
 - [會議記錄流程 Wireframe 設計規格](superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)
+- [分類清單 / 團隊清單管理頁面（階段一）](superpowers/specs/2026-06-22-category-team-pages-design.md)（已封存：樣板時期）
+- [紀錄分類/團隊標籤與團隊權控（階段二）](superpowers/specs/2026-06-22-record-tags-team-access-design.md)（已封存：樣板時期）
 
 ### changelog — 變更紀錄
 - [Login 頁面改版紀錄](changelog/login-redesign.md)
@@ -194,3 +202,6 @@
 - [首次登入強制改密碼、停用帳號在登入頁擋下（0.4.113）](changelog/2026-10-02-首次登入改密碼與停用帳號擋下.md)
 - [專案項目全面審查與修正（0.4.114）](changelog/2026-10-02-專案項目全面審查與修正.md)
 - [上線前全面審查：會議、待辦、AI 問答、帳號與權限（0.4.115）](changelog/2026-10-02-上線前全面審查與修正.md)
+- [會議上傳看得到進度、連線中斷不再蓋掉錯誤（0.4.116）](changelog/2026-10-08-會議上傳進度與連線中斷.md)
+- [上傳進度跨頁籤、瀏覽器、電腦都看得到（0.4.117）](changelog/2026-10-08-上傳進度跨視窗可見.md)
+- [docs 全面整理：對齊 Starter 文件慣例、封存樣板歷史、補齊 UI 規範／欄位字典／四份 PRD（0.4.118）](changelog/2026-10-08-文件全面整理.md)

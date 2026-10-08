@@ -1,10 +1,10 @@
 ﻿# 會議紀錄提示詞 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.103
+- 現行系統版本：0.4.118
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/09/29
+- 最後核對日期：2026/10/08
 
 > **0.4.99：提示詞範本對所有人開放。** `PromptTemplateService` 拿掉團隊過濾（清單、單筆、啟用切換、`GetEnabledSelectableAsync`），編輯表單拿掉團隊欄位；範本的維護看角色的「提示詞清單」權限（一般使用者角色的初始權限沒有），啟用中的所有人產生會議紀錄時都選得到。~~`Teams` 欄位保留、存檔時原值帶回~~。下文的團隊權控描述的是 0.4.98 以前的狀態。
 >
@@ -173,20 +173,20 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/PromptTemplates/PromptTemplatePage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/PromptTemplates/PromptTemplateViewView.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/PromptTemplates/PromptTemplateViewView.razor.cs:86`（頁面權限檢查）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/PromptTemplateController.cs:36`（`[HasPermission]` 動作鍵）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/PromptTemplateService.cs:151`（AddAsync）、`src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/PromptTemplateService.cs:244`（前置檢查）
-- `src/MeetingRecord/MeetingRecord.Business/Repositories/PromptTemplateRepository.cs:1`（API 路徑，不做列級過濾）
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/PromptVariableHelper.cs:15`（固定變數集）
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/PromptTemplate.cs:8`（Entity 欄位）、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs:23`（DbSet）
-- `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs:48`（標籤欄位轉換）
-- `src/MeetingRecord/MeetingRecord.Dtos/Models/PromptTemplateCreateUpdateDto.cs:9`、`src/MeetingRecord/MeetingRecord.Dtos/Commons/PromptTemplateSearchRequestDto.cs:6`
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:37`、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:9`
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs:26`（權限矩陣登記）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs:27`、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json:58`
-- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs:80`（DI 註冊）
-- `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs:22`、`src/MeetingRecord/MeetingRecord.Web/Program.cs:237`（Options 綁定）、`src/MeetingRecord/MeetingRecord.Web/Configuration/StartupSafetyValidator.cs:46`（Production 檢查）
-- `src/MeetingRecord/MeetingRecord.Tests/PromptTemplateServiceTests.cs:1`、`src/MeetingRecord/MeetingRecord.Tests/PromptVariableHelperTests.cs:1`、`src/MeetingRecord/MeetingRecord.Tests/PromptTemplateRegistrationTests.cs:1`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/PromptTemplates/PromptTemplatePage.razor`（`@page "/prompttemplates"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/PromptTemplates/PromptTemplateViewView.razor`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/PromptTemplates/PromptTemplateViewView.razor.cs`（`OnInitializedAsync` 頁面權限檢查）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/PromptTemplateController.cs`（`PromptTemplateController` 各端點的 `[HasPermission]` 動作鍵）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/PromptTemplateService.cs`（`PromptTemplateService.AddAsync`、`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 前置檢查、`AddPresetsAsync`）
+- `src/MeetingRecord/MeetingRecord.Business/Repositories/PromptTemplateRepository.cs`（`PromptTemplateRepository`：API 路徑，不做列級過濾）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/PromptVariableHelper.cs`（`PromptVariableHelper.KnownVariables` 固定變數集）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/PromptTemplate.cs`（`PromptTemplate` Entity 欄位）、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs`（`BackendDBContext.PromptTemplate` DbSet）
+- `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs`（`AutoMapping` 的 `#region PromptTemplate`：標籤欄位轉換）
+- `src/MeetingRecord/MeetingRecord.Dtos/Models/PromptTemplateCreateUpdateDto.cs`（`PromptTemplateCreateUpdateDto`）、`src/MeetingRecord/MeetingRecord.Dtos/Commons/PromptTemplateSearchRequestDto.cs`（`PromptTemplateSearchRequestDto`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_提示詞清單`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`GetRoleListPermissionAllName` 權限矩陣登記）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap[53]`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 53）
+- `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddApplicationServices` 的 DI 註冊）
+- `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs`（`LlmSettings`）、`src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 加入設定強型別注入宣告`：`AddOptions<LlmSettings>` Options 綁定）、`src/MeetingRecord/MeetingRecord.Web/Configuration/StartupSafetyValidator.cs`（`StartupSafetyValidator.Validate`：Production 檢查）
+- `src/MeetingRecord/MeetingRecord.Tests/PromptTemplateServiceTests.cs`、`src/MeetingRecord/MeetingRecord.Tests/PromptVariableHelperTests.cs`、`src/MeetingRecord/MeetingRecord.Tests/PromptTemplateRegistrationTests.cs`
 - 交叉連結：[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[紀錄分類與團隊權控-prd.md](紀錄分類與團隊權控-prd.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)

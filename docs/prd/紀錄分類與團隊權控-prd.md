@@ -1,10 +1,10 @@
 ﻿# 紀錄分類與團隊權控 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：0.4.103
+- 現行系統版本：0.4.118
 - 首次實作版本：0.4.0
-- 最後核對日期：2026/09/29
+- 最後核對日期：2026/10/08
 
 > **0.4.99 起，本文件描述的「紀錄上的團隊標籤字串」權控不再影響任何資料的可見性。** 0.4.102 起的現行機制是**主責＋協作團隊**：團隊＝誰的資料（部門，`Team`／`UserTeam`），專案透過 `ProjectTeam` 關聯表掛恰好一個主責團隊（`IsPrimary`，必填）加 0～多個協作團隊（比對 Id，不是名稱字串）；使用者所屬團隊與主責或協作有交集才看得到，**沒有公開專案**；會議跟著專案走（未歸屬的只有上傳者看得到），提示詞範本對所有人開放；判斷一律經 `ProjectAccessService`。角色的預設團隊（`RoleView.DefaultTeamsJson`）已刪除，`EffectiveTeamResolver` 只回傳使用者直接所屬的團隊。`Meeting`／`PromptTemplate` 的 `Teams` 字串欄位 0.4.99 起不再作用，**0.4.103 已刪除**（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`（「沒標團隊＝公開」的舊規則）與 `DataRequest.TeamFilters` 也一併刪除。**本文件第二節以後凡提到紀錄上的 `Teams` 標籤、團隊過濾與這兩個方法的段落，都是 0.4.98 以前的歷史紀錄。**
 >
@@ -74,7 +74,7 @@
 
 ## 四、內部系統運作
 
-1. 標籤字串（`TagStringHelper`）：多值以換行分隔並前後包夾，例 `"\n團隊A\n團隊B\n"`。此格式可用 `Contains("\n團隊A\n")` 在 SQLite 與 SqlServer 做「精確成員」比對，避免子字串誤判（如「團隊」誤中「團隊2」）。
+1. 標籤字串（`TagStringHelper`）：多值以換行分隔並前後包夾，例 `"\n團隊A\n團隊B\n"`。此格式可用 `Contains("\n團隊A\n")` 在 SQLite 做「精確成員」比對（本系統只支援 SQLite），避免子字串誤判（如「團隊」誤中「團隊2」）。
    - `ToStored` 去空白／去重（忽略大小寫，保留順序）；`ToList` 還原；`Wrap` 包單一名稱；`BuildContainsAnyPredicate` 產生「含任一即符合」的過濾述詞。0.4.103 起只用於分類（及專案的詞彙表、與會人員等多值欄位）。
 2. 使用者有效團隊（`EffectiveTeamResolver.GetEffectiveTeamNamesAsync`）：直接綁定使用者的團隊（`UserTeam`）。~~0.4.100 以前另聯集使用者角色的預設團隊（`RoleView.DefaultTeamsJson`）~~，該欄位已於 0.4.101 刪除。
 3. 存取範圍解析（`RecordAccessScopeProvider.GetAsync` → `RecordAccessScope(IsAdmin, Teams)`）：
@@ -103,20 +103,20 @@
 ## 七、驗收與測試
 
 - `MeetingRecord.Tests/TagStringHelperTests.cs`：`ToStored_ThenToList_ShouldRoundTrip`、`ToStored_ShouldTrimDeduplicateAndDropBlanks`、`ToStored_WithNoValidValues_ShouldReturnNull`、`BuildContainsAnyPredicate_ShouldMatchExactMemberOnly`、`BuildContainsAnyPredicate_WithEmptyValues_ShouldMatchAll`（0.4.103 起只測分類標籤用得到的字串處理；`IsTeamAccessible_*` 已隨方法刪除）。
-- `MeetingRecord.Tests/EffectiveTeamResolverTests.cs`：`ShouldReturnDirectUserTeams`、`ShouldReturnRoleDefaultTeams`、`ShouldUnionAndDeduplicate`、`ShouldReturnEmptyForUnknownUser`。
+- `MeetingRecord.Tests/EffectiveTeamResolverTests.cs`：`ShouldReturnDirectUserTeams`、`ShouldReturnAllDirectTeamsOnly`、`ShouldReturnEmptyForUnknownUser`（角色預設團隊已於 0.4.101 刪除，原 `ShouldReturnRoleDefaultTeams`／`ShouldUnionAndDeduplicate` 隨之移除）。
 - ~~`MeetingRecord.Tests/ProjectServiceTeamAccessTests.cs`~~：已不存在（團隊標籤可見性測試隨 0.4.39／0.4.99／0.4.103 陸續移除）；現行可見性測試見 `ProjectAccessTests.cs`。
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`：`HasPermissionAsync_ForAdmin_ShouldReturnTrueForAnyKey`、`HasPermissionAsync_WhenRoleHasKey_ShouldReturnTrue`、`HasPermissionAsync_LegacyBarePageKey_ShouldGrantAnyActionOfThatPage`、`HasPermissionAsync_GranularViewOnly_ShouldNotGrantEdit`、`GetEffectivePermissionKeysAsync_WithMultipleRoles_ShouldReturnUnion`。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/TagStringHelper.cs:12`（標籤字串與 `BuildContainsAnyPredicate`；`BuildTeamAccessPredicate`／`IsTeamAccessible` 0.4.103 已刪除）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/EffectiveTeamResolver.cs:16`（有效團隊解析）
-- `src/MeetingRecord/MeetingRecord.Web/Auth/RecordAccessScopeProvider.cs:34`（存取範圍解析）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/IRecordAccessScopeProvider.cs:6`（`RecordAccessScope`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs:1`、`src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs:1`（查詢範圍套用，0.4.99 起）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/PermissionChecker.cs:16`（`HasPermissionAsync`，管理員短路 `:27`）
-- `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs:31`（401/403 與 `ApiResult`）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs:36`（`[HasPermission]` 動作級標註）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs:202`（`CheckAccessAction`）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs:18`（`PermissionKey.For`／`PageOf`）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/TagStringHelper.cs`（標籤字串與 `BuildContainsAnyPredicate`；`BuildTeamAccessPredicate`／`IsTeamAccessible` 0.4.103 已刪除）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/EffectiveTeamResolver.cs`（`GetEffectiveTeamNamesAsync`，有效團隊解析）
+- `src/MeetingRecord/MeetingRecord.Web/Auth/RecordAccessScopeProvider.cs`（`GetAsync`，存取範圍解析）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/IRecordAccessScopeProvider.cs`（`RecordAccessScope`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs`、`src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（查詢範圍套用，0.4.99 起）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/PermissionChecker.cs`（`HasPermissionAsync`：先擋停用帳號，再做管理員短路）
+- `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs`（`OnAuthorizationAsync`，401/403 與 `ApiResult`）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs`（各動作方法上的 `[HasPermission]` 動作級標註）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs`（`CheckAccessAction`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionKey.For`／`PageOf`）
 - 交叉連結：[認證授權與權限機制](../security/認證授權與權限機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)、[紀錄標籤與團隊存取設計](../superpowers/specs/2026-06-22-record-tags-team-access-design.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)

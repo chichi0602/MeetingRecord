@@ -1,10 +1,10 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：0.4.115
+- 現行系統版本：0.4.118
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/10/02
+- 最後核對日期：2026/10/08
 
 > **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
@@ -133,9 +133,9 @@
 
 ## 六、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Todo.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoService.cs:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoViewView.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs:1`、`wwwroot/js/todo-auto-fit.js:1`
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Todo.cs`（`Todo`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoService.cs`（`TodoService`：`AddAsync`、`UpdateAsync`、`SetCompletedAsync`、`DeleteAsync`、`BeforeAddCheckAsync`、`BeforeUpdateCheckAsync`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoViewView.razor`、`TodoViewView.razor.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

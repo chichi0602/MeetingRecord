@@ -1,10 +1,22 @@
 ﻿# 專案總覽與定位 TODO
 
 - 文件版本：1.0
-- 文件狀態：進行中
+- 文件狀態：已封存（樣板規劃階段快照，不再維護）
 - 現行系統版本：0.4.24
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/08/17
+
+> 📌 本文為**樣板（NET10-Blazor-Starter）時期的規劃快照**，保留當時的判斷脈絡；本專案已於 0.4.25 更名並發展為 MeetingRecord（AI 會議紀錄系統）。
+> 系統現況請以 [`docs/prd/`](../prd/README.md) 的能力覆蓋矩陣與[系統功能總覽](../architecture/系統功能總覽.md)為準；各次異動的落地細節見 [`docs/changelog/`](../changelog/README.md)。
+> ⚠️ 本檔頭的「現行系統版本／最後核對日期」**刻意停在快照當時**，不隨系統版本推進 ——
+> 它記錄的是「當時看到的樣子」，更新它反而會讓人誤以為內容經過重新查證。
+
+> 📌 現況差異（2026/10/08 核對 0.4.118）：本文為封存快照，內容維持當時原貌。與現行系統不同之處：
+> - 本專案已不是「腳手架」，而是 MeetingRecord AI 會議紀錄系統（0.4.25 更名）；文中「腳手架定位」「複製成新系統」等描述不再適用
+> - Web API 現為 Auth、ExternalAuth（Google 登入）、Project、Category、Team、Meeting、Todo、PromptTemplate（另有樣板遺留的 WeatherForecast）—— 見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)
+> - CI 仍為 `.github/workflows/dotnet-ci.yml`（build、test、文件編碼、弱點掃描）—— 見 [CI-CD 與品質檢查](../operations/CI-CD與品質檢查.md)
+> - `scripts/New-StarterProject.ps1` 與 [腳手架新專案啟動流程](../guides/腳手架新專案啟動流程.md) 為樣板遺留，後者已封存
+> - 預設帳號另有「首次登入強制改密碼」（`MustChangePassword`，0.4.113）—— 見 [密碼種類與儲存機制](../security/密碼種類與儲存機制.md)
 
 ## 腳手架定位
 - [x] 目標說明：本專案定位為未來開發 .NET 10 Blazor + Web API 系統的預設腳手架，提供 UI、資料存取、DTO、API、認證授權、日誌與文件基礎。

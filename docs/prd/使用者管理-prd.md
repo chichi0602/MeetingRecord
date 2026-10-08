@@ -1,10 +1,10 @@
 ﻿# 使用者管理 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.115
-- 首次實作版本：既有腳手架核心功能
-- 最後核對日期：2026/10/02
+- 現行系統版本：0.4.118
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
+- 最後核對日期：2026/10/08
 
 > **0.4.102：「資料群組」改回「團隊」。** 團隊就是部門（例如業務部、管理部、研發部），一個人可以屬於多個；使用者看得到專案的條件是「他的任一團隊是該專案的主責或協作團隊」，**不再有公開專案**。欄位、清單欄與批次按鈕都改稱「團隊」，行為不變。
 >
@@ -79,10 +79,10 @@ View（`MyUserView`）→ `MyUserService` → `BackendDBContext`：
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/MyUserPage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/MyUserView.razor:44`、`MyUserView.razor.cs:193`（編輯回填）、`:405`（多角色／團隊變更）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MyUserService.cs:210`（Add）、`:250`（Update）、`:305`（雙寫）、`:332`（回填）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs:44`（`SyncUserRolesAsync`）、`:64`（`SyncUserTeamsAsync`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/MyUserPage.razor`（`@page "/myusers"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/MyUserView.razor`（清單、編輯視窗、批次調整團隊）、`MyUserView.razor.cs`（`OnEditAsync` 編輯回填、`OnAdditionalRolesChanged`／`OnUserTeamsChanged` 多角色／團隊變更、`OnModalOKHandleAsync` 存檔、`OnBatchTeamAsync` 批次調整團隊）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MyUserService.cs`（`MyUserService.AddAsync`、`UpdateAsync`、`SyncAssignmentsAsync` 雙寫、`GetUserAssignmentsAsync` 回填）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs`（`RbacWriteService.SyncUserRolesAsync`、`SyncUserTeamsAsync`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacBackfillService.cs`（啟動回填）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/EffectiveTeamResolver.cs`（有效團隊）
 - RBAC 資料表：`MyUser`、`RoleView`、`UserRole`、`UserTeam`、`RolePermissionMap`、`Permission`（`src/MeetingRecord/MeetingRecord.AccessDatas/Models/`）

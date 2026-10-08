@@ -1,17 +1,18 @@
 ﻿# superpowers/specs — 設計規格
 
-- 文件版本：1.1
-- 文件狀態：維護中
-- 現行系統版本：0.4.30
+- 文件版本：1.2
+- 文件狀態：維護中（本索引）；各規格為實作當時的設計紀錄
+- 現行系統版本：0.4.118
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/08/31
+- 最後核對日期：2026/10/08
 
 以 brainstorming 流程產出的設計規格；每份對應一次功能實作，實作結果見 [changelog/](../../changelog/README.md)。
+規格是「實作前的設計定案」，事後不隨程式演進改寫；與現況不同處會在文首以「📌 現況差異」註記，系統現況請以 [PRD](../../prd/README.md) 為準。
 
 | 文件 | 說明 |
 |------|------|
-| [分類清單 / 團隊清單管理頁面（階段一）](2026-06-22-category-team-pages-design.md) | Category／Team 管理頁面、Web API、權限與雙資料庫 migration 設計 |
-| [紀錄分類/團隊標籤與團隊權控（階段二）](2026-06-22-record-tags-team-access-design.md) | 紀錄分類/團隊標籤與團隊權控設計 |
-| [會議記錄流程 Wireframe 設計規格](2026-08-31-meeting-flow-wireframe-design.md) | 語音轉文字→專案項目→AI 整理會議記錄→TodoList 主流程的畫面、互動與視覺規格（尚未實作） |
+| [會議記錄流程 Wireframe 設計規格](2026-08-31-meeting-flow-wireframe-design.md) | 語音轉文字→專案項目→AI 整理會議記錄→TodoList 主流程的畫面、互動與視覺規格（部分實作，0.4.31 起；細節見文首表頭） |
+| [分類清單 / 團隊清單管理頁面（階段一）](2026-06-22-category-team-pages-design.md) | 🗄️ 已封存（樣板時期）：Category／Team 管理頁面、Web API、權限與雙資料庫 migration 設計 |
+| [紀錄分類/團隊標籤與團隊權控（階段二）](2026-06-22-record-tags-team-access-design.md) | 🗄️ 已封存（樣板時期）：紀錄分類/團隊標籤與團隊權控設計（權控已於 0.4.101～0.4.103 全面改寫） |
 
 > 返回 [文件總索引](../../README.md)

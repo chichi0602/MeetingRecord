@@ -1,10 +1,10 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.8
+- 文件版本：4.9
 - 文件狀態：已實作
-- 現行系統版本：0.4.114
-- 首次實作版本：既有腳手架核心功能（0.4.31 頁面全面改版）
-- 最後核對日期：2026/10/01
+- 現行系統版本：0.4.118
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
+- 最後核對日期：2026/10/08
 
 > **0.4.102：專案改由「主責團隊＋協作團隊」控管可見性，並加回「分類」**（取代 0.4.101 的「資料群組」與 0.4.99～0.4.100 的專案成員制）。團隊＝誰的資料（部門），分類＝什麼資料，角色＝能做什麼。
 > - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
@@ -20,10 +20,10 @@
 
 ## 一、目標與範圍
 
-提供「專案項目（Project）」的建立、查詢、修改、刪除與附件管理能力，同時作為新增其他領域 CRUD 模組時的參考樣板。
+提供「專案項目（Project）」的建立、查詢、修改、刪除與附件管理能力；專案是會議紀錄、待辦事項與 AI 問答的歸屬單位，也是資料可見範圍（主責＋協作團隊）的控管單位。
 
 - 範圍：專案選擇與單筆維護（含表單驗證）、多檔附件上傳／下載／刪除、動作級授權與主責／協作團隊可見範圍控管、分類標籤與篩選；**0.4.31 起**另含「挑一份逐字稿以 AI 產生會議紀錄」與本專案的歷史會議紀錄清單（檢視／編修）。**0.4.82 起本頁是「已歸屬專案的會議」唯一能編修與下載 PDF 的地方**——那裡才有常用名詞與與會人員的脈絡，PDF 表頭也要帶專案名稱。
-- 非範圍：專案間的相依關係／甘特圖、工時統計、跨專案報表、附件線上預覽；待辦事項的抽取與管理（TodoList 尚未實作）。
+- 非範圍：專案間的相依關係／甘特圖、工時統計、跨專案報表、附件線上預覽；待辦事項的管理見[待辦事項 PRD](待辦事項-prd.md)（0.4.32 起），由會議紀錄抽出待辦見[AI 問答 PRD](AI問答-prd.md)。
 
 > **0.4.31 版面變更**：本頁由分頁表格 CRUD 改為以專案為中心的操作介面（專案選擇器 + 摘要列 + AI 區塊 + 歷史會議紀錄）。**副作用是分頁、分類過濾、團隊過濾與關鍵字搜尋隨表格一併移除**，改以專案下拉的搜尋替代；專案數量成長到數百筆時這個版面要重新檢討。設計依據見 [會議記錄流程 Wireframe 設計規格](../superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)。
 
@@ -58,7 +58,7 @@
 - 附件：`專案附件` 一次可多選，單檔上限 1GB；待上傳清單可移除，已上傳檔案可下載或標記移除。
 - 附件查看（**0.4.43 起**）：摘要列多一格「附件 N 份」，點下去開附件視窗，列出檔名、大小、上傳時間並可下載。在此之前**主畫面完全沒有附件入口**，只有編輯視窗看得到（而且那裡的下載連結是壞的）。
 - 抽出待辦（**0.4.61 起**，**0.4.83 起這裡是唯一入口**——會議紀錄頁那顆已移除，理由見 [會議紀錄 PRD](會議紀錄-prd.md)）：`歷史會議紀錄` 已產生會議紀錄的列多一顆「抽出待辦」，用 LLM 讀該會議的 `DraftContent`（**只讀會議紀錄草稿，不讀逐字稿**——草稿已是整理過的結構化內容，抽取準確、長度短；逐字稿雜訊多會抽出一堆閒聊）。**0.4.65 起按下去會先跳費用確認對話框**（不套紅色——抽出的只是候選，勾選儲存前不會寫入任何資料；確認刻意放在按鈕而不是視窗內，因為 `TodoExtractionModal` 一開啟就呼叫 `ExtractAsync`，視窗顯示出來時 API 已經打出去了。關閉後再開啟會重新抽一次、再計費一次，文案有寫明）。抽出的候選**一律進確認視窗**，使用者可逐條勾選並修改標題、負責人、截止日與優先度後才寫入；`Todo.MeetingId` 填來源會議。權限鍵是 **`待辦事項` 的 Create**（這顆鈕真正做的事是新增待辦），不是專案項目的。抽不到東西時顯示中性提示而非錯誤；該會議先前已加入過待辦時會提示則數。**0.4.76 起另外比對標題**：與本會議先前已加入者同名的候選（`Trim` ＋ 忽略大小寫）會標上「已加入過」並**預設不勾選**，提示也會講出這次有幾條重複。⚠️ **只改預設值，不阻擋**——使用者仍可勾回去（開完後續會議再追蹤同一件事是合理的），所以服務層刻意沒有任何重複檢查，「全選」也照樣會把重複項勾起來。比對範圍限定同一場會議，跨會議比對會把「每週回報進度」這種本來就該重複的事項誤判掉。
-- AI 問答（**0.4.51 起**）：工具列一顆「AI 問答」就整個專案提問，讀本專案**所有會議紀錄與附件**（PDF／docx／txt／md／csv；掃描檔與其他格式會列為「無法讀取」）；`歷史會議紀錄` 每列一顆就單一會議提問，讀該會議的**會議紀錄與逐字稿**。多輪對話、回答邊生成邊顯示，**對話歷史存在檔案系統**。視窗滿版（0.4.94 起 96vw × 96vh，訊息氣泡最寬 960px 以維持行寬好讀）。**0.4.95 起可以附加圖片與檔案**（迴紋針、Ctrl+V 貼上、拖放；圖片 png/jpg/gif/webp ≤ 10 MB、文件 pdf/docx/txt/md/csv ≤ 20 MB、一次最多 5 個）：文件擷取文字後排在參考資料最前面，圖片隨訊息送給模型；最近 6 輪提問的附件在追問時會一起再送。附件存在對話檔旁的 `<對話 Id>.files/`，刪對話時一併刪除。細節見 [changelog](../changelog/2026-09-22-AI問答附加圖片與檔案.md)（0.4.60 起，一段對話一個 `.jsonl`，根目錄 `SystemSettings.ExternalFileSystem.AiChatPath`）——對話文字不需要被查詢或索引，放資料庫只會讓它膨脹，原本的 `AiChatMessage` 資料表已移除。同專案／會議底下所有人共用同一段對話。兩顆按鈕都不加額外動作權限（與「檢視會議紀錄」一致）。**0.4.70 起**：AI 回答改以 Markdown 渲染（先前整塊原文直接顯示，畫面上滿是 `##` 與 `**`）；每則訊息可**複製**（Markdown 原文）與**修改**——「儲存」只更正文字不呼叫模型，使用者提問另有「重新產生答案」會重跑 AI 並覆蓋原答案（**會產生費用，跳二次確認**）；整段對話與單則訊息都可**下載 PDF**（沿用「匯出」動作權限）。刪除仍只做整段（「清空這段對話」，0.4.70 起補上二次確認）。訊息以「第幾則」定位，對話檔格式不變。**0.4.79 起**：視窗左側多一欄**對話清單**，一個專案／會議底下可以有**多段對話**，可「開新對話」、切換、改名、刪除其中一段；標題預設取第一句提問（超過 20 字截斷），使用者可改名。清單與對話一樣是**所有人共用**，每一列標示是誰開的。舊的單檔對話會自動轉成第一段，使用者無感。匯出 PDF 匯出的是**目前這一段**，檔名帶上對話標題以免同一天匯出兩段撞名。
+- AI 問答（**0.4.51 起**）：工具列一顆「AI 問答」就整個專案提問，讀本專案**所有會議紀錄與附件**（PDF／docx／txt／md／csv；掃描檔與其他格式會列為「無法讀取」）；`歷史會議紀錄` 每列一顆就單一會議提問，讀該會議的**會議紀錄與逐字稿**。多輪對話、回答邊生成邊顯示，**對話歷史存在檔案系統**。視窗滿版（0.4.94 起 96vw × 96vh，訊息氣泡最寬 960px 以維持行寬好讀）。**0.4.95 起可以附加圖片與檔案**（迴紋針、Ctrl+V 貼上、拖放；圖片 png/jpg/gif/webp ≤ 10 MB、文件 pdf/docx/txt/md/csv ≤ 20 MB、一次最多 5 個）：文件擷取文字後排在參考資料最前面，圖片隨訊息送給模型；最近 6 輪提問的附件在追問時會一起再送。附件存在對話檔旁的 `<對話 Id>.files/`，刪對話時一併刪除。細節見 [changelog](../changelog/2026-09-22-AI問答附加圖片與檔案.md)（0.4.60 起，一段對話一個 `.jsonl`，根目錄 `SystemSettings.ExternalFileSystem.AiChatPath`）——對話文字不需要被查詢或索引，放資料庫只會讓它膨脹，原本的 `AiChatMessage` 資料表已移除。同專案／會議底下所有人共用同一段對話。兩顆按鈕**本身**不加額外動作權限（能進本頁就能開視窗、提問、開新對話、附加檔案、複製，與「檢視會議紀錄」一致）；**視窗內**的動作則依本頁的動作權限控管（**0.4.109 起**）：重新命名對話、編輯訊息、重新產生答案需 `專案項目:edit`，刪除對話與「清空這段對話」需 `專案項目:delete`，下載整段／單則 PDF 需 `專案項目:export`——由 `ProjectViewView` 以 `AuthenticationStateHelper.CheckAccessAction` 算好後傳入 `AiChatModal` 的 `CanEdit`／`CanDelete`／`CanExport`，沒有權限就不顯示按鈕，改名／編輯／重新產生／刪除的處理函式開頭也會再檢查一次。同列的「抽出待辦」需 `待辦事項:create`（見上；守門在按鈕，`TodoExtractionModal` 本身不檢查動作權限）。完整規格見 [AI 問答 PRD](AI問答-prd.md)。**0.4.70 起**：AI 回答改以 Markdown 渲染（先前整塊原文直接顯示，畫面上滿是 `##` 與 `**`）；每則訊息可**複製**（Markdown 原文）與**修改**（需 `edit`）——「儲存」只更正文字不呼叫模型，使用者提問另有「重新產生答案」會重跑 AI 並覆蓋原答案（**會產生費用，跳二次確認**）；整段對話與單則訊息都可**下載 PDF**（沿用「匯出」動作權限）。刪除仍只做整段（「清空這段對話」，0.4.70 起補上二次確認，需 `delete`）。訊息以「第幾則」定位，對話檔格式不變。**0.4.79 起**：視窗左側多一欄**對話清單**，一個專案／會議底下可以有**多段對話**，可「開新對話」、切換、改名（需 `edit`）、刪除（需 `delete`）其中一段；標題預設取第一句提問（超過 20 字截斷），使用者可改名。清單與對話一樣是**所有人共用**，每一列標示是誰開的。舊的單檔對話會自動轉成第一段，使用者無感。匯出 PDF 匯出的是**目前這一段**，檔名帶上對話標題以免同一天匯出兩段撞名。
 
 ## 四、內部系統運作
 
@@ -68,13 +68,13 @@
 - AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。 **0.4.71 起多一個選填的 `attendees` 參數**（插在 `promptTemplateId` 之後、`CancellationToken` 之前），清洗後以快照寫入 `Meeting.DraftAttendees`，上限 50 人。刻意**不檢查勾選的人是否真的在名冊內**——UI 只提供名冊選項，加檢查只會製造「別人改了名冊就整筆退回」的假失敗。實際的提示詞組裝見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)。
 - 從專案移除：`MeetingService.DetachFromProjectAsync(meetingId, projectId)` 檢查團隊權限、歸屬是否相符（擋畫面過期）與是否正在生成，通過後清空 `ProjectId` 與整組 `Draft*` 欄位。**不動**影音檔、逐字稿、該會議的 AI 問答對話與已抽出的待辦（待辦有自己的 `ProjectId`）。
 - 刪除專案：`OnDelete(DeleteBehavior.SetNull)` —— 底下的會議紀錄不會被刪除，只解除歸屬；確認對話框會明白告知這件事。
-- 寫入前清追蹤：`AddAsync`／`UpdateAsync`／`DeleteAsync` 進入時皆呼叫 `CleanTrackingHelper.Clean<Project>(context)`（`ProjectService.cs:201,233,286`）。
+- 寫入前清追蹤：`AddAsync`／`UpdateAsync`／`DeleteAsync` 進入時皆呼叫 `CleanTrackingHelper.Clean<Project>(context)`（`ProjectService.AddAsync`、`UpdateAsync`、`DeleteAsync`）。
 - 附件 Adapter：UI 以 `ProjectUploadFileInput`（FileName/ContentType/FileSize/Content）傳入；Service 依主表 `CreatedAt` 年／月建立目錄，檔名以 GUID 產生，落地後寫入 `ProjectFile`；刪除主表時先刪實體檔再刪紀錄。
 - Migration：模型異動需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
 
 ## 五、權限與安全
 
-- 動作級授權：`ProjectController` 各端點標註 `[HasPermission(角色_專案項目, 動作)]`（`ProjectController.cs:36,67,113,152,201`）；無權限回 403 且維持 `ApiResult` 結構；管理員短路。
+- 動作級授權：`ProjectController` 各端點標註 `[HasPermission(角色_專案項目, 動作)]`（`ProjectController.GetById`、`Search`、`Create`、`Update`、`Delete`）；無權限回 403 且維持 `ApiResult` 結構；管理員短路。
 - UI 與 API 共用同一 RBAC 權威（`IPermissionChecker`）。
 - **角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**：動作（新增／修改／刪除／匯出）以 `[HasPermission("resource:action")]` 與 `CheckAccessAction` 控管。
 - **資料可見範圍由主責＋協作團隊決定**（0.4.102 起；0.4.39～0.4.98 沒有列級控管、0.4.99～0.4.100 為專案成員制、0.4.101 為資料群組）：使用者所屬團隊與專案的主責或協作團隊有交集才看得到，沒有公開專案；看不到的專案當成不存在（UI 找不到、API 404）。規則見 [開發慣例與限制速查 §4.0](../architecture/開發慣例與限制速查.md)。
@@ -116,12 +116,13 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Projects/ProjectPage.razor:1`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor.cs:1`
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs:1`
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs:1`
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Project.cs:1`、`ProjectFile.cs:1`
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs:30`
+- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Projects/ProjectPage.razor`（`@page "/projects"`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor`（`<AiChatModal>` 的 `CanEdit`／`CanDelete`／`CanExport`、「抽出待辦」鈕的 `待辦事項:create` 守門）、`ProjectViewView.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/AiChatModal.razor.cs`（`CanEdit`／`CanDelete`／`CanExport` 參數）、`TodoExtractionModal.razor.cs`
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs`（`ProjectService`）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs`（`ProjectController`）
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Project.cs`（`Project`）、`ProjectFile.cs`（`ProjectFile`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_專案項目`）
 - 交叉連結：[Web API 設計慣例](../architecture/Web%20API%20設計慣例.md)、[檔案上傳機制](../features/檔案上傳機制.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
 
 > 備註（0.4.43 更正）：先前記載的 `/api/project-files/{id}/download` **端點從來沒有存在過**，所以附件下載一直是壞的；而且就算補上 controller 也會 401——API 全是 JWT Bearer，瀏覽器導航帶的是 Cookie。

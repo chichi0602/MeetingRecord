@@ -1,6 +1,6 @@
 ﻿# AI 用量分析 PRD
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.80
@@ -102,7 +102,7 @@
 | 區段 | 鍵 | 現行值 | 說明 |
 |---|---|---|---|
 | `LlmSettings` | `Currency` | `USD` | 定價幣別 |
-| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
+| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
 | `ExchangeRateSettings` | `Enabled` | `true` | 總開關；`false` 時整頁退回定價幣別 |
 | `ExchangeRateSettings` | `SourceUrl` | `https://open.er-api.com/v6/latest/USD` | 必須是 http(s) 絕對網址 |
 | `ExchangeRateSettings` | `TargetCurrency` | `TWD` | 必須是三碼英文字母 |
@@ -180,6 +180,7 @@
 - **0.4.97 起**：儀表板的會議時數取自本帳本的轉錄秒數；0.4.99 起啟動時以帳本中最早的轉錄紀錄回推舊會議的上傳者（0.4.99 為 `ProjectAccessBackfillService`，現為 `TeamConversionService.BackfillMeetingCreatorsAsync`）。
 - **0.4.121**：新增功能別 `AiUsageFeature.LogAnalysis = 5`（「AI 日誌分析」，token 計費），由 `DiagnosticAiService` 寫帳（成功／失敗／取消都記，不帶會議／專案）；功能下拉自動多一項。
 - **0.4.122**：新增功能別 `AiUsageFeature.ExceptionAnalysis = 6`（「AI 例外分析」，token 計費，系統例外紀錄的明細窗觸發），同樣由 `DiagnosticAiService` 寫帳；功能下拉自動多一項。
+- **0.4.124**：補上 Azure 轉錄部署 `gpt-transcribe` 的單價（每分鐘 0.0045 美元，依 OpenAI 官方價目）；之前健康監控「AI 供應商設定」亮黃燈，轉錄金額記成「—」。本機帳本沒有這個模型的舊紀錄，未回填。`SystemHealthChecksTests.AiProvider_ShippedPricing_ShouldCoverTheDeploymentsInUse` 以出貨的單價表守住。
 
 ### 程式
 

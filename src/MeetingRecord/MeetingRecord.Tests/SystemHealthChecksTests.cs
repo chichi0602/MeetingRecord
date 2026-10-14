@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
@@ -95,6 +96,37 @@ public sealed class SystemHealthChecksTests
 
         Assert.Equal(SystemHealthStatus.Healthy, verdict.Status);
         Assert.DoesNotContain("real-secret-key", verdict.Evidence);
+    }
+
+    [Fact]
+    public void AiProvider_ShippedPricing_ShouldCoverTheDeploymentsInUse()
+    {
+        // 0.4.124：Azure 轉錄部署名稱是 gpt-transcribe，出貨的 appsettings.json 沒有它的單價，
+        // 健康監控亮黃燈、轉錄金額全變「—」。這裡以出貨的單價表為準，日後有人刪掉會被擋下。
+        var settings = new LlmSettings();
+        new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(FindMenuJsonPath()))!, "appsettings.json"))
+            .Build()
+            .GetSection(LlmSettings.SectionName)
+            .Bind(settings);
+
+        var provider = settings.Providers["AzureOpenAI"];
+        provider.Endpoint = "https://contoso.openai.azure.com/";
+        provider.ApiKey = "real-secret-key";
+        settings.DefaultProvider = "AzureOpenAI";
+        settings.TranscriptionProvider = "AzureOpenAI";
+
+        foreach (var (model, transcriptionModel) in new[] { ("gpt-5.6-sol", "gpt-transcribe"), ("gpt-4o-mini", "gpt-4o-transcribe") })
+        {
+            provider.Model = model;
+            provider.TranscriptionModel = transcriptionModel;
+
+            var verdict = SystemHealthChecks.EvaluateAiProvider(settings);
+
+            Assert.True(verdict.Status == SystemHealthStatus.Healthy, $"{model}／{transcriptionModel}：{verdict.FailureMessage}");
+        }
+
+        Assert.Equal(0.0045m, settings.Pricing["gpt-transcribe"].AudioPerMinute);
     }
 
     // ───────── 語音轉錄 ─────────

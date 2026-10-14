@@ -60,10 +60,30 @@ public class MagicObjectHelper
     public const string 角色_AI用量分析 = "AI 用量分析";
 
     /// <summary>
-    /// 系統健康度（0.4.93）。同上：與 Menu.json 的 name 一字不差、尾端不加空白。
-    /// ⚠️ 開給非管理員時，頁面下方的「原始日誌」仍然只有管理員看得到。
+    /// 側邊欄「系統管理」底下的兩個子群組（0.4.120）。群組本身沒有權限鍵、也不在權限目錄：
+    /// 底下有任何一項看得到才顯示（見 <c>SidebarMenuService.GroupOnlyMenuIds</c>）。
     /// </summary>
-    public const string 角色_系統健康度 = "系統健康度";
+    public const string 角色_帳號與權限 = "帳號與權限";
+    public const string 角色_監控與診斷 = "監控與診斷";
+
+    /// <summary>
+    /// 「監控與診斷」底下的管理者限定頁面（0.4.120 起；0.4.93～0.4.119 名為「系統健康度」且可開給角色）。
+    /// ⚠️ 這些名稱**刻意不放進** <c>RolePermissionService.GetRoleListPermissionAllName()</c>：
+    /// 日誌、例外堆疊可能含敏感資訊，只有管理者看得到。頁面一律以 <c>CheckIsAdmin()</c> 守門，
+    /// 側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者——不靠權限鍵，
+    /// 舊資料庫殘留的權限列也開不了門。與 Menu.json 的 name 一字不差、尾端不加空白。
+    /// </summary>
+    public const string 角色_系統健康監控 = "系統健康監控";
+    public const string 角色_日誌檢視 = "日誌檢視";
+    public const string 角色_日誌等級設定 = "日誌等級設定";
+    public const string 角色_系統例外紀錄 = "系統例外紀錄";
+    public const string 角色_資料庫用量 = "資料庫用量";
+
+    /// <summary>
+    /// 0.4.93～0.4.119 的「系統健康度」權限鍵。只用來在啟動時把舊資料庫裡的權限列與角色勾選清掉
+    /// （<c>RbacBackfillService</c>），新程式不要再引用。
+    /// </summary>
+    public const string 已退役權限鍵_系統健康度 = "系統健康度";
     public const string 角色_資料定義 = "資料定義管理功能";
     public const string 角色_分類清單 = "分類清單";
     public const string 角色_團隊清單 = "團隊清單";

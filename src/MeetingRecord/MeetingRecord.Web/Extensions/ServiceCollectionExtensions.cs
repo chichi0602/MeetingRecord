@@ -19,6 +19,7 @@ using MeetingRecord.Web.BackgroundServices;
 using MeetingRecord.Web.Caching;
 using MeetingRecord.Web.Components.Layout;
 using MeetingRecord.Web.Configuration;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
 using MeetingRecord.Web.Localization;
 using System.Globalization;
@@ -63,6 +64,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SystemStartupState>();
         services.AddScoped<IHealthLogReader, HealthLogReader>();
         services.AddScoped<ISystemHealthService, SystemHealthService>();
+
+        // 監控與診斷（0.4.120，移植自 NET10-Blazor-Starter）。LogLevelRuntimeState 是可變的 Singleton，
+        // 必須在啟動時 Initialize()（見 Program.cs），不能等第一次開頁。
+        services.AddSingleton<LogLevelRuntimeState>();
+        services.AddScoped<INLogFilePathResolver, NLogFilePathResolver>();
+        services.AddScoped<IDatabaseUsageService, DatabaseUsageService>();
+        services.AddScoped<StorageUsageService>();
         services.AddScoped<AuthenticationStateHelper>();
         services.AddScoped<CurrentUserService>();
         services.AddScoped<IAuditLogService, AuditLogService>();

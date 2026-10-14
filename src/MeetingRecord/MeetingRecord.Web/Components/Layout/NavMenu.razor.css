@@ -359,8 +359,58 @@
     width: 0.75rem;
 }
 
+/* 鍵盤：焦點落在項目內任何地方（含第二層的群組列與連結）都要維持展開，
+   0.4.120 起改用 :has(:focus-visible)；原本的 trigger:focus-visible + flyout
+   在焦點移進 flyout 之後就失效，三層時第二層會跟著關掉。 */
 .collapsed-menu-item:hover > .collapsed-menu-flyout,
-.collapsed-menu-trigger:focus-visible + .collapsed-menu-flyout {
+.collapsed-menu-item:has(:focus-visible) > .collapsed-menu-flyout {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* ===== 收合態第三層（0.4.120，移植自 NET10-Blazor-Starter）=====
+   群組列（可再展開的第二層觸發鈕）與其飛出面板的定位基準。 */
+.collapsed-flyout-group {
+    position: relative;
+}
+
+.collapsed-flyout-group-trigger {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    width: 100%;
+}
+
+.collapsed-flyout-group-label {
+    flex: 1 1 auto;
+}
+
+.collapsed-flyout-group-arrow {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: 0.25rem;
+}
+
+/* 第二層飛出：視覺樣式沿用 .collapsed-menu-flyout，這裡只覆寫定位。
+   top 以負值抵銷父層 flyout 的 padding，讓面板頂端與群組列切齊。 */
+.collapsed-flyout-submenu {
+    left: calc(100% + 0.8rem);
+    top: -0.45rem;
+}
+
+/* 橋接寬度（1rem）需大於上方的水平間距（0.8rem），
+   否則滑鼠從群組列平移到第二層的途中會脫離 hover 而關閉。 */
+.collapsed-flyout-submenu::before {
+    left: -1rem;
+    width: 1rem;
+}
+
+.collapsed-flyout-group:hover > .collapsed-flyout-submenu,
+.collapsed-flyout-group:has(:focus-visible) > .collapsed-flyout-submenu {
     opacity: 1;
     pointer-events: auto;
     transform: translateX(0);

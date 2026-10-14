@@ -279,24 +279,26 @@ public sealed class SystemHealthChecksTests
     // ───────── 選單／權限註冊 ─────────
 
     [Fact]
-    public void RolePermissionCatalog_ShouldExposeSystemHealthAsASingleSwitch()
+    public void RolePermissionCatalog_ShouldNotExposeSystemHealth()
     {
-        var group = new RolePermissionService().GetRoleListPermissionAllName()
-            .Single(x => x.Contains(MagicObjectHelper.角色_系統健康度));
+        // 0.4.120 起只限管理者：列在權限目錄裡就能勾給角色。舊鍵「系統健康度」也不能回來。
+        var keys = new RolePermissionService().GetRolePermissionAllName();
 
-        Assert.Single(group);
+        Assert.DoesNotContain(MagicObjectHelper.角色_系統健康監控, keys);
+        Assert.DoesNotContain(MagicObjectHelper.已退役權限鍵_系統健康度, keys);
     }
 
     [Fact]
-    public void MenuJson_ShouldContainSystemHealthUnderSystemAdministration()
+    public void MenuJson_ShouldContainSystemHealthUnderMonitoringGroup()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(FindMenuJsonPath()));
 
         var systemGroup = document.RootElement.EnumerateArray().Single(x => x.GetProperty("id").GetInt32() == 3);
-        var node = systemGroup.GetProperty("subMenu").EnumerateArray().Single(x => x.GetProperty("id").GetInt32() == 34);
+        var monitoringGroup = systemGroup.GetProperty("subMenu").EnumerateArray().Single(x => x.GetProperty("id").GetInt32() == 36);
+        var node = monitoringGroup.GetProperty("subMenu").EnumerateArray().Single(x => x.GetProperty("id").GetInt32() == 34);
 
-        // ⚠️ name 必須與權限鍵一字不差，否則非管理員勾了權限也看不到。
-        Assert.Equal(MagicObjectHelper.角色_系統健康度, node.GetProperty("name").GetString());
+        // name 是頁面標題（MainLayout 依 Menu.json 顯示），與常數一字不差。
+        Assert.Equal(MagicObjectHelper.角色_系統健康監控, node.GetProperty("name").GetString());
         Assert.Equal("/system-health", node.GetProperty("url").GetString());
     }
 

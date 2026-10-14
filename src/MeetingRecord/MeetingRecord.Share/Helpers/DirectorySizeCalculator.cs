@@ -25,14 +25,21 @@ public static class DirectorySizeCalculator
     /// 一個讀不到的暫存檔不該讓整個儀表板顯示不出來（比照 <c>AiChatStore.CountQuestions</c>）。
     /// </para>
     /// </summary>
-    public static long Measure(string? directoryPath)
+    public static long Measure(string? directoryPath) => MeasureDetailed(directoryPath).Bytes;
+
+    /// <summary>
+    /// 同 <see cref="Measure"/>，另外回傳檔案數（0.4.120，資料庫用量頁的「檔案儲存用量」要用）。
+    /// 讀不到大小的檔案不計入檔案數，兩個數字永遠是同一批檔案。
+    /// </summary>
+    public static (long Bytes, int FileCount) MeasureDetailed(string? directoryPath)
     {
         if (string.IsNullOrWhiteSpace(directoryPath) || !Directory.Exists(directoryPath))
         {
-            return 0L;
+            return (0L, 0);
         }
 
         var total = 0L;
+        var count = 0;
 
         try
         {
@@ -41,6 +48,7 @@ public static class DirectorySizeCalculator
                 try
                 {
                     total += new FileInfo(file).Length;
+                    count++;
                 }
                 catch (IOException)
                 {
@@ -61,6 +69,6 @@ public static class DirectorySizeCalculator
             // 子目錄沒有權限，已累加的部分照樣回報。
         }
 
-        return total;
+        return (total, count);
     }
 }

@@ -25,11 +25,46 @@ public sealed class RbacBackfillService : IRbacBackfillService
 
     public async Task RunAsync()
     {
+        await RetireLegacyPermissionKeysAsync();
         await RenameLegacyPermissionKeysAsync();
         await BackfillPermissionCatalogAsync();
         await BackfillRolePermissionsAsync();
         await BackfillUserRolesAsync();
         logger.LogInformation("RBAC backfill completed.");
+    }
+
+    /// <summary>
+    /// 已退役、不能再勾給角色的權限鍵（0.4.120：「系統健康度」改為只限管理者的「系統健康監控」）。
+    /// 刪掉 <see cref="Permission"/>（含「系統健康度:view」這類動作鍵）與掛在上面的 <see cref="RolePermissionMap"/>，
+    /// 並從角色的 TabViewJson 移除。冪等，第二次執行不會有任何變動。
+    /// ⚠️ 必須在 <see cref="BackfillRolePermissionsAsync"/> 之前跑：那一步依 TabViewJson 補對應，
+    /// 舊鍵還留在 TabViewJson 裡就會被補回來（雖然 Permission 已刪、補不到，但順序對了才不靠運氣）。
+    /// </summary>
+    private async Task RetireLegacyPermissionKeysAsync()
+    {
+        string[] retired = [MagicObjectHelper.已退役權限鍵_系統健康度];
+        // 裸鍵（＝全部動作）與「舊鍵:動作」都要清。PageOf 對裸鍵回傳 null，所以兩個都比。
+        bool IsRetired(string key) => retired.Contains(PermissionKey.PageOf(key) ?? key, StringComparer.Ordinal);
+
+        var permissions = (await context.Permission.ToListAsync()).Where(x => IsRetired(x.Key)).ToList();
+        if (permissions.Count > 0)
+        {
+            var permissionIds = permissions.Select(x => x.Id).ToList();
+            var maps = await context.RolePermissionMap.Where(x => permissionIds.Contains(x.PermissionId)).ToListAsync();
+            context.RolePermissionMap.RemoveRange(maps);
+            context.Permission.RemoveRange(permissions);
+        }
+
+        foreach (var role in await context.RoleView.ToListAsync())
+        {
+            var names = DeserializePermissionNames(role.TabViewJson);
+            if (names.Any(IsRetired))
+            {
+                role.TabViewJson = JsonSerializer.Serialize(names.Where(x => !IsRetired(x)).ToList());
+            }
+        }
+
+        await context.SaveChangesAsync();
     }
 
     /// <summary>

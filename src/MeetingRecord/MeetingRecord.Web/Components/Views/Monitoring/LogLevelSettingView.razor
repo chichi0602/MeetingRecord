@@ -1,0 +1,68 @@
+@using MeetingRecord.Business.Services.Dashboard
+@using MeetingRecord.Web.Diagnostics
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="log-level-denied">@RoleMessage</div>
+}
+else if (!LogLevelState.IsAvailable)
+{
+    <div class="log-level-warning">
+        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error_outline" />
+        <span>
+            無法讀取 NLog 設定，日誌等級無法在執行期調整。請檢查 <code>nlog.config</code> 是否存在且含有
+            <code>&lt;logger name="*"&gt;</code> 規則。
+        </span>
+    </div>
+}
+else
+{
+    <div class="log-level-page">
+        <div class="log-level-cards">
+            <StatCard Item="@(new StatCardItem("目前生效等級", LogLevelRankHelper.ToLevelText(effectiveLevel), hasOverride ? "執行期覆寫中，重新啟動後恢復預設" : "與系統預設相同", hasOverride ? ChartTone.Warning : ChartTone.Neutral))" />
+            <StatCard Item="@(new StatCardItem("系統預設等級", LogLevelRankHelper.ToLevelText(systemDefaultLevel), "來自 nlog.config 的 <logger name=\"*\"> minlevel"))" />
+        </div>
+
+        <div class="log-level-warning">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+            <div>
+                <p><b>這個設定只在執行期有效。</b>系統重新啟動之後會回到「系統預設等級」，不會寫進任何設定檔。</p>
+                <p>套用之後即使 <code>nlog.config</code> 被重新載入，這個設定仍會保留——要回到檔案裡的值請按「還原為系統預設等級」。</p>
+                <p>本設定<b>只影響應用程式日誌</b>；框架日誌（Microsoft、EntityFrameworkCore）另由 nlog.config 的專屬規則控制，不受這裡影響。</p>
+                <p><b>調到 Debug 或 Trace 會大幅增加日誌量</b>，排查完問題請記得調回來。</p>
+            </div>
+        </div>
+
+        <div class="log-level-panel">
+            <div class="log-level-panel-title">選擇要輸出的最低等級</div>
+            <RadioGroup TValue="LogLevelRank" @bind-Value="selectedLevel">
+                @foreach (var option in LevelOptions)
+                {
+                    <div class="log-level-choice">
+                        <Radio TValue="LogLevelRank" Value="@option.Level">
+                            @LogLevelRankHelper.ToLevelText(option.Level)
+                            <span class="log-level-choice-description">（@option.Description）</span>
+                        </Radio>
+                    </div>
+                }
+            </RadioGroup>
+
+            <div class="log-level-actions">
+                <Button Type="ButtonType.Default"
+                        Disabled="@(isBusy || selectedLevel == effectiveLevel)"
+                        OnClick="OnApplyAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="check" /><span>套用</span></span>
+                </Button>
+                <Button Type="ButtonType.Default"
+                        Disabled="@(isBusy || !hasOverride)"
+                        OnClick="OnRestoreAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>還原為系統預設等級</span></span>
+                </Button>
+            </div>
+        </div>
+    </div>
+}

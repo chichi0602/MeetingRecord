@@ -144,6 +144,19 @@ public partial class NavMenu : ComponentBase, IDisposable
         return className;
     }
 
+    /// <summary>收合態 flyout 裡的群組列（第二層有子項者）；目前頁面在它底下時一併標示選中。</summary>
+    private string GetCollapsedFlyoutGroupClass(string itemKey)
+    {
+        var className = "collapsed-flyout-item collapsed-flyout-group-trigger";
+
+        if (IsMenuKeyActive(itemKey))
+        {
+            className += " collapsed-flyout-item-active";
+        }
+
+        return className;
+    }
+
     private bool IsMenuKeyActive(string itemKey)
     {
         return string.Equals(ActiveMenuPath, itemKey, StringComparison.Ordinal)

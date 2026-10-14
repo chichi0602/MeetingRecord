@@ -1,0 +1,138 @@
+/* 資料庫用量（0.4.120）。工具列、卡片格、面板照 AiUsageView 的既有寫法複製
+   （scoped CSS 沒有共用元件）；顏色一律用 --oat-* 權杖。 */
+.db-usage-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.db-usage-toolbar-left,
+.db-usage-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.db-usage-meta {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.db-usage-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.db-usage-section-title {
+    margin: 20px 0 10px;
+    color: var(--oat-ink);
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.db-usage-section-title:first-of-type {
+    margin-top: 4px;
+}
+
+.db-usage-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.db-usage-note {
+    margin-bottom: 12px;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.db-usage-warning,
+.db-usage-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.db-usage-warning {
+    border: 1px solid var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.db-usage-error {
+    border: 1px solid var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.db-usage-warning ::deep .material-icons-outlined,
+.db-usage-error ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.db-usage-panel {
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.db-usage-panel-title {
+    margin-bottom: 12px;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.db-usage-number {
+    font-variant-numeric: tabular-nums;
+}
+
+.db-usage-muted {
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+}
+
+.db-usage-path {
+    font-family: Consolas, Menlo, monospace;
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+}
+
+.db-usage-missing {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 8px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 10px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+    font-size: 12px;
+}
+
+.db-usage-footnote {
+    margin-top: 12px;
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+    line-height: 1.8;
+}
+
+code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    color: inherit;
+    font-size: 0.9em;
+}

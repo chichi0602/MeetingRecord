@@ -22,6 +22,7 @@ using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Components;
 using MeetingRecord.Web.Components.Layout;
 using MeetingRecord.Web.Configuration;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Extensions;
 using MeetingRecord.Web.Filters;
 using MeetingRecord.Web.Localization;
@@ -301,6 +302,12 @@ namespace MeetingRecord.Web
                 var app = builder.Build();
                 logger = app.Services.GetRequiredService<ILogger<Program>>();
                 logger.LogInformation("Application host built successfully.");
+
+                #region 執行期日誌等級（0.4.120）
+                // ⚠️ 必須在啟動時而不是第一次開「日誌等級設定」頁時：它訂閱 nlog.config 的重新載入事件，
+                // 順便把 autoReload 時被清掉的 BasePath／LogFilenamePrefix 變數補回去。懶載入的話沒人開頁就不會補。
+                app.Services.GetRequiredService<LogLevelRuntimeState>().Initialize();
+                #endregion
 
                 #region 非 Production 的設定提醒（不中止啟動）
                 // StartupSafetyValidator.Validate 在 NLog 接管之前就跑完，記不了 log；

@@ -41,28 +41,54 @@
     "section": "功能選單",
     "subMenu": [
       {
-        "id": 31,
-        "name": "使用者管理",
-        "icon": "group",
-        "url": "/myusers"
+        "id": 35,
+        "name": "帳號與權限",
+        "icon": "manage_accounts",
+        "subMenu": [
+          {
+            "id": 31,
+            "name": "使用者管理",
+            "icon": "group",
+            "url": "/myusers"
+          },
+          {
+            "id": 32,
+            "name": "角色管理",
+            "icon": "shield_person",
+            "url": "/roleviews"
+          }
+        ]
       },
       {
-        "id": 32,
-        "name": "角色管理",
-        "icon": "shield_person",
-        "url": "/roleviews"
-      },
-      {
-        "id": 33,
-        "name": "AI 用量分析",
-        "icon": "monetization_on",
-        "url": "/ai-usage"
-      },
-      {
-        "id": 34,
-        "name": "系統健康度",
-        "icon": "monitor_heart",
-        "url": "/system-health"
+        "id": 36,
+        "name": "監控與診斷",
+        "icon": "analytics",
+        "subMenu": [
+          {
+            "id": 34,
+            "name": "系統健康監控",
+            "icon": "monitor_heart",
+            "url": "/system-health"
+          },
+          {
+            "id": 38,
+            "name": "日誌等級設定",
+            "icon": "tune",
+            "url": "/log-level-setting"
+          },
+          {
+            "id": 30,
+            "name": "資料庫用量",
+            "icon": "data_usage",
+            "url": "/database-usage"
+          },
+          {
+            "id": 33,
+            "name": "AI 用量分析",
+            "icon": "monetization_on",
+            "url": "/ai-usage"
+          }
+        ]
       }
     ]
   },

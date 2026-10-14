@@ -1,10 +1,10 @@
 ﻿# AI 用量分析 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：0.4.120
 - 首次實作版本：0.4.80
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/14
 
 ## 一、目標與範圍
 
@@ -40,7 +40,7 @@
 |------|------|
 | UI 路由 | `/ai-usage`（`Components/Pages/AiUsages/AiUsagePage.razor`，掛 `MainLayout`，內容在 `AiUsageView`） |
 | REST API | 無 |
-| 選單路徑 | 系統管理（`Menu.json` id=3）→ AI 用量分析（id=33，icon `monetization_on`） |
+| 選單路徑 | 系統管理（`Menu.json` id=3）→ 監控與診斷（id=36，0.4.120 起）→ AI 用量分析（id=33，icon `monetization_on`）。同組的系統健康監控、日誌等級設定、資料庫用量只限管理者；本頁仍是可勾給角色的頁面權限 |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[33] = MagicObjectHelper.角色_AI用量分析` |
 | 權限鍵 | 頁面鍵「AI 用量分析」（`MagicObjectHelper.角色_AI用量分析`，**值與 `Menu.json` 的 name 一字不差、尾端不加空白**）；單一開關、沒有動作鍵（`RolePermissionService.GetRoleListPermissionAllName` 中為單元素群組）；管理員短路 |
 | 主要使用者 | 管理者。預設角色目錄（`RolePresets`）中只有「管理者」含此鍵，一般使用者／檢視者／主管都沒有 |
@@ -139,7 +139,7 @@
 
 ## 六、錯誤與邊界
 
-- **換了 deployment 沒補單價**：新呼叫的金額是 null，頂端警示條提示筆數；[系統健康度](系統健康監控-prd.md) 的「AI 供應商設定」也會因「正在用的模型沒有設定單價」亮黃燈。單價只對之後的新呼叫生效，不會追溯。
+- **換了 deployment 沒補單價**：新呼叫的金額是 null，頂端警示條提示筆數；[系統健康監控](系統健康監控-prd.md) 的「AI 供應商設定」也會因「正在用的模型沒有設定單價」亮黃燈。單價只對之後的新呼叫生效，不會追溯。
 - **抓不到匯率**：依序退回本行程上次成功的值 → 帳本最後一筆已知匯率（啟動時）→ `FallbackRate` → null（該筆不換算，「—」且不計入總額）。健康度「匯率」項（`SystemHealthChecks.EvaluateExchangeRate`）在使用帳本舊匯率或保底值、或逾期（更新間隔＋1 小時）未更新時黃燈，啟用換算卻完全沒有匯率時紅燈；停用換算時綠燈。
 - **改了 `Currency` 卻沒換匯率來源**：`ExchangeRateResponseParser` 的 `base_code` 驗證與 `AiUsageRecorder` 的幣別比對都會讓匯率留空，畫面顯示「—」而不是錯幾 % 的金額；冷啟動種子也不會拿舊幣別的匯率。
 - **設定錯誤**：負單價、`SourceUrl` 非 http(s) 絕對網址、`TargetCurrency` 不是三碼字母（含尾隨空白）、`FallbackRate <= 0`、`RefreshIntervalHours` 不在 1～168 → 啟動失敗。

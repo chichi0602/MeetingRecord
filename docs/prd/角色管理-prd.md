@@ -1,10 +1,10 @@
 ﻿# 角色管理 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：0.4.120
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/14
 
 > **0.4.102：權限矩陣的「資料群組」改回「團隊清單」。** 0.4.101 的「資料群組」權限鍵（含 `資料群組:edit` 這類動作鍵）由 `RbacBackfillService.RenameLegacyPermissionKeysAsync` 啟動時就地改回「團隊清單」，原本有的角色照樣有。角色本身的行為與 0.4.101 相同。三者分工：**角色＝能做什麼，團隊＝誰的資料，分類＝什麼資料**。
 >
@@ -25,7 +25,7 @@
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 |------|------|----------|-----------|
-| `/roleviews` | 系統管理 → 角色管理（`Menu.json` id=32）| 僅管理員（`AuthenticationStateHelper.CheckIsAdmin`）| 系統管理員 |
+| `/roleviews` | 系統管理 → 帳號與權限 → 角色管理（`Menu.json` id=32）| 僅管理員（`AuthenticationStateHelper.CheckIsAdmin`）| 系統管理員 |
 
 - `RoleViewView` 初始化先 `Check`，非管理員顯示「你沒有權限存取此頁面」並停止載入。
 - 角色本身以 Blazor 頁面、管理員身分閘控（無 `RoleView` API 控制器）；此處編輯出來的權限鍵，才是各業務 API 控制器 `[HasPermission("頁面", "動作")]` 的授權依據。
@@ -45,6 +45,7 @@
   - 名稱（必填，唯一）。
   - ~~預設團隊~~（0.4.99 起拿掉表單欄位，0.4.101 刪除資料庫欄位）。
   - **動作粒度權限矩陣**（角色項目）：依 `RolePermissionService` 的群組結構呈現。每個群組（母項，如「系統管理功能」）有一個群組核取方塊；群組下每個頁面節點提供「（全部）」核取方塊，以及五個動作核取方塊：檢視、新增、編輯、刪除、匯出（`view/create/edit/delete/export`）。
+  - 0.4.120 起權限目錄（`GetRoleListPermissionAllName()`）**不含**「系統健康度」：「監控與診斷」底下的系統健康監控、日誌等級設定、資料庫用量**只限管理者、不能勾給角色**（選單 `AdminOnlyMenuIds`、頁面 `CheckIsAdmin()`）；同組的「AI 用量分析」仍在目錄裡，可勾給角色。選單上的「帳號與權限」「監控與診斷」分組也沒有自己的權限鍵。
 - **矩陣互動語意**：勾「（全部）」等同該頁裸鍵、代表全部動作，並停用個別動作核取方塊（舊制相容）；勾任一動作或頁面會自動點亮所屬群組；取消群組會連帶清掉其下所有頁面權限。
 
 ## 四、內部系統運作
@@ -60,7 +61,7 @@ View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
   - **唯一擋下的情況：刪的是系統中最後一個角色**（「系統至少要保留一個角色」），否則所有帳號（含管理者）都會無法登入。
   - 額外角色的關聯（`UserRole`）與權限關聯（`RolePermissionMap`）由資料庫 Cascade 刪除；寫 `Role.Delete` 稽核（含換掉主要角色的人數）。
   - 畫面依回傳結果顯示成功或錯誤訊息。測試：`RoleViewDeleteTests`。
-- **啟動回填**（`RbacBackfillService.RunAsync`）：開機時由 `RolePermissionService` 建立權限目錄（`Permission`，含 `GroupName`／`SortOrder`），並依各角色 `TabViewJson` 補寫 `RolePermissionMap`，冪等。0.4.101 曾把「團隊清單」改名為「資料群組」，0.4.102 起 `RenameLegacyPermissionKeysAsync` 把「資料群組」（含 `資料群組:edit` 這類動作鍵）就地改回「團隊清單」（`Permission.Key` 與 `TabViewJson` 都改）。
+- **啟動回填**（`RbacBackfillService.RunAsync`）：0.4.120 起第一步先 `RetireLegacyPermissionKeysAsync`——刪除已退役的權限鍵「系統健康度」與「系統健康度:*」的 `Permission` 列與其 `RolePermissionMap`，並從各角色 `TabViewJson` 移除（常數 `MagicObjectHelper.已退役權限鍵_系統健康度`，冪等），曾勾過的角色因此不再帶著這個鍵。接著由 `RolePermissionService` 建立權限目錄（`Permission`，含 `GroupName`／`SortOrder`），並依各角色 `TabViewJson` 補寫 `RolePermissionMap`，冪等。0.4.101 曾把「團隊清單」改名為「資料群組」，0.4.102 起 `RenameLegacyPermissionKeysAsync` 把「資料群組」（含 `資料群組:edit` 這類動作鍵）就地改回「團隊清單」（`Permission.Key` 與 `TabViewJson` 都改）。
 - **預設角色**（`DefaultRoleSeeder`，每次啟動、冪等）：確保「一般使用者」存在，只在新建或改名時設初始權限，不動帳號的角色。
 - **權限判定**（`PermissionChecker`）：使用者角色取自 `UserRole`（多角色）並容錯併入 legacy `RoleViewId`；join `RolePermissionMap`／`Permission` 得有效權限鍵集合；管理員短路回 true；擁有裸頁面鍵者視為具該頁全部動作。
 - **前置檢查**：`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 檢查角色名稱唯一性。
@@ -83,7 +84,7 @@ View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
 ## 七、驗收與測試
 
 - `MeetingRecord.Tests/RbacWriteServiceTests.cs`：`SyncRolePermissionsAsync_ShouldAddAndRemoveToMatchKeys`、`ShouldCreateMissingPermissionRows`。
-- `MeetingRecord.Tests/RbacBackfillServiceTests.cs`：建立權限目錄、由 `TabViewJson` 連結角色權限、舊鍵「團隊清單」改名不掉權限、冪等。
+- `MeetingRecord.Tests/RbacBackfillServiceTests.cs`：建立權限目錄、由 `TabViewJson` 連結角色權限、舊鍵「團隊清單」改名不掉權限、冪等；0.4.120 起另測退役鍵「系統健康度」（含動作鍵）連同角色關聯與 `TabViewJson` 一併清除。
 - `MeetingRecord.Tests/DefaultRoleSeederTests.cs`（原 `RoleConsolidationServiceTests`）：舊名就地改名、沒有角色時新建、角色管理調整過的權限不被蓋回、不動帳號的角色、冪等。
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`：管理員全通過、角色具／缺鍵、裸頁面鍵授予全動作、僅 `view` 不含 `edit`、多角色聯集。
 - `MeetingRecord.Tests/AuditEventsTests.cs`：`Role.Create`／`Role.Delete` 稽核。

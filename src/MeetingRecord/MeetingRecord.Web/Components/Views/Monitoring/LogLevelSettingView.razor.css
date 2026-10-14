@@ -1,0 +1,90 @@
+/* 日誌等級設定（0.4.120）。顏色一律用 --oat-* 權杖，見介面視覺設計規範。 */
+.log-level-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.log-level-denied {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+/* 兩張卡片固定兩欄，窄版退成單欄。 */
+.log-level-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.log-level-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 14px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 10px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+    font-size: 0.85rem;
+    line-height: 1.7;
+}
+
+.log-level-warning p {
+    margin: 0 0 4px;
+}
+
+.log-level-warning p:last-child {
+    margin-bottom: 0;
+}
+
+.log-level-warning ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.log-level-panel {
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.log-level-panel-title {
+    margin-bottom: 12px;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.log-level-choice {
+    padding: 4px 0;
+}
+
+.log-level-choice-description {
+    color: var(--oat-ink-mid);
+}
+
+.log-level-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--oat-200);
+}
+
+code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--oat-200);
+    color: inherit;
+    font-size: 0.85em;
+}
+
+@media (max-width: 640px) {
+    .log-level-cards {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

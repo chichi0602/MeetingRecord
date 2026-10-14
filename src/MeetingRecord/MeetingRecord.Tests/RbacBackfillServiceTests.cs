@@ -85,6 +85,34 @@ public sealed class RbacBackfillServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_ShouldRetireLegacySystemHealthKeyWithoutTouchingOtherGrants()
+    {
+        // 0.4.93～0.4.119 的「系統健康度」可以勾給角色；0.4.120 起只限管理者，權限列、對應與勾選都要清掉。
+        await using var fixture = await Fixture.CreateAsync();
+        const string legacy = MagicObjectHelper.已退役權限鍵_系統健康度;
+        var role = await fixture.AddRoleAsync("主管", [legacy, $"{legacy}:view", MagicObjectHelper.角色_會議紀錄]);
+        // 0.4.119 的資料庫：權限表裡有舊鍵，角色已經勾了。
+        fixture.Context.Permission.AddRange(
+            new Permission { Key = legacy, DisplayName = legacy, GroupName = legacy },
+            new Permission { Key = $"{legacy}:view", DisplayName = legacy, GroupName = legacy });
+        await fixture.Context.SaveChangesAsync();
+        await new RbacWriteService(fixture.Context).SyncRolePermissionsAsync(role.Id, [legacy, $"{legacy}:view"]);
+        fixture.Context.ChangeTracker.Clear();
+
+        await fixture.CreateService().RunAsync();
+        await fixture.CreateService().RunAsync();
+
+        Assert.False(await fixture.Context.Permission.AnyAsync(x => x.Key.StartsWith(legacy)));
+        var linkedKeys = await fixture.Context.RolePermissionMap.AsNoTracking()
+            .Where(x => x.RoleViewId == role.Id)
+            .Join(fixture.Context.Permission, m => m.PermissionId, p => p.Id, (m, p) => p.Key)
+            .ToListAsync();
+        Assert.Equal([MagicObjectHelper.角色_會議紀錄], linkedKeys);
+        var stored = await fixture.Context.RoleView.AsNoTracking().SingleAsync(x => x.Id == role.Id);
+        Assert.Equal([MagicObjectHelper.角色_會議紀錄], JsonSerializer.Deserialize<List<string>>(stored.TabViewJson));
+    }
+
+    [Fact]
     public async Task RunAsync_ShouldBeIdempotent()
     {
         await using var fixture = await Fixture.CreateAsync();

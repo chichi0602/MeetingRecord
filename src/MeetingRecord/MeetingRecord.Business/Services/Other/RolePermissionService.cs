@@ -22,9 +22,9 @@ public class RolePermissionService
             //    預設只給管理員；勾給其他角色之前請先確認那是刻意的。
             [MagicObjectHelper.角色_AI用量分析],
 
-            // 系統健康度（0.4.93）。唯讀頁，理由同上用單元素群組。預設只給管理員；
-            // 開給其他角色時，頁面下方未遮罩的原始日誌仍然只有管理員看得到。
-            [MagicObjectHelper.角色_系統健康度],
+            // 0.4.120 起「監控與診斷」（系統健康監控、日誌檢視、日誌等級設定、系統例外紀錄、資料庫用量）
+            // 只限管理者，**刻意不列在這裡**——列了就能勾給角色。舊的「系統健康度」鍵由
+            // RbacBackfillService 在啟動時退役清除。
             [
                 MagicObjectHelper.角色_專案管理,
                 MagicObjectHelper.角色_專案項目,

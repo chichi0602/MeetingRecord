@@ -73,13 +73,49 @@
                                         <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@GetMaterialIconKind(item)" />
                                     </button>
 
+                                    @* 群組型子項（無 url，0.4.120 的「帳號與權限」「監控與診斷」）本身不是連結，
+                                       而是一列可懸停的觸發鈕，往右再彈出自己的第二層 flyout——收合時同樣維持三層，
+                                       不把孫節點攤平。0.4.119 以前這裡只畫有 url 的子項，第三層會整個不見。 *@
                                     <div class="collapsed-menu-flyout" role="menu" aria-label="@item.Name">
                                         @for (var childIndex = 0; childIndex < item.SubMenu.Count; childIndex++)
                                         {
                                             var child = item.SubMenu[childIndex];
                                             var childKey = $"{itemKey}-{childIndex}";
 
-                                            @if (!string.IsNullOrWhiteSpace(child.Url))
+                                            @if (child.HasChildren)
+                                            {
+                                                <div class="collapsed-flyout-group">
+                                                    <button type="button"
+                                                            class="@GetCollapsedFlyoutGroupClass(childKey)"
+                                                            aria-haspopup="menu"
+                                                            title="@child.Name">
+                                                        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@GetMaterialIconKind(child)" />
+                                                        <span class="collapsed-flyout-group-label">@child.Name</span>
+                                                        <span class="collapsed-flyout-group-arrow">
+                                                            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="chevron_right" />
+                                                        </span>
+                                                    </button>
+
+                                                    <div class="collapsed-menu-flyout collapsed-flyout-submenu" role="menu" aria-label="@child.Name">
+                                                        @for (var grandChildIndex = 0; grandChildIndex < child.SubMenu.Count; grandChildIndex++)
+                                                        {
+                                                            var grandChild = child.SubMenu[grandChildIndex];
+                                                            var grandChildKey = $"{childKey}-{grandChildIndex}";
+
+                                                            @if (!string.IsNullOrWhiteSpace(grandChild.Url))
+                                                            {
+                                                                <a class="@GetCollapsedFlyoutItemClass(grandChildKey)"
+                                                                   href="@grandChild.Url"
+                                                                   role="menuitem">
+                                                                    <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@GetMaterialIconKind(grandChild)" />
+                                                                    <span>@grandChild.Name</span>
+                                                                </a>
+                                                            }
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(child.Url))
                                             {
                                                 <a class="@GetCollapsedFlyoutItemClass(childKey)"
                                                    href="@child.Url"

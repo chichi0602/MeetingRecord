@@ -54,13 +54,16 @@ public sealed class AiUsageRegistrationTests
     [Fact]
     public void MenuJson_ShouldPlaceAiUsageUnderSystemAdministration()
     {
-        // 這一頁是管理員限定，放在「系統管理」底下與使用者管理、角色管理同層。
+        // 0.4.120 起放在「系統管理 → 監控與診斷」（id 36）底下，與系統健康監控等頁同組。
         using var document = JsonDocument.Parse(File.ReadAllText(FindMenuJsonPath()));
 
         var systemGroup = FindNodeById(document.RootElement, 3);
         Assert.NotNull(systemGroup);
 
-        var ids = systemGroup!.Value.GetProperty("subMenu")
+        var monitoringGroup = FindNodeById(systemGroup!.Value.GetProperty("subMenu"), 36);
+        Assert.NotNull(monitoringGroup);
+
+        var ids = monitoringGroup!.Value.GetProperty("subMenu")
             .EnumerateArray()
             .Select(x => x.GetProperty("id").GetInt32())
             .ToList();

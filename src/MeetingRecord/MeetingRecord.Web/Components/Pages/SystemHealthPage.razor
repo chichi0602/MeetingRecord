@@ -8,7 +8,7 @@
 @inject NavigationManager NavigationManager
 @inject ILogger<SystemHealthPage> Logger
 
-<PageTitle>系統健康度</PageTitle>
+<PageTitle>系統健康監控</PageTitle>
 
 @if (!string.IsNullOrWhiteSpace(roleMessage))
 {
@@ -27,7 +27,7 @@ else
             <div class="summary-main">
                 <span class="traffic-light @GetLightClass(report.Light)" aria-hidden="true"></span>
                 <div>
-                    <h1>系統健康度</h1>
+                    <h1>系統健康監控</h1>
                     <p>最後檢查時間：@report.CheckedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</p>
                 </div>
             </div>
@@ -110,14 +110,15 @@ else
             return;
         }
 
-        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_系統健康度) == false)
+        // 0.4.120 起只限管理者：不再看權限鍵（舊資料庫可能殘留「系統健康度」的勾選）。
+        if (AuthenticationStateHelper.CheckIsAdmin() == false)
         {
             roleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            Logger.LogWarning("System health page denied because current user has not this role permission.");
+            Logger.LogWarning("System health page denied because current user is not an administrator.");
             return;
         }
 
-        isAdmin = AuthenticationStateHelper.CheckIsAdmin();
+        isAdmin = true;
         report = await SystemHealthService.GetReportAsync();
     }
 

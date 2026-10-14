@@ -13,7 +13,7 @@ public sealed class SidebarMenuService
     /// 選單項目 Id → 權限鍵的宣告式對應（取代原本的「位置索引」耦合，重排選單不會錯位）。
     /// 新增受控頁面時，於此加入 Id→權限鍵即可。
     /// </summary>
-    private static readonly IReadOnlyDictionary<int, string> MenuPermissionMap = new Dictionary<int, string>
+    public static readonly IReadOnlyDictionary<int, string> MenuPermissionMap = new Dictionary<int, string>
     {
         [12] = MagicObjectHelper.角色_使用說明,
         [21] = MagicObjectHelper.角色_專案項目,
@@ -22,8 +22,7 @@ public sealed class SidebarMenuService
         [3] = MagicObjectHelper.角色_系統管理,
         [31] = MagicObjectHelper.角色_使用者管理,
         [32] = MagicObjectHelper.角色_角色管理,
-    [33] = MagicObjectHelper.角色_AI用量分析,
-        [34] = MagicObjectHelper.角色_系統健康度,
+        [33] = MagicObjectHelper.角色_AI用量分析,
         [5] = MagicObjectHelper.角色_資料定義,
         [51] = MagicObjectHelper.角色_分類清單,
         [52] = MagicObjectHelper.角色_團隊清單,
@@ -36,7 +35,20 @@ public sealed class SidebarMenuService
     /// ⚠️ 不能靠「不放進 <see cref="MenuPermissionMap"/>」達成——沒對應的項目會退回用 Name 當權限鍵，
     /// 角色沒有同名權限時照樣被藏起來。
     /// </summary>
-    private static readonly IReadOnlySet<int> PublicMenuIds = new HashSet<int> { 11 };
+    public static readonly IReadOnlySet<int> PublicMenuIds = new HashSet<int> { 11 };
+
+    /// <summary>
+    /// 只有管理者看得到的選單項目 Id（0.4.120：「監控與診斷」的系統健康監控 34、日誌等級設定 38、資料庫用量 30）。
+    /// 非管理者一律排除、**不看權限**——這些頁面不在權限目錄裡，但 0.4.119 以前「系統健康度」可以勾給角色，
+    /// 舊資料庫可能還留著權限列；只靠權限鍵擋，殘留的列就會讓選單冒出來。頁面本身另以 CheckIsAdmin 守門。
+    /// </summary>
+    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 38, 30 };
+
+    /// <summary>
+    /// 純分組、本身沒有權限的選單節點 Id（0.4.120：「帳號與權限」35、「監控與診斷」36）：
+    /// 底下有任何一項看得到才顯示。⚠️ 不能讓它們退回「拿 Name 當權限鍵」那條路。
+    /// </summary>
+    public static readonly IReadOnlySet<int> GroupOnlyMenuIds = new HashSet<int> { 35, 36 };
 
     private readonly IWebHostEnvironment environment;
     private readonly ILogger<SidebarMenuService> logger;
@@ -56,7 +68,10 @@ public sealed class SidebarMenuService
     {
         var items = await LoadMenuItemsAsync();
         var permissionMappedItems = ApplyPermissionStructure(items);
-        var authorizedItems = FilterAuthorizedMenuItems(permissionMappedItems, authenticationStateHelper);
+        var authorizedItems = FilterAuthorizedMenuItems(
+            permissionMappedItems,
+            authenticationStateHelper.CheckAccessPage,
+            authenticationStateHelper.CheckIsAdmin());
 
         logger.LogInformation("Loaded authorized sidebar menu successfully. ItemCount={ItemCount}", authorizedItems.Count);
         return authorizedItems;
@@ -91,7 +106,7 @@ public sealed class SidebarMenuService
         }
     }
 
-    private IReadOnlyList<SidebarMenuItemModel> ApplyPermissionStructure(IReadOnlyList<SidebarMenuItemModel> items)
+    public static IReadOnlyList<SidebarMenuItemModel> ApplyPermissionStructure(IReadOnlyList<SidebarMenuItemModel> items)
     {
         var result = new List<SidebarMenuItemModel>(items.Count);
 
@@ -108,22 +123,35 @@ public sealed class SidebarMenuService
         return result;
     }
 
-    private List<SidebarMenuItemModel> FilterAuthorizedMenuItems(
+    /// <summary>
+    /// 依權限過濾選單（遞迴、任何深度）。純函式，供單元測試直接呼叫。
+    /// </summary>
+    /// <param name="canAccessPage">頁面權限判斷，正式環境是 <c>AuthenticationStateHelper.CheckAccessPage</c>（管理者恆真）。</param>
+    /// <param name="isAdmin">是否為管理者；<see cref="AdminOnlyMenuIds"/> 只看這個值。</param>
+    public static List<SidebarMenuItemModel> FilterAuthorizedMenuItems(
         IReadOnlyList<SidebarMenuItemModel> items,
-        AuthenticationStateHelper authenticationStateHelper)
+        Func<string, bool> canAccessPage,
+        bool isAdmin)
     {
         var result = new List<SidebarMenuItemModel>(items.Count);
 
         foreach (var item in items)
         {
+            if (AdminOnlyMenuIds.Contains(item.Id) && !isAdmin)
+            {
+                continue;
+            }
+
             var filteredChildren = item.HasChildren
-                ? FilterAuthorizedMenuItems(item.SubMenu, authenticationStateHelper)
+                ? FilterAuthorizedMenuItems(item.SubMenu, canAccessPage, isAdmin)
                 : [];
 
             var permissionNames = GetPermissionNames(item);
-            var hasPermission = PublicMenuIds.Contains(item.Id)
-                || permissionNames.Count == 0
-                || permissionNames.Any(authenticationStateHelper.CheckAccessPage);
+            var hasPermission = !GroupOnlyMenuIds.Contains(item.Id)
+                && (PublicMenuIds.Contains(item.Id)
+                    || AdminOnlyMenuIds.Contains(item.Id)
+                    || permissionNames.Count == 0
+                    || permissionNames.Any(canAccessPage));
 
             if (!hasPermission && filteredChildren.Count == 0)
             {

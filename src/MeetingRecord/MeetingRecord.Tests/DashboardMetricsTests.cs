@@ -410,6 +410,29 @@ public sealed class DashboardMetricsTests
     }
 
     [Fact]
+    public void DirectorySize_MeasureDetailed_ShouldCountFilesInSubdirectories()
+    {
+        // 0.4.120 資料庫用量頁的「檔案儲存用量」：大小與檔案數要是同一批檔案。
+        var root = Path.Combine(Path.GetTempPath(), $"meetingrecord-count-{Guid.NewGuid():N}");
+        var nested = Path.Combine(root, "2026", "10");
+        Directory.CreateDirectory(nested);
+
+        try
+        {
+            File.WriteAllBytes(Path.Combine(root, "a.txt"), new byte[10]);
+            File.WriteAllBytes(Path.Combine(nested, "b.txt"), new byte[25]);
+            File.WriteAllBytes(Path.Combine(nested, "c.txt"), new byte[5]);
+
+            Assert.Equal((40L, 3), DirectorySizeCalculator.MeasureDetailed(root));
+            Assert.Equal((0L, 0), DirectorySizeCalculator.MeasureDetailed(Path.Combine(root, "missing")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void DirectorySize_EmptyDirectory_ShouldReturnZero()
     {
         var root = Path.Combine(Path.GetTempPath(), $"meetingrecord-empty-{Guid.NewGuid():N}");

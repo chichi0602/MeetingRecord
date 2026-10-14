@@ -449,10 +449,11 @@ body .ant-spin-dot-item {
    選單項目失去 hover、子選單立刻關掉，永遠點不到。滑過或鍵盤聚焦收合態的選單項目時，
    收合鈕淡出且不接收滑鼠事件，事件落回底下的選單項目。
    放全站樣式而不放 MainLayout.razor.css：:has() 裡比對的是 NavMenu 元件的元素，
-   元件隔離樣式會在選擇器加上 MainLayout 自己的 scope 屬性而比對不到。 */
+   元件隔離樣式會在選擇器加上 MainLayout 自己的 scope 屬性而比對不到。
+   0.4.120 起鍵盤條件改成「項目內任何元素聚焦」：收合選單有第三層後，焦點會停在飛出面板裡的群組列與連結。 */
 @media (min-width: 641px) {
     .page:has(.collapsed-menu-item:hover) .sidebar-toggle-edge,
-    .page:has(.collapsed-menu-trigger:focus-visible) .sidebar-toggle-edge {
+    .page:has(.collapsed-menu-item :focus-visible) .sidebar-toggle-edge {
         opacity: 0;
         pointer-events: none;
     }

@@ -1,0 +1,173 @@
+@using MeetingRecord.Business.Services.Dashboard
+@using MeetingRecord.Web.Diagnostics
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="db-usage-empty">@RoleMessage</div>
+}
+else
+{
+    <div class="db-usage-toolbar">
+        <div class="db-usage-toolbar-left">
+            <Tooltip Title="重新整理">
+                <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="ReloadAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+                </Button>
+            </Tooltip>
+        </div>
+        <div class="db-usage-toolbar-right">
+            @if (report is not null)
+            {
+                <span class="db-usage-meta">資料庫 @report.ElapsedMilliseconds ms · 檔案 @(storage?.ElapsedMilliseconds.ToString() ?? "—") ms</span>
+            }
+        </div>
+    </div>
+
+    @if (report is null)
+    {
+        <div class="db-usage-empty">載入中…</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(report.ErrorMessage))
+    {
+        <div class="db-usage-error">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error_outline" />
+            <span>@report.ErrorMessage</span>
+        </div>
+    }
+    else
+    {
+        <div class="db-usage-section-title">資料庫（SQLite）</div>
+        <div class="db-usage-cards">
+            <StatCard Item="@(new StatCardItem("磁碟占用總計", FileSizeFormatter.Describe(report.TotalOnDiskBytes), DescribeOnDiskFiles(report)))" />
+            <StatCard Item="@(new StatCardItem("主資料庫檔", FileSizeFormatter.Describe(report.MainDbBytes), report.DatabaseFileName))" />
+            <StatCard Item="@(new StatCardItem("已配置", FileSizeFormatter.Describe(report.AllocatedBytes), $"{report.PageCount:N0} 頁 × {report.PageSize:N0} B"))" />
+            <StatCard Item="@(new StatCardItem("可回收", FileSizeFormatter.Describe(report.ReclaimableBytes), $"{report.FreelistCount:N0} 個閒置頁，VACUUM 可釋放", report.FreelistCount > 0 ? ChartTone.Warning : ChartTone.Neutral))" />
+        </div>
+
+        @if (report.WalFileExists)
+        {
+            <div class="db-usage-note">
+                <b>預寫日誌（WAL）比主檔大是正常的。</b>它是尚未 checkpoint 的交易紀錄，SQLite 會在適當時機把內容併回主檔並回收，不代表資料量暴漲。
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(report.Message))
+        {
+            <div class="db-usage-warning">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
+                <span>@report.Message</span>
+            </div>
+        }
+
+        @foreach (var warning in report.Warnings)
+        {
+            <div class="db-usage-warning">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+                <span>@warning</span>
+            </div>
+        }
+
+        <div class="db-usage-panel">
+            <div class="db-usage-panel-title">各資料表</div>
+            <Table TItem="TableUsage"
+                   DataSource="@report.Tables"
+                   Size="TableSize.Small"
+                   RowKey="@(row => row.TableName)"
+                   HidePagination="true">
+                @* 排序綁在原始數值（DataIndex）上、顯示才格式化，
+                   否則「資料量估算」會按字串排序，1.5 MB 會排在 900 KB 之下。 *@
+                <Column TData="string" DataIndex="@nameof(TableUsage.TableName)"
+                        Title="資料表" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="long?" DataIndex="@nameof(TableUsage.RowCount)"
+                        Title="紀錄筆數" Sortable Align="ColumnAlign.Right">
+                    <span class="db-usage-number">@(context.RowCount?.ToString("N0") ?? "—")</span>
+                </Column>
+                <Column TData="long?" DataIndex="@nameof(TableUsage.EstimatedBytes)"
+                        Title="資料量估算" Sortable Align="ColumnAlign.Right">
+                    @if (context.EstimatedBytes is null)
+                    {
+                        <span class="db-usage-muted" title="@context.Note">—</span>
+                    }
+                    else
+                    {
+                        <span class="db-usage-number">@FileSizeFormatter.Describe(context.EstimatedBytes.Value)</span>
+                    }
+                </Column>
+                <Column TData="int" DataIndex="@nameof(TableUsage.IndexCount)"
+                        Title="索引數" Sortable Align="ColumnAlign.Right" />
+            </Table>
+            <div class="db-usage-footnote">
+                「資料量估算」不是磁碟占用量：它是各欄位內容的位元組加總，<b>不含索引、頁面碎片與閒置頁</b>，與實際磁碟占用會有差距。
+                綁定的 SQLite 沒有編入 <code>dbstat</code> 虛擬表，而那是取得每表實際頁數的唯一途徑。
+            </div>
+        </div>
+    }
+
+    <div class="db-usage-section-title">檔案儲存用量</div>
+    @if (storage is null)
+    {
+        <div class="db-usage-empty">@(isLoading ? "計算中…（影音目錄檔案多時需要一點時間）" : "—")</div>
+    }
+    else
+    {
+        <div class="db-usage-cards">
+            <StatCard Item="@(new StatCardItem("外部目錄合計", FileSizeFormatter.Describe(storage.TotalBytes), $"{storage.Directories.Sum(x => x.FileCount):N0} 個檔案"))" />
+            @foreach (var drive in storage.Drives)
+            {
+                <StatCard Item="@(new StatCardItem($"磁碟 {drive.Root} 可用", FileSizeFormatter.Describe(drive.FreeBytes), $"共 {FileSizeFormatter.Describe(drive.TotalBytes)}；{string.Join("、", drive.Labels)}", drive.FreeBytes < LowDiskThresholdBytes ? ChartTone.Danger : ChartTone.Neutral))" />
+            }
+        </div>
+
+        @foreach (var warning in storage.Warnings)
+        {
+            <div class="db-usage-warning">
+                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+                <span>@warning</span>
+            </div>
+        }
+
+        <div class="db-usage-panel">
+            <div class="db-usage-panel-title">各目錄</div>
+            <Table TItem="DirectoryUsage"
+                   DataSource="@storage.Directories"
+                   Size="TableSize.Small"
+                   RowKey="@(row => row.Label)"
+                   HidePagination="true">
+                <Column TData="string" DataIndex="@nameof(DirectoryUsage.Label)" Title="目錄">
+                    <div>@context.Label</div>
+                    <div class="db-usage-muted">@context.Purpose</div>
+                </Column>
+                <Column TData="string" DataIndex="@nameof(DirectoryUsage.Path)" Title="路徑">
+                    @if (string.IsNullOrWhiteSpace(context.Path))
+                    {
+                        <span class="db-usage-muted">未設定</span>
+                    }
+                    else
+                    {
+                        <span class="db-usage-path">@context.Path</span>
+                        @if (!context.Exists)
+                        {
+                            <span class="db-usage-missing">不存在</span>
+                        }
+                    }
+                </Column>
+                <Column TData="long" DataIndex="@nameof(DirectoryUsage.Bytes)"
+                        Title="大小" Sortable Align="ColumnAlign.Right">
+                    <span class="db-usage-number">@FileSizeFormatter.Describe(context.Bytes)</span>
+                </Column>
+                <Column TData="int" DataIndex="@nameof(DirectoryUsage.FileCount)"
+                        Title="檔案數" Sortable Align="ColumnAlign.Right">
+                    <span class="db-usage-number">@context.FileCount.ToString("N0")</span>
+                </Column>
+            </Table>
+            <div class="db-usage-footnote">
+                量的是磁碟現況：資料庫已刪、檔案還在的孤兒檔也會算進去。「資料庫」目錄與上面的資料庫檔是同一份，不要重複相加。
+                可用空間低於 1 GB 時以紅字標示。
+            </div>
+        </div>
+    }
+}

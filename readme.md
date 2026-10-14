@@ -71,9 +71,12 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 
 **系統管理與資料定義**
 
-- 使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
-- **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
-- **系統健康度**（`/system-health`）：健康百分比、紅黃綠燈號與最後 100 筆日誌
+- **帳號與權限**：使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
+- **監控與診斷**（0.4.120 起；前三頁只限管理者，不能勾給角色）：
+  - **系統健康監控**（`/system-health`）：健康百分比、紅黃綠燈號與最後 100 筆日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
+  - **日誌等級設定**（`/log-level-setting`）：執行期調整 NLog 等級（只在記憶體、重啟即回預設）（見[日誌等級設定 PRD](docs/prd/日誌等級設定-prd.md)）
+  - **資料庫用量**（`/database-usage`）：SQLite 檔案與各資料表用量，以及各外部目錄大小與磁碟剩餘空間（見[資料庫用量 PRD](docs/prd/資料庫用量-prd.md)）
+  - **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
 - 資料定義：分類清單、團隊清單、提示詞清單（內建範本、`{{transcript}}` 等變數、啟用狀態就地切換）
 - AI 供應商可換：`ITranscriptionProvider` 與文字生成供應商為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
 
@@ -85,10 +88,10 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
 - 平行 API 路由：保留 `/api/...`，新增 `/api/v1/...` 作為新用戶端標準入口
 - Health checks：`/health/live`、`/health/ready`
-- 系統健康監控頁：`/system-health`，管理員可查看健康百分比、紅黃綠燈號與最後 100 筆日誌
+- 系統健康監控頁：`/system-health`，只限管理員，查看健康百分比、紅黃綠燈號與最後 100 筆日誌
 - 分散式快取：`ICacheService` 統一抽象，透過 `appsettings.json` 在 Memory ↔ Redis 間切換（側邊選單已套用）
 - Production 啟動安全檢查：JWT key、預設密碼、Swagger 暴露策略與 Redis 連線字串需明確設定
-- Sidebar 導覽：JSON 定義、可收合、自動套用使用者角色權限
+- Sidebar 導覽：JSON 定義、三層選單（收合時浮出選單同樣支援第三層）、可收合、自動套用使用者角色權限
 - 右上角使用者選單「關於」對話窗：顯示系統名稱／描述／版本、執行環境、.NET 版本、啟動與已運作時間
 - 多語系：以瀏覽器 `Accept-Language` 自動切換，AntDesign 元件本地化
 - 全站請求耗時 / 例外統一寫入 NLog
@@ -167,7 +170,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Todo / PromptTemplate / Auth …）
     │   ├── BackgroundServices/     ← 轉錄、會議紀錄草稿產生、匯率更新三個背景服務
     │   ├── Extensions/             ← 服務註冊與 middleware（ServiceCollectionExtensions 等）
-    │   ├── Health/                 ← 系統健康度檢查項
+    │   ├── Health/                 ← 系統健康監控檢查項
+    │   ├── Diagnostics/            ← 監控與診斷：日誌等級（LogLevelRuntimeState）、資料庫與檔案儲存用量
     │   ├── Localization/           ← AntDesignLocaleFactory
     │   ├── Datas/Menu.json         ← Sidebar 導覽與權限定義
     │   ├── Filters/                ← ApiValidationFilter 等
@@ -314,7 +318,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
 - 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
-- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 用量分析](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 用量分析](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
 
 ### 設計規格（superpowers）
 

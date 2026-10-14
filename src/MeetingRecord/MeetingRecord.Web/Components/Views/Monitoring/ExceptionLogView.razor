@@ -1,0 +1,198 @@
+@using MeetingRecord.Business.Helpers
+@using MeetingRecord.Models.Systems
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="exception-log-empty">@RoleMessage</div>
+}
+else
+{
+    <div class="exception-log-toolbar">
+        <div class="exception-log-toolbar-left">
+            <DatePicker TValue="DateTime?" @bind-Value="startTime"
+                        ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                        Placeholder="@("最後發生（起）")" Style="width: 190px;" />
+            <span class="exception-log-range-separator">～</span>
+            <DatePicker TValue="DateTime?" @bind-Value="endTime"
+                        ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                        Placeholder="@("最後發生（迄）")" Style="width: 190px;" />
+
+            <Select TItem="string" TItemValue="string" @bind-Value="selectedSource" Style="width: 130px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="來源：不限" />
+                @foreach (var source in ExceptionSources.All)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@source" Label="@source" />
+                }
+            </Select>
+
+            <Input class="exception-log-account-input" @bind-Value="accountFilter" Placeholder="使用者帳號" AllowClear="true" />
+            <Input class="exception-log-search-input" @bind-Value="keyword" Placeholder="關鍵字（類型／訊息／頁面／操作／追蹤碼）" AllowClear="true" />
+        </div>
+
+        <div class="exception-log-toolbar-right">
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnSearchAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>查詢</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="ReloadAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+            </Button>
+            <Tooltip Title="@("複製目前查詢結果（含完整堆疊）")">
+                <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnCopyAllAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製</span></span>
+                </Button>
+            </Tooltip>
+            <Tooltip Title="@("匯出目前查詢結果（CSV）")">
+                <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnExportAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
+                </Button>
+            </Tooltip>
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnPurgeAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>清除 @PurgeDays 天未再發生</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Danger="true" Disabled="@isLoading" OnClick="OnClearAllAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete_forever" /><span>全部清除</span></span>
+            </Button>
+        </div>
+    </div>
+
+    <div class="exception-log-note">
+        本頁收錄的是程式碼記錄下來的例外（含畫面、Web API、背景作業、瀏覽器與系統啟動），相同的例外會合併成一列並累加「次數」。
+        使用者回報的「錯誤追蹤碼」可以直接貼進關鍵字查詢；完整的逐行日誌請到「日誌檢視」以 TraceId 查。
+        @RetentionText
+    </div>
+
+    <div class="exception-log-panel">
+        <Table TItem="ExceptionLogAdapterModel"
+               RemoteDataSource="true"
+               DataSource="@rows"
+               Loading="@isLoading"
+               Size="TableSize.Small"
+               RowClassName="@(_ => "exception-log-row")"
+               OnRowClick="OnRowClickAsync"
+               OnChange="OnTableChange"
+               @bind-PageIndex="_pageIndex"
+               @bind-PageSize="_pageSize"
+               @bind-Total="_total"
+               ScrollX="900">
+            <ColumnDefinitions>
+                @* 欄位刻意精簡：只留「何時、幾次、什麼錯、在哪一頁、誰」，其餘收進「查看」明細窗。 *@
+                <Column TData="DateTime" DataIndex="@nameof(ExceptionLogAdapterModel.LastOccurredAt)"
+                        Title="最後發生" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                    <span class="exception-log-time">@context.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                </Column>
+                <Column TData="long" DataIndex="@nameof(ExceptionLogAdapterModel.OccurrenceCount)"
+                        Title="次數" Width="90" Sortable Align="ColumnAlign.Right">
+                    <span class="@GetCountClass(context.OccurrenceCount)">@context.OccurrenceCount.ToString("N0")</span>
+                </Column>
+                <Column TData="string" Title="類型" Width="170" Ellipsis>
+                    <Tooltip Title="@context.ExceptionType">
+                        <span>@context.ShortExceptionType</span>
+                    </Tooltip>
+                </Column>
+                <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
+                <Column TData="string" Title="頁面" Width="160" Ellipsis>@(context.Page ?? "—")</Column>
+                <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.Account ?? "—")</Column>
+                <ActionColumn Title="操作" Width="100" Fixed="ColumnFixPlacement.Right">
+                    @* 點列會複製該筆；按鈕在這裡擋掉冒泡，否則按「查看」「刪除」也會順便複製一次。 *@
+                    <div @onclick:stopPropagation="true">
+                        <Space>
+                            <SpaceItem>
+                                <CrudActionButton Title="查看" Icon="visibility" OnClick="@(() => OnViewAsync(context))" />
+                            </SpaceItem>
+                            <SpaceItem>
+                                <CrudActionButton Title="刪除" Icon="delete" Danger="true" OnClick="@(() => OnDeleteAsync(context))" />
+                            </SpaceItem>
+                        </Space>
+                    </div>
+                </ActionColumn>
+            </ColumnDefinitions>
+        </Table>
+        <div class="exception-log-footnote">點一下任一列即複製該筆（含完整堆疊）。</div>
+    </div>
+
+    <Modal Title="例外明細"
+           Class="form-modal-large"
+           Visible="@detailVisible"
+           MaskClosable="false"
+           Footer="null"
+           OnCancel="OnDetailCancel">
+        @if (detailItem is not null)
+        {
+            <div class="exception-log-detail-actions">
+                <Button Type="ButtonType.Default" Disabled="@isStackTraceLoading" OnClick="OnCopyDetailAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製</span></span>
+                </Button>
+                <Tooltip Title="@AiButtonTitle">
+                    <Button Type="ButtonType.Default"
+                            Disabled="@(isStackTraceLoading || isAiRunning || !aiAvailable)"
+                            OnClick="OnAiAnalyzeAsync">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="insights" /><span>AI 分析</span></span>
+                    </Button>
+                </Tooltip>
+            </div>
+
+            <dl class="exception-log-detail-list">
+                <div><dt>例外類型</dt><dd>@detailItem.ExceptionType</dd></div>
+                <div><dt>訊息</dt><dd>@detailItem.Message</dd></div>
+                <div><dt>來源</dt><dd>@detailItem.Source</dd></div>
+                <div><dt>頁面</dt><dd>@(detailItem.Page ?? "—")</dd></div>
+                <div><dt>操作（日誌訊息樣板）</dt><dd>@(detailItem.Operation ?? "—")</dd></div>
+                <div><dt>記錄器</dt><dd>@(detailItem.LoggerName ?? "—")</dd></div>
+                <div><dt>使用者</dt><dd>@ExceptionLogClipboardText.FormatAccount(detailItem)</dd></div>
+                <div><dt>累計次數</dt><dd>@detailItem.OccurrenceCount.ToString("N0")</dd></div>
+                <div><dt>首次發生</dt><dd>@detailItem.FirstOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>最後發生</dt><dd>@detailItem.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>最後追蹤碼</dt><dd>@(detailItem.LastTraceId ?? "—")</dd></div>
+            </dl>
+
+            <div class="exception-log-detail-title">完整堆疊</div>
+            <pre class="exception-log-stack">@detailStackTrace</pre>
+        }
+    </Modal>
+
+    <Modal Title="@AiModalTitle"
+           Class="form-modal-large"
+           Visible="@aiModalVisible"
+           MaskClosable="false"
+           Footer="null"
+           OnCancel="OnAiModalCancel">
+        <div class="exception-ai-body">
+            @if (aiState == AiState.Running)
+            {
+                <div class="exception-ai-status">
+                    <Spin Size="SpinSize.Small" />
+                    <span>AI 正在分析這筆例外…已等待 @aiElapsedSeconds 秒。關閉視窗會取消這次分析。</span>
+                </div>
+                <div class="exception-ai-streaming">@(aiStreaming.Length == 0 ? "正在等待 AI 回應…" : aiStreaming)</div>
+            }
+            else if (aiState == AiState.Failed)
+            {
+                <div class="exception-ai-error" role="alert">@aiErrorMessage</div>
+            }
+            else if (aiState == AiState.Succeeded)
+            {
+                <div class="exception-ai-actions">
+                    <Button Type="ButtonType.Default" OnClick="OnAiCopyAsync">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製結果</span></span>
+                    </Button>
+                    <Button Type="ButtonType.Default" Loading="@isAiExporting" OnClick="OnAiExportPdfAsync">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="picture_as_pdf" /><span>匯出 PDF</span></span>
+                    </Button>
+                </div>
+
+                <dl class="exception-ai-meta">
+                    @foreach (var (label, value) in aiMeta)
+                    {
+                        <div class="exception-ai-meta-row"><dt>@label</dt><dd>@value</dd></div>
+                    }
+                </dl>
+
+                <div class="markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(aiMarkdown))</div>
+            }
+        </div>
+    </Modal>
+}

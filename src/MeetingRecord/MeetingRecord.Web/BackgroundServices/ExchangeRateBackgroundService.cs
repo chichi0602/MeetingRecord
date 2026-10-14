@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
 
@@ -45,6 +46,9 @@ public sealed class ExchangeRateBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // 0.4.122：這條背景迴圈裡記的錯誤，在系統例外紀錄標成「背景作業」。
+        new ExceptionContextAccessor().Set(new ExceptionContext(ExceptionSources.Background, "ExchangeRateBackgroundService", null, null));
+
         var options = settings.Value;
         if (!options.Enabled)
         {

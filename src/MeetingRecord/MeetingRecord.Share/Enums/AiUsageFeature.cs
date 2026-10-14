@@ -35,6 +35,9 @@ public enum AiUsageFeature
 
     /// <summary>AI 日誌分析（0.4.121，監控與診斷 → 日誌檢視）。一次分析固定一次，最多送最新 100 筆日誌。</summary>
     LogAnalysis = 5,
+
+    /// <summary>AI 例外分析（0.4.122，監控與診斷 → 系統例外紀錄）。一次分析固定一次，不做追問。</summary>
+    ExceptionAnalysis = 6,
 }
 
 /// <summary>功能別的顯示文字與計費單位判斷（UI、日誌與計價共用）。</summary>
@@ -48,6 +51,7 @@ public static class AiUsageFeatureText
         AiUsageFeature.AiChat => "AI 問答",
         AiUsageFeature.TodoExtraction => "待辦事項擷取",
         AiUsageFeature.LogAnalysis => "AI 日誌分析",
+        AiUsageFeature.ExceptionAnalysis => "AI 例外分析",
         _ => "未知",
     };
 

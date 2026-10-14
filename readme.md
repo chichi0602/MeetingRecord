@@ -76,6 +76,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
   - **系統健康監控**（`/system-health`）：健康百分比、紅黃綠燈號與最後 100 筆日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
   - **日誌檢視**（`/logs`，0.4.121）：依時間、等級、關鍵字、TraceId 查 NLog 檔案日誌，展開看堆疊、複製、匯出 .log；**AI 日誌分析**把最新 100 筆送給 AI 整理重點與建議（會產生費用，記入 AI 用量）（見[日誌檢視 PRD](docs/prd/日誌檢視-prd.md)）
   - **日誌等級設定**（`/log-level-setting`）：執行期調整 NLog 等級（只在記憶體、重啟即回預設）（見[日誌等級設定 PRD](docs/prd/日誌等級設定-prd.md)）
+  - **系統例外紀錄**（`/system-exceptions`，0.4.122，含 AI 例外分析、錯誤追蹤碼）：畫面、Web API、背景作業、系統啟動與瀏覽器的例外自動收集，相同例外合併計次、完整堆疊另存檔案；可篩選、複製、匯出 CSV、清除；**AI 例外分析**把單筆例外送給 AI 找根因與修正建議（會產生費用，記入 AI 用量）；錯誤畫面顯示 8 碼錯誤追蹤碼，可在此頁與日誌檢視查到同一次操作（見[系統例外紀錄 PRD](docs/prd/系統例外紀錄-prd.md)）
   - **資料庫用量**（`/database-usage`）：SQLite 檔案與各資料表用量，以及各外部目錄大小與磁碟剩餘空間（見[資料庫用量 PRD](docs/prd/資料庫用量-prd.md)）
   - **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
 - 資料定義：分類清單、團隊清單、提示詞清單（內建範本、`{{transcript}}` 等變數、啟用狀態就地切換）
@@ -169,10 +170,10 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     ├── MeetingRecord.Web/              ← Blazor Server 宿主
     │   ├── Components/             ← Pages / Views / Layout / Auths / Commons
     │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Todo / PromptTemplate / Auth …）
-    │   ├── BackgroundServices/     ← 轉錄、會議紀錄草稿產生、匯率更新三個背景服務
+    │   ├── BackgroundServices/     ← 轉錄、會議紀錄草稿產生、匯率更新、例外紀錄保存清理四個背景服務
     │   ├── Extensions/             ← 服務註冊與 middleware（ServiceCollectionExtensions 等）
     │   ├── Health/                 ← 系統健康監控檢查項
-    │   ├── Diagnostics/            ← 監控與診斷：日誌查詢（LogQueryService）、日誌等級（LogLevelRuntimeState）、資料庫與檔案儲存用量
+    │   ├── Diagnostics/            ← 監控與診斷：日誌查詢（LogQueryService）、日誌等級（LogLevelRuntimeState）、資料庫與檔案儲存用量、系統例外紀錄管線（ExceptionLogProvider／ExceptionLogWriter、TraceCode）
     │   ├── Localization/           ← AntDesignLocaleFactory
     │   ├── Datas/Menu.json         ← Sidebar 導覽與權限定義
     │   ├── Filters/                ← ApiValidationFilter 等
@@ -216,6 +217,8 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `NLog.BasePath` | NLog 寫入的根目錄；專案會在其下建立 `MeetingRecord.Web` 子目錄並輸出檔案日誌。 |
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `CookieSettings` | 網頁登入 Cookie 效期（0.4.119）：`ExpireMinutes`（沒勾記住我，預設 480＝8 小時）、`RememberMeDays`（勾了記住我與 Google 登入，預設 30 天）、`SlidingExpiration`（預設 `true`，期間回來使用會自動延長）。 |
+| `LogRetentionSettings` | 系統例外紀錄保存天數（0.4.122）：`ExceptionLogDays`（預設 90，「最後發生」超過的每天自動刪除，`0`＝不自動清理）。 |
+| `ClientErrorReporting` | 瀏覽器端錯誤回報（0.4.122）：`Enabled`（預設 `true`）、`MaxPerCircuitPerMinute`（每個連線每分鐘上限，預設 10）。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
 | `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成：會議紀錄草稿、抽出待辦、AI 問答）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`；`Currency` 與 `Pricing.<模型>`（每百萬 token 或每分鐘音訊單價）供 AI 用量計價。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
@@ -234,6 +237,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `SystemSettings.ExternalFileSystem.MeetingTranscriptPath` | 會議逐字稿根目錄（再依年/月細分）；不對外服務，也沒有下載端點。 |
 | `SystemSettings.ExternalFileSystem.AiChatPath` | AI 問答對話與附件的存放根目錄（0.4.60 起對話改存檔案系統）；不對外服務。 |
 | `SystemSettings.ExternalFileSystem.DataProtectionKeyPath` | Data Protection 金鑰環目錄（0.4.119），登入 Cookie 靠它加密，存在這裡才撐得過 IIS 回收與重啟；留空啟動失敗、不可放在網站目錄內、刪掉＝所有人重登。 |
+| `SystemSettings.ExternalFileSystem.ExceptionPath` | 系統例外紀錄的完整堆疊檔目錄（0.4.122，`yyyyMM/` 細分），底下 `pending/` 放啟動失敗的補登檔；不對外服務。 |
 | `AutoMapper:LicenseKey` | AutoMapper 商業授權金鑰（可留空）。 |
 
 各區段詳解見 [docs/operations/日誌與設定檔說明.md](docs/operations/日誌與設定檔說明.md)。
@@ -319,7 +323,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
 - 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
-- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 用量分析](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 用量分析](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
 
 ### 設計規格（superpowers）
 

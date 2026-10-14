@@ -1,19 +1,65 @@
 @using System.Globalization
+@using MeetingRecord.Web.Diagnostics
+@using Microsoft.AspNetCore.Components.Routing
+@implements IDisposable
+@inject NavigationManager NavigationManager
 
 @code {
+    /// <summary>浮層（對話窗、通知）的錯誤邊界；換頁時復原，讓對話窗與通知重新可用。</summary>
+    private LoggingErrorBoundary? overlayBoundary;
+
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
     protected override void OnParametersSet()
     {
         LocaleProvider.SetLocale(CultureInfo.CurrentUICulture.Name);
     }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(() => overlayBoundary?.Recover());
+    }
+
+    private void ReloadPage() => NavigationManager.Refresh(forceReload: true);
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
 }
 
+@* 0.4.122 起兩層錯誤邊界（移植自 NET10-Blazor-Starter）：內建 ErrorBoundary 不會記錄任何東西，
+   LoggingErrorBoundary 會把例外記下來（進系統例外紀錄，來源「畫面」），並把錯誤追蹤碼顯示給使用者。 *@
 <ConfigProvider>
     <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
         <Found Context="routeData">
-            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            <LoggingErrorBoundary>
+                <ChildContent>
+                    <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+                    <FocusOnNavigate RouteData="routeData" Selector="h1" />
+                </ChildContent>
+                <ErrorContent Context="exception">
+                    <div class="app-error-banner" role="alert">
+                        <b>這個頁面發生未預期的錯誤。</b>
+                        錯誤已記錄，請<a href="" @onclick="ReloadPage" @onclick:preventDefault>重新整理頁面</a>；若持續發生請聯絡系統管理員@TraceCode.Suffix(TraceCode.FromException(exception))。
+                    </div>
+                </ErrorContent>
+            </LoggingErrorBoundary>
         </Found>
     </Router>
 
-    <AntContainer />
+    <LoggingErrorBoundary @ref="overlayBoundary">
+        <ChildContent>
+            <AntContainer />
+        </ChildContent>
+        <ErrorContent Context="exception">
+            <div class="app-error-banner app-error-banner-overlay" role="alert">
+                <b>畫面元件發生錯誤，已記錄。</b>
+                請<a href="" @onclick="ReloadPage" @onclick:preventDefault>重新整理頁面</a>；若持續發生請聯絡系統管理員@TraceCode.Suffix(TraceCode.FromException(exception))。
+            </div>
+        </ErrorContent>
+    </LoggingErrorBoundary>
 </ConfigProvider>

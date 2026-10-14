@@ -38,9 +38,14 @@ namespace MeetingRecord.Web
         public static void Main(string[] args)
         {
             ILogger<Program>? logger = null;
+
+            // 0.4.122：啟動失敗補登檔的位置。在 try 外宣告，catch 才拿得到——
+            // 啟動失敗時例外紀錄的背景寫入器還沒跑，只能先寫檔，下次成功啟動再補進系統例外紀錄。
+            string? exceptionPath = null;
             try
             {
                 var builder = WebApplication.CreateBuilder(args);
+                exceptionPath = builder.Configuration["SystemSettings:ExternalFileSystem:ExceptionPath"];
                 StartupSafetyValidator.Validate(builder.Configuration, builder.Environment.EnvironmentName);
 
                 #region NLog 相關設定
@@ -266,6 +271,18 @@ namespace MeetingRecord.Web
                     .Bind(builder.Configuration.GetSection(ExchangeRateSettings.SectionName))
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
+
+                // 系統例外紀錄（0.4.122）：保留天數與瀏覽器錯誤回報。
+                builder.Services
+                    .AddOptions<LogRetentionSettings>()
+                    .Bind(builder.Configuration.GetSection(LogRetentionSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
+                builder.Services
+                    .AddOptions<ClientErrorReportingSettings>()
+                    .Bind(builder.Configuration.GetSection(ClientErrorReportingSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
                 #endregion
 
                 #region 系統使用的目錄準備
@@ -280,6 +297,7 @@ namespace MeetingRecord.Web
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingTranscriptPath, "meeting transcript");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.AiChatPath, "ai chat");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.DataProtectionKeyPath, "data protection key");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.ExceptionPath, "exception stack trace");
                 #endregion
 
                 #region Data Protection 金鑰環
@@ -302,6 +320,17 @@ namespace MeetingRecord.Web
                 var app = builder.Build();
                 logger = app.Services.GetRequiredService<ILogger<Program>>();
                 logger.LogInformation("Application host built successfully.");
+
+                #region 系統例外紀錄的程序層級掛鉤（0.4.122）
+                // 未觀察的 Task 例外、程序層級未處理例外、NLog 內部錯誤計數。都是行程全域事件，
+                // Register 會在 ApplicationStopped 解除訂閱（整合測試會在同一行程啟動多個 host）。
+                app.Services.GetRequiredService<ProcessExceptionHooks>().Register(app.Lifetime);
+                app.Services.GetRequiredService<LoggingPipelineMonitor>().Register(app.Lifetime, app.Services.GetRequiredService<TimeProvider>());
+
+                // 啟動流程（migration、種子資料）裡記的錯誤標成「系統啟動」。
+                var exceptionContextAccessor = app.Services.GetRequiredService<ExceptionContextAccessor>();
+                exceptionContextAccessor.Set(new ExceptionContext(ExceptionSources.Startup, null, null, null));
+                #endregion
 
                 #region 執行期日誌等級（0.4.120）
                 // ⚠️ 必須在啟動時而不是第一次開「日誌等級設定」頁時：它訂閱 nlog.config 的重新載入事件，
@@ -477,6 +506,23 @@ namespace MeetingRecord.Web
                 }
                 #endregion
 
+                #region 補登上次的啟動失敗（0.4.122）
+                // ⚠️ 必須在 Migration 之後：補登要寫 ExceptionLog 表。寫入成功才刪檔，失敗留到下次。
+                foreach (var (filePath, entry) in CrashMarkerStore.ReadAll(exceptionPath))
+                {
+                    using var scope = app.Services.CreateScope();
+                    var outcome = scope.ServiceProvider.GetRequiredService<ExceptionLogService>()
+                        .RecordAsync(entry).GetAwaiter().GetResult();
+                    if (outcome is not null)
+                    {
+                        CrashMarkerStore.Delete(filePath);
+                        logger.LogInformation("Imported crash marker into system exception log. Type={ExceptionType}", entry.ExceptionType);
+                    }
+                }
+
+                exceptionContextAccessor.Clear();
+                #endregion
+
                 #region 註冊中介軟體
                 // Configure the HTTP request pipeline.
                 if (!app.Environment.IsDevelopment())
@@ -507,6 +553,7 @@ namespace MeetingRecord.Web
 
                 app.UseAuthentication();
                 app.UseAuthorization();
+                app.UseExceptionContextUser();
 
                 app.MapControllers()
                     .RequireRateLimiting("api");
@@ -541,8 +588,18 @@ namespace MeetingRecord.Web
                     logger?.LogInformation("Created {DirectoryName} directory at {DirectoryPath}", directoryName, directoryPath);
                 }
             }
-            catch (Exception ex)
+            // ⚠️ 排除 HostAbortedException：dotnet ef（migrations add 等）會啟動再中止這個 host，
+            // 不排除的話每跑一次 dotnet ef 就多一筆假的「系統啟動」失敗。
+            catch (Exception ex) when (ex is not HostAbortedException)
             {
+                // 先寫補登檔（不靠 DI、不靠 ILogger），app.Build() 之前的失敗（設定驗證、金鑰路徑）也記得到。
+                CrashMarkerStore.Write(
+                    exceptionPath,
+                    ex,
+                    ExceptionSources.Startup,
+                    "Stopped program because of an exception",
+                    typeof(Program).FullName!);
+
                 if (logger != null)
                     logger.LogError(ex, "Stopped program because of an exception");
                 throw;

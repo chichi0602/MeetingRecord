@@ -70,6 +70,7 @@ public sealed class StorageUsageService
             ("上傳暫存", "通用上傳暫存目錄", fs.UploadPath),
             ("下載", "/UploadFiles 對外服務的目錄", fs.DownloadPath),
             ("登入金鑰", "Data Protection 金鑰（刪除會讓所有人被登出）", fs.DataProtectionKeyPath),
+            ("例外堆疊", "系統例外紀錄的完整堆疊與啟動失敗補登檔", fs.ExceptionPath),
             ("日誌", "NLog 日誌檔（保留 30 天）", logPathResolver.GetLogDirectory()),
         ];
     }

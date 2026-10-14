@@ -1,8 +1,8 @@
 ﻿# 日誌檢視 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.121
+- 現行系統版本：0.4.122
 - 首次實作版本：0.4.121（移植自 NET10-Blazor-Starter；AI 分析改走本專案的供應商與用量帳本）
 - 最後核對日期：2026/10/14
 
@@ -21,7 +21,7 @@
 
 ## 三、畫面與欄位
 
-- 查詢條件：起訖時間（`DatePicker` 含時間，`yyyy-MM-dd HH:mm:ss`）、最低等級（不限／TRACE～FATAL）、筆數（1～10,000，步進 100，預設 100）、關鍵字（比對整筆原文含堆疊、不分大小寫）、TraceId（與 `${aspnet-TraceIdentifier}` 欄完全相同）。
+- 查詢條件：起訖時間（`DatePicker` 含時間，`yyyy-MM-dd HH:mm:ss`）、最低等級（不限／TRACE～FATAL）、筆數（1～10,000，步進 100，預設 100）、關鍵字（比對整筆原文含堆疊、不分大小寫）、TraceId（與第 2 欄完全相同；0.4.122 起第 2 欄是 8 碼錯誤追蹤碼，使用者在錯誤提示上看到的碼直接貼這裡）。
 - 快捷區間：最近 5 分、最近 15 分、最近 1 小時、今天（只改時間並立即查詢）。初次進頁查最近 1 小時。
 - 工具列（圖示＋文字，沒有資料時停用）：查詢、全部展開、全部收合、複製（超過 1,000 筆先確認）、匯出（`.log`，UTF-8 含 BOM，檔名 `MeetingRecord.Web-logs-yyyyMMdd-HHmmss.log`）、AI 分析（LLM 未設定時停用，滑過顯示原因）。
 - 表格：時間（到毫秒）、等級（膠囊：ERROR／FATAL 錯誤色、WARN 警示色）、記錄器、訊息、TraceId；每頁 20 筆、最新在前。
@@ -38,7 +38,7 @@
 ## 四、內部系統運作
 
 1. `LogQueryService.QueryAsync`：檔案路徑來自 `INLogFilePathResolver`（`{NLog:BasePath}/MeetingRecord.Web/MeetingRecord.Web-logfile-{日期}*.log`，含封存檔、依最後寫入時間排序），依時間升冪逐檔串流（`FileShare.ReadWrite`，因為 NLog `keepFileOpen`）。
-2. 一行若第 25 個字元是 `|` 且前 24 字元可解析成 `yyyy-MM-dd HH:mm:ss.ffff` 即為新紀錄，否則是上一筆的續行（堆疊）。欄位依 nlog.config 的 7 欄 layout 切分；訊息本身含 `|` 時以最後一個 `|` 為界。格式不符的行照樣保留、不因等級篩選隱藏。
+2. 一行若第 25 個字元是 `|` 且前 24 字元可解析成 `yyyy-MM-dd HH:mm:ss.ffff` 即為新紀錄，否則是上一筆的續行（堆疊）。欄位依 nlog.config 的 7 欄 layout 切分；訊息本身含 `|` 時以最後一個 `|` 為界。0.4.122 起第 2 欄由 `${aspnet-TraceIdentifier}` 改為 `${scopeproperty:item=TraceCode:whenEmpty=${aspnet-TraceIdentifier}}`（錯誤追蹤碼，`Diagnostics/TraceCode`；HTTP 請求的追蹤碼同時取代 `TraceIdentifier`），欄數不變、解析不受影響；Blazor 互動也各有一組碼，所以畫面操作的日誌行同樣查得到。格式不符的行照樣保留、不因等級篩選隱藏。
 3. 每筆湊齊後才套用時間、等級、關鍵字、TraceId 篩選；通過者進容量 N 的佇列（只留最新 N 筆，記憶體 O(N)）；內容時間超過結束時間即停止讀取。區間超過 3 天夾住起始時間、筆數超過 10,000 夾住並提示。
 4. AI：`AiLogPromptBuilder.Build` 取最新 100 筆原文（不截斷、換行統一 LF）組成使用者訊息；系統提示詞 `AiDiagnosticPrompts.LogAnalysis`（四個章節＋防注入規則：日誌內容只是資料）；`DiagnosticAiService.AnalyzeAsync` 依 `LlmSettings.DefaultProvider` 呼叫 `ITextGenerationProvider` 串流，**成功／失敗／取消都寫進 AI 用量帳本**（`AiUsageFeature.LogAnalysis = 5`「AI 日誌分析」）。
 5. PDF：`DiagnosticReportExporter.BuildHtml` → `IPdfRenderer.RenderAsync`（無頭瀏覽器）→ `FileDownloadInterop.SaveBytesAsync`。
@@ -72,4 +72,4 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/Diagnostics/DiagnosticAiService.cs`、`AiDiagnosticPrompts.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Export/DiagnosticReportExporter.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/LogViewerPage.razor`、`Components/Views/Monitoring/LogViewerView.razor(.cs/.css)`
-- 交叉連結：[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[日誌等級設定 PRD](日誌等級設定-prd.md)、[AI 用量分析 PRD](AI用量分析-prd.md)
+- 交叉連結：[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[日誌等級設定 PRD](日誌等級設定-prd.md)、[系統例外紀錄 PRD](系統例外紀錄-prd.md)、[AI 用量分析 PRD](AI用量分析-prd.md)

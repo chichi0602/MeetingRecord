@@ -28,6 +28,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 0.4.122：系統例外紀錄的管線（寫入器的 internal 建構子、程序掛鉤的處理器等）要讓單元測試直接驗證。 -->
+    <InternalsVisibleTo Include="MeetingRecord.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 使用說明的內容來源是 docs\guides\系統使用說明.md，在這裡嵌進組件，
          讓「文件庫的那一份」與「系統裡的那一頁」永遠是同一份內容。
          ⚠️ 不要改用 Content + CopyToOutputDirectory：開發時 ContentRootPath 是專案目錄而不是

@@ -1,8 +1,8 @@
 ﻿# AI 用量分析 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.121
+- 現行系統版本：0.4.122
 - 首次實作版本：0.4.80
 - 最後核對日期：2026/10/14
 
@@ -32,6 +32,7 @@
 | AI 問答 | 3 | token | `AiChatService` | 提問與「修改後重新產生」各 1 |
 | 待辦事項擷取 | 4 | token | `TodoExtractionService` | 1 |
 | AI 日誌分析（0.4.121） | 5 | token | `DiagnosticAiService`（監控與診斷 → 日誌檢視） | 1（不帶會議／專案，明細「對象」為「—」） |
+| AI 例外分析（0.4.122） | 6 | token | `DiagnosticAiService`（監控與診斷 → 系統例外紀錄） | 1（不帶會議／專案，明細「對象」為「—」） |
 
 ⚠️ 「一次使用者動作 = 一次呼叫」是錯的，帳本記的是**實際呼叫**。
 
@@ -50,7 +51,7 @@
 
 由上而下：
 
-1. **工具列**：左側「重新整理」；右側「功能」下拉（全部功能＋六個功能別（0.4.121 起含「AI 日誌分析」），`AiUsageFeatureText.Describe` 的文字）。
+1. **工具列**：左側「重新整理」；右側「功能」下拉（全部功能＋七個功能別（0.4.121 起含「AI 日誌分析」，0.4.122 起含「AI 例外分析」），`AiUsageFeatureText.Describe` 的文字）。
 2. **說明列**：「統計起始 yyyy/MM/dd，此日之前的呼叫沒有留下用量資料。」帳本空白時改為「尚未記錄到任何 AI 呼叫…不回填先前的用量」。啟用換算且已有匯率時附「匯率 1 USD = 31.8636 TWD」（小數四位）。
    - ⚠️ 統計起始日**刻意不套功能篩選**：它講的是帳本從哪天開始記，套了的話選「待辦事項擷取」會顯示較晚的日期，像是之前的紀錄遺失。
 3. **警示條**（條件顯示）：
@@ -178,6 +179,7 @@
 - **0.4.93**：`ExchangeRateSnapshot.Source`（Live／Ledger／Fallback）與 `ExchangeRateCache.LastFailureAt`，供系統健康度判斷匯率狀態。
 - **0.4.97 起**：儀表板的會議時數取自本帳本的轉錄秒數；0.4.99 起啟動時以帳本中最早的轉錄紀錄回推舊會議的上傳者（0.4.99 為 `ProjectAccessBackfillService`，現為 `TeamConversionService.BackfillMeetingCreatorsAsync`）。
 - **0.4.121**：新增功能別 `AiUsageFeature.LogAnalysis = 5`（「AI 日誌分析」，token 計費），由 `DiagnosticAiService` 寫帳（成功／失敗／取消都記，不帶會議／專案）；功能下拉自動多一項。
+- **0.4.122**：新增功能別 `AiUsageFeature.ExceptionAnalysis = 6`（「AI 例外分析」，token 計費，系統例外紀錄的明細窗觸發），同樣由 `DiagnosticAiService` 寫帳；功能下拉自動多一項。
 
 ### 程式
 

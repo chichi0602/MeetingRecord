@@ -23,7 +23,9 @@ using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
 using MeetingRecord.Web.Localization;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Globalization;
+using System.Threading.Channels;
 using System.Threading.RateLimiting;
 
 namespace MeetingRecord.Web.Extensions;
@@ -73,6 +75,41 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDatabaseUsageService, DatabaseUsageService>();
         services.AddScoped<StorageUsageService>();
         services.AddScoped<ILogQueryService, LogQueryService>();
+
+        #region 系統例外紀錄（0.4.122，移植自 NET10-Blazor-Starter，不含 Email 告警）
+        // 記錄管線：ILoggerProvider（生產）→ 有界 Channel → ExceptionLogWriter（消費）→ ExceptionLogService。
+        // ⚠️ FullMode 用 Wait 搭配 provider 的 TryWrite（不阻塞），不要改成 DropWrite：
+        // Drop 系列模式下 TryWrite 永遠回傳 true，丟棄筆數永遠是 0。
+        var exceptionChannel = Channel.CreateBounded<ExceptionLogEntry>(
+            new BoundedChannelOptions(ExceptionLogProvider.QueueCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false,
+            });
+
+        services.AddSingleton(exceptionChannel.Reader);
+        services.AddSingleton(exceptionChannel.Writer);
+        services.AddSingleton<ExceptionContextAccessor>();
+        services.AddScoped<ExceptionStackFileStore>();
+        services.AddScoped<ExceptionLogService>();
+        services.AddHostedService<ExceptionLogWriter>();
+
+        // 每天清除超過保留天數的紀錄。⚠️ 註冊在寫入器之後：主機以相反順序停止，
+        // 清理服務關機時記的錯誤才還有寫入器收。
+        services.AddHostedService<ExceptionLogRetentionBackgroundService>();
+
+        // 程序層級的未處理例外、管線自我監控（Program.cs 在 Build 後呼叫 Register）、瀏覽器錯誤回報（每個 circuit 一份）。
+        services.AddSingleton<ProcessExceptionHooks>();
+        services.AddSingleton<LoggingPipelineMonitor>();
+        services.AddScoped<BrowserErrorReporter>();
+        services.TryAddSingleton(TimeProvider.System);
+
+        // 以 DI 註冊 ILoggerProvider，讓它拿得到 Channel 與情境存取器。
+        // ⚠️ 必須晚於 Program.cs 的 builder.Logging.ClearProviders()，否則會被清掉——
+        // AddApplicationServices 在它之後呼叫，順序正確，不要把這行搬到更前面。
+        services.AddSingleton<ILoggerProvider, ExceptionLogProvider>();
+        #endregion
         services.AddScoped<AuthenticationStateHelper>();
         services.AddScoped<CurrentUserService>();
         services.AddScoped<IAuditLogService, AuditLogService>();

@@ -45,6 +45,8 @@ public sealed class MenuIconTests
         "data_usage",
         // 日誌檢視（0.4.121）。
         "description",
+        // 系統例外紀錄（0.4.122）。
+        "bug_report",
     };
 
     [Fact]

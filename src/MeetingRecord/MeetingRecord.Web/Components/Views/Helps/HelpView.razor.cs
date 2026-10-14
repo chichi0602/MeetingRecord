@@ -78,8 +78,8 @@ public partial class HelpView : ComponentBase
     /// 寧可多顯示一段表頭，也不要因為格式改了就整頁空白。
     /// </para>
     ///
-    /// <remarks>public 是為了讓測試看得到——Web 專案沒有設 InternalsVisibleTo，
-    /// 為了一個方法去開放整個組件的內部成員並不划算。</remarks>
+    /// <remarks>public 是為了讓測試看得到（寫這段時 Web 專案還沒有 InternalsVisibleTo；
+    /// 0.4.122 起有了，但這個方法保持 public 不動）。</remarks>
     /// </summary>
     public static string StripDocumentFrontMatter(string markdown)
     {

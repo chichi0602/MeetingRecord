@@ -185,6 +185,68 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("CategoryTeam");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ExceptionLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Account")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExceptionType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("FirstOccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastOccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastTraceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LoggerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("OccurrenceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Operation")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Page")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StackTraceFile")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastOccurredAt");
+
+                    b.HasIndex("Signature")
+                        .IsUnique();
+
+                    b.ToTable("ExceptionLog");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Meeting", b =>
                 {
                     b.Property<int>("Id")

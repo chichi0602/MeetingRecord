@@ -36,6 +36,9 @@ public partial class BackendDBContext : DbContext
     /// <summary>AI 呼叫的用量帳本（0.4.80）。一次呼叫一列，永久保留，不回填歷史。</summary>
     public virtual DbSet<AiUsageLog> AiUsageLog { get; set; }
 
+    /// <summary>系統例外紀錄（0.4.122）。相同簽章合併成一列並累加次數，完整堆疊存在 ExceptionPath 的檔案裡。</summary>
+    public virtual DbSet<ExceptionLog> ExceptionLog { get; set; }
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -135,6 +138,15 @@ public partial class BackendDBContext : DbContext
             // 刻意不為 Feature／UserId 另建索引：它們只在日期過濾之後才用到，
             // 選擇性不足以打敗表掃描，徒增寫入成本——而帳本是全系統寫入最頻繁的表。
             entity.HasIndex(x => x.OccurredAt);
+        });
+
+        modelBuilder.Entity<ExceptionLog>(entity =>
+        {
+            // 合併的唯一依據。寫入已由單一消費者序列化，這個索引是第二道防線。
+            entity.HasIndex(x => x.Signature).IsUnique();
+
+            // 預設排序（最後發生 desc）與「清除 N 天未再發生」都吃這個索引。
+            entity.HasIndex(x => x.LastOccurredAt);
         });
 
         OnModelCreatingPartial(modelBuilder);

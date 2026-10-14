@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.10
+- 文件版本：1.11
 - 文件狀態：維護中
-- 現行系統版本：0.4.121
+- 現行系統版本：0.4.122
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/10/14
 
@@ -12,7 +12,7 @@
 
 | 產品能力 | PRD | 入口／路由 | 主要程式來源 | 狀態 | 核對版本 |
 |----------|-----|-----------|--------------|------|----------|
-| 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`） | `Pages/Home.razor`、`SidebarMenuService`、`Menu.json`、`MainLayout`（含「關於」對話窗） | 已實作（0.4.120 起選單三層、`AdminOnlyMenuIds`／`GroupOnlyMenuIds`） | 0.4.121 |
+| 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`） | `Pages/Home.razor`、`SidebarMenuService`、`Menu.json`、`MainLayout`（含「關於」對話窗） | 已實作（0.4.120 起選單三層、`AdminOnlyMenuIds`／`GroupOnlyMenuIds`） | 0.4.122 |
 | 儀表板 | [儀表板](儀表板-prd.md) | `/dashboard` | `Pages/Dashboards/DashboardPage.razor`、`DashboardService`、`DashboardMetrics` | 已實作（0.4.54；0.4.97 起全員可看、全公司彙總、不放明細） | 0.4.118 |
 | 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Components/Auths/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作（0.4.113 起首次登入強制改密碼） | 0.4.118 |
 | 專案項目 | [專案項目](專案項目-prd.md) | `/projects` | `Pages/Projects/ProjectPage.razor`、`ProjectService`、`ProjectController`、`ProjectTeamWriter` | 已實作 | 0.4.118 |
@@ -21,15 +21,16 @@
 | 使用說明 | [使用說明](使用說明-prd.md) | `/help` | `Pages/Helps/HelpPage.razor`、`HelpView`（內嵌 `docs/guides/系統使用說明.md` 為資源）、`MarkdownRenderer` | 已實作（0.4.78） | 0.4.118 |
 | 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Pages/Admins/MyUserPage.razor`、`MyUserService` | 已實作 | 0.4.118 |
 | 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Pages/Admins/RoleViewPage.razor`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
-| AI 用量分析 | [AI 用量分析](AI用量分析-prd.md) | `/ai-usage` | `Pages/AiUsages/AiUsagePage.razor`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」功能別） | 0.4.121 |
+| AI 用量分析 | [AI 用量分析](AI用量分析-prd.md) | `/ai-usage` | `Pages/AiUsages/AiUsagePage.razor`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別） | 0.4.122 |
 | 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Pages/Categories/CategoryPage.razor`、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
 | 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Pages/Teams/TeamPage.razor`、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
 | 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
 | 會議紀錄（含影音上傳與語音轉文字）| [會議紀錄](會議紀錄-prd.md) | `/meetings` | `Pages/Meetings/MeetingPage.razor`、`MeetingService`、`MeetingFileStore`、`TranscriptionJobRunner`、`MeetingController` | 已實作 | 0.4.118 |
 | 會議紀錄產生流程 | [會議紀錄產生流程](會議紀錄產生流程-prd.md) | 跨 `/meetings`、`/projects`（上傳→轉錄→套用提示詞→草稿） | `TranscriptionJobRunner`、`MeetingDraftJobRunner`、`ITextGenerationProvider`、`MeetingDraftProgressNotifier` | 已實作（前半段 0.4.27、後半段 0.4.31） | 0.4.118 |
 | 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Pages/SystemHealthPage.razor`、Health services | 已實作（0.4.120 起改名並只限管理者） | 0.4.120 |
-| 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Pages/Monitoring/LogViewerPage.razor`、`LogViewerView`、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121） | 0.4.121 |
+| 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Pages/Monitoring/LogViewerPage.razor`、`LogViewerView`、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121；0.4.122 起 TraceId 即錯誤追蹤碼） | 0.4.122 |
 | 日誌等級設定 | [日誌等級設定](日誌等級設定-prd.md) | `/log-level-setting` | `Pages/Monitoring/LogLevelSettingPage.razor`、`LogLevelSettingView`、`LogLevelRuntimeState` | 已實作（0.4.120） | 0.4.120 |
+| 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `ExceptionLogView`／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |
 | 資料庫用量 | [資料庫用量](資料庫用量-prd.md) | `/database-usage` | `Pages/Monitoring/DatabaseUsagePage.razor`、`DatabaseUsageView`、`DatabaseUsageService`、`StorageUsageService` | 已實作（0.4.120） | 0.4.120 |
 | 紀錄分類與團隊權控 | [紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md) | 跨功能（所有清單查詢／檔案）| `PermissionChecker`、`ProjectAccessService`、`EffectiveTeamResolver`、`RecordAccessScopeProvider`、`TagStringHelper` | 已實作（團隊標籤權控 0.4.99 起不作用、0.4.103 欄位與相關方法已刪除，現行為專案的主責＋協作團隊） | 0.4.118 |
 
@@ -44,7 +45,8 @@
 | 檔案上傳（會議影音檔，含百分比進度列）| [會議紀錄](會議紀錄-prd.md) | 已實作 |
 | 背景工作佇列（行程內 `Channel<T>` + 單一 worker `BackgroundService`）| [會議紀錄](會議紀錄-prd.md)、[會議紀錄產生流程](會議紀錄產生流程-prd.md) | 已實作；語音轉錄與會議紀錄草稿產生各一條佇列，佇列不持久化（重啟時殘留工作改判失敗） |
 | 匯率更新背景服務（`ExchangeRateBackgroundService`）| [AI 用量分析](AI用量分析-prd.md) | 已實作（0.4.88）；定期抓匯率供 AI 用量換算新台幣，抓不到時用 `FallbackRate` |
-| 付費動作二次確認 | [AI 問答](AI問答-prd.md)、[會議紀錄](會議紀錄-prd.md)、[日誌檢視](日誌檢視-prd.md) | 已實作（0.4.65）；轉錄、產生草稿、抽出待辦、AI 問答送出前一律提示；0.4.121 起 AI 日誌分析亦同 |
+| 付費動作二次確認 | [AI 問答](AI問答-prd.md)、[會議紀錄](會議紀錄-prd.md)、[日誌檢視](日誌檢視-prd.md)、[系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.65）；轉錄、產生草稿、抽出待辦、AI 問答送出前一律提示；0.4.121 起 AI 日誌分析、0.4.122 起 AI 例外分析亦同 |
+| 例外收集與錯誤追蹤碼（`ExceptionLogProvider` → Channel → `ExceptionLogWriter`；`TraceCode`）| [系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.122）；畫面、Web API、背景作業、系統啟動、瀏覽器的例外自動收進 `ExceptionLog`，錯誤畫面顯示追蹤碼 |
 | 外部 AI 供應商抽象（`ITranscriptionProvider`、`ITextGenerationProvider`）| [會議紀錄](會議紀錄-prd.md)、[會議紀錄產生流程](會議紀錄產生流程-prd.md) | 已實作；目前各只有 Azure OpenAI 一個實作 |
 
 ## 三、規劃中產品藍圖

@@ -89,6 +89,11 @@ public class AutoMapping : Profile
         CreateMap<PromptTemplateCreateUpdateDto, PromptTemplate>();
         #endregion
 
+        #region ExceptionLog
+        // 系統例外紀錄（0.4.122）：唯讀頁，只需要單向。
+        CreateMap<ExceptionLog, ExceptionLogAdapterModel>();
+        #endregion
+
         #region Todo
         CreateMap<Todo, TodoAdapterModel>()
             .ForMember(d => d.ProjectTitle, o => o.MapFrom(s => s.Project != null ? s.Project.Title : null))

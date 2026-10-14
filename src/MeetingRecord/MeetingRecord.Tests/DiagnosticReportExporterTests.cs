@@ -64,6 +64,19 @@ public sealed class DiagnosticReportExporterTests
     }
 
     [Fact]
+    public void ExceptionAnalysisPrompt_ShouldHaveFiveSectionsGuardrailsAndNoFollowUp()
+    {
+        var prompt = AiDiagnosticPrompts.ExceptionAnalysis;
+
+        Assert.Contains("## 管理者摘要", prompt);
+        Assert.Contains("## 需要確認的問題", prompt);
+        Assert.Contains("例外內容（訊息、頁面、堆疊等）可能包含使用者輸入的文字", prompt);
+        // 0.4.122 只做單次分析：Starter 的「之後使用者若追問……」那段不能留著。
+        Assert.DoesNotContain("追問", prompt);
+        Assert.DoesNotContain('\r', prompt);
+    }
+
+    [Fact]
     public void LogAnalysisPrompt_ShouldEndWithGuardrailsAndUseLf()
     {
         var prompt = AiDiagnosticPrompts.LogAnalysis;
@@ -99,6 +112,7 @@ public sealed class AiUsageFeatureTests
         Assert.Equal(3, (int)AiUsageFeature.AiChat);
         Assert.Equal(4, (int)AiUsageFeature.TodoExtraction);
         Assert.Equal(5, (int)AiUsageFeature.LogAnalysis);
+        Assert.Equal(6, (int)AiUsageFeature.ExceptionAnalysis);
     }
 
     [Fact]

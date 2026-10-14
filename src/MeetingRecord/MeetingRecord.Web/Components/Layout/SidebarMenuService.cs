@@ -38,11 +38,11 @@ public sealed class SidebarMenuService
     public static readonly IReadOnlySet<int> PublicMenuIds = new HashSet<int> { 11 };
 
     /// <summary>
-    /// 只有管理者看得到的選單項目 Id（0.4.120：「監控與診斷」的系統健康監控 34、日誌等級設定 38、資料庫用量 30；0.4.121：日誌檢視 37）。
+    /// 只有管理者看得到的選單項目 Id（0.4.120：「監控與診斷」的系統健康監控 34、日誌等級設定 38、資料庫用量 30；0.4.121：日誌檢視 37；0.4.122：系統例外紀錄 39）。
     /// 非管理者一律排除、**不看權限**——這些頁面不在權限目錄裡，但 0.4.119 以前「系統健康度」可以勾給角色，
     /// 舊資料庫可能還留著權限列；只靠權限鍵擋，殘留的列就會讓選單冒出來。頁面本身另以 CheckIsAdmin 守門。
     /// </summary>
-    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 37, 38, 30 };
+    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 37, 38, 39, 30 };
 
     /// <summary>
     /// 純分組、本身沒有權限的選單節點 Id（0.4.120：「帳號與權限」35、「監控與診斷」36）：

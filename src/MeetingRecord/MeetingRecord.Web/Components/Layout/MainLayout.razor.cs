@@ -8,7 +8,9 @@ using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
+using Microsoft.JSInterop;
 using MeetingRecord.Web.Components.Commons;
 
 namespace MeetingRecord.Web.Components.Layout;
@@ -54,6 +56,17 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     [Inject]
     private SystemStartupState SystemStartupState { get; set; } = default!;
 
+    [Inject]
+    private BrowserErrorReporter BrowserErrorReporter { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
+
+    /// <summary>瀏覽器錯誤回報的 .NET 參考（0.4.122）；登入成功後才建立。</summary>
+    private DotNetObjectReference<BrowserErrorReporter>? browserErrorReporterReference;
+
+    private bool isAuthenticated;
+
     private const string DefaultPageTitle = "系統首頁";
     private const string DefaultUserDisplayName = "使用者";
 
@@ -93,6 +106,34 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
         UpdateCurrentUserStatus();
         UpdateCurrentPageTitle();
         NavigationManager.LocationChanged += OnLocationChanged;
+        isAuthenticated = true;
+    }
+
+    /// <summary>
+    /// 登入後才註冊瀏覽器錯誤回報（0.4.122）：只有已登入、有 circuit 的頁面回報，匿名者無從灌資料。
+    /// isAuthenticated 在非同步初始化後才成立，所以不能只看 firstRender。
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!isAuthenticated || browserErrorReporterReference is not null || !BrowserErrorReporter.IsEnabled)
+        {
+            return;
+        }
+
+        browserErrorReporterReference = DotNetObjectReference.Create(BrowserErrorReporter);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("meetingRecordClientErrors.register", browserErrorReporterReference);
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit 已斷線，沒有東西可註冊。
+        }
+        catch (JSException ex)
+        {
+            // 腳本沒載入（例如被瀏覽器外掛擋掉）：少了前端錯誤回報，頁面照常可用。
+            Logger.LogWarning(ex, "Failed to register the browser error reporter.");
+        }
     }
 
     private void UpdateCurrentUserStatus()
@@ -318,5 +359,6 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     {
         Logger.LogDebug("Disposing main layout.");
         NavigationManager.LocationChanged -= OnLocationChanged;
+        browserErrorReporterReference?.Dispose();
     }
 }

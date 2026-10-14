@@ -1,0 +1,224 @@
+/* 系統例外紀錄（0.4.122）。工具列與面板照既有清單頁複製（scoped CSS 沒有共用元件）；
+   顏色一律用 --oat-* 權杖。對話窗尺寸走全站的 form-modal-large，不在這裡設。 */
+.exception-log-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.exception-log-toolbar-left,
+.exception-log-toolbar-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.exception-log-range-separator {
+    color: var(--oat-ink-mid);
+}
+
+.exception-log-toolbar ::deep .exception-log-account-input {
+    width: 140px;
+}
+
+.exception-log-toolbar ::deep .exception-log-search-input {
+    width: 280px;
+}
+
+.exception-log-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.exception-log-note {
+    margin-bottom: 12px;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.exception-log-panel {
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.exception-log-panel ::deep .exception-log-row {
+    cursor: pointer;
+}
+
+.exception-log-time {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 次數膠囊：≥10 警示色、≥100 錯誤色（形狀比照全站狀態膠囊）。 */
+.exception-log-count {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    color: var(--oat-ink);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.exception-log-count-mid {
+    border-color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.exception-log-count-high {
+    border-color: var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.exception-log-footnote {
+    margin-top: 10px;
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+}
+
+/* ───────── 明細對話窗 ───────── */
+.exception-log-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.exception-log-detail-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    margin: 0 0 14px;
+    font-size: 0.85rem;
+}
+
+.exception-log-detail-list > div {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    gap: 8px;
+}
+
+.exception-log-detail-list dt {
+    color: var(--oat-ink-mid);
+    font-weight: 600;
+}
+
+.exception-log-detail-list dd {
+    margin: 0;
+    color: var(--oat-ink);
+    overflow-wrap: anywhere;
+}
+
+.exception-log-detail-title {
+    margin-bottom: 6px;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.exception-log-stack {
+    max-height: 50vh;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border: 1px solid var(--oat-200);
+    border-radius: 8px;
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ───────── AI 例外分析對話窗（同日誌檢視的寫法）───────── */
+.exception-ai-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 40vh;
+}
+
+.exception-ai-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--oat-ink-mid);
+    font-size: 0.85rem;
+}
+
+.exception-ai-streaming {
+    padding: 12px 14px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.exception-ai-error {
+    padding: 10px 14px;
+    border-left: 4px solid var(--oat-err);
+    border-radius: 10px;
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+    font-size: 0.85rem;
+}
+
+.exception-ai-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.exception-ai-meta {
+    margin: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-50);
+    font-size: 0.8rem;
+}
+
+.exception-ai-meta-row {
+    display: flex;
+    gap: 8px;
+    margin: 2px 0;
+}
+
+.exception-ai-meta dt {
+    flex: none;
+    min-width: 5em;
+    color: var(--oat-ink-mid);
+    font-weight: 600;
+}
+
+.exception-ai-meta dd {
+    margin: 0;
+    color: var(--oat-ink);
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+    .exception-log-toolbar ::deep .exception-log-account-input,
+    .exception-log-toolbar ::deep .exception-log-search-input {
+        width: 100%;
+    }
+
+    .exception-log-detail-list > div {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

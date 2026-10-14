@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -597,6 +598,49 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 
     [Fact]
+    public void ExceptionLogProvider_ShouldBeRegisteredAlongsideNLog()
+    {
+        // ⚠️ 必須晚於 ClearProviders() 註冊，否則會被清掉——這條測試就是在釘這個順序（0.4.122）。
+        var providers = factory.Services.GetServices<Microsoft.Extensions.Logging.ILoggerProvider>();
+
+        Assert.Contains(providers, x => x is MeetingRecord.Web.Diagnostics.ExceptionLogProvider);
+    }
+
+    [Fact]
+    public async Task UnhandledApiException_ShouldBeRecordedInExceptionLog_WithTraceCodeAndAccount()
+    {
+        using var client = factory.CreateClient();
+        await AuthorizeAsync(client);
+
+        var response = await client.GetAsync("/api/ContractProbe/throw");
+        var result = await ReadApiResultAsync<object>(response);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        // TraceIdentifier 被換成 8 碼追蹤碼：使用者看到的 TraceId 就是例外紀錄的「最後追蹤碼」。
+        Assert.Matches("^[0-9A-HJKMNP-TV-Z]{8}$", result.TraceId);
+
+        // 寫入是背景非同步的，輪詢最多 5 秒。
+        MeetingRecord.AccessDatas.Models.ExceptionLog? row = null;
+        for (var attempt = 0; attempt < 50 && row is null; attempt++)
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            row = db.ExceptionLog.AsNoTracking().FirstOrDefault(x => x.LastTraceId == result.TraceId);
+            if (row is null)
+            {
+                await Task.Delay(100);
+            }
+        }
+
+        Assert.NotNull(row);
+        Assert.Equal(ExceptionSources.WebApi, row!.Source);
+        Assert.Equal(typeof(InvalidOperationException).FullName, row.ExceptionType);
+        Assert.Equal("support", row.Account);
+        // 頁面是路由樣板而不是實際網址：同一支 API 不同參數才會併成同一筆。
+        Assert.Equal("/api/ContractProbe/throw", row.Page);
+    }
+
+    [Fact]
     public async Task HealthReadiness_ShouldReturnHealthy()
     {
         using var client = factory.CreateClient();
@@ -783,7 +827,8 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
             ["SystemSettings:ExternalFileSystem:MeetingMediaPath"] = Path.Combine(rootPath, "MeetingMedia"),
             ["SystemSettings:ExternalFileSystem:MeetingTranscriptPath"] = Path.Combine(rootPath, "MeetingTranscript"),
             ["SystemSettings:ExternalFileSystem:AiChatPath"] = Path.Combine(rootPath, "AiChat"),
-            ["SystemSettings:ExternalFileSystem:DataProtectionKeyPath"] = Path.Combine(rootPath, "Keys")
+            ["SystemSettings:ExternalFileSystem:DataProtectionKeyPath"] = Path.Combine(rootPath, "Keys"),
+            ["SystemSettings:ExternalFileSystem:ExceptionPath"] = Path.Combine(rootPath, "Exception")
         };
     }
 }

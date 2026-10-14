@@ -83,6 +83,12 @@
             "url": "/log-level-setting"
           },
           {
+            "id": 39,
+            "name": "系統例外紀錄",
+            "icon": "bug_report",
+            "url": "/system-exceptions"
+          },
+          {
             "id": 30,
             "name": "資料庫用量",
             "icon": "data_usage",

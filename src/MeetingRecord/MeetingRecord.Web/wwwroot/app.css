@@ -458,3 +458,34 @@ body .ant-spin-dot-item {
         pointer-events: none;
     }
 }
+
+/* ===== 錯誤邊界的錯誤畫面（0.4.122）=====
+   Routes.razor 兩層 LoggingErrorBoundary 的 ErrorContent。放全站樣式：Routes 沒有自己的版面，
+   而浮層那一層渲染在 AntContainer 的位置（頁面最底），要固定在視窗下緣才看得到。 */
+.app-error-banner {
+    margin: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--oat-err);
+    border-left-width: 4px;
+    border-radius: 10px;
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+    line-height: 1.8;
+}
+
+.app-error-banner a {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+/* 浮層錯誤：固定在下緣。z-index 落在外框（100～102）之上、AntDesign 浮層（1000 起）之下，
+   符合「自訂圖層介於 99 與 1000 之間」的規則。 */
+.app-error-banner-overlay {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    z-index: 900;
+    margin: 0;
+}

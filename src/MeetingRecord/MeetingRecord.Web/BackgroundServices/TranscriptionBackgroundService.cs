@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Models.Systems;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Business.Services.Transcription;
@@ -69,6 +71,9 @@ public sealed class TranscriptionBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // 0.4.122：這條背景迴圈裡記的錯誤，在系統例外紀錄標成「背景作業」。
+        new ExceptionContextAccessor().Set(new ExceptionContext(ExceptionSources.Background, "TranscriptionBackgroundService", null, null));
+
         logger.LogInformation("Transcription background service started.");
 
         while (!stoppingToken.IsCancellationRequested)

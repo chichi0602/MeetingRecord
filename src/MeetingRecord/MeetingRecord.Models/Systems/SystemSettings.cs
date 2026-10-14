@@ -47,6 +47,12 @@ public class ExternalFileSystem
     /// ⚠️ 換目錄或刪掉裡面的檔案＝所有人被登出一次；不可放在網站目錄內（重新部署會被清掉）。
     /// </summary>
     public string DataProtectionKeyPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 系統例外紀錄的堆疊檔（<c>yyyyMM/{簽章}.txt</c>）與啟動失敗補登檔（<c>pending/*.json</c>）根目錄（0.4.122）。
+    /// 資料庫只存摘要，完整堆疊在這裡；刪除紀錄時一併刪檔（<c>ExceptionStackFileStore</c>）。
+    /// </summary>
+    public string ExceptionPath { get; set; } = string.Empty;
 }
 
 public class BootstrapSettings

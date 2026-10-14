@@ -84,6 +84,9 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
 
     /// <summary>
     /// 組出 Azure OpenAI 的轉錄端點位址。抽成純函式以便單元測試。
+    /// ⚠️ 1.0.28 文字生成改走 v1，轉錄**刻意不改**：v1 的 <c>/openai/v1/audio/transcriptions</c>
+    /// 打 gpt-transcribe 部署一律 404 DeploymentNotFound（換主機、加 api-version=preview、調換欄位順序都一樣），
+    /// 舊路徑則正常。api-version 用 <see cref="LlmProviderSettings.EffectiveTranscriptionApiVersion"/>（未設定時用內建值）。
     /// </summary>
     internal static Uri BuildRequestUri(string endpoint, string deploymentName, string apiVersion)
     {
@@ -99,7 +102,7 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
 
         if (string.IsNullOrWhiteSpace(apiVersion))
         {
-            throw new InvalidOperationException($"{LlmSettings.SectionName} 的 ApiVersion／TranscriptionApiVersion 不可為空白。");
+            throw new InvalidOperationException($"{LlmSettings.SectionName} 的 TranscriptionApiVersion 不可為空白。");
         }
 
         var baseAddress = endpoint.Trim().TrimEnd('/');

@@ -1,6 +1,6 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.5
+- 文件版本：3.6
 - 文件狀態：已實作
 - 現行系統版本：0.4.118
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
@@ -29,7 +29,7 @@
 | 階段 | 現況 |
 | --- | --- |
 | 提示詞範本維護 | **已實作**（0.4.26，見 [會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)） |
-| `LlmSettings` provider-aware 強型別設定 | **已實作**（0.4.26 骨架；0.4.27 新增轉錄段設定；0.4.31 起 `DefaultProvider`／`Model`／`ApiVersion` 由文字生成端實際使用） |
+| `LlmSettings` provider-aware 強型別設定 | **已實作**（0.4.26 骨架；0.4.27 新增轉錄段設定；0.4.31 起 `DefaultProvider`／`Model`／`ApiVersion` 由文字生成端實際使用；1.0.28 起文字生成改走 v1 API，移除 `ApiVersion`） |
 | 音檔上傳與保存 | **已實作**（0.4.27）。單檔 ≤1GB，存於 `SystemSettings.ExternalFileSystem.MeetingMediaPath` 的年／月 + GUID 目錄 |
 | 音檔格式／大小的允收政策 | **已實作**（0.4.27）。`MeetingMediaPolicy` 提供副檔名白名單與 1GB 上限，前端與服務層共用 |
 | 語音轉錄（STT） | **已實作**（0.4.27）。Azure OpenAI `audio/transcriptions`；供應商以 `ITranscriptionProvider` 抽象 |

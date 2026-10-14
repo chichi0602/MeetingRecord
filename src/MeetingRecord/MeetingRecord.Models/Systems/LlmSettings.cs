@@ -177,13 +177,6 @@ public class LlmSettings : IValidatableObject
                     $"{SectionName}:Providers:{name}:Model 不可為空白。",
                     [nameof(Providers)]);
             }
-
-            if (string.IsNullOrWhiteSpace(provider.ApiVersion))
-            {
-                yield return new ValidationResult(
-                    $"{SectionName}:Providers:{name}:ApiVersion 不可為空白。",
-                    [nameof(Providers)]);
-            }
         }
 
         // 轉錄段只在「明確指定 TranscriptionProvider」時驗證。
@@ -202,7 +195,8 @@ public class LlmSettings : IValidatableObject
             yield break;
         }
 
-        // 轉錄供應商的 Endpoint／ApiVersion 與生成端共用，上方已檢查；這裡只補轉錄專屬欄位。
+        // 轉錄供應商的 Endpoint 與生成端共用，上方已檢查；這裡只補轉錄專屬欄位
+        // （TranscriptionApiVersion 選填，留空用內建值）。
         if (string.IsNullOrWhiteSpace(transcriptionProvider.TranscriptionModel))
         {
             yield return new ValidationResult(
@@ -243,11 +237,11 @@ public class LlmProviderSettings
     /// <summary>API 金鑰（機敏值，正式環境以環境變數或 user-secrets 提供）。</summary>
     public string ApiKey { get; set; } = string.Empty;
 
-    /// <summary>文字生成用：Azure OpenAI 為 deployment 名稱；其他廠商為 model id。</summary>
+    /// <summary>
+    /// 文字生成用：Azure OpenAI 為 deployment 名稱；其他廠商為 model id。
+    /// 1.0.28 起文字生成走 Azure OpenAI v1 API（<c>/openai/v1/chat/completions</c>），此值放在 request 的 <c>model</c>，不需要 api-version。
+    /// </summary>
     public string Model { get; set; } = string.Empty;
-
-    /// <summary>API 版本，例如 Azure OpenAI 的 2024-10-21。</summary>
-    public string ApiVersion { get; set; } = string.Empty;
 
     /// <summary>
     /// 語音轉錄用的 deployment／model 名稱，例如 <c>gpt-4o-transcribe</c>。
@@ -256,12 +250,19 @@ public class LlmProviderSettings
     public string TranscriptionModel { get; set; } = string.Empty;
 
     /// <summary>
-    /// 語音轉錄用的 API 版本。留空時沿用 <see cref="ApiVersion"/>；
-    /// 轉錄端點通常需要比文字生成更新的版本，因此獨立成一個欄位。
+    /// 語音轉錄的 api-version 內建值（1.0.28）。轉錄**沒有**改走 v1：實測 v1 的
+    /// <c>/openai/v1/audio/transcriptions</c> 打 gpt-transcribe 部署一律回 404 DeploymentNotFound，
+    /// 只有 <c>/openai/deployments/{部署}/audio/transcriptions?api-version=…</c> 可用。
+    /// </summary>
+    public const string DefaultTranscriptionApiVersion = "2025-03-01-preview";
+
+    /// <summary>
+    /// 語音轉錄用的 API 版本，**選填**。留空時用 <see cref="DefaultTranscriptionApiVersion"/>；
+    /// 只有 Azure 淘汰這個版本、需要換新版時才要填。
     /// </summary>
     public string TranscriptionApiVersion { get; set; } = string.Empty;
 
     /// <summary>實際送出轉錄請求時使用的 API 版本。</summary>
     public string EffectiveTranscriptionApiVersion =>
-        !string.IsNullOrWhiteSpace(TranscriptionApiVersion) ? TranscriptionApiVersion.Trim() : ApiVersion.Trim();
+        !string.IsNullOrWhiteSpace(TranscriptionApiVersion) ? TranscriptionApiVersion.Trim() : DefaultTranscriptionApiVersion;
 }

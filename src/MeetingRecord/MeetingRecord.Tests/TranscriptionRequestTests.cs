@@ -51,23 +51,21 @@ public sealed class TranscriptionRequestTests
     #region 轉錄 API 版本回退
 
     [Fact]
-    public void EffectiveTranscriptionApiVersion_ShouldPreferTranscriptionApiVersion()
+    public void EffectiveTranscriptionApiVersion_ShouldPreferConfiguredValue()
     {
-        var provider = new LlmProviderSettings
-        {
-            ApiVersion = "2024-10-21",
-            TranscriptionApiVersion = "2025-03-01-preview",
-        };
+        var provider = new LlmProviderSettings { TranscriptionApiVersion = " 2026-01-01-preview " };
 
-        Assert.Equal("2025-03-01-preview", provider.EffectiveTranscriptionApiVersion);
+        Assert.Equal("2026-01-01-preview", provider.EffectiveTranscriptionApiVersion);
     }
 
     [Fact]
-    public void EffectiveTranscriptionApiVersion_ShouldFallBackToApiVersion()
+    public void EffectiveTranscriptionApiVersion_ShouldFallBackToBuiltInDefault()
     {
-        var provider = new LlmProviderSettings { ApiVersion = "2024-10-21" };
+        // 1.0.28：設定檔不必再填版本。轉錄仍走 deployments 路徑（v1 轉錄實測 404），版本用內建值。
+        var provider = new LlmProviderSettings();
 
-        Assert.Equal("2024-10-21", provider.EffectiveTranscriptionApiVersion);
+        Assert.Equal("2025-03-01-preview", LlmProviderSettings.DefaultTranscriptionApiVersion);
+        Assert.Equal(LlmProviderSettings.DefaultTranscriptionApiVersion, provider.EffectiveTranscriptionApiVersion);
     }
 
     #endregion

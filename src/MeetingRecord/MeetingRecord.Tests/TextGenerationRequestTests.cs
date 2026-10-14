@@ -10,41 +10,26 @@ public sealed class TextGenerationRequestTests
 {
     #region Azure OpenAI 端點組裝
 
-    [Fact]
-    public void BuildRequestUri_ShouldComposeDeploymentAndApiVersion()
+    [Theory]
+    [InlineData("https://contoso.openai.azure.com/", "https://contoso.openai.azure.com/openai/v1/chat/completions")]
+    [InlineData("https://contoso.openai.azure.com", "https://contoso.openai.azure.com/openai/v1/chat/completions")]
+    [InlineData("https://kmengine.services.ai.azure.com", "https://kmengine.services.ai.azure.com/openai/v1/chat/completions")]
+    public void BuildRequestUri_ShouldUseV1PathWithoutApiVersion(string endpoint, string expected)
     {
-        var uri = AzureOpenAiTextGenerationProvider.BuildRequestUri(
-            "https://contoso.openai.azure.com/",
-            "gpt-4o-mini",
-            "2024-10-21");
+        // 1.0.28 起走 v1 API：部署名稱在 body 的 model，網址不帶部署名稱也不帶 api-version。
+        var uri = AzureOpenAiTextGenerationProvider.BuildRequestUri(endpoint, "gpt-5.6-sol");
 
-        Assert.Equal(
-            "https://contoso.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21",
-            uri.ToString());
-    }
-
-    [Fact]
-    public void BuildRequestUri_ShouldNotProduceDoubleSlash_WhenEndpointHasNoTrailingSlash()
-    {
-        var uri = AzureOpenAiTextGenerationProvider.BuildRequestUri(
-            "https://contoso.openai.azure.com",
-            "gpt-4o-mini",
-            "2024-10-21");
-
-        Assert.DoesNotContain("azure.com//", uri.ToString());
+        Assert.Equal(expected, uri.ToString());
+        Assert.DoesNotContain("api-version", uri.ToString());
     }
 
     [Theory]
-    [InlineData("", "gpt-4o-mini", "2024-10-21")]
-    [InlineData("https://contoso.openai.azure.com/", "", "2024-10-21")]
-    [InlineData("https://contoso.openai.azure.com/", "gpt-4o-mini", "")]
-    public void BuildRequestUri_ShouldThrow_WhenRequiredPartIsBlank(
-        string endpoint,
-        string deploymentName,
-        string apiVersion)
+    [InlineData("", "gpt-4o-mini")]
+    [InlineData("https://contoso.openai.azure.com/", "")]
+    public void BuildRequestUri_ShouldThrow_WhenRequiredPartIsBlank(string endpoint, string deploymentName)
     {
         Assert.Throws<InvalidOperationException>(
-            () => AzureOpenAiTextGenerationProvider.BuildRequestUri(endpoint, deploymentName, apiVersion));
+            () => AzureOpenAiTextGenerationProvider.BuildRequestUri(endpoint, deploymentName));
     }
 
     #endregion

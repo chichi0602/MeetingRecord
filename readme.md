@@ -221,7 +221,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `ClientErrorReporting` | 瀏覽器端錯誤回報（0.4.122）：`Enabled`（預設 `true`）、`MaxPerCircuitPerMinute`（每個連線每分鐘上限，預設 10）。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
-| `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成：會議紀錄草稿、抽出待辦、AI 問答）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`；`Currency` 與 `Pricing.<模型>`（每百萬 token 或每分鐘音訊單價）供 AI 用量計價。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
+| `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成：會議紀錄草稿、抽出待辦、AI 問答）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`TranscriptionModel`（1.0.28 起文字生成走 Azure OpenAI v1 API，不需要 `ApiVersion`；轉錄的 api-version 內建，`TranscriptionApiVersion` 選填）；`Currency` 與 `Pricing.<模型>`（每百萬 token 或每分鐘音訊單價）供 AI 用量計價。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
 | `ExchangeRateSettings` | AI 用量換算新台幣的匯率來源：`Enabled`、`SourceUrl`、`TargetCurrency`（預設 `TWD`）、`RefreshIntervalHours`（預設 24）、`FallbackRate`（抓不到時的備援匯率）；由 `ExchangeRateBackgroundService` 定期更新。 |
 | `MediaSettings.FfmpegPath` | FFmpeg 執行檔路徑，預設 `ffmpeg`（走 PATH）。語音轉錄前一律用它把影音檔轉成 mp3 並切段。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。 |
 | `ExportSettings.BrowserPath` | 產生會議紀錄 PDF 用的瀏覽器執行檔（Edge 或 Chrome）。**留空即自動偵測**常見安裝位置，Windows 內建 Edge 因此通常不必設定。找不到時啟動記 WARN，匯出當下會回明確錯誤。 |

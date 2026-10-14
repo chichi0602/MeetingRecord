@@ -494,7 +494,6 @@ public sealed class MeetingDraftJobRunnerTests
                 Endpoint = "https://contoso.openai.azure.com/",
                 ApiKey = "test-key",
                 Model = "gpt-4o-mini",
-                ApiVersion = "2024-10-21",
             };
 
             // 單價設好，帳本的金額欄位才測得到；沒設的話金額一律是 null（那是另一組測試在守的）。

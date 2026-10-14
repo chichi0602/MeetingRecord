@@ -16,7 +16,19 @@ public sealed class LlmSettingsTests
         Assert.Equal("https://demo.openai.azure.com/", provider.Endpoint);
         Assert.Equal("dev-key", provider.ApiKey);
         Assert.Equal("gpt-4o-mini", provider.Model);
-        Assert.Equal("2024-10-21", provider.ApiVersion);
+    }
+
+    [Fact]
+    public void Bind_ShouldIgnoreLegacyApiVersionKeys()
+    {
+        // 1.0.28 移除 ApiVersion：舊的設定檔或 user-secrets 若還留著這個鍵，繫結要照常成功、驗證也要過。
+        var config = BaseSettings();
+        config["LlmSettings:Providers:AzureOpenAI:ApiVersion"] = "2024-10-21";
+
+        var settings = Bind(config);
+
+        Assert.Equal("gpt-4o-mini", settings.Providers["AzureOpenAI"].Model);
+        Assert.Empty(Validate(settings));
     }
 
     [Fact]
@@ -34,7 +46,6 @@ public sealed class LlmSettingsTests
         Assert.Equal("production-key", provider.ApiKey);
         Assert.Equal("https://demo.openai.azure.com/", provider.Endpoint);
         Assert.Equal("gpt-4o-mini", provider.Model);
-        Assert.Equal("2024-10-21", provider.ApiVersion);
     }
 
     [Fact]
@@ -52,7 +63,6 @@ public sealed class LlmSettingsTests
         var config = BaseSettings();
         config["LlmSettings:Providers:GoogleGemini:Endpoint"] = "https://generativelanguage.googleapis.com/";
         config["LlmSettings:Providers:GoogleGemini:Model"] = "gemini-2.0-flash";
-        config["LlmSettings:Providers:GoogleGemini:ApiVersion"] = "v1beta";
 
         var settings = Bind(config);
 
@@ -105,8 +115,8 @@ public sealed class LlmSettingsTests
 
         var results = Validate(settings);
 
-        // Endpoint / Model / ApiVersion 各一筆
-        Assert.Equal(3, results.Count);
+        // Endpoint / Model 各一筆（1.0.28 起不再要求 ApiVersion）
+        Assert.Equal(2, results.Count);
     }
 
     [Fact]
@@ -122,7 +132,6 @@ public sealed class LlmSettingsTests
                 {
                     Endpoint = "https://demo.openai.azure.com/",
                     Model = "gpt-4o-mini",
-                    ApiVersion = "2024-10-21",
                     ApiKey = string.Empty,
                 },
             },
@@ -200,7 +209,6 @@ public sealed class LlmSettingsTests
                 {
                     Endpoint = "https://demo.openai.azure.com/",
                     Model = "gpt-4o-mini",
-                    ApiVersion = "2024-10-21",
                 },
             },
         };
@@ -221,7 +229,6 @@ public sealed class LlmSettingsTests
                 {
                     Endpoint = "https://demo.openai.azure.com/",
                     Model = "gpt-4o-mini",
-                    ApiVersion = "2024-10-21",
                     TranscriptionModel = "gpt-4o-transcribe",
                 },
             },
@@ -244,7 +251,6 @@ public sealed class LlmSettingsTests
                 {
                     Endpoint = "https://demo.openai.azure.com/",
                     Model = "gpt-4o-mini",
-                    ApiVersion = "2024-10-21",
                 },
             },
         };
@@ -259,14 +265,13 @@ public sealed class LlmSettingsTests
         var config = BaseSettings();
         config["LlmSettings:TranscriptionProvider"] = "AzureOpenAI";
         config["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = "gpt-4o-transcribe";
-        config["LlmSettings:Providers:AzureOpenAI:TranscriptionApiVersion"] = "2025-03-01-preview";
 
         var settings = Bind(config);
 
         Assert.Equal("AzureOpenAI", settings.TranscriptionProvider);
         var provider = settings.Providers["AzureOpenAI"];
         Assert.Equal("gpt-4o-transcribe", provider.TranscriptionModel);
-        Assert.Equal("2025-03-01-preview", provider.EffectiveTranscriptionApiVersion);
+        Assert.Equal(LlmProviderSettings.DefaultTranscriptionApiVersion, provider.EffectiveTranscriptionApiVersion);
     }
 
     #endregion
@@ -277,7 +282,6 @@ public sealed class LlmSettingsTests
         ["LlmSettings:Providers:AzureOpenAI:Endpoint"] = "https://demo.openai.azure.com/",
         ["LlmSettings:Providers:AzureOpenAI:ApiKey"] = "dev-key",
         ["LlmSettings:Providers:AzureOpenAI:Model"] = "gpt-4o-mini",
-        ["LlmSettings:Providers:AzureOpenAI:ApiVersion"] = "2024-10-21",
     };
 
     private static LlmSettings Bind(params Dictionary<string, string?>[] sources)

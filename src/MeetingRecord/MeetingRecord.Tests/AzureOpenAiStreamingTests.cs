@@ -109,6 +109,20 @@ public sealed class AzureOpenAiStreamingTests
         Assert.Equal(["O", "K"], deltas);
     }
 
+    [Fact]
+    public async Task GenerateAsync_ShouldCallV1WithModelInBodyAndKeepIncludeUsage()
+    {
+        // 1.0.28：v1 API 的部署名稱放在 body；include_usage 仍要送（用量帳本靠它）。
+        var (provider, handler) = CreateProvider(RealSseResponse);
+
+        await provider.GenerateAsync("系統", "問題", null, CancellationToken.None);
+
+        Assert.Equal("https://contoso.openai.azure.com/openai/v1/chat/completions", handler.LastRequestUri?.ToString());
+        using var body = System.Text.Json.JsonDocument.Parse(handler.LastRequestBody);
+        Assert.Equal("gpt-4o-mini", body.RootElement.GetProperty("model").GetString());
+        Assert.True(body.RootElement.GetProperty("stream_options").GetProperty("include_usage").GetBoolean());
+    }
+
     private static (AzureOpenAiTextGenerationProvider Provider, StubHandler Handler) CreateProvider(string sse)
     {
         var settings = new LlmSettings { DefaultProvider = "AzureOpenAI" };
@@ -117,7 +131,6 @@ public sealed class AzureOpenAiStreamingTests
             Endpoint = "https://contoso.openai.azure.com/",
             ApiKey = "test-key",
             Model = "gpt-4o-mini",
-            ApiVersion = "2024-10-21",
         };
 
         var handler = new StubHandler(sse);
@@ -135,10 +148,13 @@ public sealed class AzureOpenAiStreamingTests
     {
         public string LastRequestBody { get; private set; } = string.Empty;
 
+        public Uri? LastRequestUri { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            LastRequestUri = request.RequestUri;
             LastRequestBody = request.Content is null
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken);

@@ -141,7 +141,7 @@
 4. `FfmpegMediaConverter` 以外部 FFmpeg 執行檔轉檔：
    `-vn -ac 1 -ar 16000 -c:a libmp3lame -b:a 32k -f segment -segment_time 900 -segment_format mp3`
    輸出到系統暫存目錄，轉錄結束即整個目錄刪除。
-5. `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。
+5. `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.28）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
 6. 各段文字以空行接合寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。
 
 > **為什麼一律切段**：Azure OpenAI 的音訊轉錄有單檔 25MB 上限，而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，不必為「檔案夠小就不切」多維護一個分支；15 分鐘 @32kbps 約 3.6MB，遠低於上限，同時順帶解決長會議的時長問題。
@@ -195,7 +195,7 @@
 - 1GB 檔案經 Blazor Server 的 SignalR 傳輸相當慢，進度列會如實反映；這是 Blazor Server 的架構天花板，不在本版處理範圍。
 - **大檔上傳可能整條連線中斷**（0.4.116 記錄）：IIS Production 上 127MB 的 mp4 傳到第 11 秒，Blazor 讀檔串流判定逾時並終止連線，整頁空白，會議已建立但沒有影音檔（可重新整理後編輯該筆再上傳）。根本原因尚未確認，先檢查 IIS 是否啟用 WebSocket；若啟用後仍中斷，改走 HTTP 上傳 API。見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)。
 - 清單上的轉錄狀態**不會自動更新**，需要按「重新整理」才會看到背景轉錄的最新進度。
-- `gpt-4o-transcribe` 需要比文字生成更新的 API 版本，因此 `TranscriptionApiVersion` 獨立於 `ApiVersion`；實際可用版本以目標 Azure 資源為準。
+- 1.0.28 起文字生成走 v1 API、不需要版本；轉錄的 api-version 內建 `2025-03-01-preview`，`TranscriptionApiVersion` 只在需要換版本時填。
 
 ## 七、設定
 
@@ -213,16 +213,14 @@
       "Endpoint": "https://your-resource.openai.azure.com/",
       "ApiKey": "DevelopmentOnly-ChangeThisLlmApiKey",
       "Model": "gpt-4o-mini",
-      "ApiVersion": "2024-10-21",
-      "TranscriptionModel": "gpt-4o-transcribe",
-      "TranscriptionApiVersion": "2025-03-01-preview"
+      "TranscriptionModel": "gpt-4o-transcribe"
     }
   }
 }
 ```
 
 - `TranscriptionProvider` 留空 → 沿用 `DefaultProvider`（轉錄端與生成端可指向不同廠商）。
-- `TranscriptionApiVersion` 留空 → 沿用 `ApiVersion`。
+- `TranscriptionApiVersion` 選填，留空 → 用內建的 `2025-03-01-preview`（1.0.28 起不再有 `ApiVersion`）。
 - **只設 `DefaultProvider`、不填 `TranscriptionModel` 的部署視為未啟用轉錄**，啟動驗證不會擋。
 - `FfmpegPath` 可填完整路徑，也可只填 `ffmpeg` 走 PATH（0.4.29 起為預設值）。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。
 - 服務一律以 `IOptions<LlmSettings>` / `IOptions<MediaSettings>` 取設定，**禁止**直接讀 `IConfiguration`。
@@ -260,7 +258,7 @@
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TranscriptionRequestTests.cs`（只測純函式，**不打真實 API、不跑真實 ffmpeg**）：
 
 - `BuildRequestUri_*`：Azure OpenAI 轉錄端點組裝、無雙斜線、必填欄位空白時擲出。
-- `EffectiveTranscriptionApiVersion_*`：轉錄 API 版本的優先序與回退。
+- `EffectiveTranscriptionApiVersion_*`：有設定時用設定值，留空時用內建版本。
 - `BuildSegmentArguments_*`：FFmpeg 參數含 `-vn`／單聲道／16kHz／libmp3lame／32kbps、固定使用 segment muxer、路徑加引號。
 - `IsAllowedFileName_*`、`MaxUploadFileSize_ShouldBeOneGigabyte`：允收政策。
 
@@ -271,7 +269,7 @@
 
 `src/MeetingRecord/MeetingRecord.Tests/MenuIconTests.cs` 的 `AllowedIcons` 已加入 `event` 與 `mic`；未加入會使整套測試失敗。
 
-轉錄設定另有 `LlmSettingsTests.cs`（`TranscriptionProvider` / `TranscriptionModel` / `TranscriptionApiVersion` 的回退與驗證）與 `StartupSafetyValidatorTests.cs`（Production 對轉錄金鑰、`TranscriptionModel`、`FfmpegPath` 的檢查）。
+轉錄設定另有 `LlmSettingsTests.cs`（`TranscriptionProvider` / `TranscriptionModel` 的回退與驗證、`TranscriptionApiVersion` 內建值、舊 `ApiVersion` 鍵被忽略）與 `StartupSafetyValidatorTests.cs`（Production 對轉錄金鑰、`TranscriptionModel`、`FfmpegPath` 的檢查）。
 
 測試以 SQLite in-memory + `EnsureCreatedAsync` 建立隔離環境，檔案操作導向系統暫存目錄下的隨機資料夾，轉錄佇列以假的 `ITranscriptionQueue` 注入。注意 `EnsureCreatedAsync` 直接由模型建表、**繞過 migration**，所以測試全綠不代表 migration 存在。
 

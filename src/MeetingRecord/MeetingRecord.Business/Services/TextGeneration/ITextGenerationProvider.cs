@@ -7,7 +7,7 @@ namespace MeetingRecord.Business.Services.TextGeneration;
 ///
 /// <para>
 /// <paramref name="Usage"/> 為 null 代表**供應商沒有回報用量**——串流被中斷、或
-/// api-version 不支援 <c>stream_options</c> 都會這樣。那不是錯誤，帳本會把 token 欄位留白
+/// 供應商不支援 <c>stream_options</c> 都會這樣。那不是錯誤，帳本會把 token 欄位留白
 /// 而不是記成 0（0 會讓人以為那次呼叫不用錢）。
 /// </para>
 /// </summary>

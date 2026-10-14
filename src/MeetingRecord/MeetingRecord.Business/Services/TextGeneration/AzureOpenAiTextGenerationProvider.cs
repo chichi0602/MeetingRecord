@@ -75,16 +75,17 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
                 $"{LlmSettings.SectionName}:Providers:{settings.DefaultProvider.Trim()}:ApiKey 未設定，無法呼叫文字生成 API。");
         }
 
-        var requestUri = BuildRequestUri(provider.Endpoint, provider.Model, provider.ApiVersion);
+        var requestUri = BuildRequestUri(provider.Endpoint, provider.Model);
 
         var payload = new ChatCompletionRequest
         {
+            // 1.0.28 起走 v1 API：部署名稱放在 body 的 model，不再放在網址裡。
+            Model = provider.Model.Trim(),
             Stream = true,
 
             // ⚠️ 串流預設**不回傳** usage，必須明確要求（0.4.80 起，用量帳本靠它）。
-            // 需要 api-version 2024-10-21 以上；舊版本會回 HTTP 400
-            // 「Unrecognized request argument supplied: stream_options」而不是忽略它——
-            // 也就是說把 ApiVersion 往回調會讓全站生成掛掉，而錯誤訊息看起來像金鑰壞了。
+            // v1 API 支援（1.0.28 實測）。舊的日期版本 API 在 2024-10-21 之前會回 HTTP 400
+            // 「Unrecognized request argument supplied: stream_options」而不是忽略它。
             StreamOptions = new StreamOptions { IncludeUsage = true },
 
             Messages =
@@ -180,13 +181,17 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
             throw new InvalidOperationException("文字生成 API 未回傳任何內容。");
         }
 
-        // usage 為 null 是可接受的結果（伺服器沒送 [DONE] 就關連線、或 api-version 不支援）。
+        // usage 為 null 是可接受的結果（伺服器沒送 [DONE] 就關連線、或供應商不支援）。
         // ⚠️ 絕不能因此拋例外——那會把「生成成功但拿不到帳」升級成「生成失敗」。
         return new TextGenerationResult(builder.ToString().Trim(), usage);
     }
 
-    /// <summary>組出 Azure OpenAI 的 chat completions 端點位址。抽成純函式以便單元測試。</summary>
-    internal static Uri BuildRequestUri(string endpoint, string deploymentName, string apiVersion)
+    /// <summary>
+    /// 組出 Azure OpenAI v1 的 chat completions 端點位址（1.0.28）。抽成純函式以便單元測試。
+    /// v1 不需要 api-version，部署名稱放在 body 的 <c>model</c>；這裡仍檢查它不可空白，錯誤才會在送出前就說清楚。
+    /// <c>openai.azure.com</c> 與 <c>services.ai.azure.com</c> 兩種端點都適用。
+    /// </summary>
+    internal static Uri BuildRequestUri(string endpoint, string deploymentName)
     {
         if (string.IsNullOrWhiteSpace(endpoint))
         {
@@ -198,16 +203,7 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
             throw new InvalidOperationException($"{LlmSettings.SectionName} 的 Model 不可為空白。");
         }
 
-        if (string.IsNullOrWhiteSpace(apiVersion))
-        {
-            throw new InvalidOperationException($"{LlmSettings.SectionName} 的 ApiVersion 不可為空白。");
-        }
-
-        var baseAddress = endpoint.Trim().TrimEnd('/');
-        var deployment = Uri.EscapeDataString(deploymentName.Trim());
-        var version = Uri.EscapeDataString(apiVersion.Trim());
-
-        return new Uri($"{baseAddress}/openai/deployments/{deployment}/chat/completions?api-version={version}");
+        return new Uri($"{endpoint.Trim().TrimEnd('/')}/openai/v1/chat/completions");
     }
 
     /// <summary>
@@ -303,6 +299,10 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
 
     private sealed class ChatCompletionRequest
     {
+        /// <summary>v1 API 的部署名稱（1.0.28）。</summary>
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = string.Empty;
+
         [JsonPropertyName("messages")]
         public List<ChatMessage> Messages { get; set; } = [];
 

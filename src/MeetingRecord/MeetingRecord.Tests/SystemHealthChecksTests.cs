@@ -513,7 +513,6 @@ public sealed class SystemHealthChecksTests
             Endpoint = "https://contoso.openai.azure.com/",
             ApiKey = "real-secret-key",
             Model = "gpt-4o-mini",
-            ApiVersion = "2024-10-21",
             TranscriptionModel = "gpt-4o-transcribe",
         };
         settings.Pricing["gpt-4o-mini"] = new LlmPricingSettings { InputPerMillionTokens = 0.15m, OutputPerMillionTokens = 0.60m };

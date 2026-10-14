@@ -41,7 +41,7 @@ public static class AiUsagePricing
 
         if (inputTokens is not { } input || outputTokens is not { } output)
         {
-            // 供應商沒回報用量（串流被中斷、api-version 不支援 include_usage）。
+            // 供應商沒回報用量（串流被中斷、或供應商不支援 include_usage）。
             return null;
         }
 

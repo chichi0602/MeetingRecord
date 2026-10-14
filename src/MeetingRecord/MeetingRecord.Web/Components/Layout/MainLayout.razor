@@ -125,3 +125,14 @@
    ⚠️ 不要在頁面裡再掛一個。0.4.69 之前這裡沒有 render 它，各頁面就自己補了 8 個，
    結果同一段 <style> 在 DOM 裡出現 9 次；0.4.82 把那 8 個移除、只留這一個。 *@
 <FormModalHelper />
+
+@* 常駐於所有頁面：上傳、轉錄與會議紀錄生成的進度，離開來源頁面也要看得到。
+   ⚠️ 0.4.84 改寫上面那段註解時連同這個與 blazor-error-ui 一起誤刪，到 1.0.25 才補回——
+   這段期間「可在右下角看到進度」的提示全都落空。LayoutMountTests 釘住這兩個掛載點。 *@
+<BackgroundJobProgressPanel />
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">關閉</span>
+</div>

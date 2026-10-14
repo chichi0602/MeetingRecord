@@ -527,7 +527,9 @@ public class MeetingService
 
             meeting.UpdatedAt = DateTime.Now;
 
-            await context.SaveChangesAsync(cancellationToken);
+            // ⚠️ 取消只作用在上面的寫檔（使用者按「取消上傳」，1.0.25）。檔案寫完就不再理會取消：
+            //    存檔後才取消會留下「已存檔、待處理」卻沒入列的會議，永遠不會被轉錄。
+            await context.SaveChangesAsync(CancellationToken.None);
             CleanTrackingHelper.Clean<Meeting>(context);
             committed = true;
 
@@ -537,7 +539,7 @@ public class MeetingService
 
             // 先登錄進度再入列：背景工作要等輪到才會知道這件事，先登錄畫面才立刻看得到「排隊中」。
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
-            await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
+            await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), CancellationToken.None);
 
             Logger.LogInformation("Meeting media uploaded and queued for transcription. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(true);
@@ -554,7 +556,17 @@ public class MeetingService
             catch (ObjectDisposedException)
             {
             }
-            Logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", meetingId);
+
+            // 使用者按「取消上傳」不是錯誤，記 Information 就好（1.0.25）。
+            var cancelledByUser = ex is OperationCanceledException && cancellationToken.IsCancellationRequested;
+            if (cancelledByUser)
+            {
+                Logger.LogInformation("Meeting media upload cancelled by user. MeetingId={MeetingId}", meetingId);
+            }
+            else
+            {
+                Logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", meetingId);
+            }
 
             // 資料庫沒寫進去，剛落地的新檔就沒有任何資料列指向它（0.4.115）。
             if (!committed && stored is not null)
@@ -565,9 +577,11 @@ public class MeetingService
             // 其他視窗正看著「上傳中 xx%」，不標成失敗就會永遠卡在那個百分比（0.4.117）。
             if (uploadStarted && !committed)
             {
-                progressNotifier.ReportFailed(meetingId, "影音檔上傳失敗，請重新上傳。");
+                progressNotifier.ReportFailed(meetingId, cancelledByUser ? "已取消上傳。" : "影音檔上傳失敗，請重新上傳。");
             }
-            return VerifyRecordResultFactory.Build(false, "影音檔上傳失敗。", ex);
+            return cancelledByUser
+                ? VerifyRecordResultFactory.Build(false, "已取消上傳。")
+                : VerifyRecordResultFactory.Build(false, "影音檔上傳失敗。", ex);
         }
     }
 

@@ -138,6 +138,34 @@
     font-size: 0.75rem;
 }
 
+/* 主責團隊下拉一個選項都沒有時的引導（1.0.26）。比一般提示醒目，因為不處理就存不了檔。 */
+.project-view-empty-teams {
+    margin-top: 6px;
+    padding: 8px 12px;
+    border: 1px solid #f0d58c;
+    border-radius: 6px;
+    background: #fffbe6;
+    color: var(--oat-ink);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+}
+
+.project-view-empty-teams a {
+    margin: 0 4px;
+    font-weight: 600;
+}
+
+.project-view-empty-teams-reload {
+    margin-left: 4px;
+    padding: 0 8px;
+    border: 1px solid var(--oat-ink-mid);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--oat-ink);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
 /* 按鈕內容。這一層 span 是在 .razor 裡自己寫的，所以拿得到 scope 屬性——
    直接寫 <Button Class="..."> 的話選擇器會被加上 [b-xxx] 而永遠選不到那顆 button。
    （按鈕與兩個下拉的頂緣對齊則由外層 .project-view-ai-field 的佔位標籤負責，

@@ -23,6 +23,12 @@
     color: var(--oat-ink-mid);
 }
 
+/* 別的頁籤正在上傳的那一列（1.0.27）：這一頁沒有它的取消來源，只說明為什麼沒有按鈕。 */
+.meeting-view-row-locked {
+    font-size: 12px;
+    color: var(--oat-ink-mid);
+}
+
 .meeting-view-pending-file {
     margin-top: 8px;
     padding: 6px 10px;

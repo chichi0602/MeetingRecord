@@ -94,7 +94,6 @@ public partial class MeetingViewView : IDisposable
     /// </summary>
     private static readonly string TranscriptionCostNotice =
         $"轉錄會呼叫 Azure OpenAI 語音服務並產生費用：音檔每 {FfmpegMediaConverter.SegmentSeconds / 60} 分鐘切成一段、逐段送出，音檔越長費用越高。";
-    private int uploadPercent;
 
     #region AI 會議紀錄
 
@@ -266,9 +265,9 @@ public partial class MeetingViewView : IDisposable
     private void OnTranscriptionProgressChanged()
         => _ = InvokeAsync(async () =>
         {
-            // 本頁正在存檔／上傳時只重繪：那條流程最後自己會重載。上傳失敗時通知器也會發「失敗」，
-            // 兩邊同時重載會在同一個 DbContext 上併發查詢（0.4.117）。這裡不記「已重載過」，之後的事件會補上。
-            if (isSaving || isUploading)
+            // 本頁正在存檔時只重繪：那條流程最後自己會重載（0.4.117）。這裡不記「已重載過」，之後的事件會補上。
+            // 1.0.27 起上傳在背景跑，上傳期間其他會議完成轉錄仍要照常重載，所以不再擋 isUploading。
+            if (isSaving)
             {
                 StateHasChanged();
                 return;
@@ -352,6 +351,7 @@ public partial class MeetingViewView : IDisposable
         }
 
         logger.LogDebug("Meeting table changed. PageIndex={PageIndex}, SortField={SortField}, SortDirection={SortDirection}", _pageIndex, sortField, sortDirection);
+
         await ReloadAsync();
     }
 
@@ -494,9 +494,15 @@ public partial class MeetingViewView : IDisposable
     /// <summary>存檔中（0.4.115）：擋重複送出。isUploading 只涵蓋上傳階段，新增那一步連按兩下會建出兩筆會議。</summary>
     private bool isSaving;
 
+    /// <summary>
+    /// 存檔中整張表單鎖住（1.0.25）：欄位、移除檔案、取消鈕、右上角關閉、Esc 都不能用。
+    /// 1.0.27 起上傳改在背景跑、存好主資料就關窗，所以上傳期間不再鎖表單（只鎖正在上傳的那一列）。
+    /// </summary>
+    private bool IsFormLocked => isSaving;
+
     private async Task OnModalOKHandleAsync(MouseEventArgs args)
     {
-        if (isUploading || isSaving)
+        if (isSaving)
         {
             return;
         }
@@ -627,19 +633,18 @@ public partial class MeetingViewView : IDisposable
         // 主資料存好之後才上傳影音檔——新增模式下要等資料庫給 Id 才知道檔案掛在哪一筆。
         if (pendingMediaFile is not null)
         {
-            // ⚠️ 這是 Modal 的 OnOk，AntDesign 會自己把視窗關掉——上傳進度條就在視窗裡，關掉就什麼都看不到（0.4.116）。
-            //    先把視窗留住，並先重載清單讓新會議出現在背後，大檔上傳期間使用者才知道系統在動。
-            modalVisible = true;
+            // 1.0.27：存好主資料就關窗，上傳在背景跑，進度直接顯示在清單這一列的「轉錄狀態」。
+            // 只鎖正在上傳的那一列，頁面其他操作照常（使用者要求）。
+            // ⚠️ 視窗只是隱藏（Modal 預設不 DestroyOnClose），裡面的 InputFile 還在，檔案串流才讀得到。
+            modalVisible = false;
             await ReloadAsync();
 
-            var uploadSucceeded = await UploadPendingMediaAsync();
-            if (!uploadSucceeded)
-            {
-                // 主資料已存檔，只有上傳失敗；讓使用者留在 Modal 重試，不關閉視窗。
-                await ReloadAsync();
-                modalVisible = true;
-                return;
-            }
+            // 刻意不 await：等下去的話 isSaving 會一路亮到上傳結束，整張表單與其他紀錄的新增、修改都會被卡住。
+            // 失敗、取消與結束後的重載都在 UploadPendingMediaAsync 裡處理。它在第一個 await 之前就記下了檔案與會議 Id，
+            // 所以下面 ResetUploadState 清掉 pendingMediaFile 不影響這趟上傳。
+            _ = UploadPendingMediaAsync();
+            ResetUploadState();
+            return;
         }
 
         await ReloadAsync();
@@ -661,8 +666,8 @@ public partial class MeetingViewView : IDisposable
 
     private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
-        // 上傳中根本不該關窗，這道早退要留在最前面（先於 dirty 判斷）。
-        if (isUploading || isSaving)
+        // 存檔中不該關窗，這道早退要留在最前面（先於 dirty 判斷）。
+        if (isSaving)
         {
             return;
         }
@@ -748,7 +753,6 @@ public partial class MeetingViewView : IDisposable
         }
 
         pendingMediaFile = file;
-        uploadPercent = 0;
         logger.LogInformation("Meeting media file selected. FileName={FileName}, FileSize={FileSize}", file.Name, file.Size);
         return Task.CompletedTask;
     }
@@ -761,70 +765,136 @@ public partial class MeetingViewView : IDisposable
     private void ClearPendingMediaFile()
     {
         pendingMediaFile = null;
-        uploadPercent = 0;
 
         // ⚠️ 只能在這裡（確定不再需要那個 IBrowserFile 之後）重建 input。
         //    在「剛選完檔案」時重建，會把檔案自己弄丟——見 FileDropZone 的註解。
         mediaDropZone?.Reset();
     }
 
-    private async Task<bool> UploadPendingMediaAsync()
+    /// <summary>
+    /// 上傳待上傳的影音檔。進度不在視窗裡顯示（1.0.27）：服務層寫進共用通知器，
+    /// 清單這一列的「轉錄狀態」與右下角面板直接顯示「上傳中 xx%」。
+    /// </summary>
+    private async Task UploadPendingMediaAsync()
     {
         if (pendingMediaFile is null)
         {
-            return true;
+            return;
         }
 
-        isUploading = true;
-        uploadPercent = 0;
-        StateHasChanged();
-
-        // 先記下這趟上傳的會議 Id：上傳期間 CurrentRecord 可能被換成別筆，錯誤紀錄會記錯會議（0.4.116）。
+        // 先記下這趟上傳的檔案與會議 Id：上傳期間 CurrentRecord 可能被換成別筆（0.4.116）。
+        var file = pendingMediaFile;
         var meetingId = CurrentRecord.Id;
+
+        isUploading = true;
+        uploadingMeetingId = meetingId;
+        using var cancellation = new CancellationTokenSource();
+        uploadCancellation = cancellation;
+        StateHasChanged();
 
         try
         {
-            await using var stream = pendingMediaFile.OpenReadStream(MeetingMediaPolicy.MaxUploadFileSize);
-
-            var progress = new UploadProgress(percent =>
-            {
-                uploadPercent = percent;
-                _ = InvokeAsync(StateHasChanged);
-            });
+            await using var stream = file.OpenReadStream(MeetingMediaPolicy.MaxUploadFileSize);
 
             var result = await meetingService.SaveMediaAsync(
                 meetingId,
                 new MeetingMediaUploadInput
                 {
-                    FileName = pendingMediaFile.Name,
-                    ContentType = pendingMediaFile.ContentType,
-                    FileSize = pendingMediaFile.Size,
+                    FileName = file.Name,
+                    ContentType = file.ContentType,
+                    FileSize = file.Size,
                     Content = stream,
                 },
-                progress);
+                cancellationToken: cancellation.Token);
 
             if (!result.Success)
             {
-                NotifyError(result.Message);
-                return false;
+                if (cancellation.IsCancellationRequested)
+                {
+                    // 已傳的部分服務層已經刪掉；會議資料還在。
+                    NotifySuccess("已取消上傳。會議資料已保留，要重新上傳請按這一列的「修改」再選一次檔案。");
+                }
+                else
+                {
+                    NotifyError($"{result.Message}會議資料已保留，要重新上傳請按這一列的「修改」再選一次檔案。");
+                }
+                return;
             }
 
-            // 檔案已經讀完寫進儲存區了，這時才可以重建 input（見 FileDropZone.Reset）。
-            pendingMediaFile = null;
-            mediaDropZone?.Reset();
-            NotifySuccess("影音檔已上傳，系統已排入背景轉錄，完成後可在清單預覽逐字稿。");
-            return true;
+            NotifySuccess("影音檔已上傳，系統已排入背景轉錄，進度會顯示在「轉錄狀態」。");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to upload meeting media. MeetingId={MeetingId}", meetingId);
             NotifyError($"影音檔上傳失敗：{ex.Message}");
-            return false;
         }
         finally
         {
             isUploading = false;
-            StateHasChanged();
+            uploadingMeetingId = null;
+            uploadCancellation = null;
+
+            // 上傳在背景跑，使用者可能早就離開這一頁了；元件已經釋放就不再碰畫面。
+            if (!disposed)
+            {
+                // 上傳期間刻意沒重建拖拉區（見 ResetUploadState），現在檔案讀完了才可以。
+                // 使用者若剛好在視窗裡選了新檔（上傳期間選檔區是停用的，照理不會），就別把它弄丟。
+                if (pendingMediaFile is null)
+                {
+                    mediaDropZone?.Reset();
+                }
+
+                // 上傳成功只會讓通知器變成「排隊中」，不算結束，進度事件不會觸發重載；這裡自己重載，
+                // 「影音檔」欄與狀態欄才會換成資料庫裡的新值。
+                try
+                {
+                    await ReloadAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Reload after background upload failed. MeetingId={MeetingId}", meetingId);
+                }
+
+                StateHasChanged();
+            }
+        }
+    }
+
+    /// <summary>元件已釋放（1.0.27）：背景上傳結束時，使用者可能已經離開這一頁。</summary>
+    private bool disposed;
+
+    /// <summary>正在上傳的會議（1.0.27）：清單只有這一列會出現「取消上傳」。</summary>
+    private int? uploadingMeetingId;
+
+    /// <summary>上傳中的取消來源；只有上傳期間不是 null。</summary>
+    private CancellationTokenSource? uploadCancellation;
+
+    /// <summary>
+    /// 上傳期間唯一能按的按鈕（1.0.25）。不提供「暫停」：檔案經 Blazor 連線傳送，
+    /// 伺服器超過 1 分鐘沒收到資料就會切斷整條連線，暫停稍久頁面就壞了。
+    /// </summary>
+    private async Task OnCancelUploadAsync()
+    {
+        if (uploadCancellation is null)
+        {
+            return;
+        }
+
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "取消上傳",
+            Content = "已上傳的部分會被丟棄，會議資料會保留，之後可以重新上傳。確定要取消嗎？",
+            OkText = "取消上傳",
+            CancelText = "繼續上傳",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false
+        });
+
+        // 確認框開著時上傳可能已經跑完了，這時 uploadCancellation 已經是 null。
+        if (confirmed && uploadCancellation is { } cancellation)
+        {
+            logger.LogInformation("Meeting media upload cancellation requested. MeetingId={MeetingId}", uploadingMeetingId);
+            cancellation.Cancel();
         }
     }
 
@@ -895,9 +965,13 @@ public partial class MeetingViewView : IDisposable
     private void ResetUploadState()
     {
         pendingMediaFile = null;
-        isUploading = false;
-        uploadPercent = 0;
-        mediaDropZone?.Reset();
+
+        // ⚠️ 背景上傳還在讀拖拉區裡的檔案時不能重建它（1.0.27），上傳結束時會自己重建。
+        //    isUploading 也只由上傳本身改，開新增／修改視窗不能把它清掉。
+        if (!isUploading)
+        {
+            mediaDropZone?.Reset();
+        }
     }
 
     #endregion
@@ -1327,21 +1401,10 @@ public partial class MeetingViewView : IDisposable
         });
     }
 
-    /// <summary>
-    /// 上傳進度轉接。刻意不用 <see cref="Progress{T}"/>——它會把回呼排到擷取到的
-    /// SynchronizationContext，在 Blazor Server 上進度更新會被延後到上傳結束才一次湧現。
-    /// </summary>
-    private sealed class UploadProgress : IProgress<int>
-    {
-        private readonly Action<int> onReport;
-
-        public UploadProgress(Action<int> onReport) => this.onReport = onReport;
-
-        public void Report(int value) => onReport(value);
-    }
-
     public void Dispose()
     {
+        // 不取消背景上傳：離開這一頁上傳照樣繼續，右下角面板看得到進度（1.0.27，使用者要背景處理）。
+        disposed = true;
         progressNotifier.Changed -= OnTranscriptionProgressChanged;
         draftProgressNotifier.Changed -= OnDraftProgressChanged;
     }

@@ -411,6 +411,24 @@ else
                                 </Select>
                             </div>
                             <ValidationMessage For="() => CurrentRecord.PrimaryTeamId" />
+                            @if (!PrimaryTeamOptions.Any())
+                            {
+                                @* 主責必填，但新系統一個團隊都沒有時下拉是空的，使用者無從得知要先去哪裡建（1.0.26）。
+                                   連結開新頁籤：這張表單填到一半，直接換頁會整張不見。 *@
+                                <div class="project-view-empty-teams">
+                                    @if (CanCreateTeam)
+                                    {
+                                        <span>還沒有可以當主責的團隊。請先到</span>
+                                        <a href="/teams" target="_blank" rel="noopener">資料定義 → 團隊清單</a>
+                                        <span>新增團隊並加入成員，完成後按</span>
+                                        <button type="button" class="project-view-empty-teams-reload" @onclick="ReloadTeamOptionsAsync">重新載入</button>
+                                    }
+                                    else
+                                    {
+                                        <span>你目前不屬於任何團隊，無法建立專案。請聯絡管理者把你加入團隊。</span>
+                                    }
+                                </div>
+                            }
                         </FormItem>
 
                         <FormItem Label="協作團隊">

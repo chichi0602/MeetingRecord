@@ -300,6 +300,31 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task SaveMediaAsync_CancelledByUser_ShouldDiscardFileAndNotEnqueue()
+    {
+        // 1.0.25：上傳期間唯一能按的是「取消上傳」；取消不是錯誤，已傳的部分丟棄、會議資料保留。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("取消上傳的會議");
+        using var cancellation = new CancellationTokenSource();
+        var upload = NewUpload("錄音.mp3", Encoding.UTF8.GetBytes("fake-audio-bytes"));
+        upload.Content = new CancellingStream(cancellation);
+
+        var result = await fixture.CreateService().SaveMediaAsync(existing.Id, upload, cancellationToken: cancellation.Token);
+
+        Assert.False(result.Success);
+        Assert.Equal("已取消上傳。", result.Message);
+        Assert.Empty(fixture.Queue.Enqueued);
+        Assert.False(Directory.Exists(fixture.MediaRoot) && Directory.EnumerateFiles(fixture.MediaRoot, "*", SearchOption.AllDirectories).Any());
+
+        var item = fixture.ProgressNotifier.Find(existing.Id)!;
+        Assert.Equal(TranscriptionPhase.Failed, item.Phase);
+        Assert.Equal("已取消上傳。", item.ErrorMessage);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Null(saved.MediaRelativePath);
+    }
+
+    [Fact]
     public async Task SaveMediaAsync_ShouldReject_WhileAnotherWindowIsUploading()
     {
         // 上傳中還沒寫進資料庫，IsJobActive 擋不到，要靠通知器擋。
@@ -1362,6 +1387,17 @@ public sealed class MeetingServiceTests
 
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
             => throw new TimeoutException("Did not receive any data in the allotted time.");
+    }
+
+    /// <summary>模擬上傳途中使用者按「取消上傳」：第一次讀取時觸發取消。</summary>
+    private sealed class CancellingStream(CancellationTokenSource cancellation) : MemoryStream
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellation.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(0);
+        }
     }
 
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue

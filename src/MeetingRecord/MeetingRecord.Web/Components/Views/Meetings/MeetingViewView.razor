@@ -90,9 +90,17 @@ else
                     }
                 </Column>
                 <Column TData="TranscriptionStatus" DataIndex="@nameof(MeetingAdapterModel.TranscriptionStatus)" Title="轉錄狀態" Sortable>
-                    <span class="meeting-status @GetStatusCssClass(context.TranscriptionStatus)">@context.TranscriptionStatusText</span>
                     @{
                         var progress = GetLiveProgress(context.Id);
+                    }
+                    @* 上傳中資料庫還是「未上傳」，徽章改看通知器（1.0.27），百分比接在後面。 *@
+                    @if (progress is { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading })
+                    {
+                        <span class="meeting-status meeting-status-processing">上傳中</span>
+                    }
+                    else
+                    {
+                        <span class="meeting-status @GetStatusCssClass(context.TranscriptionStatus)">@context.TranscriptionStatusText</span>
                     }
                     @if (progress is not null)
                     {
@@ -126,6 +134,22 @@ else
                 </Column>
                 <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
+                    @* 上傳在背景跑（1.0.27），只鎖住正在上傳的那一筆，其他紀錄照常操作。
+                       看通知器而不是本頁狀態：別的頁籤正在上傳的同一筆也會一起鎖住。
+                       「取消上傳」只出現在發起上傳的這一頁——取消來源在這個元件裡。 *@
+                    @if (GetLiveProgress(context.Id) is { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading })
+                    {
+                        @if (context.Id == uploadingMeetingId)
+                        {
+                            <CrudActionButton Title="取消上傳" Icon="cancel" Danger OnClick="OnCancelUploadAsync" />
+                        }
+                        else
+                        {
+                            <span class="meeting-view-row-locked">上傳中</span>
+                        }
+                    }
+                    else
+                    {
                     <Space>
                         @if (context.HasDraft)
                         {
@@ -201,6 +225,7 @@ else
                             </SpaceItem>
                         }
                     </Space>
+                    }
                 </ActionColumn>
             </Table>
         </div>
@@ -209,8 +234,10 @@ else
     <Modal Title="@modalTitle"
            Class="meeting-view-modal"
            @bind-Visible="@modalVisible"
-           Keyboard="true"
-           ConfirmLoading="@(isUploading || isSaving)"
+           Keyboard="@(!IsFormLocked)"
+           Closable="@(!IsFormLocked)"
+           CancelButtonProps="@(new ButtonProps { Disabled = IsFormLocked })"
+           ConfirmLoading="@IsFormLocked"
            MaskClosable="false"
            OnOk="OnModalOKHandleAsync"
            OnCancel="OnModalCancelHandleAsync">
@@ -223,19 +250,19 @@ else
                 <AntDesign.Form TModel="MeetingAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="會議標題" Required>
-                            <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入會議標題" />
+                            <Input @bind-Value="CurrentRecord.Title" Disabled="@IsFormLocked" Placeholder="請輸入會議標題" />
                             <ValidationMessage For="() => CurrentRecord.Title" />
                         </FormItem>
 
                         <FormItem Label="會議日期">
-                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" AllowClear="true" Style="width: 100%;" />
+                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" Disabled="@IsFormLocked" AllowClear="true" Style="width: 100%;" />
                             <ValidationMessage For="() => CurrentRecord.MeetingDate" />
                         </FormItem>
 
                         <FormItem Label="分類" Class="form-modal-full">
                             <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
                                     Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                    Placeholder="描述會議性質（不影響誰看得到）" AllowClear EnableSearch Style="width: 100%;">
+                                    Placeholder="描述會議性質（不影響誰看得到）" AllowClear EnableSearch Disabled="@IsFormLocked" Style="width: 100%;">
                                 @foreach (var c in availableCategories)
                                 {
                                     <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
@@ -244,7 +271,7 @@ else
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">
-                            <TextArea @bind-Value="CurrentRecord.Description" Rows="3" Placeholder="請輸入會議說明" />
+                            <TextArea @bind-Value="CurrentRecord.Description" Disabled="@IsFormLocked" Rows="3" Placeholder="請輸入會議說明" />
                             <ValidationMessage For="() => CurrentRecord.Description" />
                         </FormItem>
 
@@ -254,7 +281,7 @@ else
                             <FileDropZone @ref="mediaDropZone"
                                           OnChange="OnMediaFileSelectedAsync"
                                           Accept="@MeetingMediaPolicy.AcceptAttribute"
-                                          Disabled="@isUploading"
+                                          Disabled="@(IsFormLocked || isUploading)"
                                           Title="把影音檔拖到這裡，或點擊選擇檔案（一次一個）">
                                 @* 「一次一個」要寫出來：單檔模式下一次拖入多個檔案，Chrome 會整個靜默拒絕——
                                    不觸發 change、不報錯，使用者只會覺得「拖進去沒反應」。 *@
@@ -262,11 +289,18 @@ else
                                 儲存後會自動排入背景轉錄，影片只會取用聲音軌。
                             </FileDropZone>
 
+                            @if (isUploading)
+                            {
+                                @* 同一頁一次只跑一個上傳（1.0.27）：上傳在背景讀的是這個拖拉區裡的檔案，
+                                   這時再選檔或重建拖拉區，會把那個還在讀的檔案弄丟。其他欄位照常可以改。 *@
+                                <div class="meeting-view-upload-hint">另一個影音檔正在上傳，完成後才能在這裡選擇檔案；其他欄位可以照常修改。</div>
+                            }
+
                             @if (pendingMediaFile is not null)
                             {
                                 <div class="meeting-view-pending-file">
                                     待上傳：@pendingMediaFile.Name（@MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)）
-                                    @if (!isUploading)
+                                    @if (!IsFormLocked)
                                     {
                                         <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="ClearPendingMediaFile">移除</button>
                                     }
@@ -279,11 +313,7 @@ else
                                     <span class="meeting-view-upload-hint">選擇新檔案會取代現有檔案與逐字稿。</span>
                                 </div>
                             }
-
-                            @if (isUploading || uploadPercent > 0)
-                            {
-                                <Progress Percent="uploadPercent" Status="@(isUploading ? ProgressStatus.Active : ProgressStatus.Success)" />
-                            }
+                            @* 上傳進度與「取消上傳」1.0.27 起移到清單那一列的「轉錄狀態」與操作欄，存檔後視窗就關掉。 *@
                         </FormItem>
                     </div>
                 </AntDesign.Form>

@@ -817,6 +817,17 @@ public partial class ProjectViewView : IDisposable
         logger.LogInformation("Opened create modal for project.");
     }
 
+    /// <summary>能不能建立團隊：主責下拉空的時候，決定提示「去團隊清單新增」還是「聯絡管理者」（1.0.26）。</summary>
+    private bool CanCreateTeam => AuthenticationStateHelper.CheckAccessAction(
+        MagicObjectHelper.角色_團隊清單, PermissionActions.Create);
+
+    /// <summary>使用者在另一個頁籤建好團隊後，不必關掉填到一半的表單就能選到它。</summary>
+    private async Task ReloadTeamOptionsAsync()
+    {
+        await LoadTeamOptionsAsync(CurrentRecord.CollaboratorTeamIds);
+        logger.LogInformation("Reloaded team options in project modal. PrimaryOptionCount={Count}", primaryTeamOptions.Count);
+    }
+
     private async Task LoadTeamOptionsAsync(IEnumerable<int>? existingCollaboratorIds = null)
     {
         primaryTeamOptions = await projectService.GetSelectablePrimaryTeamsAsync();

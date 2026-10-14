@@ -14,6 +14,18 @@ public class MagicObjectHelper
     /// OAuth 外部登入流程暫存身分用的 Cookie 配置名稱
     /// </summary>
     public const string ExternalCookieScheme = "ExternalCookieScheme";
+
+    /// <summary>
+    /// 登入 Cookie 名稱（0.4.119）。必須帶專案名：Cookie 不分連接埠，同一主機名稱部署多個系統時，
+    /// 沿用框架預設名就會互相覆蓋、互相登出。⚠️ 改這個值會讓既有登入（連同記住我）全部失效一次。
+    /// </summary>
+    public const string AuthCookieName = ".MeetingRecord.Auth";
+
+    /// <summary>
+    /// Data Protection 的應用程式名稱（0.4.119）。⚠️ 改這個值＝所有人被登出一次。
+    /// 不固定時判別子取自 content root 路徑，換一個部署目錄就等於換一組金鑰用途，既有 Cookie 一樣失效。
+    /// </summary>
+    public const string DataProtectionApplicationName = "MeetingRecord";
     public const string 開發者帳號 = "support";
     /// <summary>
     /// 新帳號的預設角色。0.4.101 起可以多角色、權限取聯集，這只是起點；

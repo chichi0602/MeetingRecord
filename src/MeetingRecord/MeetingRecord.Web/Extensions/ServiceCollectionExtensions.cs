@@ -1,4 +1,5 @@
 using AntDesign;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -220,6 +221,35 @@ public static class ServiceCollectionExtensions
             var sqliteConnectionString = MagicObjectHelper.GetSQLiteConnectionString(systemSettings.ExternalFileSystem.DatabasePath);
             options.UseSqlite(sqliteConnectionString);
         }, ServiceLifetime.Scoped);
+
+        return services;
+    }
+
+    /// <summary>
+    /// 把 Data Protection 金鑰環存到 <c>SystemSettings:ExternalFileSystem:DataProtectionKeyPath</c>（0.4.119）。
+    /// <para>⚠️ **沒有這一段，登入就存不住。** 登入 Cookie 是用 Data Protection 的金鑰
+    /// 加密的；不設定時金鑰預設落在使用者設定檔下，而 IIS 的應用程式集區若未載入使用者
+    /// 設定檔，就會退化成「只存在記憶體」—— 每次回收或重啟都換一批金鑰，舊 Cookie 全部解不開，
+    /// 全站使用者被登出。0.4.118 以前正是這個狀態。</para>
+    /// <para>⚠️ <c>SetApplicationName</c> 同樣不可省略：不設定時判別子取自 content root
+    /// 路徑，**換一個部署目錄就等於換一組金鑰用途**，既有 Cookie 一樣失效。</para>
+    /// <para>⚠️ 這裡沒有呼叫 <c>ProtectKeysWith*</c>，金鑰檔是**明文 XML**（啟動日誌會出現
+    /// "No XML encryptor configured" 警告，屬預期）。拿到金鑰檔就能偽造任何人的登入 Cookie，
+    /// 資料夾必須以 NTFS 權限只開給應用程式集區身分。部署注意事項見正式部署與安全檢查清單。</para>
+    /// </summary>
+    public static IServiceCollection AddConfiguredDataProtection(this IServiceCollection services, SystemSettings systemSettings)
+    {
+        var keyPath = systemSettings.ExternalFileSystem.DataProtectionKeyPath;
+        if (string.IsNullOrWhiteSpace(keyPath))
+        {
+            throw new InvalidOperationException(
+                "SystemSettings:ExternalFileSystem:DataProtectionKeyPath 不可為空白 —— "
+                + "留空會讓金鑰退回框架預設位置，在 IIS 上等同每次回收就把所有人登出。");
+        }
+
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
+            .SetApplicationName(MagicObjectHelper.DataProtectionApplicationName);
 
         return services;
     }

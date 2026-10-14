@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：0.4.119
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/14
 
 ## 一、目標與範圍
 
@@ -37,8 +37,8 @@
 - **本地登入**（`MyUserServiceLogin.LoginAsync`，View → Service → `BackendDBContext`）：以 `Account` 查 `MyUser`；帳號不存在或密碼錯誤一律回「帳號或者密碼不正確」（不區分，避免帳號枚舉）。密碼以 `SecurePasswordHasher.VerifyPassword`（PBKDF2）驗證。
 - **帳號鎖定**：失敗時 `AccessFailedCount++`，達 `MaxFailedAccessAttempts=5` 設 `LockoutEndUtc = UtcNow + 15 分`；鎖定期間回「帳號已鎖定，請稍後再試。」成功登入後將 `AccessFailedCount` 歸零、`LockoutEndUtc` 清空。
 - **雜湊自動升級**：驗證回傳 `SuccessRehashNeeded`（舊格式）時，即時以 PBKDF2 重新雜湊並存回。
-- **Cookie 簽發**（Login.razor.cs）：建立 `ClaimTypes.Role=User`、`Name`、`NameIdentifier=Account`、`Sid=Id`，以 `CookieAuthenticationScheme` `SignInAsync`；`IsPersistent = RememberMe`（記住我 → 持久性 Cookie），`RedirectUri` 取 `ReturnUrl` 或 `/App`。
-- **Google 登入**（`ExternalAuthController` + `ExternalLoginService.FindOrCreateAsync`）：Callback 驗證 `ExternalCookieScheme` 後，依序「GoogleId 比對 → Email 連結既有帳號 → 自動建立停用新帳號」（`Status=false`、`IsAdmin=false`、`Password=""`、`Salt=null`、指派預設角色）。`!Status` 導向 `/Auths/Pending`，否則簽發 Cookie 並導回本地安全的 `returnUrl`。
+- **Cookie 簽發**（Login.razor.cs）：建立 `ClaimTypes.Role=User`、`Name`、`NameIdentifier=Account`、`Sid=Id`，以 `CookieAuthenticationScheme` `SignInAsync`；`IsPersistent = RememberMe`（記住我 → 持久性 Cookie，0.4.119 起另明寫 `ExpiresUtc = 現在 + CookieSettings.RememberMeDays 天`；沒勾則 `CookieSettings.ExpireMinutes`，皆滑動續期），`RedirectUri` 取 `ReturnUrl` 或 `/meetings`。Cookie 名稱 `.MeetingRecord.Auth`，以持久化的 Data Protection 金鑰加密，伺服器重啟、IIS 回收後仍有效（0.4.119）。
+- **Google 登入**（`ExternalAuthController` + `ExternalLoginService.FindOrCreateAsync`）：Callback 驗證 `ExternalCookieScheme` 後，依序「GoogleId 比對 → Email 連結既有帳號 → 自動建立停用新帳號」（`Status=false`、`IsAdmin=false`、`Password=""`、`Salt=null`、指派預設角色）。`!Status` 導向 `/Auths/Pending`，否則簽發 Cookie 並導回本地安全的 `returnUrl`。0.4.119 起 Google 登入一律比照勾了記住我（`IsPersistent = true`、`RememberMeDays` 天）。
 - **登出**：`SignOutAsync(CookieScheme)` 後 `NavigateTo("/Auths/Login", forceLoad: true)`。
 - **登入後狀態**（`AuthenticationStateHelper.Check`）：驗證已登入、`Sid` 有效、使用者存在且 `Status` 啟用、具角色；`NeedChangePasswordAsync` 為真且不在改密碼頁時強制導向 `/ChangePassword`。0.4.113 起條件是「`MyUser.MustChangePassword` 為 true **或**密碼等於 `123456`」：管理者建立帳號、或替別人重設密碼時設旗標（改自己的不設；`support` 一律不設，因為它被禁止改密碼），本人透過任何一個改密碼入口改完就清掉。載入 `CurrentUser`，`RoleList` 以 `IPermissionChecker.GetEffectivePermissionKeysAsync`（RBAC 多角色聯集）為權威、`TeamList` 由 `EffectiveTeamResolver` 決定。
 - **API 登入**（`AuthController`）：`login` 以帳密換 `TokenResponseDto`（JWT + Refresh），`refresh` 換新 Token，`me` 回目前使用者；一律包 `ApiResult<T>`，失敗回 401。

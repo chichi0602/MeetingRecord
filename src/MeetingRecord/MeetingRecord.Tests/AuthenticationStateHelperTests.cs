@@ -18,7 +18,7 @@ namespace MeetingRecord.Tests;
 public sealed class AuthenticationStateHelperTests
 {
     [Fact]
-    public async Task Check_WithUnauthenticatedPrincipal_ShouldReturnUnauthenticatedAndNavigateLogout()
+    public async Task Check_WithUnauthenticatedPrincipal_ShouldReturnUnauthenticatedAndNavigateLogin()
     {
         await using var fixture = await AuthenticationStateHelperFixture.CreateAsync();
         var authProvider = new TestAuthenticationStateProvider(new ClaimsPrincipal(new ClaimsIdentity()));
@@ -26,8 +26,9 @@ public sealed class AuthenticationStateHelperTests
 
         var result = await fixture.CreateHelper().Check(authProvider, navigationManager);
 
+        // 0.4.119：未認證導向登入頁而非登出頁——登出頁會刪掉一時解不開、但其實還有效的記住我 Cookie。
         Assert.Equal(AuthenticationCheckResult.Unauthenticated, result);
-        Assert.Equal("/Auths/Logout", navigationManager.NavigatedTo);
+        Assert.Equal("/Auths/Login", navigationManager.NavigatedTo);
     }
 
     [Fact]

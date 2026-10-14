@@ -40,6 +40,13 @@ public class ExternalFileSystem
     /// 一個專案或會議可以有多段對話。
     /// </summary>
     public string AiChatPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Data Protection 金鑰環（<c>key-*.xml</c>）存放目錄（0.4.119）。登入 Cookie 用這些金鑰加密，
+    /// 存在這裡才撐得過 IIS 回收與重啟。
+    /// ⚠️ 換目錄或刪掉裡面的檔案＝所有人被登出一次；不可放在網站目錄內（重新部署會被清掉）。
+    /// </summary>
+    public string DataProtectionKeyPath { get; set; } = string.Empty;
 }
 
 public class BootstrapSettings

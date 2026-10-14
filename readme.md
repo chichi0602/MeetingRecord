@@ -210,6 +210,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `CacheSettings.DefaultExpirationMinutes` | 快取項目預設存活時間（分鐘），預設 `30`。 |
 | `NLog.BasePath` | NLog 寫入的根目錄；專案會在其下建立 `MeetingRecord.Web` 子目錄並輸出檔案日誌。 |
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
+| `CookieSettings` | 網頁登入 Cookie 效期（0.4.119）：`ExpireMinutes`（沒勾記住我，預設 480＝8 小時）、`RememberMeDays`（勾了記住我與 Google 登入，預設 30 天）、`SlidingExpiration`（預設 `true`，期間回來使用會自動延長）。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
 | `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成：會議紀錄草稿、抽出待辦、AI 問答）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`ApiVersion`／`TranscriptionModel`／`TranscriptionApiVersion`；`Currency` 與 `Pricing.<模型>`（每百萬 token 或每分鐘音訊單價）供 AI 用量計價。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
@@ -227,6 +228,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `SystemSettings.ExternalFileSystem.MeetingMediaPath` | 會議影音檔根目錄（再依年/月細分）；不對外服務。 |
 | `SystemSettings.ExternalFileSystem.MeetingTranscriptPath` | 會議逐字稿根目錄（再依年/月細分）；不對外服務，也沒有下載端點。 |
 | `SystemSettings.ExternalFileSystem.AiChatPath` | AI 問答對話與附件的存放根目錄（0.4.60 起對話改存檔案系統）；不對外服務。 |
+| `SystemSettings.ExternalFileSystem.DataProtectionKeyPath` | Data Protection 金鑰環目錄（0.4.119），登入 Cookie 靠它加密，存在這裡才撐得過 IIS 回收與重啟；留空啟動失敗、不可放在網站目錄內、刪掉＝所有人重登。 |
 | `AutoMapper:LicenseKey` | AutoMapper 商業授權金鑰（可留空）。 |
 
 各區段詳解見 [docs/operations/日誌與設定檔說明.md](docs/operations/日誌與設定檔說明.md)。

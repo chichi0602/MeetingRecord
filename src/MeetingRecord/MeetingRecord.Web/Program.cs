@@ -140,6 +140,17 @@ namespace MeetingRecord.Web
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
 
+                // ⚠️ 必須在下面的 AddCookie 之前取值。比照 JwtSettings 的雙軌寫法：
+                // 先取一份即時值給 AddCookie 當場用，再註冊 DI ＋ 啟動驗證。
+                var cookieSettings = builder.Configuration
+                    .GetSection(CookieSettings.SectionName)
+                    .Get<CookieSettings>() ?? new CookieSettings();
+                builder.Services
+                    .AddOptions<CookieSettings>()
+                    .Bind(builder.Configuration.GetSection(CookieSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
+
                 var googleOAuthSettings = builder.Configuration
                     .GetSection(GoogleOAuthSettings.SectionName)
                     .Get<GoogleOAuthSettings>() ?? new GoogleOAuthSettings();
@@ -149,10 +160,18 @@ namespace MeetingRecord.Web
                 var authenticationBuilder = builder.Services.AddAuthentication(MagicObjectHelper.CookieScheme)
                     .AddCookie(MagicObjectHelper.CookieScheme, options =>
                     {
+                        options.Cookie.Name = MagicObjectHelper.AuthCookieName;
                         options.Cookie.IsEssential = true;
                         options.LoginPath = "/Auths/Login";
                         options.LogoutPath = "/Auths/Logout";
                         options.AccessDeniedPath = "/Auths/Login";
+
+                        // 0.4.119 起明寫。之前兩者都沒設定，吃框架隱藏預設（14 天 ＋ 滑動），
+                        // 「登入能撐多久」在設定檔裡查不到，也無法依環境調整。
+                        // ⚠️ 勾了「記住我」的人走的是另一個效期 —— ExpireTimeSpan 是整個
+                        // scheme 共用的，做不出兩種，故在 Login.razor.cs 明寫 ExpiresUtc 覆蓋。
+                        options.ExpireTimeSpan = TimeSpan.FromMinutes(cookieSettings.ExpireMinutes);
+                        options.SlidingExpiration = cookieSettings.SlidingExpiration;
                     })
                     .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
                     {
@@ -259,6 +278,13 @@ namespace MeetingRecord.Web
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingMediaPath, "meeting media");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.MeetingTranscriptPath, "meeting transcript");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.AiChatPath, "ai chat");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.DataProtectionKeyPath, "data protection key");
+                #endregion
+
+                #region Data Protection 金鑰環
+                // ⚠️ 註冊順序不影響：Cookie handler 在執行期才解析 IDataProtectionProvider，
+                // 所以放在這裡（systemSettings 已讀出之後）即可，不必搬到 AddAuthentication 之前。
+                builder.Services.AddConfiguredDataProtection(systemSettings);
                 #endregion
 
                 #region EF Core 宣告

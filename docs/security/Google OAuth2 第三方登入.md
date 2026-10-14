@@ -1,10 +1,10 @@
 ﻿# Google OAuth2 第三方登入
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：0.4.119
 - 首次實作版本：0.2.6
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/14
 
 ## 目的
 
@@ -138,7 +138,7 @@ GoogleOAuthSettings__ClientSecret=你的用戶端密鑰
    - 都沒有則 **自動建立**新帳號（`Status = false`、套用一般使用者角色、無密碼）。
 5. 清除外部暫存 Cookie。
 6. 若 `Status = false` → 導向 `/Auths/Pending`（帳號待審核頁，**不**登入）。
-7. 若 `Status = true` → 比照帳密登入建立 Claims（`Role`、`Name`、`NameIdentifier`、`Sid`），以主 Cookie scheme 完成登入並導向 `returnUrl`（預設 `/App`）。
+7. 若 `Status = true` → 比照帳密登入建立 Claims（`Role`、`Name`、`NameIdentifier`、`Sid`），以主 Cookie scheme 完成登入並導向 `returnUrl`（預設 `/meetings`）。0.4.119 起簽發時帶 `IsPersistent = true`、`ExpiresUtc = 現在 + CookieSettings.RememberMeDays 天`——Google 登入沒有「記住我」可勾，一律比照勾了記住我；以前不帶屬性，關掉瀏覽器就要重登。
 
 ```
 使用者 ──點擊 Google 登入──▶ /Auths/Google/Login ──Challenge──▶ Google

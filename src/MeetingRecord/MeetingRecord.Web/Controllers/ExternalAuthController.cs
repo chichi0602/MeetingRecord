@@ -18,15 +18,18 @@ public class ExternalAuthController : Controller
 {
     private readonly ExternalLoginService externalLoginService;
     private readonly GoogleOAuthSettings googleOAuthSettings;
+    private readonly CookieSettings cookieSettings;
     private readonly ILogger<ExternalAuthController> logger;
 
     public ExternalAuthController(
         ExternalLoginService externalLoginService,
         IOptions<GoogleOAuthSettings> googleOAuthSettings,
+        IOptions<CookieSettings> cookieSettings,
         ILogger<ExternalAuthController> logger)
     {
         this.externalLoginService = externalLoginService;
         this.googleOAuthSettings = googleOAuthSettings.Value;
+        this.cookieSettings = cookieSettings.Value;
         this.logger = logger;
     }
 
@@ -104,9 +107,18 @@ public class ExternalAuthController : Controller
         };
 
         var claimsIdentity = new ClaimsIdentity(claims, MagicObjectHelper.CookieScheme);
+
+        // Google 登入沒有「記住我」可勾，一律比照勾了記住我（0.4.119）。
+        // 以前不帶 AuthenticationProperties，拿到的是 session cookie，關掉瀏覽器就要重登。
+        var authProperties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(cookieSettings.RememberMeDays),
+        };
         await HttpContext.SignInAsync(
             MagicObjectHelper.CookieScheme,
-            new ClaimsPrincipal(claimsIdentity));
+            new ClaimsPrincipal(claimsIdentity),
+            authProperties);
 
         logger.LogInformation(
             "Google login succeeded. UserId={UserId}, Account={Account}.",

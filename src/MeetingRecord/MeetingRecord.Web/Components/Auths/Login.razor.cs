@@ -36,6 +36,9 @@ namespace MeetingRecord.Web.Components.Auths
         [Inject]
         public IOptions<GoogleOAuthSettings> GoogleOptions { get; set; } = default!;
 
+        [Inject]
+        public IOptions<CookieSettings> CookieOptions { get; set; } = default!;
+
         string message = string.Empty;
 
         private bool ShowGoogleLogin => GoogleOptions.Value.IsConfigured;
@@ -122,6 +125,16 @@ namespace MeetingRecord.Web.Components.Auths
                     IsPersistent = Input.RememberMe,
                     RedirectUri = returnUrl,
                 };
+
+                // 勾了「記住我」就走比較長的效期（0.4.119）。
+                // ⚠️ 不能靠 AddCookie 的 ExpireTimeSpan —— 那是整個 scheme 共用的，
+                // 做不出兩種效期；明寫 ExpiresUtc 才能只覆蓋這一次登入的票證。
+                // 滑動續期時沿用票證原本的長度，所以會以 RememberMeDays 往後滑。
+                if (Input.RememberMe)
+                {
+                    authProperties.ExpiresUtc =
+                        DateTimeOffset.UtcNow.AddDays(CookieOptions.Value.RememberMeDays);
+                }
 
                 try
                 {

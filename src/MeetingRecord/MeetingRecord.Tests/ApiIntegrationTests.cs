@@ -1,11 +1,16 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
@@ -13,6 +18,7 @@ using MeetingRecord.Models.Systems;
 using MeetingRecord.Dtos.Auths;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web;
 using MeetingRecord.Web.Configuration;
 using System.Net;
@@ -34,6 +40,32 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     public ApiIntegrationTests(ApiTestApplicationFactory factory)
     {
         this.factory = factory;
+    }
+
+    /// <summary>
+    /// 0.4.119「登入存不住」修正的三個支點：金鑰存到設定的目錄、ApplicationName 固定、
+    /// Cookie 名稱與效期明寫。任何一個被拿掉，IIS 回收或重啟後全站就會被登出。
+    /// </summary>
+    [Fact]
+    public void LoginCookie_ShouldUsePersistedKeysAndConfiguredLifetime()
+    {
+        var keyPath = factory.Services.GetRequiredService<IOptions<SystemSettings>>()
+            .Value.ExternalFileSystem.DataProtectionKeyPath;
+
+        var keyManagement = factory.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value;
+        var repository = Assert.IsType<FileSystemXmlRepository>(keyManagement.XmlRepository);
+        Assert.Equal(
+            Path.GetFullPath(keyPath).TrimEnd(Path.DirectorySeparatorChar),
+            repository.Directory.FullName.TrimEnd(Path.DirectorySeparatorChar));
+
+        var dataProtection = factory.Services.GetRequiredService<IOptions<DataProtectionOptions>>().Value;
+        Assert.Equal(MagicObjectHelper.DataProtectionApplicationName, dataProtection.ApplicationDiscriminator);
+
+        var cookie = factory.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(MagicObjectHelper.CookieScheme);
+        Assert.Equal(".MeetingRecord.Auth", cookie.Cookie.Name);
+        Assert.Equal(TimeSpan.FromMinutes(480), cookie.ExpireTimeSpan);
+        Assert.True(cookie.SlidingExpiration);
     }
 
     [Fact]
@@ -751,7 +783,8 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
             // 會用測試資料庫的編號去刪本機開發環境同編號的 AI 對話與實體檔。
             ["SystemSettings:ExternalFileSystem:MeetingMediaPath"] = Path.Combine(rootPath, "MeetingMedia"),
             ["SystemSettings:ExternalFileSystem:MeetingTranscriptPath"] = Path.Combine(rootPath, "MeetingTranscript"),
-            ["SystemSettings:ExternalFileSystem:AiChatPath"] = Path.Combine(rootPath, "AiChat")
+            ["SystemSettings:ExternalFileSystem:AiChatPath"] = Path.Combine(rootPath, "AiChat"),
+            ["SystemSettings:ExternalFileSystem:DataProtectionKeyPath"] = Path.Combine(rootPath, "Keys")
         };
     }
 }

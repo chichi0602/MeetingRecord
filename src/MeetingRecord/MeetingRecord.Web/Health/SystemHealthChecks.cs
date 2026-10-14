@@ -1,8 +1,12 @@
+using System.Diagnostics;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Caching;
 using MeetingRecord.Web.Configuration;
+using MeetingRecord.Web.Diagnostics;
 
 namespace MeetingRecord.Web.Health;
 
@@ -13,28 +17,31 @@ public sealed record SystemHealthVerdict(SystemHealthStatus Status, string Evide
 public sealed record BackgroundJobRecord(BackgroundJobKind Kind, int MeetingId, string Title, bool IsProcessing, DateTime? StartedAt);
 
 /// <summary>
-/// 各檢查項目的權重（0.4.93 重新分配）。合計必須恰好 100，由 <c>SystemHealthChecksTests</c> 守住——
-/// 日後加減項目時忘了重配，總分的意義就會悄悄改變。
+/// 各檢查項目的權重（0.4.123 重新分配，17 項）。合計必須恰好 100，由 <c>SystemHealthChecksTests</c> 守住——
+/// 日後加減項目時忘了重配，總分的意義就會悄悄改變。測試會加總這裡所有 public const，所以這個類別只放權重。
 /// </summary>
 public static class SystemHealthWeights
 {
-    // 基礎設施（68）
-    public const int Application = 5;
-    public const int Api = 5;
-    public const int Database = 20;
-    public const int Logging = 8;
-    public const int Authentication = 10;
-    public const int FileSystem = 10;
+    // 基礎設施（72）
+    public const int Application = 4;
+    public const int Api = 4;
+    public const int Database = 18;
+    public const int Logging = 6;
+    public const int Authentication = 8;
+    public const int DataProtection = 6;
+    public const int FileSystem = 8;
     public const int Host = 5;
     public const int Security = 5;
+    public const int Cache = 4;
+    public const int ExceptionPipeline = 4;
 
-    // 本系統功能（32）
-    public const int AiProvider = 10;
+    // 本系統功能（28）
+    public const int AiProvider = 9;
     public const int Transcription = 6;
-    public const int BackgroundJobs = 6;
+    public const int BackgroundJobs = 5;
     public const int RecentErrors = 4;
-    public const int PdfExport = 3;
-    public const int ExchangeRate = 3;
+    public const int PdfExport = 2;
+    public const int ExchangeRate = 2;
 }
 
 /// <summary>
@@ -252,14 +259,14 @@ public static class SystemHealthChecks
 
     /// <param name="aiSucceeded">近 24 小時成功的 AI 呼叫數。</param>
     /// <param name="aiFailed">近 24 小時失敗的 AI 呼叫數（呼叫端已排除使用者主動取消）。</param>
-    /// <param name="logErrorCount">今日日誌 ERROR／FATAL 筆數。</param>
-    public static SystemHealthVerdict EvaluateRecentErrors(int aiSucceeded, int aiFailed, int logErrorCount)
+    /// <param name="exceptionCount">「系統例外紀錄」中最後發生在近 24 小時內的例外種類數（0.4.123 起，取代今日日誌 ERROR 筆數）。</param>
+    public static SystemHealthVerdict EvaluateRecentErrors(int aiSucceeded, int aiFailed, int exceptionCount)
     {
         var total = aiSucceeded + aiFailed;
         var rate = total == 0 ? 0d : (double)aiFailed / total;
         var evidence = $"近 24 小時 AI 呼叫：{total} 次，失敗 {aiFailed} 次"
             + (total == 0 ? string.Empty : $"（{rate:P0}）")
-            + $"，使用者取消不算失敗；今日日誌 ERROR／FATAL：{logErrorCount} 筆。";
+            + $"，使用者取消不算失敗；近 24 小時有發生的例外：{exceptionCount} 種。";
 
         if (total >= MinimumCallsForFailureRate && rate > 0.5)
         {
@@ -267,7 +274,7 @@ public static class SystemHealthChecks
         }
 
         var failedTooOften = total >= MinimumCallsForFailureRate ? rate > 0.2 : aiFailed > 0;
-        if (failedTooOften || logErrorCount > 0)
+        if (failedTooOften || exceptionCount > 0)
         {
             var reasons = new List<string>();
             if (failedTooOften)
@@ -275,15 +282,203 @@ public static class SystemHealthChecks
                 reasons.Add("AI 呼叫失敗偏多，可到「AI 用量分析」看失敗原因");
             }
 
-            if (logErrorCount > 0)
+            if (exceptionCount > 0)
             {
-                reasons.Add("今日日誌有錯誤紀錄，請看下方日誌");
+                reasons.Add("近 24 小時有例外發生，請到「系統例外紀錄」查看");
             }
 
             return new(SystemHealthStatus.Degraded, evidence, string.Join("；", reasons) + "。");
         }
 
         return new(SystemHealthStatus.Healthy, evidence);
+    }
+
+    /// <summary>
+    /// 日誌（0.4.123 起不再讀檔內容，只看目錄與今日檔案）。
+    /// </summary>
+    /// <param name="logDirectory">日誌目錄；空字串代表 <c>NLog:BasePath</c> 未設定。</param>
+    /// <param name="todayFileBytes">今日日誌檔大小；null 代表檔案還不存在。</param>
+    /// <param name="overrideLevel">「日誌等級設定」的執行期覆寫；null 代表照 nlog.config。</param>
+    public static SystemHealthVerdict EvaluateLogging(
+        string logDirectory,
+        bool directoryWritable,
+        string todayFilePath,
+        long? todayFileBytes,
+        LogLevelRank effectiveLevel,
+        LogLevelRank? overrideLevel)
+    {
+        var levelText = LogLevelRankHelper.ToLevelText(effectiveLevel)
+            + (overrideLevel is null ? "（nlog.config）" : "（「日誌等級設定」執行期覆寫中）");
+
+        if (string.IsNullOrWhiteSpace(logDirectory))
+        {
+            return new(SystemHealthStatus.Unhealthy, $"目錄：未設定；目前等級：{levelText}。", "NLog:BasePath 未設定，日誌寫不出來。");
+        }
+
+        var fileText = todayFileBytes is null ? "尚未建立" : FileSizeFormatter.Describe(todayFileBytes.Value);
+        var evidence = $"目錄：{logDirectory}；今日檔案：{todayFilePath}（{fileText}）；目前等級：{levelText}。";
+
+        if (!directoryWritable)
+        {
+            return new(SystemHealthStatus.Unhealthy, evidence, "日誌目錄不存在或不可寫入。");
+        }
+
+        return todayFileBytes is null
+            ? new(SystemHealthStatus.Degraded, evidence, "今日日誌檔案尚未建立。")
+            : new(SystemHealthStatus.Healthy, evidence);
+    }
+
+    /// <summary>
+    /// 登入金鑰（0.4.123，Data Protection）：Cookie 登入票證靠這組金鑰加密。目錄壞了或金鑰沒存下來，
+    /// 每次重啟就會換一組新金鑰，所有人都得重新登入（0.4.119 修好的「登入存不住」）。
+    /// 證據只列數量與到期日，絕不列金鑰內容。
+    /// </summary>
+    /// <param name="keyFileCount">目錄裡 <c>key-*.xml</c> 的檔案數。</param>
+    /// <param name="activeKeyCount">未撤銷且未過期的金鑰數。</param>
+    /// <param name="latestExpiration">所有有效金鑰中最晚的到期時間。</param>
+    public static SystemHealthVerdict EvaluateDataProtection(
+        string? keyPath,
+        bool directoryExists,
+        bool directoryWritable,
+        int keyFileCount,
+        int activeKeyCount,
+        DateTimeOffset? latestExpiration)
+    {
+        const string lostLogins = "登入金鑰無法保存，系統重啟後所有人都要重新登入。";
+        if (string.IsNullOrWhiteSpace(keyPath))
+        {
+            return new(SystemHealthStatus.Unhealthy, "金鑰目錄：未設定。", $"DataProtectionKeyPath 未設定，{lostLogins}");
+        }
+
+        var expiration = latestExpiration?.ToLocalTime().ToString("yyyy/MM/dd") ?? "—";
+        var evidence = $"金鑰目錄：{keyPath}；金鑰檔：{keyFileCount} 個；有效金鑰：{activeKeyCount} 把（最晚到期 {expiration}，到期前會自動換新）。";
+
+        if (!directoryExists || !directoryWritable)
+        {
+            return new(SystemHealthStatus.Unhealthy, evidence, $"金鑰目錄不存在或不可寫入，{lostLogins}");
+        }
+
+        return activeKeyCount == 0
+            ? new(SystemHealthStatus.Degraded, evidence, "目前沒有有效的登入金鑰（下一次登入時會自動建立）。")
+            : new(SystemHealthStatus.Healthy, evidence);
+    }
+
+    /// <summary>
+    /// 例外紀錄管線（0.4.123，移植自 NET10-Blazor-Starter 的 EvaluateLoggingPipeline，拿掉 Email 告警）：
+    /// 記錄機制壞了卻沒人知道，是最難發現的一種故障。數值都是「本次啟動以來」的累計。
+    /// 紅燈：日誌磁碟剩不到 200 MB，或例外佇列已滿。
+    /// 黃燈：任何丟棄、寫入失敗、NLog 內部錯誤，佇列使用率達八成，或磁碟剩不到 1 GB。
+    /// 瀏覽器錯誤回報被限流擋下的筆數只列在證據、不影響燈號：那是限流照設計運作。
+    /// </summary>
+    public static SystemHealthVerdict EvaluateExceptionPipeline(
+        LoggingPipelineSnapshot snapshot,
+        int queueLength,
+        int queueCapacity,
+        long droppedEntries,
+        double? logDiskFreeGb)
+    {
+        var problems = new List<string>();
+        var status = SystemHealthStatus.Healthy;
+
+        void Degrade(string problem)
+        {
+            problems.Add(problem);
+            if (status == SystemHealthStatus.Healthy)
+            {
+                status = SystemHealthStatus.Degraded;
+            }
+        }
+
+        void Fail(string problem)
+        {
+            problems.Add(problem);
+            status = SystemHealthStatus.Unhealthy;
+        }
+
+        if (logDiskFreeGb is < 0.2)
+        {
+            Fail("日誌所在磁碟可用空間低於 200 MB，日誌即將無法寫入。");
+        }
+        else if (logDiskFreeGb is < 1)
+        {
+            Degrade("日誌所在磁碟可用空間低於 1 GB。");
+        }
+
+        if (queueLength >= queueCapacity)
+        {
+            Fail("例外佇列已滿，新的例外會被丟棄。");
+        }
+        else if (queueLength >= queueCapacity * 0.8)
+        {
+            Degrade("例外佇列使用率已達八成。");
+        }
+
+        if (droppedEntries > 0)
+        {
+            Degrade($"有 {droppedEntries:N0} 筆例外因佇列滿載被丟棄。");
+        }
+
+        if (snapshot.WriteFailures > 0)
+        {
+            Degrade($"有 {snapshot.WriteFailures:N0} 筆例外寫入資料庫失敗。");
+        }
+
+        if (snapshot.NLogInternalErrors > 0)
+        {
+            Degrade($"NLog 發生 {snapshot.NLogInternalErrors:N0} 次內部錯誤（請看 NLog 內部日誌）。");
+        }
+
+        var lastWriteFailure = snapshot.LastWriteFailureAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "—";
+        var disk = logDiskFreeGb is null ? "未設定或無法讀取" : $"{logDiskFreeGb:N2} GB";
+        var evidence =
+            $"本次啟動以來：例外佇列 {queueLength:N0}/{queueCapacity:N0}；丟棄 {droppedEntries:N0}；"
+            + $"寫入失敗 {snapshot.WriteFailures:N0}（最後 {lastWriteFailure}）；"
+            + $"瀏覽器錯誤回報因限流丟棄 {snapshot.ClientErrorsDropped:N0}；"
+            + $"NLog 內部錯誤 {snapshot.NLogInternalErrors:N0}；日誌磁碟可用 {disk}。";
+
+        return new(status, evidence, problems.Count == 0 ? null : string.Join(" ", problems));
+    }
+
+    /// <summary>
+    /// 快取服務（0.4.123，移植自 NET10-Blazor-Starter）：寫一筆哨兵再讀回比對、最後刪掉。只看設定不夠——
+    /// Provider 設成 Redis 但連不上時，設定看起來完全正常。<c>DistributedCacheService</c> 不吞例外，所以整段包住。
+    /// </summary>
+    /// <param name="evidence">設定摘要（不含 Redis 連線字串內容）。</param>
+    public static async Task<SystemHealthVerdict> ProbeCacheAsync(
+        ICacheService cache,
+        string evidence,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutSource.CancelAfter(timeout);
+
+            var key = $"health:probe:{Guid.NewGuid():N}";
+            var expected = Guid.NewGuid().ToString("N");
+
+            var stopwatch = Stopwatch.StartNew();
+            await cache.SetAsync(key, expected, TimeSpan.FromMinutes(1), timeoutSource.Token);
+            var actual = await cache.GetAsync<string>(key, timeoutSource.Token);
+            stopwatch.Stop();
+
+            await cache.RemoveAsync(key, timeoutSource.Token);
+
+            var matched = string.Equals(actual, expected, StringComparison.Ordinal);
+            return new(
+                matched ? SystemHealthStatus.Healthy : SystemHealthStatus.Degraded,
+                $"{evidence}；往返耗時：{stopwatch.ElapsedMilliseconds} ms。",
+                matched ? null : "寫入後讀回的值與寫入值不符，快取可能未真正生效。");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(SystemHealthStatus.Unhealthy, $"{evidence}；讀寫測試逾時。", $"快取在 {timeout.TotalSeconds:N0} 秒內沒有回應。");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new(SystemHealthStatus.Unhealthy, $"{evidence}；讀寫測試發生 {ex.GetType().Name}。", $"快取讀寫失敗：{ex.GetType().Name}。");
+        }
     }
 
     private static bool HasTextPricing(LlmSettings settings, string model)

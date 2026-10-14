@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.11
+- 文件版本：1.12
 - 文件狀態：維護中
-- 現行系統版本：0.4.122
+- 現行系統版本：0.4.123
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/10/14
 
@@ -27,7 +27,7 @@
 | 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
 | 會議紀錄（含影音上傳與語音轉文字）| [會議紀錄](會議紀錄-prd.md) | `/meetings` | `Pages/Meetings/MeetingPage.razor`、`MeetingService`、`MeetingFileStore`、`TranscriptionJobRunner`、`MeetingController` | 已實作 | 0.4.118 |
 | 會議紀錄產生流程 | [會議紀錄產生流程](會議紀錄產生流程-prd.md) | 跨 `/meetings`、`/projects`（上傳→轉錄→套用提示詞→草稿） | `TranscriptionJobRunner`、`MeetingDraftJobRunner`、`ITextGenerationProvider`、`MeetingDraftProgressNotifier` | 已實作（前半段 0.4.27、後半段 0.4.31） | 0.4.118 |
-| 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Pages/SystemHealthPage.razor`、Health services | 已實作（0.4.120 起改名並只限管理者） | 0.4.120 |
+| 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Pages/Monitoring/SystemHealthPage.razor`、`SystemHealthView`、Health services | 已實作（0.4.120 起改名並只限管理者；0.4.123 改版為 17 項、頁尾改最近 24 小時警告以上日誌） | 0.4.123 |
 | 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Pages/Monitoring/LogViewerPage.razor`、`LogViewerView`、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121；0.4.122 起 TraceId 即錯誤追蹤碼） | 0.4.122 |
 | 日誌等級設定 | [日誌等級設定](日誌等級設定-prd.md) | `/log-level-setting` | `Pages/Monitoring/LogLevelSettingPage.razor`、`LogLevelSettingView`、`LogLevelRuntimeState` | 已實作（0.4.120） | 0.4.120 |
 | 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `ExceptionLogView`／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |

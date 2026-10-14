@@ -65,7 +65,6 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddSingleton<SystemStartupState>();
-        services.AddScoped<IHealthLogReader, HealthLogReader>();
         services.AddScoped<ISystemHealthService, SystemHealthService>();
 
         // 監控與診斷（0.4.120，移植自 NET10-Blazor-Starter）。LogLevelRuntimeState 是可變的 Singleton，

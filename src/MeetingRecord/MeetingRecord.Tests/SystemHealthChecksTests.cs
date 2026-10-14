@@ -4,12 +4,15 @@ using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Caching;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
 
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// 系統健康度 0.4.93 新增的六項檢查的判斷邏輯、權重合計，以及選單／權限註冊。
+/// 系統健康監控各項檢查的判斷邏輯（0.4.93 本系統功能六項；0.4.123 日誌、登入金鑰、快取服務）、權重合計，以及選單／權限註冊。
+/// 例外紀錄管線見 <c>LoggingPipelineHealthTests</c>。
 /// </summary>
 public sealed class SystemHealthChecksTests
 {
@@ -258,22 +261,186 @@ public sealed class SystemHealthChecksTests
     [InlineData(8, 2, 0, SystemHealthStatus.Healthy)]      // 20% 不算超過
     [InlineData(7, 3, 0, SystemHealthStatus.Degraded)]     // 30%
     [InlineData(4, 6, 0, SystemHealthStatus.Unhealthy)]    // 60%
-    [InlineData(10, 0, 1, SystemHealthStatus.Degraded)]    // 日誌有 ERROR
+    [InlineData(10, 0, 1, SystemHealthStatus.Degraded)]    // 近 24 小時有例外
     [InlineData(0, 1, 0, SystemHealthStatus.Degraded)]     // 樣本太少：1 次失敗不是 100% 紅燈
     [InlineData(0, 0, 0, SystemHealthStatus.Healthy)]
-    public void RecentErrors_ShouldApplyThresholds(int succeeded, int failed, int logErrors, SystemHealthStatus expected)
+    public void RecentErrors_ShouldApplyThresholds(int succeeded, int failed, int exceptions, SystemHealthStatus expected)
     {
-        Assert.Equal(expected, SystemHealthChecks.EvaluateRecentErrors(succeeded, failed, logErrors).Status);
+        Assert.Equal(expected, SystemHealthChecks.EvaluateRecentErrors(succeeded, failed, exceptions).Status);
     }
 
-    [Theory]
-    [InlineData("2026-09-22 10:00:00.1234|abc|ERROR|12|Some.Logger|boom|", true)]
-    [InlineData("2026-09-22 10:00:00.1234|abc|FATAL|12|Some.Logger|boom|", true)]
-    [InlineData("2026-09-22 10:00:00.1234|abc|INFO|12|Some.Logger|ERROR in message|", false)]
-    [InlineData("   at Some.Method() in C:\\x.cs:line 3", false)]
-    public void IsErrorLine_ShouldOnlyLookAtTheLevelColumn(string line, bool expected)
+    [Fact]
+    public void RecentErrors_WithExceptions_ShouldPointToExceptionLogPage()
     {
-        Assert.Equal(expected, HealthLogReader.IsErrorLine(line));
+        // 0.4.123 起頁尾不再有原始日誌，提示要指向「系統例外紀錄」。
+        var verdict = SystemHealthChecks.EvaluateRecentErrors(10, 0, 3);
+
+        Assert.Contains("3 種", verdict.Evidence);
+        Assert.Contains("系統例外紀錄", verdict.FailureMessage);
+    }
+
+    // ───────── 日誌（0.4.123） ─────────
+
+    [Fact]
+    public void Logging_BasePathMissing_ShouldBeUnhealthy()
+    {
+        var verdict = SystemHealthChecks.EvaluateLogging(string.Empty, false, string.Empty, null, LogLevelRank.Info, null);
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+        Assert.Contains("NLog:BasePath", verdict.FailureMessage);
+    }
+
+    [Fact]
+    public void Logging_DirectoryNotWritable_ShouldBeUnhealthy()
+    {
+        var verdict = SystemHealthChecks.EvaluateLogging(@"C:\logs", false, @"C:\logs\a.log", 10, LogLevelRank.Info, null);
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+    }
+
+    [Fact]
+    public void Logging_TodayFileMissing_ShouldBeDegraded()
+    {
+        var verdict = SystemHealthChecks.EvaluateLogging(@"C:\logs", true, @"C:\logs\a.log", null, LogLevelRank.Info, null);
+
+        Assert.Equal(SystemHealthStatus.Degraded, verdict.Status);
+        Assert.Contains("尚未建立", verdict.Evidence);
+    }
+
+    [Fact]
+    public void Logging_Ok_ShouldShowEffectiveLevelAndOverride()
+    {
+        var verdict = SystemHealthChecks.EvaluateLogging(@"C:\logs", true, @"C:\logs\a.log", 2048, LogLevelRank.Debug, LogLevelRank.Debug);
+
+        Assert.Equal(SystemHealthStatus.Healthy, verdict.Status);
+        Assert.Contains("DEBUG", verdict.Evidence);
+        Assert.Contains("執行期覆寫", verdict.Evidence);
+    }
+
+    // ───────── 登入金鑰（0.4.123） ─────────
+
+    [Theory]
+    [InlineData(null, false, false)]
+    [InlineData("", false, false)]
+    [InlineData(@"C:\keys", false, false)]   // 目錄不存在
+    [InlineData(@"C:\keys", true, false)]    // 不可寫
+    public void DataProtection_PathMissingOrNotWritable_ShouldBeUnhealthy(string? path, bool exists, bool writable)
+    {
+        var verdict = SystemHealthChecks.EvaluateDataProtection(path, exists, writable, 1, 1, DateTimeOffset.Now.AddDays(80));
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+        Assert.Contains("重新登入", verdict.FailureMessage);
+    }
+
+    [Fact]
+    public void DataProtection_NoActiveKey_ShouldBeDegraded()
+    {
+        var verdict = SystemHealthChecks.EvaluateDataProtection(@"C:\keys", true, true, 0, 0, null);
+
+        Assert.Equal(SystemHealthStatus.Degraded, verdict.Status);
+    }
+
+    [Fact]
+    public void DataProtection_ActiveKey_ShouldBeHealthyAndOnlyShowCounts()
+    {
+        var verdict = SystemHealthChecks.EvaluateDataProtection(@"C:\keys", true, true, 2, 1, new DateTimeOffset(2026, 12, 31, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(SystemHealthStatus.Healthy, verdict.Status);
+        Assert.Contains("金鑰檔：2 個", verdict.Evidence);
+        Assert.Contains("有效金鑰：1 把", verdict.Evidence);
+        Assert.DoesNotContain("<", verdict.Evidence);
+    }
+
+    // ───────── 快取服務（0.4.123） ─────────
+
+    [Fact]
+    public async Task Cache_RoundTripOk_ShouldBeHealthyAndRemoveSentinel()
+    {
+        var cache = new FakeCache();
+
+        var verdict = await SystemHealthChecks.ProbeCacheAsync(cache, "Provider：Memory", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.Equal(SystemHealthStatus.Healthy, verdict.Status);
+        Assert.Empty(cache.Values);
+    }
+
+    [Fact]
+    public async Task Cache_ReadBackMismatch_ShouldBeDegraded()
+    {
+        var cache = new FakeCache { ReturnWrongValue = true };
+
+        var verdict = await SystemHealthChecks.ProbeCacheAsync(cache, "Provider：Memory", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.Equal(SystemHealthStatus.Degraded, verdict.Status);
+    }
+
+    [Fact]
+    public async Task Cache_Throws_ShouldBeUnhealthy()
+    {
+        var cache = new FakeCache { Throw = true };
+
+        var verdict = await SystemHealthChecks.ProbeCacheAsync(cache, "Provider：Redis", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+        Assert.Contains("InvalidOperationException", verdict.FailureMessage);
+    }
+
+    [Fact]
+    public async Task Cache_Hangs_ShouldTimeOutAsUnhealthy()
+    {
+        var cache = new FakeCache { Hang = true };
+
+        var verdict = await SystemHealthChecks.ProbeCacheAsync(cache, "Provider：Redis", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+        Assert.Contains("逾時", verdict.Evidence);
+    }
+
+    private sealed class FakeCache : ICacheService
+    {
+        public Dictionary<string, object?> Values { get; } = [];
+        public bool ReturnWrongValue { get; init; }
+        public bool Throw { get; init; }
+        public bool Hang { get; init; }
+
+        public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
+        {
+            await GuardAsync(cancellationToken);
+            if (ReturnWrongValue)
+            {
+                return (T)(object)"wrong";
+            }
+
+            return Values.TryGetValue(key, out var value) ? (T?)value : default;
+        }
+
+        public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
+        {
+            await GuardAsync(cancellationToken);
+            Values[key] = value;
+        }
+
+        public Task<T> GetOrCreateAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
+        {
+            await GuardAsync(cancellationToken);
+            Values.Remove(key);
+        }
+
+        private async Task GuardAsync(CancellationToken cancellationToken)
+        {
+            if (Throw)
+            {
+                throw new InvalidOperationException("redis down");
+            }
+
+            if (Hang)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+        }
     }
 
     // ───────── 選單／權限註冊 ─────────

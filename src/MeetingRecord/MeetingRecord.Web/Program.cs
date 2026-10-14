@@ -35,6 +35,14 @@ namespace MeetingRecord.Web
 {
     public class Program
     {
+        /// <summary>
+        /// NLog 的設定一律來自 nlog.config。appsettings 的「NLog」區段只放本專案自己的 <c>NLog:BasePath</c>，
+        /// 不是 NLog 設定——NLog 預設會把同名區段當設定載入（目前設定是空的時候），遇到 BasePath 就拋
+        /// <c>NLogConfigurationException</c>。整合測試兩個主機並行時，先結束的主機會 <c>LogManager.Shutdown()</c>
+        /// 清空行程共用的設定，另一個主機剛好在建置就會整批失敗（0.4.122 起偶發，0.4.123 修正）。
+        /// </summary>
+        internal static NLogAspNetCoreOptions NLogOptions => new() { LoggingConfigurationSectionName = string.Empty };
+
         public static void Main(string[] args)
         {
             ILogger<Program>? logger = null;
@@ -71,7 +79,7 @@ namespace MeetingRecord.Web
                 }
 
                 builder.Logging.ClearProviders();
-                builder.Host.UseNLog();
+                builder.Host.UseNLog(NLogOptions);
                 #endregion
 
                 #region 系統使用服務

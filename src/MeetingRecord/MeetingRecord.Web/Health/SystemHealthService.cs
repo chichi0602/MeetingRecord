@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -11,7 +13,9 @@ using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Web.Auth;
+using MeetingRecord.Web.Caching;
 using MeetingRecord.Web.Configuration;
+using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Health;
@@ -33,7 +37,13 @@ public sealed class SystemHealthService : ISystemHealthService
     private readonly IOptions<SystemSettings> systemSettingsOptions;
     private readonly IOptions<SwaggerSettings> swaggerOptions;
     private readonly IOptions<CorsSettings> corsOptions;
-    private readonly IHealthLogReader logReader;
+    private readonly INLogFilePathResolver logPathResolver;
+    private readonly LogLevelRuntimeState logLevelState;
+    private readonly IKeyManager keyManager;
+    private readonly ICacheService cacheService;
+    private readonly IOptions<CacheSettings> cacheOptions;
+    private readonly ChannelReader<ExceptionLogEntry> exceptionQueue;
+    private readonly LoggingPipelineMonitor pipelineMonitor;
     private readonly SystemStartupState startupState;
     private readonly IOptions<LlmSettings> llmOptions;
     private readonly IOptions<MediaSettings> mediaOptions;
@@ -53,7 +63,13 @@ public sealed class SystemHealthService : ISystemHealthService
         IOptions<SystemSettings> systemSettingsOptions,
         IOptions<SwaggerSettings> swaggerOptions,
         IOptions<CorsSettings> corsOptions,
-        IHealthLogReader logReader,
+        INLogFilePathResolver logPathResolver,
+        LogLevelRuntimeState logLevelState,
+        IKeyManager keyManager,
+        ICacheService cacheService,
+        IOptions<CacheSettings> cacheOptions,
+        ChannelReader<ExceptionLogEntry> exceptionQueue,
+        LoggingPipelineMonitor pipelineMonitor,
         SystemStartupState startupState,
         IOptions<LlmSettings> llmOptions,
         IOptions<MediaSettings> mediaOptions,
@@ -72,7 +88,13 @@ public sealed class SystemHealthService : ISystemHealthService
         this.systemSettingsOptions = systemSettingsOptions;
         this.swaggerOptions = swaggerOptions;
         this.corsOptions = corsOptions;
-        this.logReader = logReader;
+        this.logPathResolver = logPathResolver;
+        this.logLevelState = logLevelState;
+        this.keyManager = keyManager;
+        this.cacheService = cacheService;
+        this.cacheOptions = cacheOptions;
+        this.exceptionQueue = exceptionQueue;
+        this.pipelineMonitor = pipelineMonitor;
         this.startupState = startupState;
         this.llmOptions = llmOptions;
         this.mediaOptions = mediaOptions;
@@ -85,23 +107,23 @@ public sealed class SystemHealthService : ISystemHealthService
 
     public async Task<SystemHealthReport> GetReportAsync(CancellationToken cancellationToken = default)
     {
-        // 日誌只讀一次：「日誌」「近期錯誤」兩項與頁面下方的日誌尾端共用。
-        var logTail = logReader.ReadLatestLines(100);
-
         var items = new List<SystemHealthItem>
         {
             CheckApplication(),
             CheckApi(),
             await CheckDatabaseAsync(cancellationToken),
-            CheckLogging(logTail),
+            CheckLogging(),
             CheckAuthentication(),
+            CheckDataProtection(),
             CheckFileSystem(),
             CheckHostResources(),
             CheckSecuritySettings(),
+            await CheckCacheAsync(cancellationToken),
+            CheckExceptionPipeline(),
             CheckAiProvider(),
             CheckTranscription(),
             await CheckBackgroundJobsAsync(cancellationToken),
-            await CheckRecentErrorsAsync(logTail, cancellationToken),
+            await CheckRecentErrorsAsync(cancellationToken),
             CheckPdfExport(),
             CheckExchangeRate()
         };
@@ -114,8 +136,7 @@ public sealed class SystemHealthService : ISystemHealthService
             Score = score,
             Status = SystemHealthScoreCalculator.GetStatus(score),
             Light = SystemHealthScoreCalculator.GetLight(score),
-            Items = items,
-            LogTail = logTail
+            Items = items
         };
     }
 
@@ -199,30 +220,31 @@ public sealed class SystemHealthService : ISystemHealthService
         }
     }
 
-    private SystemHealthItem CheckLogging(HealthLogTail logTail)
+    private SystemHealthItem CheckLogging()
     {
-        var logDirectory = string.IsNullOrWhiteSpace(logTail.FilePath)
-            ? string.Empty
-            : Path.GetDirectoryName(logTail.FilePath) ?? string.Empty;
-        var directoryWritable = DirectoryIsWritable(logDirectory);
-        var status = logTail.Status;
-
-        if (!directoryWritable)
+        var logDirectory = logPathResolver.GetLogDirectory();
+        var todayFile = logPathResolver.GetLogFilePath(DateOnly.FromDateTime(DateTime.Now));
+        long? todayFileBytes = null;
+        try
         {
-            status = SystemHealthStatus.Unhealthy;
+            if (!string.IsNullOrEmpty(todayFile) && File.Exists(todayFile))
+            {
+                todayFileBytes = new FileInfo(todayFile).Length;
+            }
         }
-        else if (status == SystemHealthStatus.Healthy && logTail.Lines.Count == 0)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            status = SystemHealthStatus.Degraded;
+            // 讀不到大小就當成還沒建立，燈號會轉黃。
         }
 
-        return CreateItem(
-            "日誌",
-            "Logging",
-            SystemHealthWeights.Logging,
-            status,
-            $"目錄：{(string.IsNullOrWhiteSpace(logDirectory) ? "未設定" : logDirectory)}；今日檔案：{logTail.FilePath}；最後讀取筆數：{logTail.Lines.Count}。",
-            status == SystemHealthStatus.Healthy ? null : logTail.Message);
+        return CreateItem("日誌", "Logging", SystemHealthWeights.Logging,
+            SystemHealthChecks.EvaluateLogging(
+                logDirectory,
+                DirectoryIsWritable(logDirectory),
+                todayFile,
+                todayFileBytes,
+                logLevelState.EffectiveLevel,
+                logLevelState.OverrideLevel));
     }
 
     private SystemHealthItem CheckAuthentication()
@@ -251,6 +273,39 @@ public sealed class SystemHealthService : ISystemHealthService
             status == SystemHealthStatus.Healthy ? null : "Cookie/JWT 設定不完整，或 Production 仍使用開發用 JWT key。");
     }
 
+    /// <summary>
+    /// 登入金鑰（0.4.123）：金鑰目錄可寫、金鑰真的寫成檔案、金鑰環裡有有效金鑰。
+    /// 只讀不建：<see cref="IKeyManager.GetAllKeys"/> 不會產生新金鑰。
+    /// </summary>
+    private SystemHealthItem CheckDataProtection()
+    {
+        const string name = "登入金鑰";
+        var keyPath = systemSettingsOptions.Value.ExternalFileSystem.DataProtectionKeyPath;
+        try
+        {
+            var directoryExists = !string.IsNullOrWhiteSpace(keyPath) && Directory.Exists(keyPath);
+            var keyFileCount = directoryExists ? Directory.GetFiles(keyPath, "key-*.xml").Length : 0;
+            var now = DateTimeOffset.UtcNow;
+            var activeKeys = keyManager.GetAllKeys()
+                .Where(key => !key.IsRevoked && key.ExpirationDate > now)
+                .ToList();
+
+            return CreateItem(name, "DataProtection", SystemHealthWeights.DataProtection,
+                SystemHealthChecks.EvaluateDataProtection(
+                    keyPath,
+                    directoryExists,
+                    DirectoryIsWritable(keyPath),
+                    keyFileCount,
+                    activeKeys.Count,
+                    activeKeys.Count == 0 ? null : activeKeys.Max(key => key.ExpirationDate)));
+        }
+        catch (Exception ex)
+        {
+            return CreateItem(name, "DataProtection", SystemHealthWeights.DataProtection,
+                new SystemHealthVerdict(SystemHealthStatus.Unhealthy, $"金鑰目錄：{keyPath}；檢查時發生 {ex.GetType().Name}。", "無法讀取登入金鑰。"));
+        }
+    }
+
     private SystemHealthItem CheckFileSystem()
     {
         var paths = new Dictionary<string, string>
@@ -262,7 +317,10 @@ public sealed class SystemHealthService : ISystemHealthService
             // 0.4.93 補上：影音、逐字稿、AI 問答。之前漏掉，這三個壞了健康頁卻是綠燈。
             ["MeetingMedia"] = systemSettingsOptions.Value.ExternalFileSystem.MeetingMediaPath,
             ["MeetingTranscript"] = systemSettingsOptions.Value.ExternalFileSystem.MeetingTranscriptPath,
-            ["AiChat"] = systemSettingsOptions.Value.ExternalFileSystem.AiChatPath
+            ["AiChat"] = systemSettingsOptions.Value.ExternalFileSystem.AiChatPath,
+            // 0.4.123 補上：登入金鑰、例外堆疊。
+            ["DataProtectionKey"] = systemSettingsOptions.Value.ExternalFileSystem.DataProtectionKeyPath,
+            ["Exception"] = systemSettingsOptions.Value.ExternalFileSystem.ExceptionPath
         };
 
         var failures = paths
@@ -290,7 +348,8 @@ public sealed class SystemHealthService : ISystemHealthService
         var roots = new[]
             {
                 fileSystem.DatabasePath, fileSystem.DownloadPath, fileSystem.UploadPath, fileSystem.ProjectFilePath,
-                fileSystem.MeetingMediaPath, fileSystem.MeetingTranscriptPath, fileSystem.AiChatPath
+                fileSystem.MeetingMediaPath, fileSystem.MeetingTranscriptPath, fileSystem.AiChatPath,
+                fileSystem.DataProtectionKeyPath, fileSystem.ExceptionPath
             }
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetPathRoot)
@@ -347,6 +406,58 @@ public sealed class SystemHealthService : ISystemHealthService
             status,
             $"Swagger.EnabledInProduction：{swaggerSettings.EnabledInProduction}；CORS origins：{corsSettings.AllowedOrigins.Length}；ReturnExceptionDetails：{returnExceptionDetails?.ToString() ?? "null"}。",
             status == SystemHealthStatus.Healthy ? null : "Production 開啟了診斷或 Swagger 設定，請確認是否符合部署政策。");
+    }
+
+    /// <summary>
+    /// 快取服務（0.4.123）：實際寫讀刪一筆哨兵。Provider 打錯字時 <see cref="CacheSettings.GetProvider"/> 會拋例外，先翻成可讀訊息。
+    /// </summary>
+    private async Task<SystemHealthItem> CheckCacheAsync(CancellationToken cancellationToken)
+    {
+        const string name = "快取服務";
+        var settings = cacheOptions.Value;
+        string providerName;
+        try
+        {
+            providerName = settings.GetProvider().ToString();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return CreateItem(name, "Cache", SystemHealthWeights.Cache,
+                new SystemHealthVerdict(SystemHealthStatus.Unhealthy, $"Provider 設定值無法解析：{settings.Provider}。", $"快取 provider 設定錯誤：{ex.GetType().Name}。"));
+        }
+
+        var evidence = $"Provider：{providerName}；InstanceName：{settings.InstanceName}；Redis 連線字串：{MaskPresence(settings.RedisConnection)}";
+        return CreateItem(name, "Cache", SystemHealthWeights.Cache,
+            await SystemHealthChecks.ProbeCacheAsync(cacheService, evidence, TimeSpan.FromSeconds(5), cancellationToken));
+    }
+
+    /// <summary>
+    /// 例外紀錄管線（0.4.123）：佇列使用率、丟棄、寫入失敗、NLog 內部錯誤、日誌磁碟空間。
+    /// </summary>
+    private SystemHealthItem CheckExceptionPipeline()
+    {
+        double? freeGb = null;
+        try
+        {
+            var logDirectory = logPathResolver.GetLogDirectory();
+            var root = string.IsNullOrWhiteSpace(logDirectory) ? null : Path.GetPathRoot(Path.GetFullPath(logDirectory));
+            if (!string.IsNullOrWhiteSpace(root))
+            {
+                freeGb = new DriveInfo(root).AvailableFreeSpace / 1024d / 1024d / 1024d;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // 讀不到磁碟就在證據寫「未設定或無法讀取」，不影響燈號。
+        }
+
+        return CreateItem("例外紀錄管線", "ExceptionPipeline", SystemHealthWeights.ExceptionPipeline,
+            SystemHealthChecks.EvaluateExceptionPipeline(
+                pipelineMonitor.Snapshot(),
+                exceptionQueue.CanCount ? exceptionQueue.Count : 0,
+                ExceptionLogProvider.QueueCapacity,
+                ExceptionLogProvider.DroppedCount,
+                freeGb));
     }
 
     private SystemHealthItem CheckAiProvider()
@@ -434,7 +545,7 @@ public sealed class SystemHealthService : ISystemHealthService
         }
     }
 
-    private async Task<SystemHealthItem> CheckRecentErrorsAsync(HealthLogTail logTail, CancellationToken cancellationToken)
+    private async Task<SystemHealthItem> CheckRecentErrorsAsync(CancellationToken cancellationToken)
     {
         const string name = "近期錯誤";
         try
@@ -452,19 +563,29 @@ public sealed class SystemHealthService : ISystemHealthService
             var succeeded = outcomes.Where(x => x.Outcome == AiUsageOutcome.Succeeded).Sum(x => x.Count);
             var failed = outcomes.Where(x => x.Outcome == AiUsageOutcome.Failed).Sum(x => x.Count);
 
+            // 0.4.123 起改看「系統例外紀錄」：相同例外已合併成一列，算的是「幾種」而不是「幾次」。
+            var exceptionCount = await context.ExceptionLog
+                .AsNoTracking()
+                .CountAsync(x => x.LastOccurredAt >= since, cancellationToken);
+
             return CreateFeatureItem(name, "RecentErrors", SystemHealthWeights.RecentErrors,
-                SystemHealthChecks.EvaluateRecentErrors(succeeded, failed, logTail.ErrorCount));
+                SystemHealthChecks.EvaluateRecentErrors(succeeded, failed, exceptionCount));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return CreateFeatureItem(name, "RecentErrors", SystemHealthWeights.RecentErrors,
-                new SystemHealthVerdict(SystemHealthStatus.Unhealthy, $"檢查時發生 {ex.GetType().Name}。", "無法讀取 AI 用量紀錄。"));
+                new SystemHealthVerdict(SystemHealthStatus.Unhealthy, $"檢查時發生 {ex.GetType().Name}。", "無法讀取 AI 用量紀錄或系統例外紀錄。"));
         }
     }
 
     private static SystemHealthItem CreateFeatureItem(string name, string category, int weight, SystemHealthVerdict verdict)
     {
         return CreateItem(name, category, weight, verdict.Status, verdict.Evidence, verdict.FailureMessage, SystemHealthGroups.Features);
+    }
+
+    private static SystemHealthItem CreateItem(string name, string category, int weight, SystemHealthVerdict verdict)
+    {
+        return CreateItem(name, category, weight, verdict.Status, verdict.Evidence, verdict.FailureMessage);
     }
 
     private static SystemHealthItem CreateItem(

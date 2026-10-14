@@ -73,7 +73,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 
 - **帳號與權限**：使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
 - **監控與診斷**（0.4.120 起；除 AI 用量分析外都只限管理者，不能勾給角色）：
-  - **系統健康監控**（`/system-health`）：健康百分比、紅黃綠燈號與最後 100 筆日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
+  - **系統健康監控**（`/system-health`）：17 項檢查（0.4.123 新增登入金鑰、快取服務、例外紀錄管線）的健康分數、紅黃綠燈號，與展開才載入的最近 24 小時警告以上日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
   - **日誌檢視**（`/logs`，0.4.121）：依時間、等級、關鍵字、TraceId 查 NLog 檔案日誌，展開看堆疊、複製、匯出 .log；**AI 日誌分析**把最新 100 筆送給 AI 整理重點與建議（會產生費用，記入 AI 用量）（見[日誌檢視 PRD](docs/prd/日誌檢視-prd.md)）
   - **日誌等級設定**（`/log-level-setting`）：執行期調整 NLog 等級（只在記憶體、重啟即回預設）（見[日誌等級設定 PRD](docs/prd/日誌等級設定-prd.md)）
   - **系統例外紀錄**（`/system-exceptions`，0.4.122，含 AI 例外分析、錯誤追蹤碼）：畫面、Web API、背景作業、系統啟動與瀏覽器的例外自動收集，相同例外合併計次、完整堆疊另存檔案；可篩選、複製、匯出 CSV、清除；**AI 例外分析**把單筆例外送給 AI 找根因與修正建議（會產生費用，記入 AI 用量）；錯誤畫面顯示 8 碼錯誤追蹤碼，可在此頁與日誌檢視查到同一次操作（見[系統例外紀錄 PRD](docs/prd/系統例外紀錄-prd.md)）
@@ -90,7 +90,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
 - 平行 API 路由：保留 `/api/...`，新增 `/api/v1/...` 作為新用戶端標準入口
 - Health checks：`/health/live`、`/health/ready`
-- 系統健康監控頁：`/system-health`，只限管理員，查看健康百分比、紅黃綠燈號與最後 100 筆日誌
+- 系統健康監控頁：`/system-health`，只限管理員，查看 17 項檢查的健康分數、紅黃綠燈號與最近 24 小時警告以上日誌
 - 分散式快取：`ICacheService` 統一抽象，透過 `appsettings.json` 在 Memory ↔ Redis 間切換（側邊選單已套用）
 - Production 啟動安全檢查：JWT key、預設密碼、Swagger 暴露策略與 Redis 連線字串需明確設定
 - Sidebar 導覽：JSON 定義、三層選單（收合時浮出選單同樣支援第三層）、可收合、自動套用使用者角色權限
@@ -298,7 +298,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [分散式快取機制](docs/features/分散式快取機制.md) — `ICacheService`、Memory ↔ Redis 切換、選單快取與失效行為。
 - [多語系與本地化](docs/features/多語系與本地化.md) — `RequestLocalization` 設定、`AntDesignLocaleFactory`、支援文化。
 - [檔案上傳機制](docs/features/檔案上傳機制.md) — 專案附件、會議影音、AI 問答附件、年月目錄、刪除同步、容量上限。
-- [系統健康監控](docs/features/系統健康監控.md) — 健康百分比、紅黃綠燈號、部署探針與最後 100 筆日誌。
+- [系統健康監控](docs/features/系統健康監控.md) — 17 項檢查的健康分數、紅黃綠燈號、部署探針與最近 24 小時警告以上日誌。
 
 ### 開發與操作指南（guides）
 

@@ -1,0 +1,144 @@
+@using MeetingRecord.Web.Diagnostics
+@using MeetingRecord.Web.Health
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="health-empty">@RoleMessage</div>
+}
+else
+{
+    <div class="health-toolbar">
+        <div class="health-toolbar-left">
+            <Button Type="ButtonType.Default" Disabled="@isLoading" Loading="@isLoading" OnClick="RefreshAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新檢查</span></span>
+            </Button>
+        </div>
+        <div class="health-toolbar-right">
+            @if (report is not null)
+            {
+                <span class="health-meta">最後檢查：@report.CheckedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</span>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <div class="health-error">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error_outline" />
+            <span>@loadError</span>
+        </div>
+    }
+
+    @if (report is null)
+    {
+        @if (string.IsNullOrWhiteSpace(loadError))
+        {
+            <div class="health-empty">正在檢查系統健康狀態…</div>
+        }
+    }
+    else
+    {
+        <section class="health-summary @GetLightClass(report.Light)">
+            <span class="health-dot" aria-hidden="true"></span>
+            <div class="health-summary-score">
+                <strong>@report.Score</strong><span>/ 100</span>
+            </div>
+            <div class="health-summary-text">
+                <div class="health-summary-status">@GetStatusText(report.Status)</div>
+                <div class="health-muted">
+                    共 @report.Items.Count 項：正常 @report.Items.Count(x => x.Status == SystemHealthStatus.Healthy)、警示 @report.Items.Count(x => x.Status == SystemHealthStatus.Degraded)、異常 @report.Items.Count(x => x.Status == SystemHealthStatus.Unhealthy)。
+                    分數＝各項權重加總（正常得滿分、警示得一半）；90 以上綠燈、70 以上黃燈。
+                </div>
+            </div>
+        </section>
+
+        @foreach (var group in new[] { SystemHealthGroups.Infrastructure, SystemHealthGroups.Features })
+        {
+            <div class="health-section-title">@group</div>
+            <div class="health-items">
+                @foreach (var item in ItemsOf(group))
+                {
+                    <article class="health-item @GetLightClass(item.Light)">
+                        <div class="health-item-heading">
+                            <span class="health-dot" aria-hidden="true"></span>
+                            <div class="health-item-name">
+                                <div>@item.Name</div>
+                                <div class="health-muted">@item.Category · 權重 @item.Weight</div>
+                            </div>
+                            <span class="health-pill">@GetStatusText(item.Status)</span>
+                        </div>
+                        <p class="health-evidence">@item.Evidence</p>
+                        @if (!string.IsNullOrWhiteSpace(item.FailureMessage))
+                        {
+                            <div class="health-failure">@item.FailureMessage</div>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    }
+
+    @* 日誌原文未遮罩（可能含路徑、帳號、例外內容）；本頁只限管理者。 *@
+    <div class="health-panel">
+        <button type="button" class="health-log-toggle" aria-expanded="@(warnLogsExpanded ? "true" : "false")" @onclick="ToggleWarnLogsAsync">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="@(warnLogsExpanded ? "expand_less" : "expand_more")" />
+            <span>最近 24 小時警告以上日誌</span>
+            @if (warnLogs is not null && warnLogsExpanded)
+            {
+                <span class="health-muted">共 @warnLogsDisplay.Count 筆@(warnLogsDisplay.Count >= SystemHealthView.WarnLogTake ? $"（只列最新 {SystemHealthView.WarnLogTake} 筆）" : string.Empty)</span>
+            }
+        </button>
+
+        @if (warnLogsExpanded)
+        {
+            @if (warnLogs is not null)
+            {
+                @foreach (var warning in warnLogs.Warnings)
+                {
+                    <div class="health-warning">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+                        <span>@warning</span>
+                    </div>
+                }
+            }
+
+            @if (warnLogs is null || warnLogsDisplay.Count > 0 || warnLogsLoading)
+            {
+                <Table TItem="LogEntry"
+                       DataSource="@warnLogsDisplay"
+                       Loading="@warnLogsLoading"
+                       Size="TableSize.Small"
+                       RowKey="@(entry => entry.Sequence)"
+                       PageSize="20">
+                    <ColumnDefinitions>
+                        <Column TData="DateTime" Title="時間" Width="180">
+                            <span class="health-number">@context.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff")</span>
+                        </Column>
+                        <Column TData="string" Title="等級" Width="90">
+                            <span class="@GetLevelClass(context.Rank)">@(string.IsNullOrEmpty(context.Level) ? "－" : context.Level)</span>
+                        </Column>
+                        <Column TData="string" Title="記錄器" Width="260" Ellipsis>@context.Logger</Column>
+                        <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
+                    </ColumnDefinitions>
+                    <ExpandTemplate Context="rowData">
+                        <pre class="health-log-raw">@rowData.Data.Raw</pre>
+                    </ExpandTemplate>
+                </Table>
+            }
+            else
+            {
+                <div class="health-empty">
+                    @(warnLogs.ScannedFileCount > 0 || string.IsNullOrWhiteSpace(warnLogs.Message) ? "最近 24 小時沒有警告以上的日誌。" : warnLogs.Message)
+                </div>
+            }
+
+            <div class="health-footnote">
+                左側箭頭展開看完整內容與堆疊；要篩選、匯出或交給 AI 分析，請到 <a href="logs">日誌檢視</a>。重新檢查時會一併重查。
+            </div>
+        }
+    </div>
+}

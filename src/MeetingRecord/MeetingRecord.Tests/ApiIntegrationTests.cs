@@ -661,6 +661,23 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 
     [Fact]
+    public async Task SystemHealthService_ShouldResolveAndReportAll17ItemsWithoutLeakingSecrets()
+    {
+        // 0.4.123：新檢查注入了 IKeyManager、ICacheService、例外佇列等，DI 少一個就整頁打不開。
+        using var scope = factory.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<MeetingRecord.Web.Health.ISystemHealthService>();
+
+        var report = await service.GetReportAsync();
+
+        Assert.Equal(17, report.Items.Count);
+        Assert.Equal(100, report.Items.Sum(item => item.Weight));
+        Assert.Contains(report.Items, item => item.Category == "DataProtection");
+        Assert.Contains(report.Items, item => item.Category == "Cache" && item.Status == MeetingRecord.Web.Health.SystemHealthStatus.Healthy);
+        Assert.Contains(report.Items, item => item.Category == "ExceptionPipeline");
+        Assert.DoesNotContain(report.Items, item => item.Evidence.Contains("<key", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task SystemHealthPage_WithoutCookieLogin_ShouldNotExposeDetails()
     {
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -675,7 +692,8 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
             response.StatusCode == HttpStatusCode.OK
             || response.StatusCode == HttpStatusCode.Redirect
             || response.StatusCode == HttpStatusCode.Unauthorized);
-        Assert.DoesNotContain("最後 100 筆日誌紀錄", body);
+        Assert.DoesNotContain("最近 24 小時警告以上日誌", body);
+        Assert.DoesNotContain("例外紀錄管線", body);
     }
 
     [Fact]

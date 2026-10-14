@@ -1,0 +1,307 @@
+/* 系統健康監控（0.4.123 改版）。工具列、面板、提示框照 DatabaseUsageView 的寫法；
+   燈號只用 --oat-ok／--oat-warn／--oat-err 與對應的 -bg 權杖，不寫死色碼。 */
+.health-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.health-toolbar-left,
+.health-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.health-meta {
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.health-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.health-muted {
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+}
+
+.health-number {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* ───────── 燈號色：卡片與摘要共用，子元素用 --health-tone 取色 ───────── */
+.health-ok {
+    --health-tone: var(--oat-ok);
+    --health-tone-bg: var(--oat-ok-bg);
+}
+
+.health-warn {
+    --health-tone: var(--oat-warn);
+    --health-tone-bg: var(--oat-warn-bg);
+}
+
+.health-err {
+    --health-tone: var(--oat-err);
+    --health-tone-bg: var(--oat-err-bg);
+}
+
+.health-dot {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--health-tone);
+    box-shadow: 0 0 0 4px var(--health-tone-bg);
+}
+
+/* ───────── 摘要 ───────── */
+.health-summary {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 8px;
+    padding: 16px 20px;
+    border: 1px solid var(--oat-200);
+    border-left: 6px solid var(--health-tone);
+    border-radius: 16px;
+    background: var(--oat-surface);
+}
+
+.health-summary .health-dot {
+    width: 20px;
+    height: 20px;
+}
+
+.health-summary-score {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--health-tone);
+    font-variant-numeric: tabular-nums;
+}
+
+.health-summary-score strong {
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.health-summary-score span {
+    font-size: 0.85rem;
+}
+
+.health-summary-text {
+    min-width: 0;
+    line-height: 1.7;
+}
+
+.health-summary-status {
+    color: var(--health-tone);
+    font-weight: 700;
+}
+
+/* ───────── 分組卡片 ───────── */
+.health-section-title {
+    margin: 20px 0 10px;
+    color: var(--oat-ink);
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.health-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 12px;
+}
+
+/* min-width:0＋overflow-wrap:anywhere：證據裡的長路徑（反斜線不會斷行）否則會撐出水平捲軸。 */
+.health-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--oat-200);
+    border-left: 4px solid var(--health-tone);
+    border-radius: 12px;
+    background: var(--oat-surface);
+    overflow-wrap: anywhere;
+}
+
+.health-item-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.health-item-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--oat-ink);
+    font-weight: 700;
+}
+
+.health-item-name .health-muted {
+    font-weight: 400;
+}
+
+.health-pill {
+    flex: 0 0 auto;
+    padding: 1px 10px;
+    border: 1px solid var(--health-tone);
+    border-radius: 10px;
+    background: var(--health-tone-bg);
+    color: var(--health-tone);
+    font-size: 12px;
+}
+
+.health-evidence {
+    margin: 0;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.health-failure {
+    padding: 8px 12px;
+    border: 1px solid var(--health-tone);
+    border-radius: 8px;
+    background: var(--health-tone-bg);
+    color: var(--health-tone);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+/* ───────── 提示框 ───────── */
+.health-warning,
+.health-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.health-warning {
+    border: 1px solid var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.health-error {
+    border: 1px solid var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.health-warning ::deep .material-icons-outlined,
+.health-error ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+/* ───────── 最近 24 小時警告以上日誌 ───────── */
+.health-panel {
+    margin-top: 20px;
+    padding: 12px 16px;
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+    background: var(--oat-surface);
+}
+
+.health-log-toggle {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    width: 100%;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.health-log-toggle .health-muted {
+    font-weight: 400;
+}
+
+.health-log-toggle:focus-visible {
+    outline: 2px solid var(--oat-300);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+.health-panel > .health-log-toggle + * {
+    margin-top: 12px;
+}
+
+/* 等級膠囊：同日誌檢視。 */
+.log-level {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.log-level-warn {
+    border-color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.log-level-error {
+    border-color: var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.health-log-raw {
+    max-height: 320px;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border: 1px solid var(--oat-200);
+    border-radius: 8px;
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.health-footnote {
+    margin-top: 10px;
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+    line-height: 1.8;
+}
+
+@media (max-width: 720px) {
+    .health-summary {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .health-toolbar {
+        flex-wrap: wrap;
+    }
+}

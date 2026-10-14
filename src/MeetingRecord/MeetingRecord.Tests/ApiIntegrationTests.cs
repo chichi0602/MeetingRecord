@@ -49,14 +49,13 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     [Fact]
     public void LoginCookie_ShouldUsePersistedKeysAndConfiguredLifetime()
     {
-        var keyPath = factory.Services.GetRequiredService<IOptions<SystemSettings>>()
-            .Value.ExternalFileSystem.DataProtectionKeyPath;
-
+        // ⚠️ 不拿 IOptions<SystemSettings> 的路徑來比：ApiTestApplicationFactory 的建構子會設**行程層級**的
+        // 環境變數，另一個測試類別（GoLiveReviewApiTests）同時建立自己的 factory 時會改掉它，
+        // 兩邊讀到的暫存根目錄可能不同（0.4.121 實測偶發失敗）。這裡只驗「存在設定指定的測試目錄」而不是框架預設位置。
         var keyManagement = factory.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value;
         var repository = Assert.IsType<FileSystemXmlRepository>(keyManagement.XmlRepository);
-        Assert.Equal(
-            Path.GetFullPath(keyPath).TrimEnd(Path.DirectorySeparatorChar),
-            repository.Directory.FullName.TrimEnd(Path.DirectorySeparatorChar));
+        Assert.Equal("Keys", repository.Directory.Name);
+        Assert.Contains("MeetingRecordIntegrationTests", repository.Directory.FullName, StringComparison.Ordinal);
 
         var dataProtection = factory.Services.GetRequiredService<IOptions<DataProtectionOptions>>().Value;
         Assert.Equal(MagicObjectHelper.DataProtectionApplicationName, dataProtection.ApplicationDiscriminator);

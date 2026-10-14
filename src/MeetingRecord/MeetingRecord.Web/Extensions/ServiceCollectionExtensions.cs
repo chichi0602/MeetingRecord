@@ -8,6 +8,7 @@ using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.TodoExtraction;
 using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Business.Services.Diagnostics;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
@@ -71,6 +72,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INLogFilePathResolver, NLogFilePathResolver>();
         services.AddScoped<IDatabaseUsageService, DatabaseUsageService>();
         services.AddScoped<StorageUsageService>();
+        services.AddScoped<ILogQueryService, LogQueryService>();
         services.AddScoped<AuthenticationStateHelper>();
         services.AddScoped<CurrentUserService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
@@ -173,6 +175,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AiChatStore>();
         services.AddScoped<AiChatService>();
         services.AddScoped<TodoExtractionService>();
+
+        // 監控與診斷的 AI 分析（0.4.121：AI 日誌分析）：同一個 ITextGenerationProvider，成功／失敗／取消都記帳。
+        services.AddScoped<DiagnosticAiService>();
 
         // 長逐字稿的生成可能耗時數分鐘，預設的 100 秒逾時不夠。
         services.AddHttpClient(AzureOpenAiTextGenerationProvider.HttpClientName, client =>

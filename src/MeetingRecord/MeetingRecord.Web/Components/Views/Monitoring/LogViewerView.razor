@@ -1,0 +1,173 @@
+@using MeetingRecord.Business.Helpers
+@using MeetingRecord.Web.Diagnostics
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="log-view-empty">@RoleMessage</div>
+}
+else
+{
+    @* 左邊查詢條件、右邊動作，與全站工具列慣例一致。 *@
+    <div class="log-view-toolbar">
+        <div class="log-view-toolbar-left">
+            <DatePicker TValue="DateTime?" @bind-Value="startTime"
+                        ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                        Placeholder="@("起始時間")" Style="width: 190px;" />
+            <span class="log-view-range-separator">～</span>
+            <DatePicker TValue="DateTime?" @bind-Value="endTime"
+                        ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                        Placeholder="@("結束時間")" Style="width: 190px;" />
+
+            <Select TItem="string" TItemValue="string" @bind-Value="minimumLevel" Style="width: 118px;">
+                @foreach (var option in LevelOptions)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@option.Key">@option.Label</SelectOption>
+                }
+            </Select>
+
+            <Tooltip Title="@("最多取幾筆（最新的那幾筆）")">
+                <AntDesign.InputNumber TValue="int" @bind-Value="takeCount"
+                                       Min="1" Max="@LogQueryRequest.MaxTake" Step="100"
+                                       Style="width: 110px;" />
+            </Tooltip>
+        </div>
+
+        <div class="log-view-toolbar-right">
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnQueryAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>查詢</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnExpandAll">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="unfold_more" /><span>全部展開</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnCollapseAll">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="unfold_less" /><span>全部收合</span></span>
+            </Button>
+            <Tooltip Title="@("複製本次查詢結果（原始 nlog 格式）")">
+                <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnCopyAllAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製</span></span>
+                </Button>
+            </Tooltip>
+            <Tooltip Title="@("匯出本次查詢結果（原始 nlog 格式的 .log 檔）")">
+                <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnExportAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
+                </Button>
+            </Tooltip>
+            <Tooltip Title="@AiButtonTitle">
+                <Button Type="ButtonType.Default"
+                        Disabled="@(entriesAscending.Count == 0 || isAiRunning || !aiAvailable)"
+                        OnClick="OnAiAnalyzeAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="insights" /><span>AI 分析</span></span>
+                </Button>
+            </Tooltip>
+        </div>
+    </div>
+
+    <div class="log-view-quick-ranges">
+        <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round" Disabled="@isLoading"
+                OnClick="@(() => OnQuickRangeAsync(LogTimeRanges.Last(TimeSpan.FromMinutes(5), DateTime.Now)))">最近 5 分</Button>
+        <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round" Disabled="@isLoading"
+                OnClick="@(() => OnQuickRangeAsync(LogTimeRanges.Last(TimeSpan.FromMinutes(15), DateTime.Now)))">最近 15 分</Button>
+        <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round" Disabled="@isLoading"
+                OnClick="@(() => OnQuickRangeAsync(LogTimeRanges.Last(TimeSpan.FromHours(1), DateTime.Now)))">最近 1 小時</Button>
+        <Button Size="@ButtonSize.Small" Shape="@ButtonShape.Round" Disabled="@isLoading"
+                OnClick="@(() => OnQuickRangeAsync(LogTimeRanges.Today(DateTime.Now)))">今天</Button>
+    </div>
+
+    <div class="log-view-text-filters">
+        <Input @bind-Value="keyword" Placeholder="關鍵字（比對整筆原始內容，含堆疊）" AllowClear="true" />
+        <Input @bind-Value="traceId" Placeholder="TraceId（完全相同才算）" AllowClear="true" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="log-view-note">@statusMessage</div>
+    }
+
+    @foreach (var warning in warnings)
+    {
+        <div class="log-view-warning">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+            <span>@warning</span>
+        </div>
+    }
+
+    <div class="log-view-panel">
+        <Table @ref="logTable" TItem="LogEntry"
+               DataSource="@entriesDisplay"
+               Loading="@isLoading"
+               Size="TableSize.Small"
+               RowKey="@(entry => entry.Sequence)"
+               RowClassName="@(_ => "log-view-row")"
+               OnRowClick="OnRowClickAsync"
+               PageSize="20">
+            <ColumnDefinitions>
+                <Column TData="DateTime" Title="時間" Width="180">
+                    <span class="log-view-time">@context.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff")</span>
+                </Column>
+                <Column TData="string" Title="等級" Width="90">
+                    <span class="@GetLevelClass(context.Rank)">@(string.IsNullOrEmpty(context.Level) ? "－" : context.Level)</span>
+                </Column>
+                <Column TData="string" Title="記錄器" Width="260" Ellipsis>@context.Logger</Column>
+                <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
+                <Column TData="string" Title="TraceId" Width="130" Ellipsis>@context.TraceId</Column>
+            </ColumnDefinitions>
+            <ExpandTemplate Context="rowData">
+                <div class="log-view-expand-actions">
+                    <Button Size="@ButtonSize.Small" OnClick="@(() => OnAroundEntryAsync(rowData.Data))">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="schedule" /><span>查前後 1 分鐘</span></span>
+                    </Button>
+                </div>
+                <pre class="log-view-raw">@rowData.Data.Raw</pre>
+            </ExpandTemplate>
+        </Table>
+        <div class="log-view-footnote">
+            點一下任一列即複製該筆原文；左側箭頭展開看完整內容與堆疊。時間依伺服器時間，最新在前。
+        </div>
+    </div>
+
+    <Modal Title="@AiModalTitle"
+           Class="form-modal-large"
+           Visible="@aiModalVisible"
+           MaskClosable="false"
+           Footer="null"
+           OnCancel="OnAiModalCancel">
+        <div class="log-ai-body">
+            @if (aiState == AiState.Running)
+            {
+                <div class="log-ai-status">
+                    <Spin Size="SpinSize.Small" />
+                    <span>AI 正在分析 @aiPrompt?.IncludedEntryCount 筆日誌…已等待 @aiElapsedSeconds 秒。關閉視窗會取消這次分析。</span>
+                </div>
+                <div class="log-ai-streaming">@(aiStreaming.Length == 0 ? "正在等待 AI 回應…" : aiStreaming)</div>
+            }
+            else if (aiState == AiState.Failed)
+            {
+                <div class="log-ai-error" role="alert">@aiErrorMessage</div>
+            }
+            else if (aiState == AiState.Succeeded)
+            {
+                <div class="log-ai-actions">
+                    <Button Type="ButtonType.Default" OnClick="OnAiCopyAsync">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製結果</span></span>
+                    </Button>
+                    <Button Type="ButtonType.Default" Loading="@isAiExporting" OnClick="OnAiExportPdfAsync">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="picture_as_pdf" /><span>匯出 PDF</span></span>
+                    </Button>
+                </div>
+
+                <dl class="log-ai-meta">
+                    @foreach (var (label, value) in aiMeta)
+                    {
+                        <div class="log-ai-meta-row"><dt>@label</dt><dd>@value</dd></div>
+                    }
+                </dl>
+
+                <div class="log-ai-report markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(aiMarkdown))</div>
+            }
+        </div>
+    </Modal>
+}

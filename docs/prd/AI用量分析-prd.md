@@ -1,8 +1,8 @@
 ﻿# AI 用量分析 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.120
+- 現行系統版本：0.4.121
 - 首次實作版本：0.4.80
 - 最後核對日期：2026/10/14
 
@@ -31,6 +31,7 @@
 | 語音轉錄 | 2 | 音訊秒數 | `TranscriptionJobRunner` | N（音檔每 15 分鐘一段） |
 | AI 問答 | 3 | token | `AiChatService` | 提問與「修改後重新產生」各 1 |
 | 待辦事項擷取 | 4 | token | `TodoExtractionService` | 1 |
+| AI 日誌分析（0.4.121） | 5 | token | `DiagnosticAiService`（監控與診斷 → 日誌檢視） | 1（不帶會議／專案，明細「對象」為「—」） |
 
 ⚠️ 「一次使用者動作 = 一次呼叫」是錯的，帳本記的是**實際呼叫**。
 
@@ -40,7 +41,7 @@
 |------|------|
 | UI 路由 | `/ai-usage`（`Components/Pages/AiUsages/AiUsagePage.razor`，掛 `MainLayout`，內容在 `AiUsageView`） |
 | REST API | 無 |
-| 選單路徑 | 系統管理（`Menu.json` id=3）→ 監控與診斷（id=36，0.4.120 起）→ AI 用量分析（id=33，icon `monetization_on`）。同組的系統健康監控、日誌等級設定、資料庫用量只限管理者；本頁仍是可勾給角色的頁面權限 |
+| 選單路徑 | 系統管理（`Menu.json` id=3）→ 監控與診斷（id=36，0.4.120 起）→ AI 用量分析（id=33，icon `monetization_on`）。同組的系統健康監控、日誌檢視（0.4.121）、日誌等級設定、資料庫用量只限管理者；本頁仍是可勾給角色的頁面權限 |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[33] = MagicObjectHelper.角色_AI用量分析` |
 | 權限鍵 | 頁面鍵「AI 用量分析」（`MagicObjectHelper.角色_AI用量分析`，**值與 `Menu.json` 的 name 一字不差、尾端不加空白**）；單一開關、沒有動作鍵（`RolePermissionService.GetRoleListPermissionAllName` 中為單元素群組）；管理員短路 |
 | 主要使用者 | 管理者。預設角色目錄（`RolePresets`）中只有「管理者」含此鍵，一般使用者／檢視者／主管都沒有 |
@@ -49,7 +50,7 @@
 
 由上而下：
 
-1. **工具列**：左側「重新整理」；右側「功能」下拉（全部功能＋五個功能別，`AiUsageFeatureText.Describe` 的文字）。
+1. **工具列**：左側「重新整理」；右側「功能」下拉（全部功能＋六個功能別（0.4.121 起含「AI 日誌分析」），`AiUsageFeatureText.Describe` 的文字）。
 2. **說明列**：「統計起始 yyyy/MM/dd，此日之前的呼叫沒有留下用量資料。」帳本空白時改為「尚未記錄到任何 AI 呼叫…不回填先前的用量」。啟用換算且已有匯率時附「匯率 1 USD = 31.8636 TWD」（小數四位）。
    - ⚠️ 統計起始日**刻意不套功能篩選**：它講的是帳本從哪天開始記，套了的話選「待辦事項擷取」會顯示較晚的日期，像是之前的紀錄遺失。
 3. **警示條**（條件顯示）：
@@ -176,13 +177,14 @@
 - **0.4.91**：功能下拉連動整頁；曲線由「文字生成 vs 語音轉錄每日金額」改為「本月累計 vs 上月同期累計」；期間下拉移到明細表旁。
 - **0.4.93**：`ExchangeRateSnapshot.Source`（Live／Ledger／Fallback）與 `ExchangeRateCache.LastFailureAt`，供系統健康度判斷匯率狀態。
 - **0.4.97 起**：儀表板的會議時數取自本帳本的轉錄秒數；0.4.99 起啟動時以帳本中最早的轉錄紀錄回推舊會議的上傳者（0.4.99 為 `ProjectAccessBackfillService`，現為 `TeamConversionService.BackfillMeetingCreatorsAsync`）。
+- **0.4.121**：新增功能別 `AiUsageFeature.LogAnalysis = 5`（「AI 日誌分析」，token 計費），由 `DiagnosticAiService` 寫帳（成功／失敗／取消都記，不帶會議／專案）；功能下拉自動多一項。
 
 ### 程式
 
 - 頁面與檢視：`src/MeetingRecord/MeetingRecord.Web/Components/Pages/AiUsages/AiUsagePage.razor`、`src/MeetingRecord/MeetingRecord.Web/Components/Views/AiUsages/AiUsageView.razor`（`.razor.cs`：`OnInitializedAsync` 權限檢查、`ReloadAsync`、`LoadRowsAsync`、`OnFeatureChangedAsync`、`OnTrendDaysChangedAsync`）
 - 讀取服務：`src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiUsageAnalysisService.cs`（`GetSummaryAsync`、`GetRecentCallsAsync`、`BuildCards`、`BuildCumulativeCost`、`BuildSlices`、`CostView`）、`AiUsageModels.cs`
 - 純函式：`AiUsageMetrics`（`BuildMonthToDateRanges`、`BuildMonthToDateCumulative`、`CalculateChangeRate`、`ToChartCents`、`FormatConverted`）、`AiUsagePricing`、`AiUsageExchange`（同目錄）
-- 寫入：`AiUsageRecorder.cs`（`AiUsageRecorder.RecordAsync`、`AiUsageEntry`、`AiTokenUsage`、`AiUsageAttribution.Resolve`）；呼叫點 `MeetingDraftJobRunner`、`TranscriptionJobRunner`、`AiChatService`、`TodoExtractionService`
+- 寫入：`AiUsageRecorder.cs`（`AiUsageRecorder.RecordAsync`、`AiUsageEntry`、`AiTokenUsage`、`AiUsageAttribution.Resolve`）；呼叫點 `MeetingDraftJobRunner`、`TranscriptionJobRunner`、`AiChatService`、`TodoExtractionService`、`DiagnosticAiService`（0.4.121，`src/MeetingRecord/MeetingRecord.Business/Services/Diagnostics/`）
 - 匯率：`ExchangeRate.cs`（`ExchangeRateSnapshot`、`ExchangeRateSource`、`ExchangeRateCache`）、`ExchangeRateFetcher.cs`、`ExchangeRateResponseParser.cs`；`src/MeetingRecord/MeetingRecord.Web/BackgroundServices/ExchangeRateBackgroundService.cs`（`ExecuteAsync`、`SeedFromLedgerAsync`、`SeedFromFallback`）
 - 用量取得：`src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/AzureOpenAiTextGenerationProvider.cs`（`ExtractUsage`）、`ITextGenerationProvider.GenerateAsync`
 - 資料：`src/MeetingRecord/MeetingRecord.AccessDatas/Models/AiUsageLog.cs`；`src/MeetingRecord/MeetingRecord.Share/Enums/AiUsageFeature.cs`（`AiUsageFeatureText.Describe`／`IsTokenBased`）、`AiUsageOutcome.cs`

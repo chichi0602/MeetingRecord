@@ -32,6 +32,9 @@ public enum AiUsageFeature
 
     /// <summary>從會議紀錄抽出待辦事項。一次固定一次。</summary>
     TodoExtraction = 4,
+
+    /// <summary>AI 日誌分析（0.4.121，監控與診斷 → 日誌檢視）。一次分析固定一次，最多送最新 100 筆日誌。</summary>
+    LogAnalysis = 5,
 }
 
 /// <summary>功能別的顯示文字與計費單位判斷（UI、日誌與計價共用）。</summary>
@@ -44,6 +47,7 @@ public static class AiUsageFeatureText
         AiUsageFeature.Transcription => "語音轉錄",
         AiUsageFeature.AiChat => "AI 問答",
         AiUsageFeature.TodoExtraction => "待辦事項擷取",
+        AiUsageFeature.LogAnalysis => "AI 日誌分析",
         _ => "未知",
     };
 

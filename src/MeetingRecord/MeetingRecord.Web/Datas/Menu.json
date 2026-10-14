@@ -71,6 +71,12 @@
             "url": "/system-health"
           },
           {
+            "id": 37,
+            "name": "日誌檢視",
+            "icon": "description",
+            "url": "/logs"
+          },
+          {
             "id": 38,
             "name": "日誌等級設定",
             "icon": "tune",

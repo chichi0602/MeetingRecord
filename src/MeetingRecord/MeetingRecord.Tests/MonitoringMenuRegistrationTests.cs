@@ -40,6 +40,7 @@ public sealed class MonitoringMenuRegistrationTests
 
     [Theory]
     [InlineData(34, MagicObjectHelper.角色_系統健康監控, "/system-health")]
+    [InlineData(37, MagicObjectHelper.角色_日誌檢視, "/logs")]
     [InlineData(38, MagicObjectHelper.角色_日誌等級設定, "/log-level-setting")]
     [InlineData(30, MagicObjectHelper.角色_資料庫用量, "/database-usage")]
     public void MenuJson_AdminOnlyPagesShouldSitUnderMonitoringGroup(int id, string name, string url)
@@ -86,6 +87,7 @@ public sealed class MonitoringMenuRegistrationTests
         {
             MagicObjectHelper.已退役權限鍵_系統健康度,
             MagicObjectHelper.角色_系統健康監控,
+            MagicObjectHelper.角色_日誌檢視,
             MagicObjectHelper.角色_日誌等級設定,
             MagicObjectHelper.角色_資料庫用量,
             MagicObjectHelper.角色_監控與診斷,
@@ -95,6 +97,7 @@ public sealed class MonitoringMenuRegistrationTests
 
         var ids = Flatten(items).Select(x => x.Id).ToList();
         Assert.DoesNotContain(SystemHealthId, ids);
+        Assert.DoesNotContain(37, ids);
         Assert.DoesNotContain(38, ids);
         Assert.DoesNotContain(30, ids);
         // 底下沒有任何看得到的項目，群組與「系統管理」也要一起藏起來。

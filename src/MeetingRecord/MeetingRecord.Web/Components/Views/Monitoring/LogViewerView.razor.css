@@ -1,0 +1,215 @@
+/* 日誌檢視（0.4.121）。工具列、面板照既有清單頁的寫法複製（scoped CSS 沒有共用元件）；
+   顏色一律用 --oat-* 權杖，見介面視覺設計規範。 */
+.log-view-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.log-view-toolbar-left,
+.log-view-toolbar-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.log-view-range-separator {
+    color: var(--oat-ink-mid);
+}
+
+.log-view-quick-ranges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.log-view-text-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.log-view-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.log-view-note {
+    margin-bottom: 10px;
+    color: var(--oat-ink-mid);
+    font-size: 0.85rem;
+}
+
+.log-view-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 10px;
+    padding: 8px 14px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 10px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.log-view-warning ::deep .material-icons-outlined {
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.log-view-panel {
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+/* 整列可點（點一下複製該筆原文）。 */
+.log-view-panel ::deep .log-view-row {
+    cursor: pointer;
+}
+
+.log-view-time {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 等級膠囊：形狀比照全站狀態膠囊；錯誤／警告用狀態色，其餘中性。 */
+.log-level {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.log-level-info {
+    color: var(--oat-ink);
+}
+
+.log-level-warn {
+    border-color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.log-level-error {
+    border-color: var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.log-view-expand-actions {
+    margin-bottom: 8px;
+}
+
+.log-view-raw {
+    max-height: 320px;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border: 1px solid var(--oat-200);
+    border-radius: 8px;
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    cursor: text;
+}
+
+.log-view-footnote {
+    margin-top: 10px;
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+}
+
+/* ───────── AI 分析對話窗 ───────── */
+.log-ai-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 40vh;
+}
+
+.log-ai-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--oat-ink-mid);
+    font-size: 0.85rem;
+}
+
+/* 串流中先顯示純文字，完成後才排成 Markdown（每個 token 都跑一次 Markdig 不划算，比照 AI 問答）。 */
+.log-ai-streaming {
+    padding: 12px 14px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-ai-error {
+    padding: 10px 14px;
+    border-left: 4px solid var(--oat-err);
+    border-radius: 10px;
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+    font-size: 0.85rem;
+}
+
+.log-ai-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.log-ai-meta {
+    margin: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-50);
+    font-size: 0.8rem;
+}
+
+.log-ai-meta-row {
+    display: flex;
+    gap: 8px;
+    margin: 2px 0;
+}
+
+.log-ai-meta dt {
+    flex: none;
+    min-width: 5em;
+    color: var(--oat-ink-mid);
+    font-weight: 600;
+}
+
+.log-ai-meta dd {
+    margin: 0;
+    color: var(--oat-ink);
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+    .log-view-text-filters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

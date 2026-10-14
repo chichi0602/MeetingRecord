@@ -1,8 +1,8 @@
 ﻿# 系統健康監控 PRD
 
-- 文件版本：2.2
+- 文件版本：2.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.120
+- 現行系統版本：0.4.121
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.93 擴充為「系統健康度」，0.4.120 改名「系統健康監控」並改為只限管理者）
 - 最後核對日期：2026/10/14
 
@@ -78,4 +78,4 @@
 - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddConfiguredHealthChecks`，探針 tag `live`/`ready`）
 - `src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 註冊中介軟體` 內的 `app.MapHealthChecks` `/health/live`、`/health/ready`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`AdminOnlyMenuIds`）、`MeetingRecord.Business/Services/Other/RbacBackfillService.cs`（`RetireLegacyPermissionKeysAsync`）
-- 交叉連結：[系統健康監控（機制）](../features/系統健康監控.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)、同組的 [日誌等級設定 PRD](日誌等級設定-prd.md)、[資料庫用量 PRD](資料庫用量-prd.md)
+- 交叉連結：[系統健康監控（機制）](../features/系統健康監控.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)、同組的 [日誌檢視 PRD](日誌檢視-prd.md)（0.4.121，查完整日誌）、[日誌等級設定 PRD](日誌等級設定-prd.md)、[資料庫用量 PRD](資料庫用量-prd.md)

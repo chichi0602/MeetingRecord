@@ -43,6 +43,8 @@ public sealed class MenuIconTests
         "analytics",
         "tune",
         "data_usage",
+        // 日誌檢視（0.4.121）。
+        "description",
     };
 
     [Fact]

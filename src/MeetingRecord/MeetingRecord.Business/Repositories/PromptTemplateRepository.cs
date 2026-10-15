@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Repositories;
 
@@ -14,10 +16,12 @@ namespace MeetingRecord.Business.Repositories;
 public class PromptTemplateRepository
 {
     private readonly BackendDBContext context;
+    private readonly IAuditLogService auditLogService;
 
-    public PromptTemplateRepository(BackendDBContext context)
+    public PromptTemplateRepository(BackendDBContext context, IAuditLogService auditLogService)
     {
         this.context = context;
+        this.auditLogService = auditLogService;
     }
 
     #region 查詢方法
@@ -91,6 +95,7 @@ public class PromptTemplateRepository
         await context.PromptTemplate.AddAsync(promptTemplate);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.PromptTemplateCreate, promptTemplate.Id, $"name={promptTemplate.Name}; via={AuditVia.Api}");
         return promptTemplate;
     }
 
@@ -108,6 +113,7 @@ public class PromptTemplateRepository
         context.Entry(existing).CurrentValues.SetValues(promptTemplate);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.PromptTemplateUpdate, promptTemplate.Id, $"name={existing.Name}; via={AuditVia.Api}");
         return true;
     }
 
@@ -122,8 +128,13 @@ public class PromptTemplateRepository
         context.PromptTemplate.Remove(promptTemplate);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.PromptTemplateDelete, id, $"name={promptTemplate.Name}; via={AuditVia.Api}");
         return true;
     }
+
+    /// <summary>稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 從 API 的 claims 取得。</summary>
+    private Task AuditAsync(string action, int id, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(PromptTemplate), targetId: id.ToString(), detail: detail);
 
     #endregion
 }

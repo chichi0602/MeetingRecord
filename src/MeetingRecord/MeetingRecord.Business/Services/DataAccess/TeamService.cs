@@ -8,6 +8,7 @@ using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -15,6 +16,7 @@ public class TeamService
 {
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
     public IMapper Mapper { get; }
     public ILogger<TeamService> Logger { get; }
@@ -23,12 +25,14 @@ public class TeamService
         BackendDBContext context,
         IMapper mapper,
         ILogger<TeamService> logger,
-        ProjectAccessService projectAccess)
+        ProjectAccessService projectAccess,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
     }
 
     public async Task<DataRequestResult<TeamAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -134,6 +138,11 @@ public class TeamService
         return Mapper.Map<TeamAdapterModel>(item);
     }
 
+    // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定 ─────────
+
+    private Task AuditAsync(string action, int id, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Team), targetId: id.ToString(), detail: detail);
+
     public async Task<VerifyRecordResult> AddAsync(TeamAdapterModel paraObject)
     {
         Logger.LogInformation("Creating team. Name={TeamName}", paraObject.Name);
@@ -150,6 +159,7 @@ public class TeamService
             paraObject.Id = itemParameter.Id;
             CleanTrackingHelper.Clean<Team>(context);
 
+            await AuditAsync(AuditActions.TeamCreate, itemParameter.Id, $"name={itemParameter.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Team created successfully. TeamId={TeamId}, Name={TeamName}", itemParameter.Id, itemParameter.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -186,6 +196,7 @@ public class TeamService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Team>(context);
 
+            await AuditAsync(AuditActions.TeamUpdate, itemData.Id, $"name={itemData.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Team updated successfully. TeamId={TeamId}, Name={TeamName}", itemData.Id, itemData.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -227,6 +238,7 @@ public class TeamService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Team>(context);
 
+            await AuditAsync(AuditActions.TeamDelete, id, $"name={item.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Team deleted successfully. TeamId={TeamId}, Name={TeamName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -347,6 +359,7 @@ public class TeamService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Team>(context);
 
+            await AuditAsync(value ? AuditActions.TeamEnable : AuditActions.TeamDisable, id, $"name={item.Name}");
             Logger.LogInformation("Team state updated. Id={Id}, Value={Value}", id, value);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -394,17 +407,36 @@ public class TeamService
         var validIds = await context.MyUser.Where(x => wanted.Contains(x.Id)).Select(x => x.Id).ToListAsync();
         var rows = await context.UserTeam.Where(x => x.TeamId == teamId).ToListAsync();
 
-        context.UserTeam.RemoveRange(rows.Where(x => !validIds.Contains(x.MyUserId)));
+        var removed = rows.Where(x => !validIds.Contains(x.MyUserId)).ToList();
+        context.UserTeam.RemoveRange(removed);
         var existing = rows.Select(x => x.MyUserId).ToHashSet();
-        context.UserTeam.AddRange(validIds.Where(id => !existing.Contains(id))
-            .Select(id => new UserTeam { MyUserId = id, TeamId = teamId }));
+        var added = validIds.Where(id => !existing.Contains(id)).ToList();
+        context.UserTeam.AddRange(added.Select(id => new UserTeam { MyUserId = id, TeamId = teamId }));
         await context.SaveChangesAsync();
         CleanTrackingHelper.Clean<UserTeam>(context);
+
+        // 1.0.34：真的有增減才記。
+        if (added.Count > 0 || removed.Count > 0)
+        {
+            await AuditAsync(
+                AuditActions.TeamMembersChange,
+                teamId,
+                $"added={JoinIds(added)}; removed={JoinIds(removed.Select(x => x.MyUserId))}");
+        }
 
         Logger.LogInformation("Data group members synced. TeamId={TeamId}, Count={Count}", teamId, validIds.Count);
     }
 
     public sealed record MemberOption(int Id, string Label);
+
+    /// <summary>稽核摘要列出的編號最多幾個，超過以「…」表示。</summary>
+    private const int MaxAuditIds = 50;
+
+    private static string JoinIds(IEnumerable<int> ids)
+    {
+        var list = ids.OrderBy(x => x).ToList();
+        return string.Join(",", list.Take(MaxAuditIds)) + (list.Count > MaxAuditIds ? ",…" : string.Empty);
+    }
 
     /// <summary>
     /// 取得所有啟用中的團隊名稱（依名稱排序），供其他頁面下拉選取使用。

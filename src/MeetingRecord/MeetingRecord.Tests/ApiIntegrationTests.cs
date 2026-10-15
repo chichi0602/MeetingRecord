@@ -521,6 +521,14 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.True(getResult.Success);
         Assert.Equal(createDto.Title, getResult.Data?.Title);
+
+        // 1.0.34：API 的新增也要留稽核，操作者是 API 登入者、摘要標 via=Api。
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+        var audit = await db.AuditLog.AsNoTracking().SingleAsync(x => x.Action == AuditActions.ProjectCreate && x.TargetId == createResult.Data.Id.ToString());
+        Assert.Equal("support", audit.ActorAccount);
+        Assert.NotNull(audit.ActorUserId);
+        Assert.EndsWith("via=Api", audit.Detail);
     }
 
     [Fact]

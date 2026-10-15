@@ -5,14 +5,17 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
 public class CategoryService
 {
     private readonly BackendDBContext context;
+    private readonly IAuditLogService auditLogService;
 
     public IMapper Mapper { get; }
     public ILogger<CategoryService> Logger { get; }
@@ -20,11 +23,13 @@ public class CategoryService
     public CategoryService(
         BackendDBContext context,
         IMapper mapper,
-        ILogger<CategoryService> logger)
+        ILogger<CategoryService> logger,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
+        this.auditLogService = auditLogService;
     }
 
     public async Task<DataRequestResult<CategoryAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -122,6 +127,11 @@ public class CategoryService
         return Mapper.Map<CategoryAdapterModel>(item);
     }
 
+    // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定 ─────────
+
+    private Task AuditAsync(string action, int id, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Category), targetId: id.ToString(), detail: detail);
+
     public async Task<VerifyRecordResult> AddAsync(CategoryAdapterModel paraObject)
     {
         Logger.LogInformation("Creating category. Name={CategoryName}", paraObject.Name);
@@ -138,6 +148,7 @@ public class CategoryService
             paraObject.Id = itemParameter.Id;
             CleanTrackingHelper.Clean<Category>(context);
 
+            await AuditAsync(AuditActions.CategoryCreate, itemParameter.Id, $"name={itemParameter.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Category created successfully. CategoryId={CategoryId}, Name={CategoryName}", itemParameter.Id, itemParameter.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -174,6 +185,7 @@ public class CategoryService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Category>(context);
 
+            await AuditAsync(AuditActions.CategoryUpdate, itemData.Id, $"name={itemData.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Category updated successfully. CategoryId={CategoryId}, Name={CategoryName}", itemData.Id, itemData.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -206,6 +218,7 @@ public class CategoryService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Category>(context);
 
+            await AuditAsync(AuditActions.CategoryDelete, id, $"name={item.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Category deleted successfully. CategoryId={CategoryId}, Name={CategoryName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -294,6 +307,7 @@ public class CategoryService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Category>(context);
 
+            await AuditAsync(value ? AuditActions.CategoryEnable : AuditActions.CategoryDisable, id, $"name={item.Name}");
             Logger.LogInformation("Category state updated. Id={Id}, Value={Value}", id, value);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -321,15 +335,34 @@ public class CategoryService
         var validIds = await context.Team.Where(x => wanted.Contains(x.Id)).Select(x => x.Id).ToListAsync();
         var rows = await context.CategoryTeam.Where(x => x.CategoryId == categoryId).ToListAsync();
 
-        context.CategoryTeam.RemoveRange(rows.Where(x => !validIds.Contains(x.TeamId)));
+        var removed = rows.Where(x => !validIds.Contains(x.TeamId)).ToList();
+        context.CategoryTeam.RemoveRange(removed);
         var existing = rows.Select(x => x.TeamId).ToHashSet();
-        context.CategoryTeam.AddRange(validIds.Where(id => !existing.Contains(id))
-            .Select(id => new CategoryTeam { CategoryId = categoryId, TeamId = id }));
+        var added = validIds.Where(id => !existing.Contains(id)).ToList();
+        context.CategoryTeam.AddRange(added.Select(id => new CategoryTeam { CategoryId = categoryId, TeamId = id }));
         await context.SaveChangesAsync();
         CleanTrackingHelper.Clean<CategoryTeam>(context);
+
+        // 1.0.34：真的有增減才記。
+        if (added.Count > 0 || removed.Count > 0)
+        {
+            await AuditAsync(
+                AuditActions.CategoryTeamsChange,
+                categoryId,
+                $"added={JoinIds(added)}; removed={JoinIds(removed.Select(x => x.TeamId))}");
+        }
     }
 
     public sealed record TeamOption(int Id, string Name);
+
+    /// <summary>稽核摘要列出的編號最多幾個，超過以「…」表示。</summary>
+    private const int MaxAuditIds = 50;
+
+    private static string JoinIds(IEnumerable<int> ids)
+    {
+        var list = ids.OrderBy(x => x).ToList();
+        return string.Join(",", list.Take(MaxAuditIds)) + (list.Count > MaxAuditIds ? ",…" : string.Empty);
+    }
 
     /// <summary>
     /// 取得所有啟用中的分類名稱（依名稱排序），供其他頁面下拉選取使用。

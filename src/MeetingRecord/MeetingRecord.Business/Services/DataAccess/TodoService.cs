@@ -8,6 +8,7 @@ using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -21,6 +22,7 @@ public class TodoService
 {
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
     public IMapper Mapper { get; }
     public ILogger<TodoService> Logger { get; }
@@ -29,10 +31,12 @@ public class TodoService
         BackendDBContext context,
         IMapper mapper,
         ILogger<TodoService> logger,
-        ProjectAccessService projectAccess)
+        ProjectAccessService projectAccess,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
         Mapper = mapper;
         Logger = logger;
     }
@@ -195,12 +199,18 @@ public class TodoService
 
     #region 新增 / 修改 / 刪除
 
-    public async Task<VerifyRecordResult> AddAsync(TodoAdapterModel paraObject)
+    /// <param name="via">入口（1.0.34 稽核用）：AI 抽出待辦批次加入時傳 <see cref="AuditVia.AiExtract"/>。</param>
+    public async Task<VerifyRecordResult> AddAsync(TodoAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Creating todo. Title={TodoTitle}, ProjectId={ProjectId}", paraObject.Title, paraObject.ProjectId);
 
         if (!(await projectAccess.GetAsync()).CanViewProject(paraObject.ProjectId))
         {
+            if (await context.Project.AnyAsync(x => x.Id == paraObject.ProjectId))
+            {
+                await AuditDataScopeDeniedAsync(nameof(Project), paraObject.ProjectId, "TodoCreate");
+            }
+
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
         }
 
@@ -215,6 +225,7 @@ public class TodoService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
 
+            await AuditAsync(AuditActions.TodoCreate, itemParameter.Id, $"title={itemParameter.Title}; projectId={itemParameter.ProjectId}; via={via}");
             Logger.LogInformation("Todo created successfully. TodoId={TodoId}, Title={TodoTitle}", itemParameter.Id, itemParameter.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -249,6 +260,7 @@ public class TodoService
             if (!access.CanViewProject(item.ProjectId) || !access.CanViewProject(paraObject.ProjectId))
             {
                 Logger.LogWarning("Todo update denied by project access. TodoId={TodoId}", paraObject.Id);
+                await AuditDataScopeDeniedAsync(nameof(Todo), paraObject.Id, "Update");
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的待辦事項。");
             }
 
@@ -264,6 +276,8 @@ public class TodoService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
 
+            var moved = item.ProjectId != itemData.ProjectId ? $"; movedFrom={item.ProjectId}" : string.Empty;
+            await AuditAsync(AuditActions.TodoUpdate, itemData.Id, $"title={itemData.Title}; projectId={itemData.ProjectId}{moved}; via={AuditVia.Web}");
             Logger.LogInformation("Todo updated successfully. TodoId={TodoId}, Title={TodoTitle}", itemData.Id, itemData.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -287,8 +301,16 @@ public class TodoService
         {
             CleanTrackingHelper.Clean<Todo>(context);
             Todo? item = await context.Todo.FirstOrDefaultAsync(x => x.Id == id);
-            if (item == null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
+            if (item == null)
             {
+                return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項。");
+            }
+
+            if (!(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
+            {
+                // 對使用者仍當成不存在；稽核記下有人想改看不到的待辦（1.0.34）。
+                CleanTrackingHelper.Clean<Todo>(context);
+                await AuditDataScopeDeniedAsync(nameof(Todo), id, isCompleted ? "Complete" : "Reopen");
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項。");
             }
 
@@ -301,6 +323,7 @@ public class TodoService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
 
+            await AuditAsync(isCompleted ? AuditActions.TodoComplete : AuditActions.TodoReopen, id, $"title={item.Title}; status={item.Status}");
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)
@@ -326,6 +349,11 @@ public class TodoService
             if (item == null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
             {
                 Logger.LogWarning("Todo deletion rejected because record was not found or not visible. TodoId={TodoId}", id);
+                if (item is not null)
+                {
+                    await AuditDataScopeDeniedAsync(nameof(Todo), id, "Delete");
+                }
+
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的待辦事項。");
             }
 
@@ -334,6 +362,7 @@ public class TodoService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
 
+            await AuditAsync(AuditActions.TodoDelete, id, $"title={item.Title}; projectId={item.ProjectId}; via={AuditVia.Web}");
             Logger.LogInformation("Todo deleted successfully. TodoId={TodoId}, Title={TodoTitle}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -500,6 +529,17 @@ public class TodoService
     }
 
     #endregion
+
+    // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定 ─────────
+
+    private Task AuditAsync(string action, int todoId, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Todo), targetId: todoId.ToString(), detail: detail);
+
+    /// <summary>資料範圍擋下的寫入（看不到的待辦，或指定了看不到的專案）。</summary>
+    private Task AuditDataScopeDeniedAsync(string targetType, int targetId, string operation)
+        => auditLogService.WriteForCurrentUserAsync(
+            AuditActions.PermissionDenied, success: false, targetType: targetType, targetId: targetId.ToString(),
+            detail: $"reason=DataScope; op={operation}");
 }
 
 /// <summary>

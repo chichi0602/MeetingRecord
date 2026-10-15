@@ -474,7 +474,8 @@ public sealed class PromptTemplateServiceTests
             return new PromptTemplateService(
                 Context,
                 mapper,
-                loggerFactory.CreateLogger<PromptTemplateService>());
+                loggerFactory.CreateLogger<PromptTemplateService>(),
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")));
         }
 
         public async Task<PromptTemplate> AddPromptAsync(

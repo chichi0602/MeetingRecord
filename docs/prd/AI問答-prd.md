@@ -1,8 +1,8 @@
 ﻿# AI 問答 PRD
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.34
 - 首次實作版本：0.4.51
 - 最後核對日期：2026/10/15
 
@@ -147,6 +147,12 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 - 附件規則畫面與服務層各擋一次（`AiChatService.ValidateAttachments`），畫面擋是即時提示，服務層擋是因為畫面擋不住所有呼叫路徑。
 - 回答渲染：只經 `MarkdownRenderer`（見第四節設計決策），無原始 HTML、無危險連結通訊協定。
 - 刪除專案／會議（UI 與 API）一律清掉對話與附件，避免「同一個編號被重新配給後讀到舊對話」（0.4.115 修正的高嚴重度問題；API 新增一律由資料庫配號）。
+
+### 稽核（1.0.34）
+
+- `AiChatService`：`AiChat.Create`（使用者按「新對話」；開視窗時自動建立的第一段不記）、`AiChat.Rename`、`AiChat.ClearHistory`、`AiChat.MessageUpdate`（只記位置與字數）、`AiChat.Regenerate`。目標是對話所屬的專案或會議，摘要帶對話編號，**不記任何問答內容**。
+- `AiChatModal`：匯出 PDF 寫 `AiChat.ExportPdf`（單則或整段），下載文件附件寫 `AiChat.AttachmentDownload`（圖片預覽不記）。
+- 看不到的專案或會議被嘗試做上述寫入時寫 `Permission.Denied`（`op=AiChat…`）；讀取不記。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 

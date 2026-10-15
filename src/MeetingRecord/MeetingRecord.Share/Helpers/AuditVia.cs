@@ -9,6 +9,9 @@ public static class AuditVia
     public const string Web = "Web";
     public const string Api = "Api";
     public const string Blazor = "Blazor";
+
+    /// <summary>AI 抽出待辦後批次加入（1.0.34）。</summary>
+    public const string AiExtract = "AiExtract";
 }
 
 /// <summary>

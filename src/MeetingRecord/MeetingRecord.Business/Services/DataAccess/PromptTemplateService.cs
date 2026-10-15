@@ -8,6 +8,7 @@ using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -18,6 +19,7 @@ namespace MeetingRecord.Business.Services.DataAccess;
 public class PromptTemplateService
 {
     private readonly BackendDBContext context;
+    private readonly IAuditLogService auditLogService;
 
     public IMapper Mapper { get; }
     public ILogger<PromptTemplateService> Logger { get; }
@@ -25,11 +27,13 @@ public class PromptTemplateService
     public PromptTemplateService(
         BackendDBContext context,
         IMapper mapper,
-        ILogger<PromptTemplateService> logger)
+        ILogger<PromptTemplateService> logger,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         Mapper = mapper;
         Logger = logger;
+        this.auditLogService = auditLogService;
     }
 
     public async Task<DataRequestResult<PromptTemplateAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -134,6 +138,11 @@ public class PromptTemplateService
         return Mapper.Map<PromptTemplateAdapterModel>(item);
     }
 
+    // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定 ─────────
+
+    private Task AuditAsync(string action, int id, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(PromptTemplate), targetId: id.ToString(), detail: detail);
+
     public async Task<VerifyRecordResult> AddAsync(PromptTemplateAdapterModel paraObject)
     {
         Logger.LogInformation("Creating prompt template. Name={PromptTemplateName}", paraObject.Name);
@@ -149,6 +158,8 @@ public class PromptTemplateService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
+            // 只記名稱，不記提示詞本文。
+            await AuditAsync(AuditActions.PromptTemplateCreate, itemParameter.Id, $"name={itemParameter.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Prompt template created successfully. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", itemParameter.Id, itemParameter.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -185,6 +196,7 @@ public class PromptTemplateService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
+            await AuditAsync(AuditActions.PromptTemplateUpdate, itemData.Id, $"name={itemData.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Prompt template updated successfully. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", itemData.Id, itemData.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -217,6 +229,7 @@ public class PromptTemplateService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
+            await AuditAsync(AuditActions.PromptTemplateDelete, id, $"name={item.Name}; via={AuditVia.Web}");
             Logger.LogInformation("Prompt template deleted successfully. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -260,6 +273,7 @@ public class PromptTemplateService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
+            await AuditAsync(isEnabled ? AuditActions.PromptTemplateEnable : AuditActions.PromptTemplateDisable, id, $"name={item.Name}");
             Logger.LogInformation("Prompt template enabled state updated. PromptTemplateId={PromptTemplateId}, IsEnabled={IsEnabled}", id, isEnabled);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -320,6 +334,13 @@ public class PromptTemplateService
             var message = skipped == 0
                 ? $"已新增 {toAdd.Count} 筆內建範本。"
                 : $"已新增 {toAdd.Count} 筆內建範本，略過 {skipped} 筆（已有同名提示詞）。";
+
+            if (toAdd.Count > 0)
+            {
+                await auditLogService.WriteForCurrentUserAsync(
+                    AuditActions.PromptTemplateAddPresets, success: true, targetType: nameof(PromptTemplate), targetId: "*",
+                    detail: $"added={toAdd.Count}; skipped={skipped}");
+            }
 
             Logger.LogInformation("Prompt template presets applied. Added={Added}, Skipped={Skipped}", toAdd.Count, skipped);
             return VerifyRecordResultFactory.Build(true, message);

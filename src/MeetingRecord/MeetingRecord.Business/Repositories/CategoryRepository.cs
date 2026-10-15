@@ -1,17 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Repositories;
 
 public class CategoryRepository
 {
     private readonly BackendDBContext context;
+    private readonly IAuditLogService auditLogService;
 
-    public CategoryRepository(BackendDBContext context)
+    public CategoryRepository(BackendDBContext context, IAuditLogService auditLogService)
     {
         this.context = context;
+        this.auditLogService = auditLogService;
     }
 
     #region 查詢方法
@@ -83,6 +87,7 @@ public class CategoryRepository
         await context.Category.AddAsync(category);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.CategoryCreate, category.Id, $"name={category.Name}; via={AuditVia.Api}");
         return category;
     }
 
@@ -100,6 +105,7 @@ public class CategoryRepository
         context.Entry(existing).CurrentValues.SetValues(category);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.CategoryUpdate, category.Id, $"name={existing.Name}; via={AuditVia.Api}");
         return true;
     }
 
@@ -114,8 +120,13 @@ public class CategoryRepository
         context.Category.Remove(category);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.CategoryDelete, id, $"name={category.Name}; via={AuditVia.Api}");
         return true;
     }
+
+    /// <summary>稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 從 API 的 claims 取得。</summary>
+    private Task AuditAsync(string action, int id, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Category), targetId: id.ToString(), detail: detail);
 
     #endregion
 }

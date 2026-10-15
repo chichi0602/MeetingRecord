@@ -139,7 +139,8 @@ public sealed class TeamServiceTests
                 Context,
                 mapper,
                 loggerFactory.CreateLogger<TeamService>(),
-                TestProjectAccess.Admin(Context));
+                TestProjectAccess.Admin(Context),
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")));
         }
 
         public async Task<Team> AddTeamAsync(string name, string? code)

@@ -16,6 +16,7 @@ using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
 
@@ -1436,6 +1437,104 @@ public sealed class MeetingServiceTests
 
     #endregion
 
+    #region 稽核（1.0.34）
+
+    [Fact]
+    public async Task Audit_CreateUpdateDelete_ShouldUseCurrentUserAndVia()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        fixture.CurrentUserService.CurrentUser = new CurrentUser { Id = 7, Name = "王小明", Account = "wang" };
+        var service = fixture.CreateService();
+        var model = NewModel("週會");
+
+        await service.AddAsync(model);
+        model.Title = "週會（改）";
+        await service.UpdateAsync(model);
+        await service.DeleteAsync(model.Id, AuditVia.Api);
+
+        var audits = await ReadAuditsAsync(fixture);
+        Assert.Equal([AuditActions.MeetingCreate, AuditActions.MeetingUpdate, AuditActions.MeetingDelete], audits.Select(x => x.Action));
+        Assert.All(audits, x =>
+        {
+            Assert.Equal(7, x.ActorUserId);
+            Assert.Equal("wang", x.ActorAccount);
+            Assert.Equal("Meeting", x.TargetType);
+            Assert.Equal(model.Id.ToString(), x.TargetId);
+        });
+        Assert.Equal("title=週會; via=Web", audits[0].Detail);
+        Assert.EndsWith("via=Api", audits[2].Detail);
+    }
+
+    [Fact]
+    public async Task Audit_MediaUpload_ShouldRecordFileNameAndSize()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("要上傳的會議");
+        var payload = Encoding.UTF8.GetBytes("fake-audio");
+
+        await fixture.CreateService().SaveMediaAsync(existing.Id, NewUpload("錄音.mp3", payload));
+
+        var audit = Assert.Single(await ReadAuditsAsync(fixture));
+        Assert.Equal(AuditActions.MeetingMediaUpload, audit.Action);
+        Assert.Equal($"file=錄音.mp3; size={payload.Length}", audit.Detail);
+    }
+
+    [Fact]
+    public async Task Audit_AttachThenDetach_ShouldRecordProject()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("臨時討論", draftStatus: DraftStatus.Completed);
+        var service = fixture.CreateService();
+
+        await service.AttachToProjectAsync(meeting.Id, project.Id);
+        await service.DetachFromProjectAsync(meeting.Id, project.Id);
+
+        var audits = await ReadAuditsAsync(fixture);
+        Assert.Equal([AuditActions.MeetingAttachProject, AuditActions.MeetingDetachProject], audits.Select(x => x.Action));
+        Assert.Contains($"projectId={project.Id}", audits[0].Detail);
+        Assert.Contains($"projectId={project.Id}; draftCleared=true", audits[1].Detail);
+    }
+
+    /// <summary>草稿編修只記字數，不記內容（會議紀錄全文）。</summary>
+    [Fact]
+    public async Task Audit_DraftUpdate_ShouldRecordLengthOnly()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求會議", projectId: project.Id, draftStatus: DraftStatus.Completed);
+        const string content = "機密的會議結論";
+
+        var result = await fixture.CreateService().UpdateDraftAsync(meeting.Id, content);
+
+        Assert.True(result.Success);
+        var audit = Assert.Single(await ReadAuditsAsync(fixture));
+        Assert.Equal(AuditActions.MeetingDraftUpdate, audit.Action);
+        Assert.Contains($"chars={content.Length}", audit.Detail);
+        Assert.DoesNotContain(content, audit.Detail);
+    }
+
+    /// <summary>看不到的會議：上傳被擋要記權限拒絕，但不能有成功紀錄。</summary>
+    [Fact]
+    public async Task Audit_MediaUploadByOutsider_ShouldWriteDataScopeDenied()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var meetingId = ids["B專案會議"];
+
+        await fixture.CreateService(isAdmin: false, userA).SaveMediaAsync(meetingId, NewUpload("錄音.mp3", [1, 2, 3]));
+
+        var audit = Assert.Single(await ReadAuditsAsync(fixture));
+        Assert.Equal(AuditActions.PermissionDenied, audit.Action);
+        Assert.Equal(meetingId.ToString(), audit.TargetId);
+        Assert.Equal("reason=DataScope; op=MediaUpload", audit.Detail);
+    }
+
+    private static async Task<List<AuditLog>> ReadAuditsAsync(MeetingServiceFixture fixture)
+        => await fixture.Context.AuditLog.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
+
+    #endregion
+
     #region 測試輔助
 
     private static MeetingAdapterModel NewModel(string title) => new()
@@ -1615,7 +1714,8 @@ public sealed class MeetingServiceTests
                 DraftProgressNotifier,
                 CurrentUserService,
                 TestAiServices.CreateCallLogService(Context, AiCallLogPath),
-                Quota);
+                Quota,
+                TestAuditLogs.CreateService(Context, TestAuditActor.From(CurrentUserService)));
         }
 
         /// <summary>1.0.29：用量上限（預設不限制）。</summary>

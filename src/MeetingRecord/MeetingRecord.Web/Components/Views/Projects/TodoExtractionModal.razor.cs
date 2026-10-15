@@ -5,6 +5,7 @@ using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.TodoExtraction;
 using MeetingRecord.Models.AdapterModel;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Components.Views.Projects;
 
@@ -245,7 +246,7 @@ public partial class TodoExtractionModal : ComponentBase
                     continue;
                 }
 
-                var result = await TodoService.AddAsync(model);
+                var result = await TodoService.AddAsync(model, AuditVia.AiExtract);
                 if (result.Success)
                 {
                     added++;

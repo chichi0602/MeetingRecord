@@ -142,6 +142,20 @@ public sealed class GoLiveReviewApiTests : IClassFixture<ApiTestApplicationFacto
 
         Assert.True(created.Success);
         Assert.NotEqual(765432, created.Data!.Id);
+
+        // 1.0.34：API 新增、刪除會議都留稽核並標 via=Api（刪除走 MeetingService，由控制器傳入入口）。
+        var delete = await client.DeleteAsync($"/api/Meeting/{created.Data.Id}");
+        Assert.Equal(HttpStatusCode.OK, delete.StatusCode);
+        var audits = new List<AuditLog>();
+        await WithDbAsync(async db => audits = await db.AuditLog.AsNoTracking()
+            .Where(x => x.TargetType == "Meeting" && x.TargetId == created.Data.Id.ToString())
+            .OrderBy(x => x.Id).ToListAsync());
+        Assert.Equal([AuditActions.MeetingCreate, AuditActions.MeetingDelete], audits.Select(x => x.Action));
+        Assert.All(audits, x =>
+        {
+            Assert.Equal("support", x.ActorAccount);
+            Assert.EndsWith("via=Api", x.Detail);
+        });
     }
 
     [Fact]

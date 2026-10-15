@@ -13,6 +13,7 @@ using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -40,6 +41,7 @@ public class MeetingService
     private readonly CurrentUserService currentUserService;
     private readonly AiCallLogService aiCallLogService;
     private readonly IAiQuotaService quotaService;
+    private readonly IAuditLogService auditLogService;
 
     public IMapper Mapper { get; }
     public ILogger<MeetingService> Logger { get; }
@@ -57,7 +59,8 @@ public class MeetingService
         IMeetingDraftProgressNotifier draftProgressNotifier,
         CurrentUserService currentUserService,
         AiCallLogService aiCallLogService,
-        IAiQuotaService quotaService)
+        IAiQuotaService quotaService,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         Mapper = mapper;
@@ -72,6 +75,7 @@ public class MeetingService
         this.currentUserService = currentUserService;
         this.aiCallLogService = aiCallLogService;
         this.quotaService = quotaService;
+        this.auditLogService = auditLogService;
     }
 
     /// <summary>
@@ -239,6 +243,7 @@ public class MeetingService
 
             paraObject.Id = itemParameter.Id;
 
+            await AuditAsync(AuditActions.MeetingCreate, itemParameter.Id, $"title={itemParameter.Title}; via={AuditVia.Web}");
             Logger.LogInformation("Meeting created successfully. MeetingId={MeetingId}, Title={Title}", itemParameter.Id, itemParameter.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -275,6 +280,7 @@ public class MeetingService
             if (!(await projectAccess.GetAsync()).CanViewMeeting(item.ProjectId, item.CreatedByUserId))
             {
                 Logger.LogWarning("Meeting update denied by project access. MeetingId={MeetingId}", paraObject.Id);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), paraObject.Id, "Update");
                 return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
             }
 
@@ -318,6 +324,7 @@ public class MeetingService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            await AuditAsync(AuditActions.MeetingUpdate, itemData.Id, $"title={itemData.Title}; via={AuditVia.Web}");
             Logger.LogInformation("Meeting updated successfully. MeetingId={MeetingId}, Title={Title}", itemData.Id, itemData.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -334,7 +341,8 @@ public class MeetingService
     /// 刪除會議紀錄，並移除影音檔與逐字稿的實體檔案。
     /// 實體檔案刪除失敗只記 Warning，不阻斷資料列刪除（見 docs/features/檔案上傳機制.md §4）。
     /// </summary>
-    public async Task<VerifyRecordResult> DeleteAsync(int id)
+    /// <param name="via">入口（1.0.34 稽核用）：API 的刪除也走這裡，Controller 傳 <see cref="AuditVia.Api"/>。</param>
+    public async Task<VerifyRecordResult> DeleteAsync(int id, string via = AuditVia.Web)
     {
         Logger.LogInformation("Deleting meeting. MeetingId={MeetingId}", id);
 
@@ -354,6 +362,7 @@ public class MeetingService
             if (!(await projectAccess.GetAsync()).CanViewMeeting(item.ProjectId, item.CreatedByUserId))
             {
                 Logger.LogWarning("Meeting deletion denied by project access. MeetingId={MeetingId}", id);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), id, "Delete");
                 return VerifyRecordResultFactory.Build(false, "沒有權限刪除這筆會議紀錄。");
             }
 
@@ -382,6 +391,7 @@ public class MeetingService
             // 1.0.29：AI 對話紀錄含這場會議的逐字稿與會議紀錄全文，跟著會議一起刪（用量帳本不動）。
             await TryDeleteAiCallLogsAsync(id);
 
+            await AuditAsync(AuditActions.MeetingDelete, id, $"title={item.Title}; via={via}");
             Logger.LogInformation("Meeting deleted successfully. MeetingId={MeetingId}, Title={Title}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -395,6 +405,17 @@ public class MeetingService
     }
 
     #endregion
+
+    // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定，網頁與 API 都認得出是誰 ─────────
+
+    private Task AuditAsync(string action, int meetingId, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Meeting), targetId: meetingId.ToString(), detail: detail);
+
+    /// <summary>資料範圍擋下的寫入：看不到的會議，或歸屬／產生草稿時指定了看不到的專案。</summary>
+    private Task AuditDataScopeDeniedAsync(string targetType, int targetId, string operation)
+        => auditLogService.WriteForCurrentUserAsync(
+            AuditActions.PermissionDenied, success: false, targetType: targetType, targetId: targetId.ToString(),
+            detail: $"reason=DataScope; op={operation}");
 
     /// <summary>刪除會議的 AI 對話紀錄。盡力而為：失敗只記日誌，不影響已完成的刪除。</summary>
     private async Task TryDeleteAiCallLogsAsync(int meetingId)
@@ -516,6 +537,7 @@ public class MeetingService
             if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
                 Logger.LogWarning("Meeting media upload denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "MediaUpload");
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
             }
 
@@ -580,6 +602,7 @@ public class MeetingService
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), CancellationToken.None);
 
+            await AuditAsync(AuditActions.MeetingMediaUpload, meetingId, $"file={stored.OriginalFileName}; size={stored.FileSize}");
             Logger.LogInformation("Meeting media uploaded and queued for transcription. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -646,6 +669,7 @@ public class MeetingService
             if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
                 Logger.LogWarning("Transcription requeue denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "Retranscribe");
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄執行轉錄。");
             }
 
@@ -678,6 +702,7 @@ public class MeetingService
 
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
+            await AuditAsync(AuditActions.MeetingRetranscribe, meetingId, $"title={meeting.Title}");
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)
@@ -729,6 +754,7 @@ public class MeetingService
             if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
                 Logger.LogWarning("Attach denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "AttachProject");
                 return VerifyRecordResultFactory.Build(false, "沒有權限變更這筆會議紀錄的歸屬。");
             }
 
@@ -759,6 +785,11 @@ public class MeetingService
             // 看不到的專案當成不存在，不透露它存在與否。
             if (project is null || !access.CanViewProject(project.Id))
             {
+                if (project is not null)
+                {
+                    await AuditDataScopeDeniedAsync(nameof(Project), project.Id, $"AttachProject; meetingId={meetingId}");
+                }
+
                 return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
             }
 
@@ -770,6 +801,7 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            await AuditAsync(AuditActions.MeetingAttachProject, meetingId, $"title={meeting.Title}; projectId={projectId}");
             Logger.LogInformation(
                 "Meeting attached to project. MeetingId={MeetingId}, Title={Title}, ProjectId={ProjectId}",
                 meetingId,
@@ -828,6 +860,7 @@ public class MeetingService
             if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
                 Logger.LogWarning("Detach denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DetachProject");
                 return VerifyRecordResultFactory.Build(false, "沒有權限移除這筆會議紀錄。");
             }
 
@@ -843,6 +876,7 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "這筆逐字稿正在產生會議紀錄，請等結束後再移除。");
             }
 
+            var detachedProjectId = meeting.ProjectId;
             meeting.ProjectId = null;
             meeting.DraftContent = null;
             meeting.DraftStatus = DraftStatus.NotGenerated;
@@ -857,6 +891,7 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            await AuditAsync(AuditActions.MeetingDetachProject, meetingId, $"title={meeting.Title}; projectId={detachedProjectId}; draftCleared=true");
             Logger.LogInformation(
                 "Meeting detached from project. MeetingId={MeetingId}, Title={Title}", meetingId, meeting.Title);
 
@@ -918,6 +953,7 @@ public class MeetingService
             if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
                 Logger.LogWarning("Draft request denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DraftRequest");
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆逐字稿產生會議紀錄。");
             }
 
@@ -950,6 +986,11 @@ public class MeetingService
                     .FirstOrDefaultAsync(x => x.Id == effectiveProjectId, cancellationToken);
                 if (project is null || !access.CanViewProject(project.Id))
                 {
+                    if (project is not null)
+                    {
+                        await AuditDataScopeDeniedAsync(nameof(Project), project.Id, $"DraftRequest; meetingId={meetingId}");
+                    }
+
                     return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
                 }
             }
@@ -985,6 +1026,10 @@ public class MeetingService
             // 先登錄進度再入列，理由同轉錄：背景工作要等輪到才知道，先登錄畫面才立刻看得到「排隊中」。
             draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await draftQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
+            await AuditAsync(
+                AuditActions.MeetingDraftRequest,
+                meetingId,
+                $"title={meeting.Title}; projectId={effectiveProjectId}; template={template.Name}; attendees={TagStringHelper.ToList(meeting.DraftAttendees).Count}");
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)
@@ -1052,6 +1097,7 @@ public class MeetingService
             if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
             {
                 Logger.LogWarning("Draft update denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DraftUpdate");
                 return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
             }
 
@@ -1065,6 +1111,8 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            // 只記字數，不記內容（會議紀錄全文）。
+            await AuditAsync(AuditActions.MeetingDraftUpdate, meetingId, $"title={meeting.Title}; chars={content?.Length ?? 0}");
             Logger.LogInformation("Meeting draft updated. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(true);
         }

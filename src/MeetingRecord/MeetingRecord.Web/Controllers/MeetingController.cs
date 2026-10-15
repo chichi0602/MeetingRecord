@@ -181,7 +181,7 @@ public class MeetingController : ControllerBase
             // 刪除走 MeetingService（0.4.115）：和畫面同一套，一併清掉影音檔、逐字稿與 AI 問答對話，
             // 背景工作進行中也會擋下。以前 API 只刪資料列與兩個實體檔，對話檔留在磁碟上，
             // 配合新增時照抄 Id，別人就能用同一個 Id 讀回已刪會議的問答內容。
-            var result = await meetingService.DeleteAsync(id);
+            var result = await meetingService.DeleteAsync(id, AuditVia.Api);
             if (!result.Success)
             {
                 logger.LogWarning("Meeting delete request rejected. MeetingId={MeetingId}, Reason={Reason}", id, result.Message);

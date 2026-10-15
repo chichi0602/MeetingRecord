@@ -254,7 +254,7 @@ public class ProjectController : ControllerBase
                 return NotFound(ApiResult.NotFoundResult($"找不到 ID 為 {id} 的專案"));
             }
 
-            var result = await projectService.DeleteAsync(id);
+            var result = await projectService.DeleteAsync(id, AuditVia.Api);
             if (!result.Success)
             {
                 logger.LogWarning("Project delete request failed. ProjectId={ProjectId}, Reason={Reason}", id, result.Message);

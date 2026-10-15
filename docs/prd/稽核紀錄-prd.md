@@ -1,9 +1,9 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.1
-- 文件狀態：部分實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33 已實作；業務資料事件在第三批補上）
-- 現行系統版本：1.0.33
-- 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）；移植自 NET10-Blazor-Starter 的 /audit-logs
+- 文件版本：1.2
+- 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
+- 現行系統版本：1.0.34
+- 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
 - 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
@@ -21,15 +21,20 @@
   - 登入成功改由呼叫端在真的登入之後才寫，並以 `via=Web`／`via=Api` 區分入口。
   - 密碼異動（首次登入改密碼、右上角變更密碼、設定 API 密碼、管理者重設密碼）、使用者啟停用、加入／移出團隊。
   - 權限拒絕：API 回 403、頁面顯示「你沒有權限存取此頁面」。
-- **後續批次（已規劃，尚未實作）**：
-  - 第三批：專案、會議、待辦、團隊、分類、提示詞的新增／修改／刪除／啟停用；檔案上傳／刪除／下載；PDF 匯出；會議流程動作（重新轉錄、歸屬／移出專案、產生／修改草稿、待辦完成）；AI 問答的對話操作（新增、改名、清除歷程、修改訊息）。
+- **範圍（1.0.34，第三批）**：
+  - 專案、會議、待辦、團隊、分類、提示詞的新增／修改／刪除／啟停用，網頁與 API 兩條路都記並以 `via` 區分。
+  - 檔案上傳／刪除／下載、PDF 匯出。
+  - 會議流程動作：上傳影音、重新轉錄、歸屬／移出專案、產生／編修會議紀錄；待辦完成與重開；團隊成員與分類適用團隊的異動。
+  - AI 問答的對話操作：新增、改名、清除、修改訊息、重新產生、匯出 PDF、下載附件。
+  - 資料範圍擋下的寫入（想改看不到的專案、會議、待辦）。
 - **非範圍**：
   - 單筆刪除（刻意不提供，稽核紀錄是追究責任的證據）。
   - Web API（內部管理頁）。
   - 修改前後值（只記非敏感摘要）。
   - 重複登入失敗的告警。
   - 登入頁驗證碼錯誤、欄位空白（還沒驗證帳密，只寫日誌）。
-  - 資料範圍擋下的存取（看不到的專案／會議當成不存在、回 404），留待第三批評估。
+  - 資料範圍擋下的**讀取**（開啟看不到的專案／會議）；寫入被擋 1.0.34 起會記。
+  - AI 問答開視窗時自動建立的第一段對話、AI 問答的提問本身（費用與內容另見 Token 用量與 AI 對話紀錄）。
   - JWT 政策型的 403（`Program.cs` 的 `OnForbidden`，目前只有測試探針會走到）。
   - 給非管理者看。
 
@@ -115,7 +120,12 @@
 | 登出與權杖 | `Logout.Manual`、`Logout.Forced`（`reason=invalid-claim`／`deleted`／`disabled`／`no-role`／`permission-error`）、`Token.RefreshFailed`（`reason=AccountStateChanged`／`InvalidToken`） |
 | 密碼 | `Password.Change`（`via=FirstLogin`／`Dialog`，目前密碼錯誤時記失敗）、`Password.ApiSet`、`Password.Reset`（管理者在編輯視窗填新密碼） |
 | 使用者與角色 | `User.Create`／`Update`／`Delete`／`Enable`／`Disable`／`TeamAdd`／`TeamRemove`／`GoogleLink`／`GoogleCreate`、`Role.Create`／`Update`／`Delete` |
-| 權限 | `Permission.Denied`（目標 `ApiEndpoint#{方法} {路徑}` 或 `Page#{路由}`） |
+| 權限 | `Permission.Denied`（目標 `ApiEndpoint#{方法} {路徑}`、`Page#{路由}`，或 1.0.34 起資料範圍擋下的 `Project`／`Meeting`／`Todo#{編號}`，摘要 `reason=DataScope; op=…`） |
+| 專案（1.0.34） | `Project.Create`／`Update`／`Delete`、`Project.FileUpload`／`FileDelete`／`FileDownload`（一檔一筆） |
+| 會議（1.0.34） | `Meeting.Create`／`Update`／`Delete`、`Meeting.MediaUpload`、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`、`Meeting.DraftRequest`／`DraftUpdate`（只記字數）、`Meeting.ExportPdf` |
+| 待辦（1.0.34） | `Todo.Create`（AI 抽出時 `via=AiExtract`）／`Update`／`Delete`、`Todo.Complete`／`Reopen` |
+| 團隊、分類、提示詞（1.0.34） | `Team.*`、`Category.*`、`PromptTemplate.*`：Create／Update／Delete／Enable／Disable；`Team.MembersChange`、`Category.TeamsChange`（有增減才記）、`PromptTemplate.AddPresets` |
+| AI 問答（1.0.34） | `AiChat.Create`／`Rename`／`ClearHistory`／`MessageUpdate`／`Regenerate`／`ExportPdf`／`AttachmentDownload` |
 | AI 用量上限、AI 對話紀錄、Token 用量 | `Ai.QuotaBlocked`、`AiCallLog.View`／`DownloadJson`／`ExportPdf`／`Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`、`AiUsage.Export`／`ExportPdf`／`Delete`／`Purge`／`ClearAll`／`AutoPurge` |
 | 監控與診斷 | `ExceptionLog.Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`／`AiAnalyze`／`AiAnalyzeExportPdf`、`LogLevel.Apply`／`Restore`、`LogViewer.Export`／`AiAnalyze`／`AiAnalyzeExportPdf` |
 | 稽核紀錄本身 | `Audit.Export`、`Audit.Purge`、`Audit.ClearAll`、`Audit.AutoPurge` |
@@ -128,6 +138,14 @@
 - **API 權限拒絕**：`HasPermissionAttribute` 回 403 前寫入；寫入失敗照樣回 403。401（未登入）不記。
 - **自己改密碼**：操作者與目標都是本人。欄位空白、兩次不一致這類輸入錯誤不記；目前密碼錯誤記失敗。
 - **團隊成員**：實際異動 0 人時不寫；摘要最多列 50 個使用者編號。
+
+### 寫入規則（1.0.34，業務資料）
+
+- **操作者由寫入服務自己找**：`IAuditLogService.WriteForCurrentUserAsync` 經 `IAuditActorProvider`（實作 `Web/Auth/AuditActorProvider`）決定操作者——Blazor 用 `CurrentUserService`，API 請求從 HttpContext 的 claims 取（`CurrentUserService` 在 API 是空的）。業務服務只要注入 `IAuditLogService`。
+- **網頁與 API 各寫各的**：Repository 是另一套寫入路徑、不呼叫 Service，所以兩邊都寫，摘要分別標 `via=Web`／`via=Api`。專案與會議的 API 刪除會轉呼叫 Service，由控制器傳 `via=Api`。
+- **只在存檔成功之後寫**；409 衝突、404、驗證失敗不記。
+- **資料範圍擋下的寫入**：記 `Permission.Denied`（`reason=DataScope; op=…`），對使用者仍當成不存在；完全不存在的編號不記。讀取被擋不記。
+- **摘要不放內容**：會議紀錄草稿只記字數，AI 問答只記對話編號、位置與字數，提示詞只記名稱，附件只記檔名與大小。
 
 ## 五、權限與安全
 
@@ -152,6 +170,11 @@
 - `AuditLogRetentionBackgroundServiceTests`：過期才刪、刪完才寫 `Audit.AutoPurge`、0 天不清、沒有可刪不寫。
 - `AuditActionsConventionTests`：每個代碼都有中文名稱且符合 `名詞.動作`；原始碼不得以字串常值寫稽核。
 - `AuditLogMenuRegistrationTests`：選單位置、名稱、網址、圖示、只限管理者、非管理者即使有同名權限也看不到。
+- 1.0.34：
+  - `BusinessAuditEventsTests`（11 則）：專案（含逐檔附件、下載、API 刪除 via、資料範圍擋下）、待辦（含完成／重開、AI 抽出、擋下）、團隊與分類（同步只在有增減時記）、提示詞（不含本文、預設範本一筆）、AI 問答（自動建立不記、擋下）。
+  - `MeetingServiceTests` 新增 5 則：新增修改刪除的操作者與 via、影音上傳、歸屬與移出、草稿只記字數、擋下上傳。
+  - `AuditActorProviderTests`（4 則）：Blazor 優先、JWT 與 Cookie claims、沒人登入時為 null。
+  - `ApiIntegrationTests`／`GoLiveReviewApiTests`：API 建立專案、建立與刪除會議都有 `via=Api` 且操作者是 API 登入者。
 - 1.0.33：
   - `MyUserServiceLoginTests`：成功不寫稽核（由呼叫端寫）、失敗摘要帶 `via`。
   - `GoLiveReviewApiTests`：API 登入成功 `via=Api`、必須先改密碼只記失敗、停用後換發與無效權杖記 `Token.RefreshFailed`。
@@ -169,5 +192,6 @@
 - `Models/Systems/AuditLogQuery.cs`、`LogRetentionSettings.cs`、`Models/AdapterModel/AuditLogAdapterModel.cs`
 - `Web/Auth/ClientIpProvider.cs`、`Web/Components/ApplicationCircuitHandler.cs`、`Web/BackgroundServices/AuditLogRetentionBackgroundService.cs`
 - `Web/Components/Pages/Admins/AuditLogPage.razor`、`Views/Admins/AuditLogView.razor(.cs/.css)`
+- 1.0.34：`Business/Services/Other/IAuditActorProvider.cs`、`Web/Auth/AuditActorProvider.cs`；`ProjectService`、`MeetingService`、`TodoService`、`TeamService`、`CategoryService`、`PromptTemplateService`、`AiChatService` 與對應的 Repository；`MeetingViewView`、`ProjectViewView`、`AiChatModal`、`TodoExtractionModal`
 - 1.0.33：`Share/Helpers/AuditVia.cs`（`AuditVia`、`LogoutReasons`）、`MyUserServiceLogin`、`Login.razor.cs`、`Logout.razor.cs`、`AuthController`、`ExternalAuthController`、`ExternalLoginService`、`MyUserService`、`AuthenticationStateHelper`、`HasPermissionAttribute`、17 個頁面的拒絕分支
-- [認證授權與權限機制](../security/認證授權與權限機制.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §8.3、變更紀錄：[第一批](../changelog/2026-10-15-稽核紀錄查詢頁與基礎建設.md)、[第二批](../changelog/2026-10-15-稽核紀錄帳號安全事件與權限拒絕.md)
+- [認證授權與權限機制](../security/認證授權與權限機制.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §8.3、變更紀錄：[第一批](../changelog/2026-10-15-稽核紀錄查詢頁與基礎建設.md)、[第二批](../changelog/2026-10-15-稽核紀錄帳號安全事件與權限拒絕.md)、[第三批](../changelog/2026-10-15-稽核紀錄業務資料事件.md)

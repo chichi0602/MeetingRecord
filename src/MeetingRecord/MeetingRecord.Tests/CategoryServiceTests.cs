@@ -126,7 +126,8 @@ public sealed class CategoryServiceTests
             return new CategoryService(
                 Context,
                 mapper,
-                loggerFactory.CreateLogger<CategoryService>());
+                loggerFactory.CreateLogger<CategoryService>(),
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")));
         }
 
         public async Task<Category> AddCategoryAsync(string name)

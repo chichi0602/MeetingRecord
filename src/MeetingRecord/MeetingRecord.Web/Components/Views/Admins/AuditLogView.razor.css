@@ -93,6 +93,17 @@
     background: var(--oat-50);
 }
 
+.audit-log-action-business {
+    background: var(--oat-ok-bg);
+    border-color: var(--oat-300);
+}
+
+.audit-log-action-definition {
+    background: var(--oat-100);
+    border-color: var(--oat-300);
+    border-style: dashed;
+}
+
 .audit-log-action-audit {
     border-color: var(--oat-warn);
     background: var(--oat-warn-bg);

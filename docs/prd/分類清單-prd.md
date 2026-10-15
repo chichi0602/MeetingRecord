@@ -1,10 +1,10 @@
 ﻿# 分類清單 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.34
 - 首次實作版本：0.3.0
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/15
 
 > **0.4.102：分類＝「什麼資料」，只描述資料、不影響誰看得到。** 三者分工：**團隊＝誰的資料**（決定可見範圍，見 [團隊清單](團隊清單-prd.md)）、**分類＝什麼資料**、**角色＝能做什麼**。
 > - 分類重新被使用：專案表單與會議表單都有「分類」多選（啟用中的分類），以**名稱字串**存進 `Project.Categories`／`Meeting.Categories`（`TagStringHelper`）；會議頁工具列有「分類」過濾與清單欄，專案頁的選擇器旁有「依分類篩選」。
@@ -64,6 +64,11 @@
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`分類清單:view`、`分類清單:create`、`分類清單:edit`、`分類清單:delete`。裸鍵「分類清單」代表該頁全部動作（向後相容）。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路（不需個別權限）。
 - UI 與 API 共用單一 RBAC 權威來源：UI 用 Cookie 驗證並以 `CheckAccessPage`（頁面鍵）控制進入頁面，API 用 JWT Bearer 並以動作鍵控制個別操作。
+
+### 稽核（1.0.34）
+
+- `CategoryService`（網頁）與 `CategoryRepository`（API）：`Category.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要 `name`、`via`。
+- 適用團隊同步（`SyncTeamsAsync`）有實際增減時寫 `Category.TeamsChange`，沒變動不寫。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 

@@ -11,6 +11,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -23,6 +24,7 @@ public class ProjectService
     private readonly AiChatStore chatStore;
     private readonly ProjectAccessService projectAccess;
     private readonly AiCallLogService aiCallLogService;
+    private readonly IAuditLogService auditLogService;
 
     public IMapper Mapper { get; }
     public ILogger<ProjectService> Logger { get; }
@@ -34,7 +36,8 @@ public class ProjectService
         IOptions<SystemSettings> systemSettings,
         AiChatStore chatStore,
         ProjectAccessService projectAccess,
-        AiCallLogService aiCallLogService)
+        AiCallLogService aiCallLogService,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         Mapper = mapper;
@@ -43,6 +46,7 @@ public class ProjectService
         this.chatStore = chatStore;
         this.projectAccess = projectAccess;
         this.aiCallLogService = aiCallLogService;
+        this.auditLogService = auditLogService;
     }
 
     public async Task<DataRequestResult<ProjectAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -208,12 +212,16 @@ public class ProjectService
             // 回填 Id（0.4.114）：畫面用它選取剛建立的專案；附件失敗時也靠它切成編輯模式，重送才不會再建一筆。
             paraObject.Id = itemParameter.Id;
 
-            var saveFilesResult = await SaveNewFilesAsync(itemParameter, uploadFiles);
+            await AuditAsync(AuditActions.ProjectCreate, itemParameter.Id, $"title={itemParameter.Title}; via={AuditVia.Web}");
+
+            var (saveFilesResult, savedFiles) = await SaveNewFilesAsync(itemParameter, uploadFiles);
             if (!saveFilesResult.Success)
             {
                 context.ChangeTracker.Clear();
                 return VerifyRecordResultFactory.Build(false, "專案已建立，但附件儲存失敗，請在編輯中重新上傳附件。");
             }
+
+            await AuditFilesAsync(AuditActions.ProjectFileUpload, itemParameter.Id, savedFiles);
 
             Logger.LogInformation("Project created successfully. ProjectId={ProjectId}, Title={Title}", itemParameter.Id, itemParameter.Title);
             return VerifyRecordResultFactory.Build(true);
@@ -239,6 +247,7 @@ public class ProjectService
         if (!access.CanViewProject(paraObject.Id))
         {
             Logger.LogWarning("Project update denied by data group. ProjectId={ProjectId}", paraObject.Id);
+            await AuditDataScopeDeniedAsync(paraObject.Id, "Update");
             return VerifyRecordResultFactory.Build(false, "找不到要修改的專案資料。");
         }
 
@@ -285,20 +294,25 @@ public class ProjectService
             currentItem.UpdatedAt = paraObject.UpdatedAt;
 
             await context.SaveChangesAsync();
+            await AuditAsync(AuditActions.ProjectUpdate, currentItem.Id, $"title={currentItem.Title}; via={AuditVia.Web}");
 
-            var saveFilesResult = await SaveNewFilesAsync(currentItem, uploadFiles);
+            var (saveFilesResult, savedFiles) = await SaveNewFilesAsync(currentItem, uploadFiles);
             if (!saveFilesResult.Success)
             {
                 context.ChangeTracker.Clear();
                 return VerifyRecordResultFactory.Build(false, "專案資料已儲存，但附件儲存失敗，請重新上傳附件。");
             }
 
-            var removeFilesResult = await RemoveProjectFilesAsync(currentItem, removedFileIds);
+            await AuditFilesAsync(AuditActions.ProjectFileUpload, currentItem.Id, savedFiles);
+
+            var (removeFilesResult, removedFiles) = await RemoveProjectFilesAsync(currentItem, removedFileIds);
             if (!removeFilesResult.Success)
             {
                 context.ChangeTracker.Clear();
                 return removeFilesResult;
             }
+
+            await AuditFilesAsync(AuditActions.ProjectFileDelete, currentItem.Id, removedFiles);
 
             Logger.LogInformation("Project updated successfully. ProjectId={ProjectId}, Title={Title}", currentItem.Id, currentItem.Title);
             return VerifyRecordResultFactory.Build(true);
@@ -311,7 +325,8 @@ public class ProjectService
         }
     }
 
-    public async Task<VerifyRecordResult> DeleteAsync(int id)
+    /// <param name="via">入口（1.0.34 稽核用）：API 的刪除也走這裡，Controller 傳 <see cref="AuditVia.Api"/>。</param>
+    public async Task<VerifyRecordResult> DeleteAsync(int id, string via = AuditVia.Web)
     {
         Logger.LogInformation("Deleting project. ProjectId={ProjectId}", id);
 
@@ -319,6 +334,7 @@ public class ProjectService
         if (!(await projectAccess.GetAsync()).CanViewProject(id))
         {
             Logger.LogWarning("Project deletion denied by data group. ProjectId={ProjectId}", id);
+            await AuditDataScopeDeniedAsync(id, "Delete");
             return VerifyRecordResultFactory.Build(false, "找不到要刪除的專案資料。");
         }
 
@@ -360,6 +376,7 @@ public class ProjectService
                 Logger.LogError(ex, "Failed to delete AI call logs of project. ProjectId={ProjectId}", id);
             }
 
+            await AuditAsync(AuditActions.ProjectDelete, id, $"title={item.Title}; files={physicalFiles.Count}; via={via}");
             Logger.LogInformation("Project deleted successfully. ProjectId={ProjectId}, Title={Title}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -421,6 +438,8 @@ public class ProjectService
             return null;
         }
 
+        await AuditAsync(AuditActions.ProjectFileDownload, file.ProjectId, $"file={file.OriginalFileName}; fileId={file.Id}; size={file.FileSize}");
+
         return new ProjectFileDownloadResult
         {
             Content = File.OpenRead(fullPath),
@@ -470,11 +489,12 @@ public class ProjectService
         return Task.FromResult(VerifyRecordResultFactory.Build(true));
     }
 
-    private async Task<VerifyRecordResult> SaveNewFilesAsync(Project project, IEnumerable<ProjectUploadFileInput>? uploadFiles)
+    /// <returns>結果，以及實際存下的附件（稽核逐檔記錄用）。</returns>
+    private async Task<(VerifyRecordResult Result, IReadOnlyList<ProjectFile> Saved)> SaveNewFilesAsync(Project project, IEnumerable<ProjectUploadFileInput>? uploadFiles)
     {
         if (uploadFiles is null)
         {
-            return VerifyRecordResultFactory.Build(true);
+            return (VerifyRecordResultFactory.Build(true), []);
         }
 
         List<ProjectFile> newFiles = [];
@@ -500,7 +520,7 @@ public class ProjectService
                 await context.SaveChangesAsync();
             }
 
-            return VerifyRecordResultFactory.Build(true);
+            return (VerifyRecordResultFactory.Build(true), newFiles);
         }
         catch (Exception ex)
         {
@@ -510,21 +530,22 @@ public class ProjectService
             }
 
             Logger.LogError(ex, "Failed to save project files. ProjectId={ProjectId}", project.Id);
-            return VerifyRecordResultFactory.Build(false, "專案附件儲存失敗", ex);
+            return (VerifyRecordResultFactory.Build(false, "專案附件儲存失敗", ex), []);
         }
     }
 
-    private async Task<VerifyRecordResult> RemoveProjectFilesAsync(Project project, IEnumerable<int>? removedFileIds)
+    /// <returns>結果，以及實際刪掉的附件（稽核逐檔記錄用）。</returns>
+    private async Task<(VerifyRecordResult Result, IReadOnlyList<ProjectFile> Removed)> RemoveProjectFilesAsync(Project project, IEnumerable<int>? removedFileIds)
     {
         if (removedFileIds is null)
         {
-            return VerifyRecordResultFactory.Build(true);
+            return (VerifyRecordResultFactory.Build(true), []);
         }
 
         var removedFileIdSet = removedFileIds.Distinct().ToHashSet();
         if (removedFileIdSet.Count == 0)
         {
-            return VerifyRecordResultFactory.Build(true);
+            return (VerifyRecordResultFactory.Build(true), []);
         }
 
         var filesToRemove = project.Files
@@ -547,8 +568,28 @@ public class ProjectService
             DeletePhysicalFile(file);
         }
 
-        return VerifyRecordResultFactory.Build(true);
+        return (VerifyRecordResultFactory.Build(true), filesToRemove);
     }
+
+    // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定，網頁與 API 都認得出是誰 ─────────
+
+    private Task AuditAsync(string action, int projectId, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Project), targetId: projectId.ToString(), detail: detail);
+
+    /// <summary>附件一檔一筆，只記檔名與大小。</summary>
+    private async Task AuditFilesAsync(string action, int projectId, IEnumerable<ProjectFile> files)
+    {
+        foreach (var file in files)
+        {
+            await AuditAsync(action, projectId, $"file={file.OriginalFileName}; size={file.FileSize}");
+        }
+    }
+
+    /// <summary>資料範圍擋下的寫入（看不到的專案）。</summary>
+    private Task AuditDataScopeDeniedAsync(int projectId, string operation)
+        => auditLogService.WriteForCurrentUserAsync(
+            AuditActions.PermissionDenied, success: false, targetType: nameof(Project), targetId: projectId.ToString(),
+            detail: $"reason=DataScope; op={operation}");
 
     private async Task<(ProjectFile File, string FullPath)> SavePhysicalFileAsync(Project project, ProjectUploadFileInput uploadFile)
     {

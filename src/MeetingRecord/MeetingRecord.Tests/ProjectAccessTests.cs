@@ -654,16 +654,17 @@ public sealed class ProjectAccessTests
                 systemSettings,
                 new AiChatStore(systemSettings, loggerFactory.CreateLogger<AiChatStore>()),
                 Access(userId, isAdmin),
-                TestAiServices.CreateCallLogService(Context));
+                TestAiServices.CreateCallLogService(Context),
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")));
 
         public TodoService CreateTodoService(int userId, bool isAdmin = false)
-            => new(Context, mapper, loggerFactory.CreateLogger<TodoService>(), Access(userId, isAdmin));
+            => new(Context, mapper, loggerFactory.CreateLogger<TodoService>(), Access(userId, isAdmin), TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")));
 
         public TeamService CreateTeamService(int userId = 0, bool isAdmin = false)
-            => new(Context, mapper, loggerFactory.CreateLogger<TeamService>(), Access(userId, isAdmin));
+            => new(Context, mapper, loggerFactory.CreateLogger<TeamService>(), Access(userId, isAdmin), TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")));
 
         public CategoryService CreateCategoryService()
-            => new(Context, mapper, loggerFactory.CreateLogger<CategoryService>());
+            => new(Context, mapper, loggerFactory.CreateLogger<CategoryService>(), TestAuditLogs.CreateService(Context));
 
         public MyUserService CreateMyUserService()
             => new(

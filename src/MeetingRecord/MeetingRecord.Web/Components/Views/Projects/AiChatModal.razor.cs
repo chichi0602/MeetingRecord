@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Export;
+using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Services;
 using MeetingRecord.Web.Components.Commons;
 
@@ -19,6 +21,9 @@ public partial class AiChatModal : ComponentBase
 
     [Inject]
     private AiChatService AiChatService { get; set; } = default!;
+
+    [Inject]
+    private IAuditLogService AuditLogService { get; set; } = default!;
 
     [Inject]
     private IPdfRenderer PdfRenderer { get; set; } = default!;
@@ -205,7 +210,8 @@ public partial class AiChatModal : ComponentBase
             if (target is null)
             {
                 // 一段都沒有：開一段空的，使用者可以直接開始問。
-                target = await AiChatService.CreateConversationAsync(Scope, TargetId);
+                // 開視窗時自動建的第一段對話不算使用者的動作，不寫稽核（1.0.34）。
+                target = await AiChatService.CreateConversationAsync(Scope, TargetId, audit: false);
                 conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
             }
 
@@ -643,6 +649,9 @@ public partial class AiChatModal : ComponentBase
         }
 
         await FileDownloadInterop.SaveBytesAsync(attachment.FileName, content, "application/octet-stream");
+        await AuditLogService.WriteForCurrentUserAsync(
+            AuditActions.AiChatAttachmentDownload, targetType: Scope.ToString(), targetId: TargetId.ToString(),
+            detail: $"conversationId={currentConversationId}; file={attachment.FileName}; size={content.Length}");
     }
 
     private void ClosePreview()
@@ -866,7 +875,7 @@ public partial class AiChatModal : ComponentBase
             var html = AiChatDocumentExporter.BuildMessageHtml(TargetName, messages[index], index + 1, exportedAt);
             var fileName = AiChatDocumentExporter.BuildMessageFileName(TargetName, index + 1, exportedAt, CurrentConversation?.Title);
 
-            await ExportAsync(html, fileName);
+            await ExportAsync(html, fileName, "Message");
         }
         catch (Exception ex)
         {
@@ -898,7 +907,7 @@ public partial class AiChatModal : ComponentBase
             var html = AiChatDocumentExporter.BuildConversationHtml(TargetName, messages, exportedAt, CurrentConversation?.Title);
             var fileName = AiChatDocumentExporter.BuildConversationFileName(TargetName, exportedAt, CurrentConversation?.Title);
 
-            await ExportAsync(html, fileName);
+            await ExportAsync(html, fileName, "Conversation");
         }
         catch (Exception ex)
         {
@@ -913,11 +922,15 @@ public partial class AiChatModal : ComponentBase
         }
     }
 
-    private async Task ExportAsync(string html, string fileName)
+    /// <param name="kind">稽核用（1.0.34）：<c>Message</c>（單則）或 <c>Conversation</c>（整段）。</param>
+    private async Task ExportAsync(string html, string fileName, string kind)
     {
         var pdf = await PdfRenderer.RenderAsync(html);
 
         await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
+        await AuditLogService.WriteForCurrentUserAsync(
+            AuditActions.AiChatExportPdf, targetType: Scope.ToString(), targetId: TargetId.ToString(),
+            detail: $"conversationId={currentConversationId}; kind={kind}; file={fileName}; bytes={pdf.Length}");
 
         // 單則與整段對話都走這裡，所以提示只寫一次；檔名本身就分得出是哪一種。
         //

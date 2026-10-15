@@ -231,6 +231,9 @@ public partial class ProjectViewView : IDisposable
     [Inject]
     public NavigationManager NavigationManager { get; set; } = default!;
 
+    [Inject]
+    public IAuditLogService AuditLogService { get; set; } = default!;
+
     public ProjectViewView(
         ILogger<ProjectViewView> logger,
         ProjectService projectService,
@@ -592,6 +595,9 @@ public partial class ProjectViewView : IDisposable
             var pdf = await pdfRenderer.RenderAsync(html);
 
             await fileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
+            await AuditLogService.WriteForCurrentUserAsync(
+                AuditActions.MeetingExportPdf, targetType: "Meeting", targetId: meeting.Id.ToString(),
+                detail: $"file={fileName}; bytes={pdf.Length}; page=Project");
 
             logger.LogInformation(
                 "Meeting draft exported as pdf. MeetingId={MeetingId}, FileName={FileName}, Bytes={Bytes}",

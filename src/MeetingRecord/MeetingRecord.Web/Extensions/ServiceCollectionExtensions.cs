@@ -123,6 +123,9 @@ public static class ServiceCollectionExtensions
         // 來源 IP（1.0.32）：⚠️ 介面必須解析到同一個實例，circuit handler 記下的 IP 寫稽核時才讀得到。
         services.AddScoped<ClientIpProvider>();
         services.AddScoped<IClientIpProvider>(sp => sp.GetRequiredService<ClientIpProvider>());
+
+        // 稽核的目前操作者（1.0.34）：Blazor 用 CurrentUserService，API 從 claims 取。
+        services.AddScoped<IAuditActorProvider, AuditActorProvider>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IRbacBackfillService, RbacBackfillService>();
         services.AddScoped<DefaultRoleSeeder>();

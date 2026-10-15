@@ -1,10 +1,10 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.9
+- 文件版本：1.10
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.34
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/15
 
 > **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
@@ -130,6 +130,12 @@
 - 前置檢查：新增與修改都會驗證所屬專案存在（0.4.66 起不再檢查團隊可見範圍）。
 - 寫入前後皆 `CleanTrackingHelper.Clean<Todo>(context)`。
 - API 新增後會重新載入實體才回傳，否則回應的 `ProjectTitle`／`MeetingTitle` 會是空的。
+
+### 稽核（1.0.34）
+
+- `TodoService`（網頁）與 `TodoRepository`（API）：`Todo.Create`／`Update`／`Delete`，勾選完成與取消完成寫 `Todo.Complete`／`Todo.Reopen`。摘要帶 `title`、`projectId`、`via`；搬到別的專案時加 `movedFrom`。
+- AI 抽出待辦批次加入時每筆各記一筆 `Todo.Create`，摘要 `via=AiExtract`。
+- 看不到的待辦被嘗試修改、勾選、刪除，或要建在看不到的專案底下時，寫 `Permission.Denied`（`reason=DataScope`）。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、相關程式與文件
 

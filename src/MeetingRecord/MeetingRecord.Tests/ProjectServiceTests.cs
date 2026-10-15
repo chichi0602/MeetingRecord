@@ -212,7 +212,8 @@ public sealed class ProjectServiceTests
                 systemSettings,
                 chatStore,
                 TestProjectAccess.Admin(Context),
-                TestAiServices.CreateCallLogService(Context));
+                TestAiServices.CreateCallLogService(Context),
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")));
         }
 
         public async ValueTask DisposeAsync()

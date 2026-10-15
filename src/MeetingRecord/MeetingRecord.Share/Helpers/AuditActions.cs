@@ -81,6 +81,67 @@ public static class AuditActions
     public const string LogViewerAiAnalyzeExportPdf = "LogViewer.AiAnalyzeExportPdf";
     #endregion
 
+    #region 專案（1.0.34）
+    public const string ProjectCreate = "Project.Create";
+    public const string ProjectUpdate = "Project.Update";
+    public const string ProjectDelete = "Project.Delete";
+    public const string ProjectFileUpload = "Project.FileUpload";
+    public const string ProjectFileDelete = "Project.FileDelete";
+    public const string ProjectFileDownload = "Project.FileDownload";
+    #endregion
+
+    #region 會議（1.0.34）
+    public const string MeetingCreate = "Meeting.Create";
+    public const string MeetingUpdate = "Meeting.Update";
+    public const string MeetingDelete = "Meeting.Delete";
+    public const string MeetingMediaUpload = "Meeting.MediaUpload";
+    public const string MeetingRetranscribe = "Meeting.Retranscribe";
+    public const string MeetingAttachProject = "Meeting.AttachProject";
+    public const string MeetingDetachProject = "Meeting.DetachProject";
+    public const string MeetingDraftRequest = "Meeting.DraftRequest";
+    public const string MeetingDraftUpdate = "Meeting.DraftUpdate";
+    public const string MeetingExportPdf = "Meeting.ExportPdf";
+    #endregion
+
+    #region 待辦（1.0.34）
+    public const string TodoCreate = "Todo.Create";
+    public const string TodoUpdate = "Todo.Update";
+    public const string TodoDelete = "Todo.Delete";
+    public const string TodoComplete = "Todo.Complete";
+    public const string TodoReopen = "Todo.Reopen";
+    #endregion
+
+    #region 團隊、分類、提示詞（1.0.34）
+    public const string TeamCreate = "Team.Create";
+    public const string TeamUpdate = "Team.Update";
+    public const string TeamDelete = "Team.Delete";
+    public const string TeamEnable = "Team.Enable";
+    public const string TeamDisable = "Team.Disable";
+    public const string TeamMembersChange = "Team.MembersChange";
+    public const string CategoryCreate = "Category.Create";
+    public const string CategoryUpdate = "Category.Update";
+    public const string CategoryDelete = "Category.Delete";
+    public const string CategoryEnable = "Category.Enable";
+    public const string CategoryDisable = "Category.Disable";
+    public const string CategoryTeamsChange = "Category.TeamsChange";
+    public const string PromptTemplateCreate = "PromptTemplate.Create";
+    public const string PromptTemplateUpdate = "PromptTemplate.Update";
+    public const string PromptTemplateDelete = "PromptTemplate.Delete";
+    public const string PromptTemplateEnable = "PromptTemplate.Enable";
+    public const string PromptTemplateDisable = "PromptTemplate.Disable";
+    public const string PromptTemplateAddPresets = "PromptTemplate.AddPresets";
+    #endregion
+
+    #region AI 問答（1.0.34）
+    public const string AiChatCreate = "AiChat.Create";
+    public const string AiChatRename = "AiChat.Rename";
+    public const string AiChatClearHistory = "AiChat.ClearHistory";
+    public const string AiChatMessageUpdate = "AiChat.MessageUpdate";
+    public const string AiChatRegenerate = "AiChat.Regenerate";
+    public const string AiChatExportPdf = "AiChat.ExportPdf";
+    public const string AiChatAttachmentDownload = "AiChat.AttachmentDownload";
+    #endregion
+
     #region 稽核紀錄本身
     public const string AuditExport = "Audit.Export";
     public const string AuditPurge = "Audit.Purge";
@@ -149,6 +210,57 @@ public static class AuditActions
         [LogViewerExport] = "匯出日誌",
         [LogViewerAiAnalyze] = "AI 分析日誌",
         [LogViewerAiAnalyzeExportPdf] = "匯出日誌 AI 分析 PDF",
+
+        [ProjectCreate] = "新增專案",
+        [ProjectUpdate] = "修改專案",
+        [ProjectDelete] = "刪除專案",
+        [ProjectFileUpload] = "上傳專案附件",
+        [ProjectFileDelete] = "刪除專案附件",
+        [ProjectFileDownload] = "下載專案附件",
+
+        [MeetingCreate] = "新增會議",
+        [MeetingUpdate] = "修改會議",
+        [MeetingDelete] = "刪除會議",
+        [MeetingMediaUpload] = "上傳會議影音",
+        [MeetingRetranscribe] = "重新轉錄",
+        [MeetingAttachProject] = "會議歸屬專案",
+        [MeetingDetachProject] = "會議移出專案",
+        [MeetingDraftRequest] = "產生會議紀錄",
+        [MeetingDraftUpdate] = "編修會議紀錄",
+        [MeetingExportPdf] = "匯出會議紀錄 PDF",
+
+        [TodoCreate] = "新增待辦",
+        [TodoUpdate] = "修改待辦",
+        [TodoDelete] = "刪除待辦",
+        [TodoComplete] = "完成待辦",
+        [TodoReopen] = "重開待辦",
+
+        [TeamCreate] = "新增團隊",
+        [TeamUpdate] = "修改團隊",
+        [TeamDelete] = "刪除團隊",
+        [TeamEnable] = "啟用團隊",
+        [TeamDisable] = "停用團隊",
+        [TeamMembersChange] = "團隊成員異動",
+        [CategoryCreate] = "新增分類",
+        [CategoryUpdate] = "修改分類",
+        [CategoryDelete] = "刪除分類",
+        [CategoryEnable] = "啟用分類",
+        [CategoryDisable] = "停用分類",
+        [CategoryTeamsChange] = "分類適用團隊異動",
+        [PromptTemplateCreate] = "新增提示詞",
+        [PromptTemplateUpdate] = "修改提示詞",
+        [PromptTemplateDelete] = "刪除提示詞",
+        [PromptTemplateEnable] = "啟用提示詞",
+        [PromptTemplateDisable] = "停用提示詞",
+        [PromptTemplateAddPresets] = "建立預設提示詞",
+
+        [AiChatCreate] = "新增 AI 問答對話",
+        [AiChatRename] = "AI 問答對話改名",
+        [AiChatClearHistory] = "清除 AI 問答對話",
+        [AiChatMessageUpdate] = "修改 AI 問答訊息",
+        [AiChatRegenerate] = "重新產生 AI 回答",
+        [AiChatExportPdf] = "匯出 AI 問答 PDF",
+        [AiChatAttachmentDownload] = "下載 AI 問答附件",
 
         [AuditExport] = "匯出稽核紀錄",
         [AuditPurge] = "清除舊稽核紀錄",

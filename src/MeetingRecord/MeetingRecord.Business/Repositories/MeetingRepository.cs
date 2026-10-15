@@ -4,6 +4,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Repositories;
 
@@ -20,11 +21,13 @@ public class MeetingRepository
 {
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
-    public MeetingRepository(BackendDBContext context, ProjectAccessService projectAccess)
+    public MeetingRepository(BackendDBContext context, ProjectAccessService projectAccess, IAuditLogService auditLogService)
     {
         this.context = context;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
     }
 
     #region 查詢方法
@@ -97,6 +100,9 @@ public class MeetingRepository
         await context.Meeting.AddAsync(meeting);
         await context.SaveChangesAsync();
 
+        await auditLogService.WriteForCurrentUserAsync(
+            AuditActions.MeetingCreate, targetType: nameof(Meeting), targetId: meeting.Id.ToString(),
+            detail: $"title={meeting.Title}; via={AuditVia.Api}");
         return meeting;
     }
 
@@ -107,8 +113,17 @@ public class MeetingRepository
     public async Task<bool> UpdateAsync(Meeting meeting)
     {
         var existing = await context.Meeting.FindAsync(meeting.Id);
-        if (existing == null || !(await projectAccess.GetAsync()).CanViewMeeting(existing.ProjectId, existing.CreatedByUserId))
+        if (existing == null)
         {
+            return false;
+        }
+
+        if (!(await projectAccess.GetAsync()).CanViewMeeting(existing.ProjectId, existing.CreatedByUserId))
+        {
+            // 對外仍當成不存在（404），稽核另外記下有人想改看不到的會議（1.0.34）。
+            await auditLogService.WriteForCurrentUserAsync(
+                AuditActions.PermissionDenied, success: false, targetType: nameof(Meeting), targetId: meeting.Id.ToString(),
+                detail: $"reason=DataScope; op=Update; via={AuditVia.Api}");
             return false;
         }
 
@@ -142,6 +157,9 @@ public class MeetingRepository
         context.Entry(existing).CurrentValues.SetValues(meeting);
         await context.SaveChangesAsync();
 
+        await auditLogService.WriteForCurrentUserAsync(
+            AuditActions.MeetingUpdate, targetType: nameof(Meeting), targetId: meeting.Id.ToString(),
+            detail: $"title={existing.Title}; via={AuditVia.Api}");
         return true;
     }
 

@@ -4,6 +4,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers.Searchs;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Share.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
@@ -19,11 +20,13 @@ public class ProjectRepository
 {
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
-    public ProjectRepository(BackendDBContext context, ProjectAccessService projectAccess)
+    public ProjectRepository(BackendDBContext context, ProjectAccessService projectAccess, IAuditLogService auditLogService)
     {
         this.context = context;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
     }
 
     #region 查詢方法
@@ -214,6 +217,9 @@ public class ProjectRepository
         await context.Project.AddAsync(project);
         await context.SaveChangesAsync();
 
+        await auditLogService.WriteForCurrentUserAsync(
+            AuditActions.ProjectCreate, targetType: nameof(Project), targetId: project.Id.ToString(),
+            detail: $"title={project.Title}; via={AuditVia.Api}");
         return (project, null);
     }
 
@@ -245,8 +251,17 @@ public class ProjectRepository
     {
         var access = await projectAccess.GetAsync();
         var existingProject = await context.Project.Include(x => x.Teams).FirstOrDefaultAsync(x => x.Id == project.Id);
-        if (existingProject == null || !access.CanViewProject(project.Id))
+        if (existingProject == null)
         {
+            return (false, null);
+        }
+
+        if (!access.CanViewProject(project.Id))
+        {
+            // 對外仍當成不存在（404），稽核另外記下有人想改看不到的專案（1.0.34）。
+            await auditLogService.WriteForCurrentUserAsync(
+                AuditActions.PermissionDenied, success: false, targetType: nameof(Project), targetId: project.Id.ToString(),
+                detail: $"reason=DataScope; op=Update; via={AuditVia.Api}");
             return (false, null);
         }
 
@@ -281,6 +296,9 @@ public class ProjectRepository
         context.Entry(existingProject).CurrentValues.SetValues(project);
         await context.SaveChangesAsync();
 
+        await auditLogService.WriteForCurrentUserAsync(
+            AuditActions.ProjectUpdate, targetType: nameof(Project), targetId: project.Id.ToString(),
+            detail: $"title={existingProject.Title}; via={AuditVia.Api}");
         return (true, null);
     }
 

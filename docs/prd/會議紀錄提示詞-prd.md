@@ -1,10 +1,10 @@
 ﻿# 會議紀錄提示詞 PRD
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.34
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/15
 
 > **0.4.99：提示詞範本對所有人開放。** `PromptTemplateService` 拿掉團隊過濾（清單、單筆、啟用切換、`GetEnabledSelectableAsync`），編輯表單拿掉團隊欄位；範本的維護看角色的「提示詞清單」權限（一般使用者角色的初始權限沒有），啟用中的所有人產生會議紀錄時都選得到。~~`Teams` 欄位保留、存檔時原值帶回~~。下文的團隊權控描述的是 0.4.98 以前的狀態。
 >
@@ -124,6 +124,11 @@
 - **提示詞範本不做列級過濾（0.4.99 起）**：UI 與 API 都對所有人開放，只看角色的「提示詞清單」動作權限。~~**團隊列級權控只在 Blazor Service 層生效**：非管理員於 `PromptTemplateService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的提示詞；單筆讀取以 `TagStringHelper.IsTeamAccessible` 守門。~~（0.4.98 以前；**0.4.103 這兩個方法與 `PromptTemplate.Teams` 已刪除**。）
 - 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
 - `LlmSettings` 的 `ApiKey` 為機敏值：版控內只放開發預設值，`appsettings.Production.json` 一併清空 `DefaultProvider` 與 `ApiKey`，正式環境須以環境變數（`LlmSettings__Providers__AzureOpenAI__ApiKey`）或 user-secrets 提供。`StartupSafetyValidator` 在 Production 啟動時檢查：指定了 `DefaultProvider` 就不允許 `ApiKey` 留空或沿用開發預設值、也不允許 `Endpoint` 留空或沿用範例值。
+
+### 稽核（1.0.34）
+
+- `PromptTemplateService`（網頁）與 `PromptTemplateRepository`（API）：`PromptTemplate.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要**只記名稱**，不記提示詞本文。
+- 建立內建範本（`AddPresetsAsync`）有新增時寫一筆 `PromptTemplate.AddPresets`（`added=N; skipped=N`）。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 

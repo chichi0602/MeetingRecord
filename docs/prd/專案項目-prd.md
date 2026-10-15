@@ -1,10 +1,10 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.10
+- 文件版本：4.11
 - 文件狀態：已實作
-- 現行系統版本：1.0.26
+- 現行系統版本：1.0.34
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/15
 
 > **0.4.102：專案改由「主責團隊＋協作團隊」控管可見性，並加回「分類」**（取代 0.4.101 的「資料群組」與 0.4.99～0.4.100 的專案成員制）。團隊＝誰的資料（部門），分類＝什麼資料，角色＝能做什麼。
 > - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
@@ -99,6 +99,12 @@
 **保留未動**：Meeting、PromptTemplate、Todo 各自的 `Categories`/`Teams` 與其列級權限判斷（`MeetingService.RequestDraftAsync` 對逐字稿與提示詞的兩處守門仍在）、`TagStringHelper`、`DataRequest.CategoryFilters/TeamFilters`、`IRecordAccessScopeProvider` 的 DI 註冊、專案附件功能。（此為 0.4.39 當時的狀態：Todo 的兩欄 0.4.66 移除；Meeting／PromptTemplate 的 `Teams` 0.4.99 起不再作用，**0.4.103 連同 `DataRequest.TeamFilters`、`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible` 一起刪除**。）
 
 結果（0.4.39～0.4.98）：**只要具備「專案項目」頁面權限就看得到所有專案**，動作層級的授權（新增／修改／刪除／匯出）不受影響。0.4.101 起改以 `ProjectTeam` 關聯表（而非字串欄位）重新控管可見性，0.4.102 起分主責與協作團隊，見上。
+
+### 稽核（1.0.34）
+
+- 網頁（`ProjectService`）與 API（`ProjectRepository`）的新增、修改、刪除都寫 `Project.Create`／`Update`／`Delete`，摘要帶 `title` 與 `via=Web`／`via=Api`；API 刪除經 `ProjectService.DeleteAsync(id, via)`。
+- 附件一檔一筆：`Project.FileUpload`／`FileDelete`（`file=檔名; size=位元組`），下載寫 `Project.FileDownload`。
+- 看不到的專案被嘗試修改或刪除時寫 `Permission.Denied`（`reason=DataScope; op=Update／Delete`），對使用者仍當成不存在。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 

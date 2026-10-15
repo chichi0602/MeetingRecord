@@ -3,6 +3,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Repositories;
 
@@ -16,11 +17,13 @@ public class TodoRepository
 {
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
-    public TodoRepository(BackendDBContext context, ProjectAccessService projectAccess)
+    public TodoRepository(BackendDBContext context, ProjectAccessService projectAccess, IAuditLogService auditLogService)
     {
         this.context = context;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
     }
 
     #region 查詢方法
@@ -119,6 +122,11 @@ public class TodoRepository
         var access = await projectAccess.GetAsync();
         if (!access.CanViewProject(todo.ProjectId))
         {
+            if (await context.Project.AnyAsync(x => x.Id == todo.ProjectId))
+            {
+                await AuditDeniedAsync(nameof(Project), todo.ProjectId, "TodoCreate");
+            }
+
             throw new InvalidOperationException("找不到指定的專案項目。");
         }
 
@@ -141,6 +149,7 @@ public class TodoRepository
         await context.Todo.AddAsync(todo);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.TodoCreate, todo.Id, $"title={todo.Title}; projectId={todo.ProjectId}; via={AuditVia.Api}");
         return todo;
     }
 
@@ -148,10 +157,19 @@ public class TodoRepository
     {
         var existing = await context.Todo.FindAsync(todo.Id);
         var access = await projectAccess.GetAsync();
-        if (existing == null || !access.CanViewProject(existing.ProjectId) || !access.CanViewProject(todo.ProjectId))
+        if (existing == null)
         {
             return false;
         }
+
+        if (!access.CanViewProject(existing.ProjectId) || !access.CanViewProject(todo.ProjectId))
+        {
+            // 對外仍當成不存在（404），稽核另外記下（1.0.34）。
+            await AuditDeniedAsync(nameof(Todo), todo.Id, "Update");
+            return false;
+        }
+
+        var previousProjectId = existing.ProjectId;
 
         todo.UpdatedAt = DateTime.Now;
         todo.CreatedAt = existing.CreatedAt;
@@ -161,22 +179,39 @@ public class TodoRepository
         context.Entry(existing).CurrentValues.SetValues(todo);
         await context.SaveChangesAsync();
 
+        var moved = previousProjectId != todo.ProjectId ? $"; movedFrom={previousProjectId}" : string.Empty;
+        await AuditAsync(AuditActions.TodoUpdate, todo.Id, $"title={todo.Title}; projectId={todo.ProjectId}{moved}; via={AuditVia.Api}");
         return true;
     }
 
     public async Task<bool> DeleteAsync(int id)
     {
         var todo = await context.Todo.FindAsync(id);
-        if (todo == null || !(await projectAccess.GetAsync()).CanViewProject(todo.ProjectId))
+        if (todo == null)
         {
+            return false;
+        }
+
+        if (!(await projectAccess.GetAsync()).CanViewProject(todo.ProjectId))
+        {
+            await AuditDeniedAsync(nameof(Todo), id, "Delete");
             return false;
         }
 
         context.Todo.Remove(todo);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.TodoDelete, id, $"title={todo.Title}; projectId={todo.ProjectId}; via={AuditVia.Api}");
         return true;
     }
+
+    private Task AuditAsync(string action, int todoId, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Todo), targetId: todoId.ToString(), detail: detail);
+
+    private Task AuditDeniedAsync(string targetType, int targetId, string operation)
+        => auditLogService.WriteForCurrentUserAsync(
+            AuditActions.PermissionDenied, success: false, targetType: targetType, targetId: targetId.ToString(),
+            detail: $"reason=DataScope; op={operation}; via={AuditVia.Api}");
 
     #endregion
 }

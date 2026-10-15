@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.AiChat;
 
@@ -79,6 +80,7 @@ public class AiChatService
     private readonly AiCallGateway gateway;
     private readonly ILogger<AiChatService> logger;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
     public AiChatService(
         BackendDBContext context,
@@ -90,7 +92,8 @@ public class AiChatService
         IOptions<LlmSettings> llmSettings,
         AiCallGateway gateway,
         ILogger<AiChatService> logger,
-        ProjectAccessService projectAccess)
+        ProjectAccessService projectAccess,
+        IAuditLogService auditLogService)
     {
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
@@ -102,6 +105,7 @@ public class AiChatService
         this.gateway = gateway;
         this.logger = logger;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
     }
 
     /// <summary>
@@ -109,7 +113,8 @@ public class AiChatService
     /// **每個公開方法第一行都要呼叫**——對話檔與附件在檔案系統上，路徑由範圍＋對象 Id 直接算出來，
     /// 沒擋的話知道 Id 就讀得到別人的對話。看不到時當成不存在。
     /// </summary>
-    private async Task EnsureAccessAsync(AiChatScope scope, int targetId, CancellationToken cancellationToken)
+    /// <param name="auditOperation">寫入類操作傳操作名稱（1.0.34）：被資料範圍擋下時記一筆權限拒絕；讀取類不傳、不記。</param>
+    private async Task EnsureAccessAsync(AiChatScope scope, int targetId, CancellationToken cancellationToken, string? auditOperation = null)
     {
         var access = await projectAccess.GetAsync();
         if (access.IsAdmin)
@@ -134,6 +139,13 @@ public class AiChatService
         if (!allowed)
         {
             logger.LogWarning("AI chat access denied. Scope={Scope}, TargetId={TargetId}", scope, targetId);
+            if (auditOperation is not null)
+            {
+                await auditLogService.WriteForCurrentUserAsync(
+                    AuditActions.PermissionDenied, success: false, targetType: scope.ToString(), targetId: targetId.ToString(),
+                    detail: $"reason=DataScope; op=AiChat{auditOperation}");
+            }
+
             throw new InvalidOperationException("找不到這個專案或會議，可能已被刪除或沒有權限。");
         }
     }
@@ -152,13 +164,23 @@ public class AiChatService
     }
 
     /// <summary>開一段新對話，回傳它的 Id。建立者記的是現在這個人。</summary>
+    /// <param name="audit">
+    /// 寫不寫稽核（1.0.34）。開視窗時對象底下還沒有對話會自動建一段，那不算使用者的動作，傳 false。
+    /// </param>
     public async Task<string> CreateConversationAsync(
         AiChatScope scope,
         int targetId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool audit = true)
     {
-        await EnsureAccessAsync(scope, targetId, cancellationToken);
-        return await chatStore.CreateConversationAsync(scope, targetId, ResolveCurrentUserName(), cancellationToken);
+        await EnsureAccessAsync(scope, targetId, cancellationToken, audit ? "Create" : null);
+        var conversationId = await chatStore.CreateConversationAsync(scope, targetId, ResolveCurrentUserName(), cancellationToken);
+        if (audit)
+        {
+            await AuditAsync(AuditActions.AiChatCreate, scope, targetId, $"conversationId={conversationId}");
+        }
+
+        return conversationId;
     }
 
     /// <summary>
@@ -172,8 +194,14 @@ public class AiChatService
         string title,
         CancellationToken cancellationToken = default)
     {
-        await EnsureAccessAsync(scope, targetId, cancellationToken);
-        return await chatStore.RenameConversationAsync(scope, targetId, conversationId, title, cancellationToken);
+        await EnsureAccessAsync(scope, targetId, cancellationToken, "Rename");
+        var outcome = await chatStore.RenameConversationAsync(scope, targetId, conversationId, title, cancellationToken);
+        if (outcome == UpdateOutcome.Updated)
+        {
+            await AuditAsync(AuditActions.AiChatRename, scope, targetId, $"conversationId={conversationId}; title={title.Trim()}");
+        }
+
+        return outcome;
     }
 
     /// <summary>取出這段對話的完整歷史（依時間由舊到新）。</summary>
@@ -194,8 +222,9 @@ public class AiChatService
         string conversationId,
         CancellationToken cancellationToken = default)
     {
-        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        await EnsureAccessAsync(scope, targetId, cancellationToken, "ClearHistory");
         chatStore.TryDeleteConversation(scope, targetId, conversationId);
+        await AuditAsync(AuditActions.AiChatClearHistory, scope, targetId, $"conversationId={conversationId}");
     }
 
     /// <summary>
@@ -275,14 +304,23 @@ public class AiChatService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(original);
-        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        await EnsureAccessAsync(scope, targetId, cancellationToken, "MessageUpdate");
 
-        return await chatStore.UpdateMessagesAsync(
+        var outcome = await chatStore.UpdateMessagesAsync(
             scope,
             targetId,
             conversationId,
             [new MessageEdit(index, original.Role, original.Content, newContent)],
             cancellationToken);
+        if (outcome == UpdateOutcome.Updated)
+        {
+            // 只記位置與字數，不記內容。
+            await AuditAsync(
+                AuditActions.AiChatMessageUpdate, scope, targetId,
+                $"conversationId={conversationId}; index={index}; role={original.Role}; chars={newContent.Length}");
+        }
+
+        return outcome;
     }
 
     /// <summary>
@@ -304,7 +342,7 @@ public class AiChatService
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newQuestion);
-        await EnsureAccessAsync(scope, targetId, cancellationToken);
+        await EnsureAccessAsync(scope, targetId, cancellationToken, "Regenerate");
 
         var history = await GetHistoryAsync(scope, targetId, conversationId, cancellationToken);
 
@@ -376,6 +414,10 @@ public class AiChatService
                     : "這段對話在產生期間被其他人更動，新的回答沒有寫入。請重新整理後再試。");
         }
 
+        await AuditAsync(
+            AuditActions.AiChatRegenerate, scope, targetId,
+            $"conversationId={conversationId}; index={questionIndex}; answerChars={answer.Length}");
+
         logger.LogInformation(
             "AI chat answer regenerated. Scope={Scope}, TargetId={TargetId}, Index={Index}, AnswerLength={AnswerLength}",
             scope,
@@ -389,6 +431,10 @@ public class AiChatService
             contextResult.TruncatedLabels,
             contextResult.SkippedLabels);
     }
+
+    /// <summary>稽核（1.0.34）：目標是對話所屬的專案或會議；不記任何對話內容。</summary>
+    private Task AuditAsync(string action, AiChatScope scope, int targetId, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: scope.ToString(), targetId: targetId.ToString(), detail: detail);
 
     /// <summary>
     /// 取出 <paramref name="index"/> 之前的訊息。重新產生時用來還原「當時的脈絡」。

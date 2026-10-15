@@ -21,15 +21,43 @@ public sealed class AuditLogService : IAuditLogService
     private readonly DbContextOptions<BackendDBContext> options;
     private readonly ILogger<AuditLogService> logger;
     private readonly IClientIpProvider? clientIpProvider;
+    private readonly IAuditActorProvider? actorProvider;
 
     public AuditLogService(
         DbContextOptions<BackendDBContext> options,
         ILogger<AuditLogService> logger,
-        IClientIpProvider? clientIpProvider = null)
+        IClientIpProvider? clientIpProvider = null,
+        IAuditActorProvider? actorProvider = null)
     {
         this.options = options;
         this.logger = logger;
         this.clientIpProvider = clientIpProvider;
+        this.actorProvider = actorProvider;
+    }
+
+    public Task WriteForCurrentUserAsync(
+        string action,
+        bool success = true,
+        string? targetType = null,
+        string? targetId = null,
+        string? detail = null)
+    {
+        var (userId, account) = ResolveActor();
+        return WriteAsync(action, success, userId, account, targetType, targetId, detail);
+    }
+
+    /// <summary>找操作者失敗不能讓稽核整筆寫不進去。</summary>
+    private (int? UserId, string? Account) ResolveActor()
+    {
+        try
+        {
+            return actorProvider?.GetActor() ?? (null, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to resolve actor for audit log.");
+            return (null, null);
+        }
     }
 
     public async Task WriteAsync(

@@ -259,6 +259,8 @@ public partial class AuditLogView : ComponentBase
         "Audit" => "audit-log-pill audit-log-action-audit",
         "Ai" or "AiCallLog" or "AiUsage" or "AiChat" => "audit-log-pill audit-log-action-ai",
         "ExceptionLog" or "LogLevel" or "LogViewer" => "audit-log-pill audit-log-action-system",
+        "Project" or "Meeting" or "Todo" => "audit-log-pill audit-log-action-business",
+        "Team" or "Category" or "PromptTemplate" => "audit-log-pill audit-log-action-definition",
         _ => "audit-log-pill",
     };
 

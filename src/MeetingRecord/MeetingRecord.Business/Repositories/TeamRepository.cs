@@ -3,6 +3,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Repositories;
 
@@ -10,11 +11,13 @@ public class TeamRepository
 {
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAuditLogService auditLogService;
 
-    public TeamRepository(BackendDBContext context, ProjectAccessService projectAccess)
+    public TeamRepository(BackendDBContext context, ProjectAccessService projectAccess, IAuditLogService auditLogService)
     {
         this.context = context;
         this.projectAccess = projectAccess;
+        this.auditLogService = auditLogService;
     }
 
     #region 查詢方法
@@ -98,6 +101,7 @@ public class TeamRepository
         await context.Team.AddAsync(team);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.TeamCreate, team.Id, $"name={team.Name}; via={AuditVia.Api}");
         return team;
     }
 
@@ -115,6 +119,7 @@ public class TeamRepository
         context.Entry(existing).CurrentValues.SetValues(team);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.TeamUpdate, team.Id, $"name={existing.Name}; via={AuditVia.Api}");
         return true;
     }
 
@@ -136,8 +141,13 @@ public class TeamRepository
         context.Team.Remove(team);
         await context.SaveChangesAsync();
 
+        await AuditAsync(AuditActions.TeamDelete, id, $"name={team.Name}; via={AuditVia.Api}");
         return (true, null);
     }
+
+    /// <summary>稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 從 API 的 claims 取得。</summary>
+    private Task AuditAsync(string action, int id, string detail)
+        => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Team), targetId: id.ToString(), detail: detail);
 
     #endregion
 }

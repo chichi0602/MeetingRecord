@@ -56,7 +56,7 @@ public sealed class StatusToggleTests : IAsyncDisposable
         context.Team.Add(team);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
-        var service = new TeamService(context, mapper, loggerFactory.CreateLogger<TeamService>(), TestProjectAccess.Admin(context));
+        var service = new TeamService(context, mapper, loggerFactory.CreateLogger<TeamService>(), TestProjectAccess.Admin(context), TestAuditLogs.CreateService(context));
 
         Assert.True((await service.SetEnabledAsync(team.Id, false)).Success);
         Assert.False((await context.Team.AsNoTracking().SingleAsync()).IsEnabled);
@@ -70,7 +70,7 @@ public sealed class StatusToggleTests : IAsyncDisposable
         context.Category.Add(category);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
-        var service = new CategoryService(context, mapper, loggerFactory.CreateLogger<CategoryService>());
+        var service = new CategoryService(context, mapper, loggerFactory.CreateLogger<CategoryService>(), TestAuditLogs.CreateService(context));
 
         Assert.True((await service.SetEnabledAsync(category.Id, true)).Success);
         Assert.True((await context.Category.AsNoTracking().SingleAsync()).IsEnabled);

@@ -570,7 +570,8 @@ public sealed class TodoServiceTests
                 Context,
                 mapper,
                 loggerFactory.CreateLogger<TodoService>(),
-                TestProjectAccess.Admin(Context));
+                TestProjectAccess.Admin(Context),
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")));
         }
 
         public async Task<Project> AddProjectAsync(string title)

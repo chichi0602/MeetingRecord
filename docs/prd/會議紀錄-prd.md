@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.9
+- 文件版本：2.10
 - 文件狀態：已實作
-- 現行系統版本：1.0.27
+- 現行系統版本：1.0.34
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/15
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -172,6 +172,12 @@
   - ~~0.4.98 以前以 `Meeting.Teams` 做團隊列級權控（`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`，無團隊＝公開）~~；0.4.35 從表單移除團隊欄位後，~~0.4.35～0.4.98 新建的會議一律公開~~，0.4.82 移除逐字稿預覽後 AI 問答一度沒有列級守門。0.4.99 改為專案權控解決，**0.4.103 `Meeting.Teams` 與上述兩個方法已刪除**。
 - 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
 - 會議逐字稿會外送第三方 LLM 供應商，導入前應確認資料處理、留存與跨境政策符合組織要求。
+
+### 稽核（1.0.34）
+
+- `MeetingService`（網頁）與 `MeetingRepository`（API）：`Meeting.Create`／`Update`／`Delete`（摘要帶 `via`；API 刪除經 `MeetingService.DeleteAsync(id, via)`）。
+- 流程動作：`Meeting.MediaUpload`（檔名與大小；使用者取消不記）、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`（`projectId`）、`Meeting.DraftRequest`（專案、提示詞名稱、與會者人數）、`Meeting.DraftUpdate`（**只記字數**，不記會議紀錄內容）、`Meeting.ExportPdf`（會議頁與專案頁的匯出）。
+- 看不到的會議被嘗試修改、刪除、上傳、重新轉錄、歸屬、移出、產生或編修草稿時寫 `Permission.Denied`（`reason=DataScope; op=…`）；歸屬或產生草稿時指定了看不到的專案，目標是那個專案。用量上限擋下由 `AiCallGateway` 另記 `Ai.QuotaBlocked`。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 

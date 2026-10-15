@@ -18,15 +18,18 @@ public class AuthController : ControllerBase
 {
     private readonly MyUserServiceLogin userServiceLogin;
     private readonly IJwtTokenService jwtTokenService;
+    private readonly IAuditLogService auditLogService;
     private readonly ILogger<AuthController> logger;
 
     public AuthController(
         MyUserServiceLogin userServiceLogin,
         IJwtTokenService jwtTokenService,
+        IAuditLogService auditLogService,
         ILogger<AuthController> logger)
     {
         this.userServiceLogin = userServiceLogin;
         this.jwtTokenService = jwtTokenService;
+        this.auditLogService = auditLogService;
         this.logger = logger;
     }
 
@@ -34,7 +37,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<ApiResult<TokenResponseDto>>> Login([FromBody] LoginRequestDto request)
     {
-        var (message, user) = await userServiceLogin.LoginAsync(request.Account, request.Password);
+        var (message, user) = await userServiceLogin.LoginAsync(request.Account, request.Password, AuditVia.Api);
         if (user is null)
         {
             logger.LogWarning("API login failed. Account={Account}", request.Account);
@@ -46,10 +49,24 @@ public class AuthController : ControllerBase
         if (user.MustChangePassword || request.Password == MagicObjectHelper.NeedChangePassword)
         {
             logger.LogWarning("API login rejected because password change is required. Account={Account}, UserId={UserId}", user.Account, user.Id);
+            await auditLogService.WriteAsync(
+                AuditActions.LoginFailed,
+                success: false,
+                actorUserId: user.Id,
+                actorAccount: user.Account,
+                detail: $"via={AuditVia.Api}; reason=MustChangePassword");
             return Unauthorized(ApiResult<TokenResponseDto>.UnauthorizedResult("請先登入網頁變更密碼後，再使用 API。"));
         }
 
         var tokenResponse = jwtTokenService.CreateTokenResponse(user);
+
+        // 1.0.33：發出權杖之後才算登入成功（失敗類由 LoginAsync 寫）。
+        await auditLogService.WriteAsync(
+            AuditActions.LoginSuccess,
+            success: true,
+            actorUserId: user.Id,
+            actorAccount: user.Account,
+            detail: $"via={AuditVia.Api}");
         logger.LogInformation("API login succeeded. Account={Account}, UserId={UserId}", user.Account, user.Id);
         return Ok(ApiResult<TokenResponseDto>.SuccessResult(tokenResponse, "登入成功"));
     }
@@ -67,6 +84,14 @@ public class AuthController : ControllerBase
             var user = await userServiceLogin.GetUserForTokenRefreshAsync(currentUser.Id);
             if (user is null)
             {
+                await auditLogService.WriteAsync(
+                    AuditActions.TokenRefreshFailed,
+                    success: false,
+                    actorUserId: currentUser.Id > 0 ? currentUser.Id : null,
+                    actorAccount: string.IsNullOrWhiteSpace(currentUser.Account) ? null : currentUser.Account,
+                    targetType: "MyUser",
+                    targetId: currentUser.Id.ToString(),
+                    detail: $"via={AuditVia.Api}; reason=AccountStateChanged");
                 return Unauthorized(ApiResult<TokenResponseDto>.UnauthorizedResult("帳號狀態已變更，請重新登入。"));
             }
 
@@ -76,6 +101,12 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Refresh token validation failed.");
+
+            // 權杖本身驗不過，認不出是誰；IP 由稽核服務自己記。
+            await auditLogService.WriteAsync(
+                AuditActions.TokenRefreshFailed,
+                success: false,
+                detail: $"via={AuditVia.Api}; reason=InvalidToken");
             return Unauthorized(ApiResult<TokenResponseDto>.UnauthorizedResult("Refresh Token 無效或已過期。"));
         }
     }

@@ -156,6 +156,7 @@ public partial class AiCallLogView : ComponentBase
         if (!AuthenticationStateHelper.CheckIsAdmin())
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/ai-call-logs");
             Logger.LogWarning("AI call log view denied because the current user is not an administrator.");
             return;
         }

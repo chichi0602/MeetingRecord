@@ -1,9 +1,9 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.0
-- 文件狀態：部分實作（第一批：查詢頁與基礎建設；帳號安全事件、權限拒絕、業務資料事件分別在第二、三批補上）
-- 現行系統版本：1.0.32
-- 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）；移植自 NET10-Blazor-Starter 的 /audit-logs
+- 文件版本：1.1
+- 文件狀態：部分實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33 已實作；業務資料事件在第三批補上）
+- 現行系統版本：1.0.33
+- 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）；移植自 NET10-Blazor-Starter 的 /audit-logs
 - 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
@@ -16,14 +16,21 @@
   - 保留期限：每天自動清除超過 `LogRetentionSettings:AuditLogDays`（預設 365）天的紀錄。
   - 動作代碼集中成 `AuditActions` 常數並附中文名稱。
   - 寫入服務改用自己的短命 DbContext。
+- **範圍（1.0.33，第二批）**：
+  - 登出（使用者自己登出、被系統強制登出並註明原因）、Google 登入（成功／失敗／待審核、連結既有帳號、自動建立帳號）、API 權杖更新失敗。
+  - 登入成功改由呼叫端在真的登入之後才寫，並以 `via=Web`／`via=Api` 區分入口。
+  - 密碼異動（首次登入改密碼、右上角變更密碼、設定 API 密碼、管理者重設密碼）、使用者啟停用、加入／移出團隊。
+  - 權限拒絕：API 回 403、頁面顯示「你沒有權限存取此頁面」。
 - **後續批次（已規劃，尚未實作）**：
-  - 第二批：登出、Google 登入、API 權杖更新失敗、改密碼、使用者啟停用、加入／移出團隊、權限拒絕（API 與 UI 頁面）。
   - 第三批：專案、會議、待辦、團隊、分類、提示詞的新增／修改／刪除／啟停用；檔案上傳／刪除／下載；PDF 匯出；會議流程動作（重新轉錄、歸屬／移出專案、產生／修改草稿、待辦完成）；AI 問答的對話操作（新增、改名、清除歷程、修改訊息）。
 - **非範圍**：
   - 單筆刪除（刻意不提供，稽核紀錄是追究責任的證據）。
   - Web API（內部管理頁）。
   - 修改前後值（只記非敏感摘要）。
   - 重複登入失敗的告警。
+  - 登入頁驗證碼錯誤、欄位空白（還沒驗證帳密，只寫日誌）。
+  - 資料範圍擋下的存取（看不到的專案／會議當成不存在、回 404），留待第三批評估。
+  - JWT 政策型的 403（`Program.cs` 的 `OnForbidden`，目前只有測試探針會走到）。
   - 給非管理者看。
 
 ## 二、使用者與入口
@@ -100,15 +107,27 @@
 - **自動清除** `AuditLogRetentionBackgroundService`：啟動時先跑一次，之後每 24 小時；門檻 `DateTime.UtcNow - AuditLogDays`；有刪才寫 `Audit.AutoPurge`（摘要 `rows=..; days=..`，沒有操作者）。
 - **動作代碼** `AuditActions`（Share/Helpers）：常數＋`DisplayNames` 中文對照。代碼一經使用就不改名。
 
-### 目前記錄的動作（1.0.32）
+### 目前記錄的動作（1.0.33）
 
 | 類別 | 代碼 |
 | --- | --- |
-| 登入 | `Login.Success`、`Login.Failed`、`Login.LockedOut`、`Login.Disabled` |
-| 使用者與角色 | `User.Create`／`Update`／`Delete`、`Role.Create`／`Update`／`Delete` |
+| 登入 | `Login.Success`（`via=Web`／`Api`）、`Login.Failed`、`Login.LockedOut`、`Login.Disabled`、`Login.GoogleSuccess`／`GoogleFailed`／`GooglePending` |
+| 登出與權杖 | `Logout.Manual`、`Logout.Forced`（`reason=invalid-claim`／`deleted`／`disabled`／`no-role`／`permission-error`）、`Token.RefreshFailed`（`reason=AccountStateChanged`／`InvalidToken`） |
+| 密碼 | `Password.Change`（`via=FirstLogin`／`Dialog`，目前密碼錯誤時記失敗）、`Password.ApiSet`、`Password.Reset`（管理者在編輯視窗填新密碼） |
+| 使用者與角色 | `User.Create`／`Update`／`Delete`／`Enable`／`Disable`／`TeamAdd`／`TeamRemove`／`GoogleLink`／`GoogleCreate`、`Role.Create`／`Update`／`Delete` |
+| 權限 | `Permission.Denied`（目標 `ApiEndpoint#{方法} {路徑}` 或 `Page#{路由}`） |
 | AI 用量上限、AI 對話紀錄、Token 用量 | `Ai.QuotaBlocked`、`AiCallLog.View`／`DownloadJson`／`ExportPdf`／`Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`、`AiUsage.Export`／`ExportPdf`／`Delete`／`Purge`／`ClearAll`／`AutoPurge` |
 | 監控與診斷 | `ExceptionLog.Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`／`AiAnalyze`／`AiAnalyzeExportPdf`、`LogLevel.Apply`／`Restore`、`LogViewer.Export`／`AiAnalyze`／`AiAnalyzeExportPdf` |
 | 稽核紀錄本身 | `Audit.Export`、`Audit.Purge`、`Audit.ClearAll`、`Audit.AutoPurge` |
+
+### 寫入規則（1.0.33）
+
+- **登入成功由呼叫端寫**：`MyUserServiceLogin.LoginAsync` 只寫失敗類（帶 `via`）。帳密對了不代表真的登入了——API 會因為必須先改密碼而拒絕（寫 `Login.Failed reason=MustChangePassword`），網頁簽入 Cookie 也可能失敗——所以 `Login.Success` 由網頁在 `SignInAsync` 之後、API 在發出權杖之後才寫。
+- **強制登出**：`AuthenticationStateHelper.Check` 把人踢出時導向 `/Auths/Logout?reason=…`（`LogoutReasons`）。登出頁在 `SignOutAsync` 之前取身分，原因在白名單裡寫 `Logout.Forced`，否則有身分就寫 `Logout.Manual`；沒身分也沒原因不寫。使用者手動帶 `?reason=` 只會改變自己那筆的分類，沒有危害。
+- **頁面權限拒絕**：各頁在拒絕分支呼叫 `AuthenticationStateHelper.RecordPageAccessDeniedAsync(route)`。刻意不放進 `CheckAccessPage`／`CheckIsAdmin`，因為側邊欄過濾每個選單項目都會呼叫它們。`PageAccessDeniedAuditTests` 掃原始碼守門。管理頁執行動作前的靜默 `CheckIsAdmin` 不記。
+- **API 權限拒絕**：`HasPermissionAttribute` 回 403 前寫入；寫入失敗照樣回 403。401（未登入）不記。
+- **自己改密碼**：操作者與目標都是本人。欄位空白、兩次不一致這類輸入錯誤不記；目前密碼錯誤記失敗。
+- **團隊成員**：實際異動 0 人時不寫；摘要最多列 50 個使用者編號。
 
 ## 五、權限與安全
 
@@ -133,6 +152,15 @@
 - `AuditLogRetentionBackgroundServiceTests`：過期才刪、刪完才寫 `Audit.AutoPurge`、0 天不清、沒有可刪不寫。
 - `AuditActionsConventionTests`：每個代碼都有中文名稱且符合 `名詞.動作`；原始碼不得以字串常值寫稽核。
 - `AuditLogMenuRegistrationTests`：選單位置、名稱、網址、圖示、只限管理者、非管理者即使有同名權限也看不到。
+- 1.0.33：
+  - `MyUserServiceLoginTests`：成功不寫稽核（由呼叫端寫）、失敗摘要帶 `via`。
+  - `GoLiveReviewApiTests`：API 登入成功 `via=Api`、必須先改密碼只記失敗、停用後換發與無效權杖記 `Token.RefreshFailed`。
+  - `ApiIntegrationTests`：無權限呼叫拿到 403 時有 `Permission.Denied`。
+  - `AuditEventsTests`：管理者重設密碼、首次登入改密碼（成功與目前密碼錯誤）、對話窗改密碼、設定 API 密碼、啟停用、加入／移出團隊。
+  - `ExternalLoginServiceTests`：連結既有帳號、自動建立、既有連結不寫。
+  - `LogoutAuditTests`：強制登出原因白名單、主動登出、未登入不寫。
+  - `AuthenticationStateHelperTests`：踢出時導向帶原因的登出頁、`RecordPageAccessDeniedAsync`。
+  - `PageAccessDeniedAuditTests`：每個拒絕分支都有寫稽核。
 
 ## 八、相關程式與文件
 
@@ -141,4 +169,5 @@
 - `Models/Systems/AuditLogQuery.cs`、`LogRetentionSettings.cs`、`Models/AdapterModel/AuditLogAdapterModel.cs`
 - `Web/Auth/ClientIpProvider.cs`、`Web/Components/ApplicationCircuitHandler.cs`、`Web/BackgroundServices/AuditLogRetentionBackgroundService.cs`
 - `Web/Components/Pages/Admins/AuditLogPage.razor`、`Views/Admins/AuditLogView.razor(.cs/.css)`
-- [認證授權與權限機制](../security/認證授權與權限機制.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §8.3、[變更紀錄](../changelog/2026-10-15-稽核紀錄查詢頁與基礎建設.md)
+- 1.0.33：`Share/Helpers/AuditVia.cs`（`AuditVia`、`LogoutReasons`）、`MyUserServiceLogin`、`Login.razor.cs`、`Logout.razor.cs`、`AuthController`、`ExternalAuthController`、`ExternalLoginService`、`MyUserService`、`AuthenticationStateHelper`、`HasPermissionAttribute`、17 個頁面的拒絕分支
+- [認證授權與權限機制](../security/認證授權與權限機制.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §8.3、變更紀錄：[第一批](../changelog/2026-10-15-稽核紀錄查詢頁與基礎建設.md)、[第二批](../changelog/2026-10-15-稽核紀錄帳號安全事件與權限拒絕.md)

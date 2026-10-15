@@ -216,6 +216,7 @@ public partial class MeetingViewView : IDisposable
         if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_會議紀錄) == false)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/meetings");
             logger.LogWarning("Meeting view denied because current user has not this role permission.");
             return;
         }

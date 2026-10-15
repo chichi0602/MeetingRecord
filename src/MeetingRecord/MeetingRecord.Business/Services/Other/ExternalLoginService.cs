@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.Other;
 
@@ -12,11 +13,13 @@ public class ExternalLoginService
 {
     private readonly BackendDBContext context;
     private readonly ILogger<ExternalLoginService> logger;
+    private readonly IAuditLogService auditLogService;
 
-    public ExternalLoginService(BackendDBContext context, ILogger<ExternalLoginService> logger)
+    public ExternalLoginService(BackendDBContext context, ILogger<ExternalLoginService> logger, IAuditLogService auditLogService)
     {
         this.context = context;
         this.logger = logger;
+        this.auditLogService = auditLogService;
     }
 
     /// <summary>
@@ -55,6 +58,14 @@ public class ExternalLoginService
                 user.UpdateAt = DateTime.Now;
                 await context.SaveChangesAsync();
                 logger.LogInformation("External login linked Google to existing account. UserId={UserId}.", user.Id);
+                await auditLogService.WriteAsync(
+                    AuditActions.UserGoogleLink,
+                    success: true,
+                    actorUserId: user.Id,
+                    actorAccount: user.Account,
+                    targetType: nameof(MyUser),
+                    targetId: user.Id.ToString(),
+                    detail: $"provider={provider}; 以 Email 連結既有帳號");
                 return user;
             }
         }
@@ -87,6 +98,14 @@ public class ExternalLoginService
         logger.LogInformation(
             "External login created new disabled account awaiting approval. UserId={UserId}, Email={Email}.",
             newUser.Id, email);
+        await auditLogService.WriteAsync(
+            AuditActions.UserGoogleCreate,
+            success: true,
+            actorUserId: newUser.Id,
+            actorAccount: newUser.Account,
+            targetType: nameof(MyUser),
+            targetId: newUser.Id.ToString(),
+            detail: $"provider={provider}; 待審核（停用中）");
         return newUser;
     }
 }

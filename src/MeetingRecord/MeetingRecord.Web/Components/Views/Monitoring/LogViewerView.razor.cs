@@ -151,6 +151,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
         if (!AuthenticationStateHelper.CheckIsAdmin())
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/logs");
             Logger.LogWarning("Log viewer denied because the current user is not an administrator.");
             return;
         }

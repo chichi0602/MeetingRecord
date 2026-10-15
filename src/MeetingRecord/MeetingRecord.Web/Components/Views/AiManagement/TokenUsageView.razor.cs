@@ -187,6 +187,7 @@ public partial class TokenUsageView : ComponentBase
         if (!AuthenticationStateHelper.CheckIsAdmin())
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/token-usage");
             Logger.LogWarning("Token usage denied because the current user is not an administrator.");
             return;
         }

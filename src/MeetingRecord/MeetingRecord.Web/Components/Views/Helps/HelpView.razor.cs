@@ -57,6 +57,7 @@ public partial class HelpView : ComponentBase
         if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_使用說明) == false)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/help");
             Logger.LogWarning("Help view denied because current user has not this role permission.");
             return;
         }

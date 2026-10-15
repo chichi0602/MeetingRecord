@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：0.4.119
+- 現行系統版本：1.0.33
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
 
@@ -45,7 +45,11 @@
   - 0.4.115：`login` 對需要改密碼的帳號（同 `NeedChangePasswordAsync` 的條件）回 401「請先登入網頁變更密碼後，再使用 API。」以前強制改密碼只在網頁生效。
   - 0.4.115：`refresh` 換發前以 `MyUserServiceLogin.GetUserForTokenRefreshAsync` 重查資料庫，停用、鎖定、刪除或待改密碼都回 401，身分以資料庫為準。以前只看舊權杖的內容，被停用的人在 7 天內都能一直換到新權杖。
   - 0.4.115：`PermissionChecker` 對停用的帳號一律回 false（管理者也一樣），手上的存取權杖在到期前也不能再呼叫受保護 API。
-- **稽核**：登入寫入 `Login.Success` / `Login.Failed` / `Login.LockedOut`（`AuditLog`）。
+- **稽核**：登入寫入 `Login.Success` / `Login.Failed` / `Login.LockedOut` / `Login.Disabled`（`AuditLog`）。1.0.33 起：
+  - 失敗類由 `MyUserServiceLogin.LoginAsync` 寫，摘要帶 `via=Web`／`via=Api`；**成功改由呼叫端在真的登入之後才寫**（網頁 `SignInAsync` 之後、API 發出權杖之後）。API 因必須先改密碼而拒絕時只記 `Login.Failed reason=MustChangePassword`。
+  - 登出寫 `Logout.Manual`；`AuthenticationStateHelper.Check` 把人踢出時導向 `/Auths/Logout?reason=…`，寫 `Logout.Forced`。
+  - Google 登入寫 `Login.GoogleSuccess`／`GoogleFailed`／`GooglePending`，連結既有帳號寫 `User.GoogleLink`、自動建立寫 `User.GoogleCreate`；API 權杖更新失敗寫 `Token.RefreshFailed`。
+  - 改密碼寫 `Password.Change`（首次登入頁、右上角對話窗）、設定 API 密碼寫 `Password.ApiSet`。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 五、權限與安全
 

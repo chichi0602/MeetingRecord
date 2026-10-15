@@ -61,7 +61,13 @@ public class MyUserServiceLogin
         return user;
     }
 
-    public async Task<(string, MyUser?)> LoginAsync(string username, string password)
+    /// <summary>
+    /// 驗證帳密。失敗（帳號不存在、鎖定、密碼錯誤、停用）在這裡寫稽核，摘要帶 <c>via=</c>。
+    /// ⚠️ 1.0.33 起**成功不在這裡寫**：帳密對了不代表真的登入了（API 還可能因為必須先改密碼而拒絕、
+    /// 網頁簽入 Cookie 也可能失敗），由呼叫端在真的簽入或發出權杖之後寫 <see cref="AuditActions.LoginSuccess"/>。
+    /// </summary>
+    /// <param name="via">入口，<see cref="AuditVia.Web"/> 或 <see cref="AuditVia.Api"/>。</param>
+    public async Task<(string, MyUser?)> LoginAsync(string username, string password, string via = AuditVia.Web)
     {
         Logger.LogInformation("Login attempt started for Account={Account}.", username);
 
@@ -73,14 +79,14 @@ public class MyUserServiceLogin
             if (item is null)
             {
                 Logger.LogWarning("Login failed because account was not found. Account={Account}", username);
-                await auditLogService.WriteAsync(AuditActions.LoginFailed, success: false, actorAccount: username, detail: "帳號不存在");
+                await auditLogService.WriteAsync(AuditActions.LoginFailed, success: false, actorAccount: username, detail: $"via={via}; reason=帳號不存在");
                 return ("帳號或者密碼不正確", null);
             }
 
             if (item.LockoutEndUtc.HasValue && item.LockoutEndUtc.Value > DateTime.UtcNow)
             {
                 Logger.LogWarning("Login blocked because account is locked. Account={Account}, UserId={UserId}, LockoutEndUtc={LockoutEndUtc}", username, item.Id, item.LockoutEndUtc);
-                await auditLogService.WriteAsync(AuditActions.LoginLockedOut, success: false, actorUserId: item.Id, actorAccount: username);
+                await auditLogService.WriteAsync(AuditActions.LoginLockedOut, success: false, actorUserId: item.Id, actorAccount: username, detail: $"via={via}");
                 return ("帳號已鎖定，請稍後再試。", null);
             }
 
@@ -100,7 +106,7 @@ public class MyUserServiceLogin
 
                 await context.SaveChangesAsync();
                 string failAction = item.LockoutEndUtc is not null ? AuditActions.LoginLockedOut : AuditActions.LoginFailed;
-                await auditLogService.WriteAsync(failAction, success: false, actorUserId: item.Id, actorAccount: username, detail: $"AccessFailedCount={item.AccessFailedCount}");
+                await auditLogService.WriteAsync(failAction, success: false, actorUserId: item.Id, actorAccount: username, detail: $"via={via}; AccessFailedCount={item.AccessFailedCount}");
                 return ("帳號或者密碼不正確", null);
             }
 
@@ -110,7 +116,7 @@ public class MyUserServiceLogin
             if (!item.Status)
             {
                 Logger.LogWarning("Login blocked because account is disabled. Account={Account}, UserId={UserId}", username, item.Id);
-                await auditLogService.WriteAsync(AuditActions.LoginDisabled, success: false, actorUserId: item.Id, actorAccount: username);
+                await auditLogService.WriteAsync(AuditActions.LoginDisabled, success: false, actorUserId: item.Id, actorAccount: username, detail: $"via={via}");
                 return ("此帳號已停用，請聯絡管理者。", null);
             }
 
@@ -134,7 +140,6 @@ public class MyUserServiceLogin
                 await context.SaveChangesAsync();
             }
 
-            await auditLogService.WriteAsync(AuditActions.LoginSuccess, success: true, actorUserId: item.Id, actorAccount: item.Account);
             Logger.LogInformation("Login validation succeeded for Account={Account}, UserId={UserId}.", username, item.Id);
             return (string.Empty, item);
         }

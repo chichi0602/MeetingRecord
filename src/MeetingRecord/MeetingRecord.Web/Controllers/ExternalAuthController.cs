@@ -19,17 +19,20 @@ public class ExternalAuthController : Controller
     private readonly ExternalLoginService externalLoginService;
     private readonly GoogleOAuthSettings googleOAuthSettings;
     private readonly CookieSettings cookieSettings;
+    private readonly IAuditLogService auditLogService;
     private readonly ILogger<ExternalAuthController> logger;
 
     public ExternalAuthController(
         ExternalLoginService externalLoginService,
         IOptions<GoogleOAuthSettings> googleOAuthSettings,
         IOptions<CookieSettings> cookieSettings,
+        IAuditLogService auditLogService,
         ILogger<ExternalAuthController> logger)
     {
         this.externalLoginService = externalLoginService;
         this.googleOAuthSettings = googleOAuthSettings.Value;
         this.cookieSettings = cookieSettings.Value;
+        this.auditLogService = auditLogService;
         this.logger = logger;
     }
 
@@ -66,6 +69,7 @@ public class ExternalAuthController : Controller
         if (!result.Succeeded || result.Principal is null)
         {
             logger.LogWarning("Google callback failed because external authentication did not succeed.");
+            await auditLogService.WriteAsync(AuditActions.LoginGoogleFailed, success: false, detail: "reason=ExternalAuthFailed");
             return Redirect("/Auths/Login");
         }
 
@@ -76,6 +80,11 @@ public class ExternalAuthController : Controller
         if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email))
         {
             logger.LogWarning("Google callback rejected because subject or email claim is missing.");
+            await auditLogService.WriteAsync(
+                AuditActions.LoginGoogleFailed,
+                success: false,
+                actorAccount: string.IsNullOrWhiteSpace(email) ? null : email,
+                detail: "reason=MissingClaims");
             await HttpContext.SignOutAsync(MagicObjectHelper.ExternalCookieScheme);
             return Redirect("/Auths/Login");
         }
@@ -95,6 +104,14 @@ public class ExternalAuthController : Controller
             logger.LogInformation(
                 "Google login user is disabled and awaiting approval. UserId={UserId}, Email={Email}.",
                 user.Id, email);
+            await auditLogService.WriteAsync(
+                AuditActions.LoginGooglePending,
+                success: false,
+                actorUserId: user.Id,
+                actorAccount: user.Account,
+                targetType: "MyUser",
+                targetId: user.Id.ToString(),
+                detail: "reason=待審核或已停用");
             return Redirect("/Auths/Pending");
         }
 
@@ -123,6 +140,12 @@ public class ExternalAuthController : Controller
         logger.LogInformation(
             "Google login succeeded. UserId={UserId}, Account={Account}.",
             user.Id, user.Account);
+        await auditLogService.WriteAsync(
+            AuditActions.LoginGoogleSuccess,
+            success: true,
+            actorUserId: user.Id,
+            actorAccount: user.Account,
+            detail: $"via={AuditVia.Web}");
 
         return Redirect(GetSafeReturnUrl(returnUrl));
     }

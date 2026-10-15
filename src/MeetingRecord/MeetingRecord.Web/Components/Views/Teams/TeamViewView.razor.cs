@@ -82,6 +82,7 @@ namespace MeetingRecord.Web.Components.Views.Teams
             if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_團隊清單) == false)
             {
                 RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+                await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/teams");
                 logger.LogWarning("Team view denied because current user has not this role permission.");
                 return;
             }

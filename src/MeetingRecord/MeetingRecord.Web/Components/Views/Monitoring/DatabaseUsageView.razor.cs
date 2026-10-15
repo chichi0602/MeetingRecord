@@ -56,6 +56,7 @@ public partial class DatabaseUsageView : ComponentBase
         if (!AuthenticationStateHelper.CheckIsAdmin())
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/database-usage");
             Logger.LogWarning("Database usage page denied because the current user is not an administrator.");
             return;
         }

@@ -83,6 +83,7 @@ namespace MeetingRecord.Web.Components.Views.Categories
             if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_分類清單) == false)
             {
                 RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+                await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/categories");
                 logger.LogWarning("Category view denied because current user has not this role permission.");
                 return;
             }

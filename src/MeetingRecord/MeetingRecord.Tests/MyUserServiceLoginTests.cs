@@ -8,6 +8,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
 
@@ -122,19 +123,21 @@ public sealed class MyUserServiceLoginTests
         Assert.Null(saved.LockoutEndUtc);
     }
 
+    /// <summary>
+    /// 1.0.33 起帳密驗證成功不寫稽核：成功由呼叫端在真的簽入 Cookie／發出權杖之後才寫
+    /// （API 還可能因為必須先改密碼而拒絕）。
+    /// </summary>
     [Fact]
-    public async Task LoginAsync_Success_ShouldWriteAuditLog()
+    public async Task LoginAsync_Success_ShouldNotWriteAuditLog_TheCallerDoes()
     {
         await using var fixture = await LoginFixture.CreateAsync();
         await fixture.AddUserAsync("grace", "secret-password", legacy: false);
         var service = fixture.CreateService();
 
-        await service.LoginAsync("grace", "secret-password");
+        var (_, user) = await service.LoginAsync("grace", "secret-password");
 
-        var audit = await fixture.Context.AuditLog.AsNoTracking().SingleAsync();
-        Assert.Equal("Login.Success", audit.Action);
-        Assert.True(audit.Success);
-        Assert.Equal("grace", audit.ActorAccount);
+        Assert.NotNull(user);
+        Assert.False(await fixture.Context.AuditLog.AsNoTracking().AnyAsync());
     }
 
     [Fact]
@@ -144,11 +147,25 @@ public sealed class MyUserServiceLoginTests
         await fixture.AddUserAsync("heidi", "secret-password", legacy: false);
         var service = fixture.CreateService();
 
-        await service.LoginAsync("heidi", "wrong-password");
+        await service.LoginAsync("heidi", "wrong-password", AuditVia.Api);
 
         var audit = await fixture.Context.AuditLog.AsNoTracking().SingleAsync();
-        Assert.Equal("Login.Failed", audit.Action);
+        Assert.Equal(AuditActions.LoginFailed, audit.Action);
         Assert.False(audit.Success);
+        Assert.StartsWith("via=Api;", audit.Detail);
+    }
+
+    [Fact]
+    public async Task LoginAsync_UnknownAccount_ShouldWriteFailedAuditWithDefaultWebVia()
+    {
+        await using var fixture = await LoginFixture.CreateAsync();
+
+        await fixture.CreateService().LoginAsync("nobody", "whatever");
+
+        var audit = await fixture.Context.AuditLog.AsNoTracking().SingleAsync();
+        Assert.Equal(AuditActions.LoginFailed, audit.Action);
+        Assert.Equal("nobody", audit.ActorAccount);
+        Assert.Equal("via=Web; reason=帳號不存在", audit.Detail);
     }
 
     [Fact]

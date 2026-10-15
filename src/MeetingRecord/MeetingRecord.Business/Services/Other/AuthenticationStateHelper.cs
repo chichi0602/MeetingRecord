@@ -21,6 +21,7 @@ public class AuthenticationStateHelper
     private readonly RolePermissionService rolePermissionService;
     private readonly IEffectiveTeamResolver effectiveTeamResolver;
     private readonly IPermissionChecker permissionChecker;
+    private readonly IAuditLogService auditLogService;
 
     public AuthenticationStateHelper(
         ILogger<AuthenticationStateHelper> logger,
@@ -29,7 +30,8 @@ public class AuthenticationStateHelper
         CurrentUserService currentUserService,
         RolePermissionService rolePermissionService,
         IEffectiveTeamResolver effectiveTeamResolver,
-        IPermissionChecker permissionChecker)
+        IPermissionChecker permissionChecker,
+        IAuditLogService auditLogService)
     {
         this.logger = logger;
         this.mapper = mapper;
@@ -38,6 +40,7 @@ public class AuthenticationStateHelper
         this.rolePermissionService = rolePermissionService;
         this.effectiveTeamResolver = effectiveTeamResolver;
         this.permissionChecker = permissionChecker;
+        this.auditLogService = auditLogService;
     }
 
     public async Task<AuthenticationCheckResult> Check(AuthenticationStateProvider authStateProvider, NavigationManager navigationManager)
@@ -69,7 +72,7 @@ public class AuthenticationStateHelper
         {
             logger.LogWarning("Authentication check failed because claim {ClaimType} is missing or invalid.", ClaimTypes.Sid);
             await Task.Delay(200);
-            navigationManager.NavigateTo("/Auths/Logout", true, true);
+            navigationManager.NavigateTo(LogoutReasons.LogoutUrl(LogoutReasons.InvalidClaim), true, true);
             return AuthenticationCheckResult.InvalidUser;
         }
 
@@ -78,7 +81,7 @@ public class AuthenticationStateHelper
         {
             logger.LogWarning("Authentication check failed because UserId={UserId} was not found.", id);
             await Task.Delay(200);
-            navigationManager.NavigateTo("/Auths/Logout", true, true);
+            navigationManager.NavigateTo(LogoutReasons.LogoutUrl(LogoutReasons.Deleted), true, true);
             return AuthenticationCheckResult.InvalidUser;
         }
 
@@ -86,7 +89,7 @@ public class AuthenticationStateHelper
         {
             logger.LogWarning("Authentication check failed because UserId={UserId} is disabled.", id);
             await Task.Delay(200);
-            navigationManager.NavigateTo("/Auths/Logout", true, true);
+            navigationManager.NavigateTo(LogoutReasons.LogoutUrl(LogoutReasons.Disabled), true, true);
             return AuthenticationCheckResult.InvalidUser;
         }
 
@@ -108,7 +111,7 @@ public class AuthenticationStateHelper
         {
             logger.LogWarning("User {UserId} does not have a role view assigned. Redirecting to logout.", id);
             await Task.Delay(200);
-            navigationManager.NavigateTo("/Auths/Logout", true, true);
+            navigationManager.NavigateTo(LogoutReasons.LogoutUrl(LogoutReasons.NoRole), true, true);
             return AuthenticationCheckResult.InvalidUser;
         }
 
@@ -138,7 +141,7 @@ public class AuthenticationStateHelper
         {
             logger.LogError(ex, "Failed to initialize permission data for UserId={UserId}.", id);
             await Task.Delay(200);
-            navigationManager.NavigateTo("/Auths/Logout", true, true);
+            navigationManager.NavigateTo(LogoutReasons.LogoutUrl(LogoutReasons.PermissionError), true, true);
             return AuthenticationCheckResult.InvalidUser;
         }
     }
@@ -173,6 +176,26 @@ public class AuthenticationStateHelper
         }
 
         return await myUserService.GetAsync(id);
+    }
+
+    /// <summary>
+    /// 頁面擋下目前使用者時寫一筆 <see cref="AuditActions.PermissionDenied"/>（1.0.33）。
+    /// 各頁在顯示「你沒有權限存取此頁面」的分支呼叫。
+    /// ⚠️ 刻意不放進 <see cref="CheckAccessPage"/>／<see cref="CheckIsAdmin"/>：側邊欄過濾每個選單項目都會呼叫它們，
+    /// 放進去每開一頁就洗出一堆拒絕紀錄（<c>PageAccessDeniedAuditTests</c> 守門每個拒絕分支都有呼叫）。
+    /// </summary>
+    /// <param name="route">被擋下的頁面路由，例如 <c>/audit-logs</c>。</param>
+    public Task RecordPageAccessDeniedAsync(string route)
+    {
+        var currentUser = currentUserService.CurrentUser;
+        return auditLogService.WriteAsync(
+            AuditActions.PermissionDenied,
+            success: false,
+            actorUserId: currentUser.Id > 0 ? currentUser.Id : null,
+            actorAccount: currentUser.Id > 0 ? currentUser.Account : null,
+            targetType: "Page",
+            targetId: route,
+            detail: $"via={AuditVia.Blazor}");
     }
 
     public bool CheckIsAdmin()

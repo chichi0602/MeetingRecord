@@ -93,6 +93,7 @@ public partial class PromptTemplateViewView
         if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_提示詞清單) == false)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/prompttemplates");
             logger.LogWarning("Prompt template view denied because current user has not this role permission.");
             return;
         }

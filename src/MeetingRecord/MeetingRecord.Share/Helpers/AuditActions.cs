@@ -15,12 +15,34 @@ public static class AuditActions
     public const string LoginFailed = "Login.Failed";
     public const string LoginLockedOut = "Login.LockedOut";
     public const string LoginDisabled = "Login.Disabled";
+    public const string LoginGoogleSuccess = "Login.GoogleSuccess";
+    public const string LoginGoogleFailed = "Login.GoogleFailed";
+    public const string LoginGooglePending = "Login.GooglePending";
+    public const string LogoutManual = "Logout.Manual";
+    public const string LogoutForced = "Logout.Forced";
+    public const string TokenRefreshFailed = "Token.RefreshFailed";
+    #endregion
+
+    #region 密碼
+    public const string PasswordChange = "Password.Change";
+    public const string PasswordApiSet = "Password.ApiSet";
+    public const string PasswordReset = "Password.Reset";
+    #endregion
+
+    #region 權限
+    public const string PermissionDenied = "Permission.Denied";
     #endregion
 
     #region 使用者與角色
     public const string UserCreate = "User.Create";
     public const string UserUpdate = "User.Update";
     public const string UserDelete = "User.Delete";
+    public const string UserEnable = "User.Enable";
+    public const string UserDisable = "User.Disable";
+    public const string UserTeamAdd = "User.TeamAdd";
+    public const string UserTeamRemove = "User.TeamRemove";
+    public const string UserGoogleLink = "User.GoogleLink";
+    public const string UserGoogleCreate = "User.GoogleCreate";
     public const string RoleCreate = "Role.Create";
     public const string RoleUpdate = "Role.Update";
     public const string RoleDelete = "Role.Delete";
@@ -73,10 +95,28 @@ public static class AuditActions
         [LoginFailed] = "登入失敗",
         [LoginLockedOut] = "登入鎖定",
         [LoginDisabled] = "停用帳號嘗試登入",
+        [LoginGoogleSuccess] = "Google 登入成功",
+        [LoginGoogleFailed] = "Google 登入失敗",
+        [LoginGooglePending] = "Google 登入待審核",
+        [LogoutManual] = "登出",
+        [LogoutForced] = "被系統登出",
+        [TokenRefreshFailed] = "API 權杖更新失敗",
+
+        [PasswordChange] = "變更密碼",
+        [PasswordApiSet] = "設定 API 密碼",
+        [PasswordReset] = "管理者重設密碼",
+
+        [PermissionDenied] = "權限拒絕",
 
         [UserCreate] = "新增使用者",
         [UserUpdate] = "修改使用者",
         [UserDelete] = "刪除使用者",
+        [UserEnable] = "啟用使用者",
+        [UserDisable] = "停用使用者",
+        [UserTeamAdd] = "加入團隊",
+        [UserTeamRemove] = "移出團隊",
+        [UserGoogleLink] = "連結 Google 帳號",
+        [UserGoogleCreate] = "Google 自動建立帳號",
         [RoleCreate] = "新增角色",
         [RoleUpdate] = "修改角色",
         [RoleDelete] = "刪除角色",

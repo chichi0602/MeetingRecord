@@ -10,6 +10,7 @@ using MeetingRecord.Dtos.Auths;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Controllers;
 using System.Net;
@@ -47,6 +48,43 @@ public sealed class GoLiveReviewApiTests : IClassFixture<ApiTestApplicationFacto
 
         var refresh = await client.PostAsJsonAsync("/api/Auth/refresh", new RefreshTokenRequestDto { RefreshToken = login.Data!.RefreshToken });
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+
+        // 1.0.33：被拒的換發要留稽核，認得出是誰。
+        var audits = await ReadAuditsAsync(userId);
+        var refused = Assert.Single(audits, x => x.Action == AuditActions.TokenRefreshFailed);
+        Assert.False(refused.Success);
+        Assert.Equal("via=Api; reason=AccountStateChanged", refused.Detail);
+    }
+
+    /// <summary>1.0.33：API 登入成功由控制器在發出權杖之後寫，摘要標 via=Api。</summary>
+    [Fact]
+    public async Task Login_Success_ShouldWriteLoginSuccessViaApi()
+    {
+        var (account, password, userId) = await SeedUserAsync();
+        using var client = factory.CreateClient();
+
+        var login = await client.PostAsJsonAsync("/api/Auth/login", new LoginRequestDto { Account = account, Password = password });
+
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var audit = Assert.Single(await ReadAuditsAsync(userId));
+        Assert.Equal(AuditActions.LoginSuccess, audit.Action);
+        Assert.Equal(account, audit.ActorAccount);
+        Assert.Equal("via=Api", audit.Detail);
+    }
+
+    [Fact]
+    public async Task Refresh_WithInvalidToken_ShouldWriteRefreshFailed()
+    {
+        using var client = factory.CreateClient();
+        var marker = DateTime.UtcNow.AddSeconds(-1);
+
+        var refresh = await client.PostAsJsonAsync("/api/Auth/refresh", new RefreshTokenRequestDto { RefreshToken = "not-a-token" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+        var found = false;
+        await WithDbAsync(async db => found = await db.AuditLog.AnyAsync(x =>
+            x.Action == AuditActions.TokenRefreshFailed && x.OccurredAt >= marker && x.Detail == "via=Api; reason=InvalidToken"));
+        Assert.True(found);
     }
 
     [Fact]
@@ -60,6 +98,11 @@ public sealed class GoLiveReviewApiTests : IClassFixture<ApiTestApplicationFacto
         var login = await client.PostAsJsonAsync("/api/Auth/login", new LoginRequestDto { Account = account, Password = password });
 
         Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+
+        // 1.0.33：帳密對了但被拒，只記失敗、不記成功。
+        var audit = Assert.Single(await ReadAuditsAsync(userId));
+        Assert.Equal(AuditActions.LoginFailed, audit.Action);
+        Assert.Equal("via=Api; reason=MustChangePassword", audit.Detail);
     }
 
     [Fact]
@@ -168,6 +211,13 @@ public sealed class GoLiveReviewApiTests : IClassFixture<ApiTestApplicationFacto
 
     private MeetingRecord.Models.Systems.SystemSettings GetSettings()
         => factory.Services.GetRequiredService<IOptions<MeetingRecord.Models.Systems.SystemSettings>>().Value;
+
+    private async Task<List<AuditLog>> ReadAuditsAsync(int userId)
+    {
+        var rows = new List<AuditLog>();
+        await WithDbAsync(async db => rows = await db.AuditLog.AsNoTracking().Where(x => x.ActorUserId == userId).OrderBy(x => x.Id).ToListAsync());
+        return rows;
+    }
 
     private async Task WithDbAsync(Func<BackendDBContext, Task> action)
     {

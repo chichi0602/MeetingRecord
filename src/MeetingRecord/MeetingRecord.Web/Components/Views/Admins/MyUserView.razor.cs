@@ -95,6 +95,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
             if (!AuthenticationStateHelper.CheckIsAdmin())
             {
                 RoleMessage = "你沒有權限存取此頁面";
+                await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/myusers");
                 logger.LogWarning("User management view denied because current user is not an administrator.");
                 return;
             }

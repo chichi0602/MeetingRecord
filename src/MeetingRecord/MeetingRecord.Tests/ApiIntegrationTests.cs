@@ -127,6 +127,17 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.False(result.Success);
         Assert.Equal(403, result.StatusCode);
+
+        // 1.0.33：403 要留一筆權限拒絕。
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var denied = await db.AuditLog.AsNoTracking().SingleAsync(x => x.Action == AuditActions.PermissionDenied && x.ActorAccount == account);
+            Assert.False(denied.Success);
+            Assert.Equal("ApiEndpoint", denied.TargetType);
+            Assert.Equal("GET /api/Project/1", denied.TargetId);
+            Assert.StartsWith("缺少權限：", denied.Detail);
+        }
     }
 
     [Fact]

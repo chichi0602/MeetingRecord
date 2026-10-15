@@ -271,6 +271,7 @@ public partial class ProjectViewView : IDisposable
         if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_專案項目) == false)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/projects");
             logger.LogWarning("Project management view denied because current user has not this role permission.");
             return;
         }

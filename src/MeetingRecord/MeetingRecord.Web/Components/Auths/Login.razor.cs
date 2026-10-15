@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
 using System.Security.Claims;
 
@@ -32,6 +33,9 @@ namespace MeetingRecord.Web.Components.Auths
 
         [Inject]
         public MyUserServiceLogin MyUserServiceLogin { get; set; } = default!;
+
+        [Inject]
+        public IAuditLogService AuditLogService { get; set; } = default!;
 
         [Inject]
         public IOptions<GoogleOAuthSettings> GoogleOptions { get; set; } = default!;
@@ -99,7 +103,7 @@ namespace MeetingRecord.Web.Components.Auths
                 return;
             }
 
-            (string result, MyUser? myUser) = await MyUserServiceLogin.LoginAsync(Input.Account, Input.Password);
+            (string result, MyUser? myUser) = await MyUserServiceLogin.LoginAsync(Input.Account, Input.Password, AuditVia.Web);
             if (!string.IsNullOrEmpty(result) || myUser is null)
             {
                 Logger.LogWarning("Login failed for Account={Account}. Reason={Reason}", Input.Account, result);
@@ -142,6 +146,14 @@ namespace MeetingRecord.Web.Components.Auths
                         "CookieAuthenticationScheme",
                         new ClaimsPrincipal(claimsIdentity),
                         authProperties);
+
+                    // 1.0.33：真的簽入 Cookie 之後才算登入成功（失敗類由 LoginAsync 寫）。
+                    await AuditLogService.WriteAsync(
+                        AuditActions.LoginSuccess,
+                        success: true,
+                        actorUserId: myUser.Id,
+                        actorAccount: myUser.Account,
+                        detail: $"via={AuditVia.Web}");
 
                     Logger.LogInformation(
                         "Login succeeded for Account={Account}, UserId={UserId}, RedirectUri={RedirectUri}.",

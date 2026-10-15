@@ -165,6 +165,7 @@ public partial class TodoViewView : IAsyncDisposable
         if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_待辦事項) == false)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/todos");
             logger.LogWarning("Todo view denied because current user has not this role permission.");
             return;
         }

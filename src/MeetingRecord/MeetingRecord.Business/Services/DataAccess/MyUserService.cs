@@ -321,6 +321,15 @@ public class MyUserService
                 targetType: nameof(MyUser), targetId: itemData.Id.ToString(),
                 detail: BuildAssignmentDetail(itemData.Account, paraObject));
 
+            // 1.0.33：管理者在編輯視窗填了新密碼，另外記一筆重設密碼（User.Update 的摘要看不出動了密碼）。
+            if (!string.IsNullOrWhiteSpace(paraObject.Password))
+            {
+                await auditLogService.WriteAsync(
+                    AuditActions.PasswordReset, success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+                    targetType: nameof(MyUser), targetId: itemData.Id.ToString(),
+                    detail: $"by=admin; account={itemData.Account}; mustChangePassword={itemData.MustChangePassword}");
+            }
+
             Logger.LogInformation("User updated successfully. UserId={UserId}, Account={Account}", itemData.Id, itemData.Account);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -502,6 +511,7 @@ public class MyUserService
         if (SecurePasswordHasher.VerifyPassword(currentPassword, user.Password, user.Salt) == PasswordVerificationOutcome.Failed)
         {
             Logger.LogWarning("Own password change rejected because current password is invalid. UserId={UserId}", userId);
+            await WriteOwnPasswordAuditAsync(AuditActions.PasswordChange, user, success: false, "by=self; via=FirstLogin; reason=WrongCurrentPassword");
             return VerifyRecordResultFactory.Build(false, "目前密碼不正確。");
         }
 
@@ -524,6 +534,7 @@ public class MyUserService
 
         await context.SaveChangesAsync();
 
+        await WriteOwnPasswordAuditAsync(AuditActions.PasswordChange, user, success: true, "by=self; via=FirstLogin");
         Logger.LogInformation("Own password changed successfully. UserId={UserId}", userId);
         return VerifyRecordResultFactory.Build(true);
     }
@@ -574,6 +585,7 @@ public class MyUserService
             if (SecurePasswordHasher.VerifyPassword(currentPassword ?? string.Empty, user.Password, user.Salt) == PasswordVerificationOutcome.Failed)
             {
                 Logger.LogWarning("Set API password rejected because current password is invalid. UserId={UserId}", userId);
+                await WriteOwnPasswordAuditAsync(AuditActions.PasswordApiSet, user, success: false, "by=self; reason=WrongCurrentPassword");
                 return VerifyRecordResultFactory.Build(false, "目前密碼不正確。");
             }
         }
@@ -595,6 +607,7 @@ public class MyUserService
 
         await context.SaveChangesAsync();
 
+        await WriteOwnPasswordAuditAsync(AuditActions.PasswordApiSet, user, success: true, $"by=self; firstLocalPassword={!hasLocalPassword}");
         Logger.LogInformation("Own API password set successfully. UserId={UserId}", userId);
         return VerifyRecordResultFactory.Build(true);
     }
@@ -637,6 +650,12 @@ public class MyUserService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<MyUser>(context);
 
+            var (actorUserId, actorAccount) = ResolveActor();
+            await auditLogService.WriteAsync(
+                value ? AuditActions.UserEnable : AuditActions.UserDisable, success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+                targetType: nameof(MyUser), targetId: id.ToString(),
+                detail: $"account={item.Account}");
+
             Logger.LogInformation("MyUser state updated. Id={Id}, Value={Value}", id, value);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -670,6 +689,7 @@ public class MyUserService
         await context.SaveChangesAsync();
         CleanTrackingHelper.Clean<UserTeam>(context);
 
+        await WriteTeamMembershipAuditAsync(AuditActions.UserTeamAdd, teamId, toAdd);
         Logger.LogInformation("Users added to data group. TeamId={TeamId}, Added={Added}", teamId, toAdd.Count);
         return toAdd.Count;
     }
@@ -686,8 +706,42 @@ public class MyUserService
         await context.SaveChangesAsync();
         CleanTrackingHelper.Clean<UserTeam>(context);
 
+        await WriteTeamMembershipAuditAsync(AuditActions.UserTeamRemove, teamId, rows.Select(x => x.MyUserId).ToList());
         Logger.LogInformation("Users removed from data group. TeamId={TeamId}, Removed={Removed}", teamId, rows.Count);
         return rows.Count;
+    }
+
+    /// <summary>摘要最多列幾個使用者編號，超過的只算在 count 裡。</summary>
+    private const int MaxAuditUserIds = 50;
+
+    /// <summary>團隊成員異動的稽核（1.0.33）；實際異動 0 人時不寫。</summary>
+    private Task WriteTeamMembershipAuditAsync(string action, int teamId, IReadOnlyList<int> userIds)
+    {
+        if (userIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var (actorUserId, actorAccount) = ResolveActor();
+        var listed = string.Join(",", userIds.OrderBy(x => x).Take(MaxAuditUserIds));
+        var more = userIds.Count > MaxAuditUserIds ? ",…" : string.Empty;
+        return auditLogService.WriteAsync(
+            action, success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+            targetType: nameof(Team), targetId: teamId.ToString(),
+            detail: $"count={userIds.Count}; userIds={listed}{more}");
+    }
+
+    /// <summary>
+    /// 自己改密碼的稽核（1.0.33）：操作者與目標都是本人。<c>ResolveActor()</c> 取不到（例如測試或非 Blazor 路徑）時用本人。
+    /// ⚠️ 摘要不放任何密碼內容。
+    /// </summary>
+    private Task WriteOwnPasswordAuditAsync(string action, MyUser user, bool success, string detail)
+    {
+        var (actorUserId, actorAccount) = ResolveActor();
+        return auditLogService.WriteAsync(
+            action, success: success, actorUserId: actorUserId ?? user.Id, actorAccount: actorAccount ?? user.Account,
+            targetType: nameof(MyUser), targetId: user.Id.ToString(),
+            detail: detail);
     }
 
     private Task OtherDependencyData(MyUserAdapterModel data)
@@ -748,6 +802,7 @@ public class MyUserService
             if (SecurePasswordHasher.VerifyPassword(currentPassword, user.Password, user.Salt) == PasswordVerificationOutcome.Failed)
             {
                 Logger.LogWarning("Change password rejected because current password is incorrect. UserId={UserId}", userId);
+                await WriteOwnPasswordAuditAsync(AuditActions.PasswordChange, user, success: false, "by=self; via=Dialog; reason=WrongCurrentPassword");
                 return VerifyRecordResultFactory.Build(false, "目前密碼輸入錯誤。");
             }
 
@@ -760,6 +815,7 @@ public class MyUserService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<MyUser>(context);
 
+            await WriteOwnPasswordAuditAsync(AuditActions.PasswordChange, user, success: true, "by=self; via=Dialog");
             Logger.LogInformation("Password changed successfully. UserId={UserId}", userId);
             return VerifyRecordResultFactory.Build(true);
         }

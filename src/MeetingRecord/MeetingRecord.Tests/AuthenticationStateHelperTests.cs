@@ -17,6 +17,26 @@ namespace MeetingRecord.Tests;
 
 public sealed class AuthenticationStateHelperTests
 {
+    /// <summary>1.0.33：頁面拒絕寫一筆 Permission.Denied，目標是被擋下的路由，操作者是目前使用者。</summary>
+    [Fact]
+    public async Task RecordPageAccessDeniedAsync_ShouldWritePermissionDeniedForThePage()
+    {
+        await using var fixture = await AuthenticationStateHelperFixture.CreateAsync();
+        fixture.CurrentUserService.CurrentUser.Id = 7;
+        fixture.CurrentUserService.CurrentUser.Account = "viewer";
+
+        await fixture.CreateHelper().RecordPageAccessDeniedAsync("/audit-logs");
+
+        var audit = await fixture.Context.AuditLog.AsNoTracking().SingleAsync();
+        Assert.Equal(AuditActions.PermissionDenied, audit.Action);
+        Assert.False(audit.Success);
+        Assert.Equal(7, audit.ActorUserId);
+        Assert.Equal("viewer", audit.ActorAccount);
+        Assert.Equal("Page", audit.TargetType);
+        Assert.Equal("/audit-logs", audit.TargetId);
+        Assert.Equal("via=Blazor", audit.Detail);
+    }
+
     [Fact]
     public async Task Check_WithUnauthenticatedPrincipal_ShouldReturnUnauthenticatedAndNavigateLogin()
     {
@@ -41,7 +61,8 @@ public sealed class AuthenticationStateHelperTests
         var result = await fixture.CreateHelper().Check(authProvider, navigationManager);
 
         Assert.Equal(AuthenticationCheckResult.InvalidUser, result);
-        Assert.Equal("/Auths/Logout", navigationManager.NavigatedTo);
+        // 1.0.33：帶上原因，登出頁據此寫「被系統登出」。
+        Assert.Equal(LogoutReasons.LogoutUrl(LogoutReasons.InvalidClaim), navigationManager.NavigatedTo);
     }
 
     [Fact]
@@ -54,7 +75,8 @@ public sealed class AuthenticationStateHelperTests
         var result = await fixture.CreateHelper().Check(authProvider, navigationManager);
 
         Assert.Equal(AuthenticationCheckResult.InvalidUser, result);
-        Assert.Equal("/Auths/Logout", navigationManager.NavigatedTo);
+        // 1.0.33：帶上原因，登出頁據此寫「被系統登出」。
+        Assert.Equal(LogoutReasons.LogoutUrl(LogoutReasons.Deleted), navigationManager.NavigatedTo);
     }
 
     [Fact]
@@ -68,7 +90,8 @@ public sealed class AuthenticationStateHelperTests
         var result = await fixture.CreateHelper().Check(authProvider, navigationManager);
 
         Assert.Equal(AuthenticationCheckResult.InvalidUser, result);
-        Assert.Equal("/Auths/Logout", navigationManager.NavigatedTo);
+        // 1.0.33：帶上原因，登出頁據此寫「被系統登出」。
+        Assert.Equal(LogoutReasons.LogoutUrl(LogoutReasons.Disabled), navigationManager.NavigatedTo);
     }
 
     [Fact]
@@ -82,7 +105,8 @@ public sealed class AuthenticationStateHelperTests
         var result = await fixture.CreateHelper().Check(authProvider, navigationManager);
 
         Assert.Equal(AuthenticationCheckResult.InvalidUser, result);
-        Assert.Equal("/Auths/Logout", navigationManager.NavigatedTo);
+        // 1.0.33：帶上原因，登出頁據此寫「被系統登出」。
+        Assert.Equal(LogoutReasons.LogoutUrl(LogoutReasons.NoRole), navigationManager.NavigatedTo);
     }
 
     [Fact]
@@ -96,7 +120,8 @@ public sealed class AuthenticationStateHelperTests
         var result = await fixture.CreateHelper().Check(authProvider, navigationManager);
 
         Assert.Equal(AuthenticationCheckResult.InvalidUser, result);
-        Assert.Equal("/Auths/Logout", navigationManager.NavigatedTo);
+        // 1.0.33：帶上原因，登出頁據此寫「被系統登出」。
+        Assert.Equal(LogoutReasons.LogoutUrl(LogoutReasons.PermissionError), navigationManager.NavigatedTo);
     }
 
     [Fact]
@@ -322,7 +347,8 @@ public sealed class AuthenticationStateHelperTests
                 CurrentUserService,
                 rolePermissionService,
                 new EffectiveTeamResolver(Context),
-                new PermissionChecker(Context));
+                new PermissionChecker(Context),
+                TestAuditLogs.CreateService(Context));
         }
 
         public async Task<MyUser> AddUserAsync(

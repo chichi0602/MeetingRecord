@@ -1,0 +1,22 @@
+/* Token 用量分組表（1.0.31）。顏色一律用 --oat-* 權杖。 */
+.group-number {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.group-cost {
+    font-weight: 600;
+}
+
+.group-failed {
+    color: var(--oat-err);
+}
+
+.group-warn {
+    color: var(--oat-warn);
+    cursor: help;
+}
+
+.group-muted {
+    color: var(--oat-ink-mid);
+}

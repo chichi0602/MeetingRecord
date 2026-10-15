@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Models.Systems;
 using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.Dashboard;
@@ -9,7 +10,7 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Business.Services.AiUsage;
 
 /// <summary>
-/// 「Token 用量」頁（1.0.30 前名為「AI 用量分析」）的讀取層。
+/// 「Token 用量」頁（1.0.30 前名為「AI 用量分析」）的讀取層；1.0.31 起加上篩選、分組、每日、明細、匯出與刪除。
 ///
 /// <para>
 /// ⚠️ <b>金額一律撈進記憶體再加總，絕不在 SQL 端 SUM 或 ORDER BY。</b>
@@ -32,6 +33,12 @@ public class AiUsageAnalysisService
 {
     /// <summary>分佈圖最多顯示幾項，其餘併成「其他」。</summary>
     private const int TopCount = 8;
+
+    /// <summary>每日統計補齊沒有資料的日子的最長區間；超過只列有資料的日子，免得一年列出 365 列空白。</summary>
+    public const int MaxFilledDays = 92;
+
+    /// <summary>CSV 匯出的筆數上限（同 AI 對話紀錄）。</summary>
+    public const int MaxExportRows = 10_000;
 
     private readonly BackendDBContext context;
     private readonly ExchangeRateCache exchangeRates;
@@ -57,6 +64,55 @@ public class AiUsageAnalysisService
     /// <returns>刪除的列數。</returns>
     public Task<int> PurgeBeforeAsync(DateTime before, CancellationToken cancellationToken = default)
         => context.AiUsageLog.Where(x => x.OccurredAt < before).ExecuteDeleteAsync(cancellationToken);
+
+    /// <summary>刪除單筆帳本列（1.0.31）。AI 對話紀錄不連動。</summary>
+    /// <returns>是否真的刪到（已被別人刪掉時為 false）。</returns>
+    public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
+        => await context.AiUsageLog.Where(x => x.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
+
+    /// <summary>清空整張帳本（1.0.31）。AI 對話紀錄與會議時數（<c>Meeting.MediaDurationSeconds</c>）不受影響。</summary>
+    /// <returns>刪除的列數。</returns>
+    public Task<int> ClearAllAsync(CancellationToken cancellationToken = default)
+        => context.AiUsageLog.ExecuteDeleteAsync(cancellationToken);
+
+    /// <summary>
+    /// 套用篩選。⚠️ 只比對整數、字串與日期欄位；金額欄位是 TEXT，不可以放進 SQL 條件。
+    /// </summary>
+    private static IQueryable<AiUsageLog> ApplyFilter(IQueryable<AiUsageLog> source, AiUsageFilter filter)
+    {
+        if (filter.From is { } from)
+        {
+            source = source.Where(x => x.OccurredAt >= from);
+        }
+
+        if (filter.ToExclusive is { } toExclusive)
+        {
+            source = source.Where(x => x.OccurredAt < toExclusive);
+        }
+
+        if (filter.Feature is { } feature)
+        {
+            source = source.Where(x => x.Feature == feature);
+        }
+
+        if (filter.UserId is { } userId)
+        {
+            source = source.Where(x => x.UserId == userId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Model))
+        {
+            var model = filter.Model;
+            source = source.Where(x => x.Model == model);
+        }
+
+        if (filter.Outcome is { } outcome)
+        {
+            source = source.Where(x => x.Outcome == outcome);
+        }
+
+        return source;
+    }
 
     /// <summary>
     /// 這一頁要用哪一種幣別顯示（0.4.88）。
@@ -111,20 +167,7 @@ public class AiUsageAnalysisService
             source = source.Where(x => x.Feature == selected);
         }
 
-        var facts = await source
-            .Select(x => new UsageFact(
-                x.OccurredAt,
-                x.Feature,
-                x.Outcome,
-                x.Model,
-                x.UserName,
-                x.InputTokens,
-                x.OutputTokens,
-                x.AudioSeconds,
-                x.EstimatedCost,
-                x.Currency,
-                x.ExchangeRate))
-            .ToListAsync(cancellationToken);
+        var facts = await ProjectFacts(source).ToListAsync(cancellationToken);
 
         var currency = facts.Select(x => x.Currency).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "USD";
 
@@ -145,9 +188,9 @@ public class AiUsageAnalysisService
             startedAt,
             BuildCards(thisMonth, thisMonthCost, lastMonthCost, view, feature),
             BuildCumulativeCost(thisMonth, lastMonthSamePeriod, now, view),
-            BuildSlices(thisMonth.GroupBy(x => AiUsageFeatureText.Describe(x.Feature)), view),
-            BuildSlices(thisMonth.GroupBy(x => string.IsNullOrWhiteSpace(x.Model) ? "（未知）" : x.Model), view),
-            BuildSlices(thisMonth.GroupBy(x => x.UserName ?? "（未記錄）"), view),
+            BuildSlices(thisMonth.GroupBy(FeatureKey), view),
+            BuildSlices(thisMonth.GroupBy(ModelKey), view),
+            BuildSlices(thisMonth.GroupBy(UserKey), view),
             view.Format(view.Sum(thisMonth)),
             thisMonth.Count(x => x.EstimatedCost is null && x.Outcome == AiUsageOutcome.Succeeded),
             thisMonth.Count(x => x.Outcome != AiUsageOutcome.Succeeded),
@@ -171,13 +214,7 @@ public class AiUsageAnalysisService
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var source = context.AiUsageLog.AsNoTracking()
-            .Where(x => x.OccurredAt >= query.From && x.OccurredAt < query.ToExclusive);
-
-        if (query.Feature is { } feature)
-        {
-            source = source.Where(x => x.Feature == feature);
-        }
+        var source = ApplyFilter(context.AiUsageLog.AsNoTracking(), query.Filter);
 
         var totalCount = await source.CountAsync(cancellationToken);
 
@@ -187,9 +224,11 @@ public class AiUsageAnalysisService
         // ⚠️ ThenByDescending(Id) 不可省：一趟分段摘要會在同一秒內寫進十幾列，
         //    只用 OccurredAt 排序時 SQLite 不保證穩定，翻頁會看到同一列出現兩次、另一列消失。
         // ⚠️ 絕對不可 OrderBy(EstimatedCost)——decimal 在 SQLite 是 TEXT，那是字典序。
-        var rows = await source
-            .OrderByDescending(x => x.OccurredAt)
-            .ThenByDescending(x => x.Id)
+        var ordered = query.SortAscending
+            ? source.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id)
+            : source.OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.Id);
+
+        var rows = await ordered
             .Skip((page - 1) * size)
             .Take(size)
             .Select(x => new
@@ -210,6 +249,7 @@ public class AiUsageAnalysisService
                 x.Currency,
                 x.ExchangeRate,
                 x.ErrorMessage,
+                x.CallId,
             })
             .ToListAsync(cancellationToken);
 
@@ -230,7 +270,234 @@ public class AiUsageAnalysisService
                 DescribeTarget(x.MeetingId, x.ProjectId),
                 DescribeUsage(x.Feature, x.InputTokens, x.OutputTokens, x.AudioSeconds, x.IsAudioDurationEstimated),
                 rowView.Format(rowView.Of(x.EstimatedCost, x.ExchangeRate)),
-                x.ErrorMessage))]);
+                x.ErrorMessage,
+                x.CallId))]);
+    }
+
+    /// <summary>
+    /// 篩選範圍的統計（1.0.31）：一次把範圍內的列撈進記憶體，算出合計、每日與三種分組。
+    /// 金額一律在記憶體加總與排序——見類別註解的 SQLite decimal 說明。
+    /// </summary>
+    public async Task<AiUsageReport> GetReportAsync(
+        AiUsageFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var facts = await ProjectFacts(ApplyFilter(context.AiUsageLog.AsNoTracking(), filter))
+            .ToListAsync(cancellationToken);
+
+        var view = BuildCostView(
+            facts.Select(x => x.Currency).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "USD");
+        var cost = view.Sum(facts);
+
+        var (daily, isFilled) = BuildDaily(facts, filter, view);
+
+        return new AiUsageReport(
+            facts.Count,
+            facts.Count(x => x.Outcome != AiUsageOutcome.Succeeded),
+            facts.Sum(x => (long)(x.InputTokens ?? 0)),
+            facts.Sum(x => (long)(x.OutputTokens ?? 0)),
+            facts.Sum(x => x.AudioSeconds ?? 0d),
+            cost,
+            view.Format(cost),
+            facts.Count(x => x.EstimatedCost is null && x.Outcome == AiUsageOutcome.Succeeded),
+            view.Convert ? facts.Count(x => x.EstimatedCost is not null && x.ExchangeRate is null) : 0,
+            daily,
+            isFilled,
+            BuildGroups(facts.GroupBy(UserKey), view),
+            BuildGroups(facts.GroupBy(FeatureKey), view),
+            BuildGroups(facts.GroupBy(ModelKey), view),
+            BuildSlices(facts.GroupBy(FeatureKey), view),
+            BuildSlices(facts.GroupBy(ModelKey), view),
+            BuildSlices(facts.GroupBy(UserKey), view));
+    }
+
+    /// <summary>單筆明細（1.0.31）。找不到回 null。</summary>
+    public async Task<AiUsageDetail?> GetDetailAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var row = await context.AiUsageLog.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        return row is null ? null : ToDetail(row, BuildCostView(row.Currency ?? "USD"));
+    }
+
+    /// <summary>CSV 匯出（1.0.31）：套用篩選、新到舊，最多 <paramref name="maxRows"/> 筆。</summary>
+    public async Task<IReadOnlyList<AiUsageDetail>> GetForExportAsync(
+        AiUsageFilter filter,
+        int maxRows = MaxExportRows,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var rows = await ApplyFilter(context.AiUsageLog.AsNoTracking(), filter)
+            .OrderByDescending(x => x.OccurredAt)
+            .ThenByDescending(x => x.Id)
+            .Take(Math.Max(maxRows, 1))
+            .ToListAsync(cancellationToken);
+
+        var view = BuildCostView(
+            rows.Select(x => x.Currency).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "USD");
+
+        return [.. rows.Select(x => ToDetail(x, view))];
+    }
+
+    /// <summary>篩選下拉的選項（1.0.31）：帳本裡出現過的使用者（取最近一次的名稱）與模型。</summary>
+    public async Task<AiUsageFilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default)
+    {
+        // 以 (UserId, UserName) 分組：同一人改過名稱也只有幾組，不必把整張帳本撈回來。
+        var users = await context.AiUsageLog.AsNoTracking()
+            .Where(x => x.UserId != null)
+            .GroupBy(x => new { x.UserId, x.UserName })
+            .Select(g => new { g.Key.UserId, g.Key.UserName, LastAt = g.Max(x => x.OccurredAt) })
+            .ToListAsync(cancellationToken);
+
+        var models = await context.AiUsageLog.AsNoTracking()
+            .Select(x => x.Model)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
+
+        return new AiUsageFilterOptions(
+            [
+                .. users
+                    .GroupBy(x => x.UserId!.Value)
+                    .Select(g => (g.Key, g.OrderByDescending(x => x.LastAt)
+                        .Select(x => x.UserName)
+                        .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? $"#{g.Key}"))
+                    .OrderBy(x => x.Item2, StringComparer.CurrentCulture),
+            ],
+            [.. models.Where(x => !string.IsNullOrWhiteSpace(x))]);
+    }
+
+    private static IQueryable<UsageFact> ProjectFacts(IQueryable<AiUsageLog> source)
+        => source.Select(x => new UsageFact(
+            x.OccurredAt,
+            x.Feature,
+            x.Outcome,
+            x.Model,
+            x.UserName,
+            x.InputTokens,
+            x.OutputTokens,
+            x.AudioSeconds,
+            x.EstimatedCost,
+            x.Currency,
+            x.ExchangeRate));
+
+    private static string UserKey(UsageFact fact) => fact.UserName ?? "（未記錄）";
+
+    private static string FeatureKey(UsageFact fact) => AiUsageFeatureText.Describe(fact.Feature);
+
+    private static string ModelKey(UsageFact fact) => string.IsNullOrWhiteSpace(fact.Model) ? "（未知）" : fact.Model;
+
+    /// <summary>金額算不出來而未計入的列：成功卻沒單價，或有金額卻沒匯率。失敗且沒金額的不算（本來就沒用量）。</summary>
+    private static bool IsNotCounted(UsageFact fact, CostView view)
+        => view.Of(fact) is null && (fact.Outcome == AiUsageOutcome.Succeeded || fact.EstimatedCost is not null);
+
+    /// <summary>分組：依金額由大到小（記憶體排序），同額再依次數與名稱，順序才穩定。</summary>
+    private static IReadOnlyList<AiUsageGroupRow> BuildGroups(
+        IEnumerable<IGrouping<string, UsageFact>> groups,
+        CostView view)
+        =>
+        [
+            .. groups
+                .Select(g =>
+                {
+                    var cost = view.Sum(g);
+                    return new AiUsageGroupRow(
+                        g.Key,
+                        g.Count(),
+                        g.Count(x => x.Outcome != AiUsageOutcome.Succeeded),
+                        g.Sum(x => (long)(x.InputTokens ?? 0)),
+                        g.Sum(x => (long)(x.OutputTokens ?? 0)),
+                        g.Sum(x => x.AudioSeconds ?? 0d),
+                        cost,
+                        g.Any(x => view.Of(x) is not null) ? view.Format(cost) : "—",
+                        g.Count(x => IsNotCounted(x, view)));
+                })
+                .OrderByDescending(x => x.Cost)
+                .ThenByDescending(x => x.CallCount)
+                .ThenBy(x => x.Key, StringComparer.Ordinal),
+        ];
+
+    /// <summary>
+    /// 每日統計，新到舊。區間有明確起訖且不超過 <see cref="MaxFilledDays"/> 天時補齊沒有資料的日子
+    /// （畫面才看得出「哪幾天沒用」）；否則只列有資料的日子。
+    /// </summary>
+    private static (IReadOnlyList<AiUsageDailyRow> Rows, bool IsFilled) BuildDaily(
+        IReadOnlyList<UsageFact> facts,
+        AiUsageFilter filter,
+        CostView view)
+    {
+        // ⚠️ 直接取日期、不套 ToLocalTime()——理由見 BuildCumulativeCost。
+        var byDate = facts
+            .GroupBy(x => DateOnly.FromDateTime(x.OccurredAt))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        IEnumerable<DateOnly> dates = byDate.Keys;
+        var isFilled = false;
+
+        if (filter.From is { } from && filter.ToExclusive is { } toExclusive)
+        {
+            var first = DateOnly.FromDateTime(from);
+            var last = DateOnly.FromDateTime(toExclusive.AddTicks(-1));
+            var days = last.DayNumber - first.DayNumber + 1;
+            if (days is > 0 and <= MaxFilledDays)
+            {
+                dates = Enumerable.Range(0, days).Select(first.AddDays);
+                isFilled = true;
+            }
+        }
+
+        var rows = dates
+            .OrderByDescending(x => x)
+            .Select(date =>
+            {
+                var items = byDate.TryGetValue(date, out var list) ? list : [];
+                var cost = view.Sum(items);
+                return new AiUsageDailyRow(
+                    date,
+                    items.Count,
+                    items.Sum(x => (long)(x.InputTokens ?? 0)),
+                    items.Sum(x => (long)(x.OutputTokens ?? 0)),
+                    items.Sum(x => x.AudioSeconds ?? 0d),
+                    cost,
+                    items.Count == 0 || items.Any(x => view.Of(x) is not null) ? view.Format(cost) : "—",
+                    items.Count(x => IsNotCounted(x, view)));
+            })
+            .ToList();
+
+        return (rows, isFilled);
+    }
+
+    private static AiUsageDetail ToDetail(AiUsageLog x, CostView view)
+    {
+        var converted = view.Of(x.EstimatedCost, x.ExchangeRate);
+        return new AiUsageDetail(
+            x.Id,
+            x.CallId,
+            x.OccurredAt,
+            x.Feature,
+            x.Outcome,
+            x.Provider,
+            string.IsNullOrWhiteSpace(x.Model) ? "（未知）" : x.Model,
+            x.UserId,
+            x.UserName,
+            x.MeetingId,
+            x.ProjectId,
+            x.InputTokens,
+            x.OutputTokens,
+            x.CachedInputTokens,
+            x.AudioSeconds,
+            x.IsAudioDurationEstimated,
+            x.EstimatedCost,
+            x.Currency,
+            x.InputPricePerMillion,
+            x.OutputPricePerMillion,
+            x.AudioPricePerMinute,
+            x.ExchangeRate,
+            x.ConvertedCurrency,
+            converted,
+            view.Format(converted),
+            x.ErrorMessage);
     }
 
     private static string DescribeTarget(int? meetingId, int? projectId)

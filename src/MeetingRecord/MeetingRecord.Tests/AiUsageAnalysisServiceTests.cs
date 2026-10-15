@@ -92,7 +92,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         await SeedAsync(2, feature: AiUsageFeature.Transcription);
 
         var result = await service.GetRecentCallsAsync(
-            Query(currentPage: 1, pageSize: 50) with { Feature = AiUsageFeature.Transcription });
+            Query(currentPage: 1, pageSize: 50, feature: AiUsageFeature.Transcription));
 
         Assert.Equal(2, result.TotalCount);
         Assert.All(result.Rows, x => Assert.Equal(AiUsageFeature.Transcription, x.Feature));
@@ -437,13 +437,215 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
 
     #endregion
 
-    private static AiUsageQuery Query(int currentPage, int pageSize)
+    #region 1.0.31 篩選、統計、明細、刪除
+
+    [Fact]
+    public async Task Filter_ShouldIncludeTheWholeEndDay_AndExcludeTheNextDay()
+    {
+        var today = DateTime.Today;
+        await AddAsync(cost: 1m, occurredAt: today.AddDays(-1).AddHours(23).AddMinutes(59));
+        await AddAsync(cost: 1m, occurredAt: today.AddHours(10));
+        await AddAsync(cost: 1m, occurredAt: today.AddDays(1).AddMinutes(1));
+
+        // 畫面的「結束日＝今天」傳成「明天零時（不含）」。
+        var report = await service.GetReportAsync(new AiUsageFilter(From: today, ToExclusive: today.AddDays(1)));
+
+        Assert.Equal(1, report.CallCount);
+    }
+
+    [Fact]
+    public async Task Filter_ShouldApplyFeatureUserModelAndOutcome()
+    {
+        await AddAsync(cost: 1m, feature: AiUsageFeature.AiChat, userId: 1, userName: "甲", model: "m1");
+        await AddAsync(cost: 1m, feature: AiUsageFeature.AiChat, userId: 2, userName: "乙", model: "m1");
+        await AddAsync(cost: 1m, feature: AiUsageFeature.TodoExtraction, userId: 1, userName: "甲", model: "m2");
+        await AddAsync(cost: null, feature: AiUsageFeature.AiChat, userId: 1, userName: "甲", model: "m1", outcome: AiUsageOutcome.Failed);
+
+        Assert.Equal(3, (await service.GetReportAsync(new AiUsageFilter(Feature: AiUsageFeature.AiChat))).CallCount);
+        Assert.Equal(3, (await service.GetReportAsync(new AiUsageFilter(UserId: 1))).CallCount);
+        Assert.Equal(3, (await service.GetReportAsync(new AiUsageFilter(Model: "m1"))).CallCount);
+        Assert.Equal(1, (await service.GetReportAsync(new AiUsageFilter(Outcome: AiUsageOutcome.Failed))).CallCount);
+        Assert.Equal(2, (await service.GetReportAsync(new AiUsageFilter(Feature: AiUsageFeature.AiChat, UserId: 1))).CallCount);
+
+        var page = await service.GetRecentCallsAsync(new AiUsageQuery(new AiUsageFilter(UserId: 2), 1, 10));
+        Assert.Equal("乙", Assert.Single(page.Rows).UserName);
+    }
+
+    [Fact]
+    public async Task Report_ShouldSumAndSortGroupsByNumericCost()
+    {
+        // ⚠️ 字典序陷阱：SQLite 的 decimal 是 TEXT，"10" < "9"。分組必須在記憶體依數值排序。
+        await AddAsync(cost: 9m, userName: "九元", userId: 1);
+        await AddAsync(cost: 10m, userName: "十元", userId: 2);
+        await AddAsync(cost: 2m, userName: "九元", userId: 1);
+
+        var report = await service.GetReportAsync(new AiUsageFilter());
+
+        Assert.Equal(21m, report.Cost);
+        Assert.Equal(3, report.CallCount);
+        Assert.Equal(["九元", "十元"], report.ByUser.Select(x => x.Key));
+        Assert.Equal(11m, report.ByUser[0].Cost);
+        Assert.Equal(2, report.ByUser[0].CallCount);
+        Assert.Equal(300, report.InputTokens);
+    }
+
+    [Fact]
+    public async Task Report_ShouldConvertWithEachRowsOwnRate_AndCountRowsThatCannotBeConverted()
+    {
+        await AddAsync(cost: 1m, exchangeRate: 30m);
+        await AddAsync(cost: 1m, exchangeRate: 32m);
+        await AddAsync(cost: 1m, exchangeRate: null);
+        await AddAsync(cost: null);
+
+        var report = await service.GetReportAsync(new AiUsageFilter());
+
+        Assert.Equal(62m, report.Cost);
+        Assert.Equal("NT$ 62.00", report.CostText);
+        Assert.Equal(1, report.NoRateCallCount);
+        Assert.Equal(1, report.UnpricedCallCount);
+        Assert.Equal(2, Assert.Single(report.ByModel).NotCountedCount);
+    }
+
+    [Fact]
+    public async Task Report_Daily_ShouldFillEmptyDays_WhenTheRangeIsShort()
+    {
+        var today = DateTime.Today;
+        await AddAsync(cost: 1m, occurredAt: today.AddDays(-2).AddHours(9));
+        await AddAsync(cost: 2m, occurredAt: today.AddHours(9));
+
+        var report = await service.GetReportAsync(new AiUsageFilter(From: today.AddDays(-6), ToExclusive: today.AddDays(1)));
+
+        Assert.True(report.IsDailyFilled);
+        Assert.Equal(7, report.Daily.Count);
+        Assert.Equal(DateOnly.FromDateTime(today), report.Daily[0].Date);
+        Assert.Equal(2m, report.Daily[0].Cost);
+        Assert.Equal(0, report.Daily[1].CallCount);
+        Assert.Equal(1m, report.Daily[2].Cost);
+    }
+
+    [Fact]
+    public async Task Report_Daily_ShouldOnlyListDaysWithData_WhenTheRangeIsLongOrOpen()
+    {
+        var today = DateTime.Today;
+        await AddAsync(cost: 1m, occurredAt: today.AddDays(-200));
+        await AddAsync(cost: 1m, occurredAt: today);
+
+        var longRange = await service.GetReportAsync(new AiUsageFilter(From: today.AddDays(-365), ToExclusive: today.AddDays(1)));
+        var openRange = await service.GetReportAsync(new AiUsageFilter());
+
+        Assert.False(longRange.IsDailyFilled);
+        Assert.Equal(2, longRange.Daily.Count);
+        Assert.False(openRange.IsDailyFilled);
+        Assert.Equal(2, openRange.Daily.Count);
+    }
+
+    [Fact]
+    public async Task RecentCalls_ShouldSortAscending_AndCarryTheCallId()
+    {
+        var callId = Guid.NewGuid();
+        await AddAsync(cost: 1m, occurredAt: DateTime.Now.AddMinutes(-10), callId: callId);
+        await AddAsync(cost: 1m, occurredAt: DateTime.Now.AddMinutes(-5));
+
+        var ascending = await service.GetRecentCallsAsync(Query(currentPage: 1, pageSize: 10, sortAscending: true));
+        var descending = await service.GetRecentCallsAsync(Query(currentPage: 1, pageSize: 10));
+
+        Assert.Equal(callId, ascending.Rows[0].CallId);
+        Assert.Null(descending.Rows[0].CallId);
+    }
+
+    [Fact]
+    public async Task Detail_ShouldReturnTheSnapshots()
+    {
+        var callId = Guid.NewGuid();
+        context.AiUsageLog.Add(new AiUsageLog
+        {
+            OccurredAt = DateTime.Now,
+            Feature = AiUsageFeature.Transcription,
+            Outcome = AiUsageOutcome.Succeeded,
+            Provider = "AzureOpenAI",
+            Model = "gpt-transcribe",
+            AudioSeconds = 600,
+            IsAudioDurationEstimated = true,
+            AudioPricePerMinute = 0.0045m,
+            EstimatedCost = 0.045m,
+            Currency = "USD",
+            ExchangeRate = 32m,
+            ConvertedCurrency = "TWD",
+            UserId = 7,
+            UserName = "王小明",
+            MeetingId = 12,
+            CallId = callId,
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        var id = context.AiUsageLog.Single().Id;
+
+        var detail = await service.GetDetailAsync(id);
+
+        Assert.NotNull(detail);
+        Assert.Equal(callId, detail!.CallId);
+        Assert.Equal(0.0045m, detail.AudioPricePerMinute);
+        Assert.Equal(1.44m, detail.ConvertedCost);
+        Assert.Equal("NT$ 1.44", detail.CostText);
+        Assert.Equal("會議 #12", detail.TargetText);
+        Assert.True(detail.IsAudioDurationEstimated);
+        Assert.Null(await service.GetDetailAsync(id + 1));
+    }
+
+    [Fact]
+    public async Task FilterOptions_ShouldListUsersWithTheirLatestNameAndDistinctModels()
+    {
+        await AddAsync(cost: 1m, userId: 1, userName: "舊名", model: "m2", occurredAt: DateTime.Now.AddDays(-3));
+        await AddAsync(cost: 1m, userId: 1, userName: "新名", model: "m1", occurredAt: DateTime.Now.AddDays(-1));
+        await AddAsync(cost: 1m, userId: null, userName: null, model: "m1");
+
+        var options = await service.GetFilterOptionsAsync();
+
+        var user = Assert.Single(options.Users);
+        Assert.Equal((1, "新名"), user);
+        Assert.Equal(["m1", "m2"], options.Models);
+    }
+
+    [Fact]
+    public async Task Export_ShouldRespectTheFilterAndTheRowLimit()
+    {
+        await SeedAsync(5, feature: AiUsageFeature.AiChat);
+        await SeedAsync(2, feature: AiUsageFeature.TodoExtraction);
+
+        var limited = await service.GetForExportAsync(new AiUsageFilter(), maxRows: 3);
+        var filtered = await service.GetForExportAsync(new AiUsageFilter(Feature: AiUsageFeature.TodoExtraction));
+
+        Assert.Equal(3, limited.Count);
+        Assert.True(limited[0].OccurredAt >= limited[1].OccurredAt);
+        Assert.Equal(2, filtered.Count);
+    }
+
+    [Fact]
+    public async Task DeletePurgeAndClear_ShouldRemoveLedgerRows()
+    {
+        await AddAsync(cost: 1m, occurredAt: DateTime.Today.AddDays(-10));
+        await AddAsync(cost: 1m, occurredAt: DateTime.Today.AddDays(-1));
+        await AddAsync(cost: 1m, occurredAt: DateTime.Today);
+        var ids = context.AiUsageLog.OrderBy(x => x.OccurredAt).Select(x => x.Id).ToList();
+
+        Assert.True(await service.DeleteAsync(ids[2]));
+        Assert.False(await service.DeleteAsync(ids[2]));
+        Assert.Equal(1, await service.PurgeBeforeAsync(DateTime.Today.AddDays(-5)));
+        Assert.Equal(1, await service.ClearAllAsync());
+        Assert.Empty(context.AiUsageLog);
+    }
+
+    #endregion
+
+    private static AiUsageQuery Query(int currentPage, int pageSize, AiUsageFeature? feature = null, bool sortAscending = false)
         => new(
-            From: DateTime.Now.Date.AddDays(-30),
-            ToExclusive: DateTime.Now.Date.AddDays(1),
-            Feature: null,
+            new AiUsageFilter(
+                From: DateTime.Now.Date.AddDays(-30),
+                ToExclusive: DateTime.Now.Date.AddDays(1),
+                Feature: feature),
             CurrentPage: currentPage,
-            PageSize: pageSize);
+            PageSize: pageSize,
+            SortAscending: sortAscending);
 
     private async Task SeedAsync(
         int count,
@@ -471,7 +673,10 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         AiUsageOutcome outcome = AiUsageOutcome.Succeeded,
         string? userName = "王小明",
         DateTime? occurredAt = null,
-        decimal? exchangeRate = 1m)
+        decimal? exchangeRate = 1m,
+        int? userId = null,
+        string model = "gpt-4o-mini",
+        Guid? callId = null)
     {
         context.AiUsageLog.Add(new AiUsageLog
         {
@@ -479,7 +684,9 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
             Feature = feature,
             Outcome = outcome,
             Provider = "AzureOpenAI",
-            Model = "gpt-4o-mini",
+            Model = model,
+            UserId = userId,
+            CallId = callId,
             InputTokens = outcome == AiUsageOutcome.Succeeded ? 100 : null,
             OutputTokens = outcome == AiUsageOutcome.Succeeded ? 50 : null,
             EstimatedCost = cost,

@@ -4,7 +4,7 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Business.Services.AiUsage;
 
 /// <summary>
-/// 「AI 用量分析」整頁的資料。
+/// 「Token 用量」頁上方「本月概況」的資料（1.0.30 前名為「AI 用量分析」，當時是整頁的資料）。
 ///
 /// <para>
 /// 圖表型別一律沿用 <see cref="MeetingRecord.Business.Services.Dashboard"/> 的
@@ -57,7 +57,24 @@ public sealed record AiUsageRow(
     string? Target,
     string UsageText,
     string CostText,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    Guid? CallId = null);
+
+/// <summary>
+/// Token 用量頁的篩選條件（1.0.31）。明細、合計、每日、分組、CSV、PDF 共用同一組條件。
+/// ⚠️ 只比對整數、字串與日期欄位——金額欄位（decimal 存成 TEXT）一律不進 SQL 條件。
+/// </summary>
+/// <param name="From">起始時間（含）；null 表示不限。</param>
+/// <param name="ToExclusive">結束時間（不含）；畫面的「結束日」傳隔天零時，當天才不會被切掉。</param>
+/// <param name="UserId">使用者 Id；null 表示不限。</param>
+/// <param name="Model">模型名稱（完全相同）；null 或空字串表示不限。</param>
+public sealed record AiUsageFilter(
+    DateTime? From = null,
+    DateTime? ToExclusive = null,
+    AiUsageFeature? Feature = null,
+    int? UserId = null,
+    string? Model = null,
+    AiUsageOutcome? Outcome = null);
 
 /// <summary>明細表的查詢條件。</summary>
 /// <remarks>
@@ -66,11 +83,107 @@ public sealed record AiUsageRow(
 /// （<c>Take</c> 被包在 <c>if (dataRequest.Take != 0)</c> 裡，於是從來沒真的分頁）。
 /// </remarks>
 public sealed record AiUsageQuery(
-    DateTime From,
-    DateTime ToExclusive,
-    AiUsageFeature? Feature,
+    AiUsageFilter Filter,
     int CurrentPage,
-    int PageSize);
+    int PageSize,
+    bool SortAscending = false);
 
 /// <summary>明細表的一頁。</summary>
 public sealed record AiUsagePagedResult(int TotalCount, IReadOnlyList<AiUsageRow> Rows);
+
+/// <summary>
+/// 篩選範圍的統計（1.0.31）：合計、每日、依使用者／功能／模型分組，以及「圖表」頁籤的三組切片。
+/// 金額一律是**顯示幣別**（換算開啟時為新台幣），在記憶體加總。
+/// </summary>
+/// <param name="Cost">換算得出金額的列加總；算不出來的列不計入（筆數見 <paramref name="UnpricedCallCount"/>、<paramref name="NoRateCallCount"/>）。</param>
+/// <param name="IsDailyFilled">每日是否補齊了沒有資料的日子（區間不超過 <see cref="AiUsageAnalysisService.MaxFilledDays"/> 天才補）。</param>
+public sealed record AiUsageReport(
+    int CallCount,
+    int FailedCallCount,
+    long InputTokens,
+    long OutputTokens,
+    double AudioSeconds,
+    decimal Cost,
+    string CostText,
+    int UnpricedCallCount,
+    int NoRateCallCount,
+    IReadOnlyList<AiUsageDailyRow> Daily,
+    bool IsDailyFilled,
+    IReadOnlyList<AiUsageGroupRow> ByUser,
+    IReadOnlyList<AiUsageGroupRow> ByFeature,
+    IReadOnlyList<AiUsageGroupRow> ByModel,
+    IReadOnlyList<ChartSlice> FeatureSlices,
+    IReadOnlyList<ChartSlice> ModelSlices,
+    IReadOnlyList<ChartSlice> UserSlices);
+
+/// <summary>分組統計的一列（依使用者、功能或模型）。</summary>
+/// <param name="NotCountedCount">金額算不出來（沒單價或沒匯率）而未計入的筆數；失敗且沒有金額的不算。</param>
+public sealed record AiUsageGroupRow(
+    string Key,
+    int CallCount,
+    int FailedCount,
+    long InputTokens,
+    long OutputTokens,
+    double AudioSeconds,
+    decimal Cost,
+    string CostText,
+    int NotCountedCount);
+
+/// <summary>每日統計的一列。</summary>
+public sealed record AiUsageDailyRow(
+    DateOnly Date,
+    int CallCount,
+    long InputTokens,
+    long OutputTokens,
+    double AudioSeconds,
+    decimal Cost,
+    string CostText,
+    int NotCountedCount);
+
+/// <summary>篩選下拉的選項：帳本裡實際出現過的使用者（取最近一次的名稱）與模型。</summary>
+public sealed record AiUsageFilterOptions(
+    IReadOnlyList<(int UserId, string UserName)> Users,
+    IReadOnlyList<string> Models);
+
+/// <summary>
+/// 單筆用量的完整內容（1.0.31）：明細窗與 CSV 共用。單價與匯率都是**呼叫當下的快照**，改設定不影響。
+/// </summary>
+/// <param name="ConvertedCost">換算後金額；換算關閉時等於原幣金額，沒單價或沒匯率時為 null。</param>
+/// <param name="CostText">顯示用的金額文字（與明細表同一套規則）。</param>
+public sealed record AiUsageDetail(
+    int Id,
+    Guid? CallId,
+    DateTime OccurredAt,
+    AiUsageFeature Feature,
+    AiUsageOutcome Outcome,
+    string Provider,
+    string Model,
+    int? UserId,
+    string? UserName,
+    int? MeetingId,
+    int? ProjectId,
+    int? InputTokens,
+    int? OutputTokens,
+    int? CachedInputTokens,
+    double? AudioSeconds,
+    bool IsAudioDurationEstimated,
+    decimal? EstimatedCost,
+    string? Currency,
+    decimal? InputPricePerMillion,
+    decimal? OutputPricePerMillion,
+    decimal? AudioPricePerMinute,
+    decimal? ExchangeRate,
+    string? ConvertedCurrency,
+    decimal? ConvertedCost,
+    string CostText,
+    string? ErrorMessage)
+{
+    public string FeatureText => AiUsageFeatureText.Describe(Feature);
+
+    public string OutcomeText => AiUsageOutcomeText.Describe(Outcome);
+
+    /// <summary>對象：會議或專案編號。</summary>
+    public string TargetText => MeetingId is { } meeting ? $"會議 #{meeting}"
+        : ProjectId is { } project ? $"專案 #{project}"
+        : "—";
+}

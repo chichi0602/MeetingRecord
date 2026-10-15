@@ -1,6 +1,6 @@
 ﻿# AI 對話紀錄 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
 - 現行系統版本：1.0.30
 - 首次實作版本：1.0.29（記錄）、1.0.30（頁面）；移植自 NET10-Blazor-Starter 的 /ai-call-logs
@@ -25,7 +25,7 @@ AI 的花費在「Token 用量」看得到，但「當時送了什麼、AI 回�
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
 | `/ai-call-logs` | 系統管理 → AI 管理（id 62）→ AI 對話紀錄（id 63，`forum`） | **只限管理者**（`CheckIsAdmin()`＋`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄） | 系統管理員 |
-| `/ai-call-logs?callId=…` | 從 Token 用量的明細跳過來（1.0.31） | 同上 | 系統管理員 |
+| `/ai-call-logs?callId=…` | 從 Token 用量明細窗的「查看 AI 對話紀錄」跳過來（1.0.31 起），直接開啟同一個呼叫識別碼的那一筆 | 同上 | 系統管理員 |
 
 ## 三、畫面與欄位
 
@@ -121,4 +121,4 @@ AI 的花費在「Token 用量」看得到，但「當時送了什麼、AI 回�
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/AiCallLog.cs`、`Models/Systems/AiCallLogModels.cs`、`AiCallLogQuery.cs`、`AiCallLogSettings.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/AiManagement/AiCallLogPage.razor`、`Components/Views/AiManagement/AiCallLogView.razor(.cs/.css)`
 - `src/MeetingRecord/MeetingRecord.Web/BackgroundServices/AiLogRetentionBackgroundService.cs`
-- 交叉連結：[AI 用量分析／Token 用量 PRD](AI用量分析-prd.md)、[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[正式部署與安全檢查清單](../operations/正式部署與安全檢查清單.md)
+- 交叉連結：[Token 用量 PRD](Token用量-prd.md)、[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[正式部署與安全檢查清單](../operations/正式部署與安全檢查清單.md)

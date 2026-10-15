@@ -80,7 +80,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
   - **資料庫用量**（`/database-usage`）：SQLite 檔案與各資料表用量，以及各外部目錄大小與磁碟剩餘空間（見[資料庫用量 PRD](docs/prd/資料庫用量-prd.md)）
 - **AI 管理**（1.0.30 起；都只限管理者，不能勾給角色）：
   - **AI 對話紀錄**（`/ai-call-logs`）：每次付費 AI 呼叫的完整送出內容與回應，可依日期、功能、結果、使用者、模型、關鍵字篩選；明細含用量與費用、「同一趟工作」的其他呼叫，可下載 JSON、匯出 PDF；CSV 不含內容；可手動清除，並依保留天數自動清除（見[AI 對話紀錄 PRD](docs/prd/AI對話紀錄-prd.md)）
-  - **Token 用量**（`/token-usage`，舊網址 `/ai-usage` 仍可用；1.0.29 以前叫「AI 用量分析」、在監控與診斷底下）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣；1.0.29 起所有付費 AI 呼叫經 `AiCallGateway`，同時寫 AI 對話紀錄，並可設每月用量上限（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
+  - **Token 用量**（`/token-usage`，舊網址 `/ai-usage` 仍可用；1.0.29 以前叫「AI 用量分析」、在監控與診斷底下）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣；1.0.29 起所有付費 AI 呼叫經 `AiCallGateway`，同時寫 AI 對話紀錄，並可設每月用量上限；1.0.31 起頁面有上限列、篩選（按查詢才套用）、圖表／每日／依使用者／依功能／依模型／明細頁籤、單筆明細窗（可跳到同一筆 AI 對話紀錄）、CSV／PDF 匯出與刪除、清除（見[Token 用量 PRD](docs/prd/Token用量-prd.md)）
 - 資料定義：分類清單、團隊清單、提示詞清單（內建範本、`{{transcript}}` 等變數、啟用狀態就地切換）
 - AI 供應商可換：`ITranscriptionProvider` 與文字生成供應商為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
 
@@ -328,7 +328,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
 - 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
-- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[AI 用量分析（Token 用量）](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[Token 用量](docs/prd/Token用量-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
 
 ### 設計規格（superpowers）
 

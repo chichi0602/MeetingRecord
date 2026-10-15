@@ -1,6 +1,6 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.118
@@ -97,6 +97,7 @@
 | 專案附件 | `Views/Projects/ProjectViewView.razor` | `form-modal-standard` |
 | 抽出待辦 | `Views/Projects/TodoExtractionModal.razor` | `form-modal-standard` |
 | 會議紀錄**檢視**（唯讀） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal form-modal-standard` |
+| 用量明細（唯讀，1.0.31） | `Views/AiManagement/TokenUsageView.razor` | `form-modal-standard` |
 | 角色維護 | `Views/Admins/RoleViewView.razor` | `form-modal-large` |
 | 專案維護 | `Views/Projects/ProjectViewView.razor` | `form-modal-large` |
 | AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
@@ -222,7 +223,7 @@
 
 ## 八、二次確認框：`ModalService.ConfirmAsync`
 
-全站約有 25 個呼叫點（含 `FormDirtyHelper` 內那一個共用點；1.0.30 的 AI 對話紀錄再加 3 個），一律用 `await modalService.ConfirmAsync(new ConfirmOptions { … })`，回傳 `bool`。確認框吃第三節的基準線，不掛尺寸 class。
+全站約有 25 個呼叫點（含 `FormDirtyHelper` 內那一個共用點；1.0.30 的 AI 對話紀錄再加 3 個、1.0.31 的 Token 用量再加 3 個），一律用 `await modalService.ConfirmAsync(new ConfirmOptions { … })`，回傳 `bool`。確認框吃第三節的基準線，不掛尺寸 class。
 
 ### 8.1 共同格式
 
@@ -248,6 +249,14 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
   | 列上「刪除」 | 刪除 AI 對話紀錄（內容：確定要刪除這一筆嗎？送出內容與回應的檔案會一併刪除） | 刪除 |
   | 清除此日之前 | 清除 yyyy-MM-dd 之前的 AI 對話紀錄（不含當天，連同內容檔） | 清除 |
   | 全部清除 | 清空全部 AI 對話紀錄（刪除所有紀錄與整個內容檔目錄） | 全部清除 |
+
+- 例：「Token 用量」（1.0.31，`TokenUsageView`）的三個刪除動作同樣套 `Danger`。內容都註明「AI 對話紀錄不會一起刪除；會議時數不受影響」；刪除範圍含本月時加註「本月 AI 用量上限的已用額度會跟著變少」（全部清除寫「會歸零」），因為本月的帳本就是用量上限的計算來源：
+
+  | 動作 | 標題 | `OkText` |
+  |---|---|---|
+  | 明細列「刪除」 | 刪除用量紀錄（內容：確定要刪除這一筆嗎？無法復原） | 刪除 |
+  | 清除此日之前 | 清除 yyyy-MM-dd 之前的用量紀錄（不含當天） | 清除 |
+  | 全部清除 | 清空全部用量紀錄（統計起始日會重新計算） | 全部清除 |
 
 ### 8.2 付費動作一律二次確認（速查表 §6.3）
 

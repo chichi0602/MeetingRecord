@@ -1,20 +1,5 @@
-/* 工具列：左邊新增／重新整理、右邊過濾（0.4.75 定案的全站慣例）。
-   這 14 行在七個清單頁各有一份——scoped CSS 沒有共用元件，照既有現況複製。 */
-.ai-usage-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.ai-usage-toolbar-left,
-.ai-usage-toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
+/* Token 用量（1.0.31 升級）。工具列、清除列、膠囊、明細清單照「AI 對話紀錄」複製（scoped CSS 沒有共用元件）；
+   顏色一律用 --oat-* 權杖。對話窗尺寸走全站的 form-modal-standard，不在這裡設。 */
 .ai-usage-denied,
 .ai-usage-empty {
     padding: 24px;
@@ -28,6 +13,10 @@
     color: var(--oat-ink-mid);
     font-size: 0.8rem;
     line-height: 1.7;
+}
+
+.ai-usage-note span + span::before {
+    content: "　";
 }
 
 .ai-usage-warning {
@@ -49,7 +38,9 @@
     line-height: 1.7;
 }
 
-.ai-usage-warning code {
+.ai-usage-warning code,
+.ai-usage-footnote code,
+.token-quota code {
     padding: 1px 5px;
     border-radius: 4px;
     background: var(--oat-200);
@@ -57,10 +48,16 @@
     font-size: 0.85em;
 }
 
+.ai-usage-section-title {
+    margin: 20px 0 10px;
+    color: var(--oat-ink);
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
 /* 指標卡片。
    ⚠️ 不能直接借用儀表板的 .dashboard-cards——那條規則在 DashboardView.razor.css 裡是
-   **scoped** 的（會被編成 [b-xxxxx]），在這一頁完全不生效，卡片會變成一張一列。
-   scoped CSS 沒有共用元件，照既有現況複製一份。 */
+   **scoped** 的（會被編成 [b-xxxxx]），在這一頁完全不生效，卡片會變成一張一列。 */
 .ai-usage-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -73,43 +70,14 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 16px;
-    margin: 16px 0;
+    margin-bottom: 16px;
 }
 
-.ai-usage-table {
-    margin-top: 16px;
-    padding: 16px;
+.ai-usage-panel {
+    padding: 8px 16px 16px;
     background: var(--oat-surface);
     border: 1px solid var(--oat-200);
     border-radius: 16px;
-}
-
-/* 明細表標題列：左邊標題、右邊期間下拉（0.4.91）。 */
-.ai-usage-table-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.ai-usage-table-title {
-    color: var(--oat-ink);
-    font-size: 0.9rem;
-    font-weight: 700;
-}
-
-/* 時間與金額用等寬數字，逐列比對才對得齊。 */
-.ai-usage-time,
-.ai-usage-cost {
-    font-variant-numeric: tabular-nums;
-}
-
-.ai-usage-failed {
-    color: var(--oat-err);
-    /* 失敗原因放在 title 上，滑過才顯示——完整訊息會把表格撐爆。 */
-    cursor: help;
 }
 
 .ai-usage-footnote {
@@ -119,10 +87,170 @@
     line-height: 1.9;
 }
 
-.ai-usage-footnote code {
-    padding: 1px 5px;
+/* ───────── 上限列 ───────── */
+.token-quota {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-surface);
+    color: var(--oat-ink);
+    font-size: 0.82rem;
+}
+
+.token-quota-title {
+    font-weight: 700;
+}
+
+.token-quota-users {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+}
+
+.token-quota-hint {
+    flex-basis: 100%;
+    color: var(--oat-ink-mid);
+    font-size: 0.78rem;
+}
+
+/* ───────── 工具列與清除列 ───────── */
+.token-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.token-toolbar-left,
+.token-toolbar-right,
+.token-purge {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.token-purge {
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+
+.token-muted {
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+}
+
+.token-number {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 狀態膠囊：形狀比照全站狀態膠囊；失敗與達上限用錯誤色、取消與達八成用警示色。 */
+.token-pill {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    color: var(--oat-ink);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.token-pill-warn {
+    border-color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.token-pill-err {
+    border-color: var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+/* ───────── 每日 ───────── */
+.token-daily {
+    display: grid;
+    gap: 4px;
+}
+
+.token-daily-row {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(80px, 1fr) 7rem 8rem 6rem 4.5rem;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+}
+
+.token-daily-empty {
+    color: var(--oat-ink-mid);
+}
+
+.token-daily-bar {
+    height: 8px;
     border-radius: 4px;
-    background: var(--oat-200);
-    color: inherit;
-    font-size: 0.9em;
+    background: var(--oat-100);
+    overflow: hidden;
+}
+
+.token-daily-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--oat-ink-mid);
+}
+
+.token-daily-cost {
+    text-align: right;
+    font-weight: 600;
+}
+
+.token-daily-note {
+    margin-top: 8px;
+}
+
+/* ───────── 明細對話窗 ───────── */
+.token-detail-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.token-detail-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    margin: 0 0 10px;
+    font-size: 0.85rem;
+}
+
+.token-detail-list > div {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 8px;
+}
+
+.token-detail-list dt {
+    color: var(--oat-ink-mid);
+    font-weight: 600;
+}
+
+.token-detail-list dd {
+    margin: 0;
+    color: var(--oat-ink);
+    overflow-wrap: anywhere;
+}
+
+.token-error-text {
+    margin-left: 8px;
+    color: var(--oat-err);
 }

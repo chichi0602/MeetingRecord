@@ -1,0 +1,53 @@
+@using MeetingRecord.Business.Services.AiUsage
+
+@* Token 用量的「依使用者／依功能／依模型」三個頁籤共用（1.0.31）。順序已由服務層依金額排好，這裡不再排序。 *@
+<Table TItem="AiUsageGroupRow"
+       DataSource="@Rows"
+       HidePagination="true"
+       PageSize="@Math.Max(Rows.Count, 1)"
+       Size="TableSize.Small"
+       ScrollX="760">
+    <ColumnDefinitions>
+        <Column TData="string" Title="@KeyTitle" Ellipsis>@context.Key</Column>
+        <Column TData="int" Title="次數" Width="80" Align="ColumnAlign.Right">
+            <span class="group-number">@context.CallCount.ToString("N0")</span>
+        </Column>
+        <Column TData="int" Title="失敗" Width="70" Align="ColumnAlign.Right">
+            <span class="group-number @(context.FailedCount > 0 ? "group-failed" : string.Empty)">@context.FailedCount.ToString("N0")</span>
+        </Column>
+        <Column TData="long" Title="輸入 token" Width="110" Align="ColumnAlign.Right">
+            <span class="group-number">@context.InputTokens.ToString("N0")</span>
+        </Column>
+        <Column TData="long" Title="輸出 token" Width="110" Align="ColumnAlign.Right">
+            <span class="group-number">@context.OutputTokens.ToString("N0")</span>
+        </Column>
+        <Column TData="double" Title="轉錄時長" Width="100" Align="ColumnAlign.Right">
+            <span class="group-number">@AiUsageMetrics.FormatAudio(context.AudioSeconds)</span>
+        </Column>
+        <Column TData="string" Title="估算金額" Width="120" Align="ColumnAlign.Right">
+            <span class="group-number group-cost">@context.CostText</span>
+        </Column>
+        <Column TData="int" Title="未計入" Width="80" Align="ColumnAlign.Right">
+            @if (context.NotCountedCount > 0)
+            {
+                <Tooltip Title="@("沒有單價或沒有匯率，金額未計入")">
+                    <span class="group-number group-warn">@context.NotCountedCount.ToString("N0")</span>
+                </Tooltip>
+            }
+            else
+            {
+                <span class="group-number group-muted">0</span>
+            }
+        </Column>
+    </ColumnDefinitions>
+</Table>
+
+@code {
+    /// <summary>分組列（服務層已排序）。</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<AiUsageGroupRow> Rows { get; set; } = [];
+
+    /// <summary>第一欄標題：使用者、功能或模型。</summary>
+    [Parameter, EditorRequired]
+    public string KeyTitle { get; set; } = string.Empty;
+}

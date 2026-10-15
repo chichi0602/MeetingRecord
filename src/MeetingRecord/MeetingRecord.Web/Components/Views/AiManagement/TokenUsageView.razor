@@ -2,182 +2,376 @@
 @using MeetingRecord.Business.Services.Dashboard
 @using MeetingRecord.Share.Enums
 
-@if (!string.IsNullOrWhiteSpace(RoleMessage))
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrWhiteSpace(RoleMessage))
 {
     <div class="ai-usage-denied">@RoleMessage</div>
 }
+else if (summary is null)
+{
+    <div class="ai-usage-empty">載入中…</div>
+}
 else
 {
-    @* 左邊重新整理、右邊期間，與全站清單頁一致（0.4.75 定案）。 *@
-    <div class="ai-usage-toolbar">
-        <div class="ai-usage-toolbar-left">
-            <Tooltip Title="重新整理">
-                <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="ReloadAsync">
-                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
-                </Button>
-            </Tooltip>
-        </div>
+    var busy = isLoading || isExporting;
 
-        <div class="ai-usage-toolbar-right">
-            @* 功能下拉影響整頁：卡片、曲線、模型與使用者分佈、明細表（0.4.91 起）。
-               在那之前它只接到最下面的明細表，選了之後上面的數字一個都不會動。
-               期間下拉不在這裡——見明細表那一區的說明。 *@
-            <Select TItem="string" TItemValue="string"
-                    Value="@featureFilter"
-                    ValueChanged="OnFeatureChangedAsync"
-                    Disabled="@isLoading"
-                    Style="min-width: 150px;">
-                <SelectOption TItem="string" TItemValue="string" Value="@AllFeatures">全部功能</SelectOption>
-                @foreach (var feature in AllFeatureValues)
-                {
-                    <SelectOption TItem="string" TItemValue="string"
-                                  Value="@feature.ToString()">@AiUsageFeatureText.Describe(feature)</SelectOption>
-                }
-            </Select>
-        </div>
-    </div>
-
-    @if (summary is null)
-    {
-        <div class="ai-usage-empty">載入中…</div>
-    }
-    else
-    {
-        @* ⚠️ 統計起始日一定要寫出來。這張帳本沒有回填，不講清楚的話使用者會以為
-           系統在此之前都沒有花錢。 *@
-        <div class="ai-usage-note">
-            @if (summary.StartedAt is { } startedAt)
+    @* ───────── 上限列（1.0.31）：固定看本月，不跟著篩選走 ───────── *@
+    <div class="token-quota">
+        <span class="token-quota-title">AI 用量上限（本月）</span>
+        <span class="token-quota-item">
+            全系統每月：
+            @if (globalQuota is { IsLimited: true } quota)
             {
-                <span>統計起始 @startedAt.ToString("yyyy/MM/dd")，此日之前的呼叫沒有留下用量資料。</span>
+                <span class="token-number">NT$ @quota.Used.ToString("N0") ／ @quota.Limit.ToString("N0")</span>
+                @if (QuotaPillText(quota.Ratio, quota.IsReached) is { Length: > 0 } pill)
+                {
+                    <span class="@QuotaPillClass(quota.Ratio, quota.IsReached)">@pill</span>
+                }
             }
             else
             {
-                <span>尚未記錄到任何 AI 呼叫。這張帳本從 0.4.80 起開始累積，不回填先前的用量。</span>
+                <span>不限@(globalQuota is { } unlimited ? $"（本月已用 NT$ {unlimited.Used:N0}）" : string.Empty)</span>
             }
-            @if (summary.ExchangeRateNote is { } note)
-            {
-                <span>@note</span>
-            }
+        </span>
+        <span class="token-quota-item">
+            每人每月：@(PerUserLimit > 0 ? $"NT$ {PerUserLimit:N0}" : "不限")
+        </span>
+        @if (PerUserLimit > 0 && topUsers.Count > 0)
+        {
+            <span class="token-quota-item token-quota-users">
+                本月用最多：
+                @foreach (var user in topUsers)
+                {
+                    var ratio = UserRatio(user);
+                    var reached = user.Used >= PerUserLimit;
+                    <span class="token-quota-user">
+                        @(user.UserName ?? $"#{user.UserId}") <span class="token-number">NT$ @user.Used.ToString("N0")</span>
+                        @if (QuotaPillText(ratio, reached) is { Length: > 0 } userPill)
+                        {
+                            <span class="@QuotaPillClass(ratio, reached)">@userPill</span>
+                        }
+                    </span>
+                }
+            </span>
+        }
+        <span class="token-quota-hint">設定在 <code>AiQuotaSettings</code>（0＝不限）；未設定單價的呼叫以 0 元計。</span>
+    </div>
+
+    @* ⚠️ 統計起始日一定要寫出來。這張帳本沒有回填，不講清楚的話使用者會以為
+       系統在此之前都沒有花錢。 *@
+    <div class="ai-usage-note">
+        @if (summary.StartedAt is { } startedAt)
+        {
+            <span>統計起始 @startedAt.ToString("yyyy/MM/dd")（目前保留的最早一筆），此日之前的呼叫沒有留下用量資料或已被清除。</span>
+        }
+        else
+        {
+            <span>尚未記錄到任何 AI 呼叫。這張帳本從 0.4.80 起開始累積，不回填先前的用量。</span>
+        }
+        @if (summary.ExchangeRateNote is { } note)
+        {
+            <span>@note</span>
+        }
+        <span>@RetentionText</span>
+    </div>
+
+    @if (summary.UnpricedCallCount > 0)
+    {
+        @* 這一條是整個功能最容易無聲出錯的地方：換了 deployment 卻沒設單價時，
+           金額會是空的而不是 0，但使用者不會知道為什麼。 *@
+        <div class="ai-usage-warning">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+            <span>
+                本月有 @summary.UnpricedCallCount 次呼叫的模型未設定單價，金額<b>未</b>納入統計。
+                請在 <code>appsettings.json</code> 的 <code>LlmSettings:Pricing</code> 依 deployment 名稱補上。
+            </span>
+        </div>
+    }
+
+    @if (summary.NoRateCallCount > 0)
+    {
+        <div class="ai-usage-warning">
+            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
+            <span>
+                本月有 @summary.NoRateCallCount 次呼叫沒有當時的匯率，金額<b>未</b>納入台幣統計。
+            </span>
+        </div>
+    }
+
+    @* ───────── 本月概況：固定全部功能、本月至今 ───────── *@
+    <div class="ai-usage-section-title">本月概況（全部功能）</div>
+    <div class="ai-usage-cards">
+        @foreach (var card in summary.Cards)
+        {
+            <StatCard Item="card" />
+        }
+    </div>
+
+    @* ⚠️ 單位要寫在標題裡：LineChart 沒有 Display 覆寫，資料點提示是把「分」原樣印出來。 *@
+    <LineChart Title="@($"本月累計估算金額（單位：{(summary.ExchangeRateNote is null ? "美分" : "NT$ 分")}）")"
+               Points="summary.CumulativeCost"
+               SeriesOneLabel="本月"
+               SeriesTwoLabel="上月同期" />
+
+    @* ───────── 篩選（1.0.31）：下方的合計、頁籤、匯出都依這組條件 ───────── *@
+    <div class="ai-usage-section-title">篩選分析</div>
+    <div class="token-toolbar">
+        <div class="token-toolbar-left">
+            <DatePicker TValue="DateTime?" @bind-Value="startDate" Format="yyyy-MM-dd" Placeholder="@("開始日期")" Style="width: 140px;" />
+            <span class="token-muted">～</span>
+            <DatePicker TValue="DateTime?" @bind-Value="endDate" Format="yyyy-MM-dd" Placeholder="@("結束日期")" Style="width: 140px;" />
+
+            <Select TItem="string" TItemValue="string" @bind-Value="featureFilter" Style="width: 150px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="功能：不限" />
+                @foreach (var feature in Enum.GetValues<AiUsageFeature>())
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@feature.ToString()" Label="@AiUsageFeatureText.Describe(feature)" />
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="userFilter" Style="width: 140px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="使用者：不限" />
+                @foreach (var (userId, userName) in filterOptions.Users)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@userId.ToString()" Label="@userName" />
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="modelFilter" Style="width: 160px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="模型：不限" />
+                @foreach (var model in filterOptions.Models)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@model" Label="@model" />
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="outcomeFilter" Style="width: 120px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="結果：不限" />
+                <SelectOption TItemValue="string" TItem="string" Value="@nameof(AiUsageOutcome.Succeeded)" Label="成功" />
+                <SelectOption TItemValue="string" TItem="string" Value="@nameof(AiUsageOutcome.Failed)" Label="失敗" />
+                <SelectOption TItemValue="string" TItem="string" Value="@nameof(AiUsageOutcome.Cancelled)" Label="已取消" />
+            </Select>
         </div>
 
-        @if (summary.UnpricedCallCount > 0)
-        {
-            @* 這一條是整個功能最容易無聲出錯的地方：換了 deployment 卻沒設單價時，
-               金額會是空的而不是 0，但使用者不會知道為什麼。 *@
-            <div class="ai-usage-warning">
-                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
-                <span>
-                    有 @summary.UnpricedCallCount 次呼叫的模型未設定單價，金額<b>未</b>納入統計。
-                    請在 <code>appsettings.json</code> 的 <code>LlmSettings:Pricing</code> 依 deployment 名稱補上。
-                </span>
-            </div>
-        }
+        <div class="token-toolbar-right">
+            <Button Type="ButtonType.Default" Disabled="@busy" OnClick="OnSearchAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>查詢</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Disabled="@busy" OnClick="OnRefreshAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+            </Button>
+            <Tooltip Title="@("匯出目前查詢結果的每一筆（CSV）")">
+                <Button Type="ButtonType.Default" Disabled="@(busy || report is not { CallCount: > 0 })" OnClick="OnExportCsvAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出 CSV</span></span>
+                </Button>
+            </Tooltip>
+            <Tooltip Title="@("合計、每日、依使用者／功能／模型與明細（前 200 筆）")">
+                <Button Type="ButtonType.Default" Disabled="@(busy || report is not { CallCount: > 0 })" Loading="@isExporting" OnClick="OnExportPdfAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="picture_as_pdf" /><span>匯出 PDF</span></span>
+                </Button>
+            </Tooltip>
+        </div>
+    </div>
 
-        @if (summary.NoRateCallCount > 0)
-        {
-            @* 0.4.88 之前的紀錄沒有匯率，抓不到匯率的那段期間也沒有。
-               與上面那條同一個理由：金額是空的而不是 0，但使用者不會知道為什麼。 *@
-            <div class="ai-usage-warning">
-                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="warning" />
-                <span>
-                    有 @summary.NoRateCallCount 次呼叫沒有當時的匯率（多半是 0.4.88 之前的紀錄），金額<b>未</b>納入台幣統計。
-                </span>
-            </div>
-        }
+    <div class="token-purge">
+        <DatePicker TValue="DateTime?" @bind-Value="purgeBefore" Format="yyyy-MM-dd" Placeholder="@("清除此日之前")" Style="width: 150px;" />
+        <Button Type="ButtonType.Default" Danger="true" Disabled="@busy" OnClick="OnPurgeAsync">
+            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>清除此日之前</span></span>
+        </Button>
+        <Button Type="ButtonType.Default" Danger="true" Disabled="@busy" OnClick="OnClearAllAsync">
+            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete_forever" /><span>全部清除</span></span>
+        </Button>
+    </div>
+
+    @if (report is not null)
+    {
+        <div class="ai-usage-note">查詢區間：@RangeText@(DescribeFilters().Count > 0 ? "；" + string.Join("、", DescribeFilters().Select(x => $"{x.Label}：{x.Value}")) : string.Empty)</div>
 
         <div class="ai-usage-cards">
-            @foreach (var card in summary.Cards)
-            {
-                <StatCard Item="card" />
-            }
+            <StatCard Item="@(new StatCardItem("呼叫次數", report.CallCount.ToString("N0"), report.FailedCallCount > 0 ? $"含 {report.FailedCallCount:N0} 次失敗或取消" : "全部成功", report.FailedCallCount > 0 ? ChartTone.Danger : ChartTone.Neutral))" />
+            <StatCard Item="@(new StatCardItem("token", $"{AiUsageMetrics.FormatTokens(report.InputTokens)} / {AiUsageMetrics.FormatTokens(report.OutputTokens)}", "輸入 / 輸出"))" />
+            <StatCard Item="@(new StatCardItem("轉錄時長", AiUsageMetrics.FormatAudio(report.AudioSeconds), "送進語音辨識的音訊"))" />
+            <StatCard Item="@(new StatCardItem("估算金額", report.CostText, report.UnpricedCallCount + report.NoRateCallCount > 0 ? $"有 {report.UnpricedCallCount + report.NoRateCallCount:N0} 筆未計入（沒單價或沒匯率）" : "依呼叫當下的單價與匯率", report.UnpricedCallCount + report.NoRateCallCount > 0 ? ChartTone.Warning : ChartTone.Neutral))" />
         </div>
 
-        @* ⚠️ 單位一定要寫在標題裡。LineChart 沒有 ChartSlice 那種 Display 覆寫，
-           資料點提示是把 int（分）原樣印出來——同一個「12」從 USD 0.12 變成 NT$0.12
-           數量級差三十幾倍，畫面上卻沒有任何提示。 *@
-        @* 本月累計對上月同期累計（0.4.91）。最後一點就是第一張卡片的那兩個數字，
-           這條曲線是那張卡的趨勢版：看得出這個月是不是花得比上個月快。
-           ⚠️ 單位要寫在標題裡：LineChart 沒有 Display 覆寫，資料點提示是把「分」原樣印出來。 *@
-        <LineChart Title="@($"本月累計估算金額（單位：{(summary.ExchangeRateNote is null ? "美分" : "NT$ 分")}）")"
-                   Points="summary.CumulativeCost"
-                   SeriesOneLabel="本月"
-                   SeriesTwoLabel="上月同期" />
+        <div class="ai-usage-panel">
+            <Tabs @bind-ActiveKey="activeTab" Animated="false">
+                <TabPane Key="@TabCharts" Tab="圖表">
+                    <div class="ai-usage-grid">
+                        <PieChart Title="依功能" Slices="report.FeatureSlices" TotalDisplay="@report.CostText" />
+                        <BarChart Title="依模型" Items="report.ModelSlices" />
+                    </div>
+                    <BarChart Title="依使用者" Items="report.UserSlices" />
+                </TabPane>
 
-        @* 選了特定功能時功能別圓餅只剩一片 100%，沒有任何資訊，所以不渲染。
-           .ai-usage-grid 是 auto-fit，剩下模型長條一張時會自動撐滿整列。 *@
-        <div class="ai-usage-grid">
-            @if (IsAllFeatures)
-            {
-                <PieChart Title="本月依功能別" Slices="summary.ByFeature" TotalDisplay="@summary.TotalCostDisplay" />
-            }
-            <BarChart Title="本月依模型" Items="summary.ByModel" />
-        </div>
-
-        <BarChart Title="本月依使用者" Items="summary.ByUser" />
-
-        <div class="ai-usage-table">
-            @* 期間下拉放在這裡而不是右上角（0.4.91）：曲線改成本月累計之後，
-               「最近 N 天」只剩明細表在用。留在右上角就會變成又一個「選了上面沒反應」的下拉。 *@
-            <div class="ai-usage-table-head">
-                <div class="ai-usage-table-title">最近呼叫明細</div>
-                <Select TItem="int" TItemValue="int"
-                        Value="@trendDays"
-                        ValueChanged="OnTrendDaysChangedAsync"
-                        Disabled="@isLoading"
-                        Style="min-width: 130px;">
-                    @foreach (var days in TrendDayOptions)
+                <TabPane Key="@TabDaily" Tab="@($"每日（{report.Daily.Count}）")">
+                    @if (report.Daily.Count == 0)
                     {
-                        <SelectOption TItem="int" TItemValue="int" Value="@days">@($"最近 {days} 天")</SelectOption>
-                    }
-                </Select>
-            </div>
-
-            <Table @ref="table"
-                   TItem="AiUsageRow"
-                   RemoteDataSource="true"
-                   DataSource="@rows"
-                   OnChange="OnTableChangeAsync"
-                   @bind-PageIndex="pageIndex"
-                   @bind-PageSize="pageSize"
-                   @bind-Total="total"
-                   Size="TableSize.Small">
-                <Column TData="DateTime" Title="時間">
-                    <span class="ai-usage-time">@context.OccurredAt.ToString("MM/dd HH:mm:ss")</span>
-                </Column>
-                <Column TData="string" Title="功能">@context.FeatureText</Column>
-                <Column TData="string" Title="模型">@context.Model</Column>
-                <Column TData="string" Title="使用者">@(context.UserName ?? "—")</Column>
-                <Column TData="string" Title="對象">@context.Target</Column>
-                <Column TData="string" Title="用量">@context.UsageText</Column>
-                <Column TData="string" Title="估算金額">
-                    <span class="ai-usage-cost">@context.CostText</span>
-                </Column>
-                <Column TData="string" Title="狀態">
-                    @if (context.Outcome == AiUsageOutcome.Succeeded)
-                    {
-                        <span>@context.OutcomeText</span>
+                        <div class="ai-usage-empty">沒有資料。</div>
                     }
                     else
                     {
-                        <span class="ai-usage-failed" title="@context.ErrorMessage">@context.OutcomeText</span>
+                        <div class="token-daily">
+                            @foreach (var day in report.Daily)
+                            {
+                                <div class="token-daily-row @(day.CallCount == 0 ? "token-daily-empty" : string.Empty)">
+                                    <span class="token-number">@day.Date.ToString("MM/dd (ddd)", System.Globalization.CultureInfo.GetCultureInfo("zh-TW"))</span>
+                                    <span class="token-daily-bar"><span style="width: @(DailyBarWidth(day))%"></span></span>
+                                    <span class="token-number token-daily-cost">@day.CostText</span>
+                                    <span class="token-number token-muted">@AiUsageMetrics.FormatTokens(day.InputTokens) / @AiUsageMetrics.FormatTokens(day.OutputTokens)</span>
+                                    <span class="token-number token-muted">@AiUsageMetrics.FormatAudio(day.AudioSeconds)</span>
+                                    <span class="token-number token-muted">@day.CallCount.ToString("N0") 次</span>
+                                </div>
+                            }
+                        </div>
+                        @if (!report.IsDailyFilled)
+                        {
+                            <div class="token-muted token-daily-note">區間沒有起訖或超過 @AiUsageAnalysisService.MaxFilledDays 天，只列出有資料的日子。</div>
+                        }
                     }
-                </Column>
-            </Table>
-        </div>
+                </TabPane>
 
-        @* 誠實的下限說明。失敗與取消的呼叫沒有用量資料，但供應商仍可能計費——
-           這是這個功能唯一站得住腳的講法，而且零成本。 *@
-        <div class="ai-usage-footnote">
-            金額為<b>估算</b>：依 <code>LlmSettings:Pricing</code> 的單價在呼叫當下換算，改設定不影響既有紀錄。
-            @if (summary.ExchangeRateNote is not null)
-            {
-                <text>
-                    台幣金額以<b>呼叫當下</b>的匯率換算（來源 open.er-api.com，每日更新一次），
-                    因此匯率變動同樣不影響既有紀錄；取不到匯率的那幾筆不換算，顯示「—」且不計入總額。
-                </text>
-            }
-            失敗與取消的呼叫沒有用量資料，但串流中斷時供應商仍可能計費，因此本頁的金額是<b>下限</b>，
-            實際帳單可能略高。
+                <TabPane Key="@TabUser" Tab="@($"依使用者（{report.ByUser.Count}）")">
+                    <TokenUsageGroupTable Rows="report.ByUser" KeyTitle="使用者" />
+                </TabPane>
+
+                <TabPane Key="@TabFeature" Tab="@($"依功能（{report.ByFeature.Count}）")">
+                    <TokenUsageGroupTable Rows="report.ByFeature" KeyTitle="功能" />
+                </TabPane>
+
+                <TabPane Key="@TabModel" Tab="@($"依模型（{report.ByModel.Count}）")">
+                    <TokenUsageGroupTable Rows="report.ByModel" KeyTitle="模型" />
+                </TabPane>
+
+                <TabPane Key="@TabDetail" Tab="@($"明細（{total:N0}）")">
+                    <Table TItem="AiUsageRow"
+                           RemoteDataSource="true"
+                           DataSource="@rows"
+                           Loading="@isLoading"
+                           OnChange="OnTableChangeAsync"
+                           @bind-PageIndex="pageIndex"
+                           @bind-PageSize="pageSize"
+                           @bind-Total="total"
+                           Size="TableSize.Small"
+                           ScrollX="1000">
+                        <ColumnDefinitions>
+                            <Column TData="DateTime" DataIndex="@nameof(AiUsageRow.OccurredAt)"
+                                    Title="時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                                <span class="token-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            </Column>
+                            <Column TData="string" Title="功能" Width="130">@context.FeatureText</Column>
+                            <Column TData="string" Title="結果" Width="90">
+                                @if (string.IsNullOrWhiteSpace(context.ErrorMessage))
+                                {
+                                    <span class="@OutcomeClass(context.Outcome)">@context.OutcomeText</span>
+                                }
+                                else
+                                {
+                                    <Tooltip Title="@context.ErrorMessage">
+                                        <span class="@OutcomeClass(context.Outcome)">@context.OutcomeText</span>
+                                    </Tooltip>
+                                }
+                            </Column>
+                            <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.UserName ?? "（系統）")</Column>
+                            <Column TData="string" Title="對象" Width="100">@context.Target</Column>
+                            <Column TData="string" Title="模型" Width="140" Ellipsis>@context.Model</Column>
+                            <Column TData="string" Title="用量" Width="140">@context.UsageText</Column>
+                            <Column TData="string" Title="估算金額" Width="110" Align="ColumnAlign.Right">
+                                <span class="token-number">@context.CostText</span>
+                            </Column>
+                            <ActionColumn Title="操作" Width="100" Fixed="ColumnFixPlacement.Right">
+                                <Space>
+                                    <SpaceItem>
+                                        <CrudActionButton Title="查看" Icon="visibility" OnClick="@(() => OnViewAsync(context))" />
+                                    </SpaceItem>
+                                    <SpaceItem>
+                                        <CrudActionButton Title="刪除" Icon="delete" Danger="true" OnClick="@(() => OnDeleteAsync(context))" />
+                                    </SpaceItem>
+                                </Space>
+                            </ActionColumn>
+                        </ColumnDefinitions>
+                    </Table>
+                </TabPane>
+            </Tabs>
         </div>
     }
+
+    @* 誠實的下限說明。失敗與取消的呼叫沒有用量資料，但供應商仍可能計費——
+       這是這個功能唯一站得住腳的講法，而且零成本。 *@
+    <div class="ai-usage-footnote">
+        金額為<b>估算</b>：依 <code>LlmSettings:Pricing</code> 的單價在呼叫當下換算，改設定不影響既有紀錄。
+        @if (summary.ExchangeRateNote is not null)
+        {
+            <text>
+                台幣金額以<b>呼叫當下</b>的匯率換算（來源 open.er-api.com，每日更新一次），
+                因此匯率變動同樣不影響既有紀錄；取不到匯率的那幾筆不換算，顯示「—」且不計入總額。
+                上限列則以目前匯率補算沒有匯率的列（寧可多算），兩邊可能有些微差距。
+            </text>
+        }
+        失敗與取消的呼叫沒有用量資料，但串流中斷時供應商仍可能計費，因此本頁的金額是<b>下限</b>，
+        實際帳單可能略高。
+    </div>
+
+    <Modal Title="用量明細"
+           Class="form-modal-standard"
+           Visible="@detailVisible"
+           MaskClosable="false"
+           Footer="null"
+           OnCancel="OnDetailCancel">
+        @if (isDetailLoading || detail is null)
+        {
+            <div class="ai-usage-empty"><Spin Size="SpinSize.Small" /> 讀取中…</div>
+        }
+        else
+        {
+            <div class="token-detail-actions">
+                @if (detailCallLogId is not null)
+                {
+                    <Button Type="ButtonType.Default" OnClick="OnOpenCallLog">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="forum" /><span>查看 AI 對話紀錄</span></span>
+                    </Button>
+                }
+                else
+                {
+                    <span class="token-muted">@CallLogUnavailableText</span>
+                }
+            </div>
+
+            <dl class="token-detail-list">
+                <div><dt>時間</dt><dd>@detail.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>功能</dt><dd>@detail.FeatureText</dd></div>
+                <div>
+                    <dt>結果</dt>
+                    <dd>
+                        <span class="@OutcomeClass(detail.Outcome)">@detail.OutcomeText</span>
+                        @if (!string.IsNullOrWhiteSpace(detail.ErrorMessage))
+                        {
+                            <span class="token-error-text">@detail.ErrorMessage</span>
+                        }
+                    </dd>
+                </div>
+                <div><dt>使用者</dt><dd>@(detail.UserName ?? "（系統）")@(detail.UserId is { } uid ? $"（Id {uid}）" : string.Empty)</dd></div>
+                <div><dt>對象</dt><dd>@detail.TargetText</dd></div>
+                <div><dt>供應商／模型</dt><dd>@detail.Provider／@detail.Model</dd></div>
+                <div><dt>輸入 token</dt><dd class="token-number">@(detail.InputTokens?.ToString("N0") ?? "—")</dd></div>
+                <div><dt>輸出 token</dt><dd class="token-number">@(detail.OutputTokens?.ToString("N0") ?? "—")</dd></div>
+                <div><dt>快取 token</dt><dd class="token-number">@(detail.CachedInputTokens?.ToString("N0") ?? "—")</dd></div>
+                <div>
+                    <dt>音訊時長</dt>
+                    <dd>@(detail.AudioSeconds is { } seconds ? $"{seconds:0.#} 秒{(detail.IsAudioDurationEstimated ? "（推估）" : string.Empty)}" : "—")</dd>
+                </div>
+                <div><dt>輸入單價</dt><dd>@FormatPrice(detail.InputPricePerMillion, detail.Currency, "百萬 token")</dd></div>
+                <div><dt>輸出單價</dt><dd>@FormatPrice(detail.OutputPricePerMillion, detail.Currency, "百萬 token")</dd></div>
+                <div><dt>音訊單價</dt><dd>@FormatPrice(detail.AudioPricePerMinute, detail.Currency, "分鐘")</dd></div>
+                <div><dt>估算金額（原幣）</dt><dd>@AiUsageMetrics.FormatAmount(detail.EstimatedCost, detail.Currency)</dd></div>
+                <div><dt>當時匯率</dt><dd>@(detail.ExchangeRate is { } rate ? $"1 {detail.Currency} = {rate:0.####} {detail.ConvertedCurrency}" : "—")</dd></div>
+                <div><dt>估算金額</dt><dd class="token-number">@detail.CostText</dd></div>
+                <div><dt>呼叫識別碼</dt><dd class="token-number">@(detail.CallId?.ToString() ?? "—")</dd></div>
+            </dl>
+            <div class="token-muted">單價與匯率都是呼叫當下的快照，之後改設定不影響這一筆。</div>
+        }
+    </Modal>
 }

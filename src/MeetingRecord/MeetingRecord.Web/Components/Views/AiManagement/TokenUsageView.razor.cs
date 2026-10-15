@@ -7,17 +7,18 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Web.Components.Views.AiUsages;
+namespace MeetingRecord.Web.Components.Views.AiManagement;
 
 /// <summary>
-/// AI 用量分析。**管理員限定**——這一頁看得到全公司的用量與人名，而且不套團隊過濾。
+/// Token 用量（1.0.30 由「AI 用量分析」改名並移到「系統管理 → AI 管理」）。**只限管理者**——
+/// 這一頁看得到全公司的用量與人名，而且不套團隊過濾；1.0.29 以前可勾給角色，1.0.30 起權限鍵已退役。
 ///
 /// <para>
 /// 資料來自 0.4.80 起累積的用量帳本，**沒有回填**：畫面上一定要寫出統計起始日，
 /// 否則使用者會以為系統在此之前都沒有花錢。
 /// </para>
 /// </summary>
-public partial class AiUsageView : ComponentBase
+public partial class TokenUsageView : ComponentBase
 {
     /// <summary>「全部功能」在下拉裡的值。用空字串而不是 null，AntDesign 的 Select 才綁得住。</summary>
     private const string AllFeatures = "";
@@ -31,7 +32,7 @@ public partial class AiUsageView : ComponentBase
     private AiUsageAnalysisService AiUsageAnalysisService { get; set; } = default!;
 
     [Inject]
-    private ILogger<AiUsageView> Logger { get; set; } = default!;
+    private ILogger<TokenUsageView> Logger { get; set; } = default!;
 
     [Inject]
     private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
@@ -72,10 +73,11 @@ public partial class AiUsageView : ComponentBase
             return;
         }
 
-        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_AI用量分析) == false)
+        // 1.0.30 起只限管理者：不再看權限鍵（舊資料庫可能殘留「AI 用量分析」的勾選）。
+        if (!AuthenticationStateHelper.CheckIsAdmin())
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            Logger.LogWarning("AI usage denied because current user has not this role permission.");
+            Logger.LogWarning("Token usage denied because the current user is not an administrator.");
             return;
         }
 

@@ -53,11 +53,20 @@ public class MagicObjectHelper
     public const string 角色_角色管理 = "角色管理 ";
 
     /// <summary>
-    /// AI 用量分析（0.4.80）。⚠️ 這個值會直接拿去做字串比對，也是側邊欄的顯示名，
-    /// 而且必須與 Menu.json 的 name 一字不差。上面幾個常數尾端有空白是既有資料的
-    /// 既成事實（「角色管理 」「登出 」），新常數不要跟著加。
+    /// 「系統管理 → AI 管理」群組與底下的頁面（1.0.30）。⚠️ 與 Menu.json 的 name 一字不差、尾端不加空白
+    /// （上面幾個常數尾端有空白是既有資料的既成事實，新常數不要跟著加）。
+    /// 兩頁都**只限管理者**、不在權限目錄裡（對話紀錄含會議逐字稿全文；用量含全公司的人名與金額），
+    /// 頁面以 <c>CheckIsAdmin()</c> 守門，側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者。
     /// </summary>
-    public const string 角色_AI用量分析 = "AI 用量分析";
+    public const string 角色_AI管理 = "AI 管理";
+    public const string 角色_AI對話紀錄 = "AI 對話紀錄";
+    public const string 角色_Token用量 = "Token 用量";
+
+    /// <summary>
+    /// 0.4.80～1.0.29 的「AI 用量分析」權限鍵（可勾給角色）。1.0.30 起頁面改名「Token 用量」並只限管理者，
+    /// 只用來在啟動時把舊資料庫裡的權限列與角色勾選清掉（<c>RbacBackfillService</c>），新程式不要再引用。
+    /// </summary>
+    public const string 已退役權限鍵_AI用量分析 = "AI 用量分析";
 
     /// <summary>
     /// 側邊欄「系統管理」底下的兩個子群組（0.4.120）。群組本身沒有權限鍵、也不在權限目錄：

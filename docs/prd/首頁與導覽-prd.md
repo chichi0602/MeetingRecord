@@ -1,10 +1,10 @@
 ﻿# 首頁與導覽 PRD
 
-- 文件版本：1.12
+- 文件版本：1.13
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（「關於」對話窗為 0.4.24 新增）
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
 
@@ -33,7 +33,7 @@
   - 依 `Menu.json` 階層渲染，支援展開與「收合」兩種型態（收合時以圖示 flyout 呈現）。0.4.120 起選單有三層：收合態的 flyout 遇到分組（沒有 `url`、有 `subMenu`）會畫成一列帶右箭頭的觸發鈕，懸停再往右彈出第二層 flyout，不把孫節點攤平；鍵盤以 `:has(:focus-visible)` 展開（移植自 NET10-Blazor-Starter）。
   - 每項含 `name`、`icon`（Material 圖示）、`url` 或子選單 `subMenu`。
   - 無任何可用項目時顯示「尚無可用選單」。
-  - 0.4.33 起分為兩個區塊：**核心功能**（儀表板 `/dashboard`／會議紀錄 `/meetings`／專案項目 `/projects`／待辦事項 `/todos`／使用說明 `/help`，皆為頂層項；儀表板為 0.4.54 新增）與**功能選單**（系統管理〔0.4.120 起分兩組：帳號與權限（id 35）＝使用者管理 `/myusers`／角色管理 `/roleviews`；監控與診斷（id 36）＝系統健康監控 `/system-health`／日誌檢視 `/logs`（0.4.121）／日誌等級設定 `/log-level-setting`／系統例外紀錄 `/system-exceptions`（0.4.122）／資料庫用量 `/database-usage`／AI 用量分析 `/ai-usage`〕、資料定義〔分類清單／團隊清單／提示詞清單；「團隊清單」0.4.99～0.4.100 曾移除、0.4.101 以「資料群組」之名放回、0.4.102 改回原名〕、登出）。區塊由 `Menu.json` 頂層節點的 `section` 欄位宣告，加新區塊不需改程式。
+  - 0.4.33 起分為兩個區塊：**核心功能**（儀表板 `/dashboard`／會議紀錄 `/meetings`／專案項目 `/projects`／待辦事項 `/todos`／使用說明 `/help`，皆為頂層項；儀表板為 0.4.54 新增）與**功能選單**（系統管理〔0.4.120 起分組，1.0.30 起三組：帳號與權限（id 35，`manage_accounts`）＝使用者管理 `/myusers`／角色管理 `/roleviews`；監控與診斷（id 36，`analytics`）＝系統健康監控 `/system-health`／日誌檢視 `/logs`（0.4.121）／日誌等級設定 `/log-level-setting`／系統例外紀錄 `/system-exceptions`（0.4.122）／資料庫用量 `/database-usage`；AI 管理（id 62，`psychology`，1.0.30）＝AI 對話紀錄 `/ai-call-logs`（id 63，`forum`）／Token 用量 `/token-usage`（id 33，`toll`；原「監控與診斷」下的「AI 用量分析」`/ai-usage`，舊網址保留為別名）〕、資料定義〔分類清單／團隊清單／提示詞清單；「團隊清單」0.4.99～0.4.100 曾移除、0.4.101 以「資料群組」之名放回、0.4.102 改回原名〕、登出）。區塊由 `Menu.json` 頂層節點的 `section` 欄位宣告，加新區塊不需改程式。
   - **標題區（0.4.44 改版，0.4.47～0.4.49 調整尺寸）**：專案標誌（與登入頁、`favicon.svg` 同一份三橢圓「AI」線稿，以 `currentColor` 描邊）＋ 系統名稱 ＋ 副標「管理後台功能清單」。系統名稱讀 `SystemSettings.SystemInformation.SystemName`，**不寫死**。收合態只留標誌（0.4.46：標題文字改用 `display: none`，`opacity`／`width` 歸零會留下高度把標題列撐長）。**標誌尺寸略大於該狀態的選單圖示**（展開 2rem、收合 2.5rem；等大會顯得單薄，且 SVG 的 viewBox 已收緊為 `5 5 110 110` 去掉四周空白），頁首高度與底線則與 `MainLayout` 的 `.top-row` 完全相同（`min-height: 4.5rem` ＋ 1px 底線），兩區的頁首邊界才會切齊。
   - **收合鈕（0.4.44 起移出側邊欄）**：改由 `MainLayout.razor` 渲染，浮在側邊欄右邊界上、垂直置中，收合／展開時跟著滑動。放在 `.sidebar` 外面是因為 `.sidebar` 有 `overflow: hidden`，擺在裡面沒辦法跨出邊界。
   - **選中樣式（0.4.45 定案）**：`--oat-300`（#D4BDA8）圓角色塊，比側邊欄底色深一階，文字與圖示皆為深棕（對比 6.4:1），無色條、無陰影；hover 用淺一階的 `--oat-200` 以資區別。收合態的圖示按鈕套同一套。
@@ -55,7 +55,7 @@
 1. `SidebarMenuService.LoadAuthorizedMenuItemsAsync` 讀取選單並過濾：
    - `ReadMenuItemsFromDisk` 由 `MagicObjectHelper.Menu結構定義`（`Datas/Menu.json`）反序列化，經 `ICacheService` 快取（key `sidebar:menu:raw`）。
    - `ApplyPermissionStructure` 依每項唯一 `id` 從 `MenuPermissionMap`（id→權限鍵）填入 `PermissionName`；找不到對應時退回以 `Name` 為權限名。
-   - `FilterAuthorizedMenuItems(items, canAccessPage, isAdmin)` 遞迴過濾（任何深度）：列在 `AdminOnlyMenuIds`（0.4.122：34、37、38、39、30）的項目非管理者一律排除、不看權限；其餘項目 id 列在 `PublicMenuIds`（免權限，0.4.97 起只有儀表板）、項目自身權限（`Name` 或 `PermissionName` 任一）通過，或其子項尚有可見項目時保留。列在 `GroupOnlyMenuIds`（0.4.120：35、36）的分組本身沒有權限，只看子項。
+   - `FilterAuthorizedMenuItems(items, canAccessPage, isAdmin)` 遞迴過濾（任何深度）：列在 `AdminOnlyMenuIds`（1.0.30：34、37、38、39、30、33、63）的項目非管理者一律排除、不看權限；其餘項目 id 列在 `PublicMenuIds`（免權限，0.4.97 起只有儀表板）、項目自身權限（`Name` 或 `PermissionName` 任一）通過，或其子項尚有可見項目時保留。列在 `GroupOnlyMenuIds`（1.0.30：35、36、62）的分組本身沒有權限，只看子項。
    - `ApplyPermissionStructure` 與 `FilterAuthorizedMenuItems` 皆為 `public static` 純函式，由 `MonitoringMenuRegistrationTests` 直接測試。
 2. 權限判定唯一來源為 `AuthenticationStateHelper.CheckAccessPage(name)`：比對 `CurrentUser.RoleList`（由 `IPermissionChecker.GetEffectivePermissionKeysAsync` 供給的 RBAC 有效權限鍵集合）；管理員短路一律通過。
 3. `Menu.json` 以 `id` 對應權限鍵，重排選單順序不會錯位（已移除舊「位置索引三處同步」耦合）。
@@ -65,9 +65,9 @@
 
 - 頁面權限採宣告式三件組：`Menu.json`（每項唯一 `id`）＋ `SidebarMenuService.MenuPermissionMap`（id→權限鍵）＋ `MagicObjectHelper` 權限鍵常數。
 - 免權限頁面：`SidebarMenuService.PublicMenuIds`（目前只有 11「儀表板」，0.4.97 起）。這類頁面不放進 `MenuPermissionMap`，也不列在角色管理的權限矩陣。
-- 管理者限定頁面：`SidebarMenuService.AdminOnlyMenuIds`（0.4.120 起：34「系統健康監控」、38「日誌等級設定」、30「資料庫用量」；0.4.121 加入 37「日誌檢視」；0.4.122 加入 39「系統例外紀錄」，圖示 `bug_report`，排在日誌等級設定之後）。非管理者一律看不到（舊資料庫殘留的權限列也無效）；不放進 `MenuPermissionMap`，也不列在權限矩陣，頁面以 `CheckIsAdmin()` 守門。
-- 純分組：`SidebarMenuService.GroupOnlyMenuIds`（0.4.120 起：35「帳號與權限」、36「監控與診斷」），沒有權限鍵，底下有可見項目才顯示。
-- id→權限鍵對應：12→`角色_使用說明`「使用說明」、21→`角色_專案項目`「專案項目」、22→`角色_待辦事項`「待辦事項」、61→`角色_會議紀錄`「會議紀錄」、3→`角色_系統管理`「系統管理功能」、31→`角色_使用者管理`「使用者管理」、32→`角色_角色管理`「角色管理」、33→`角色_AI用量分析`「AI 用量分析」、5→`角色_資料定義`「資料定義管理功能」、51→`角色_分類清單`「分類清單」、52→`角色_團隊清單`「團隊清單」、53→`角色_提示詞清單`「提示詞清單」、4→`角色_登出`「登出」。
+- 管理者限定頁面：`SidebarMenuService.AdminOnlyMenuIds`（0.4.120 起：34「系統健康監控」、38「日誌等級設定」、30「資料庫用量」；0.4.121 加入 37「日誌檢視」；0.4.122 加入 39「系統例外紀錄」，圖示 `bug_report`，排在日誌等級設定之後；1.0.30 加入「AI 管理」的 33「Token 用量」與 63「AI 對話紀錄」）。非管理者一律看不到（舊資料庫殘留的權限列也無效）；不放進 `MenuPermissionMap`，也不列在權限矩陣，頁面以 `CheckIsAdmin()` 守門。
+- 純分組：`SidebarMenuService.GroupOnlyMenuIds`（0.4.120 起：35「帳號與權限」、36「監控與診斷」；1.0.30 加入 62「AI 管理」），沒有權限鍵，底下有可見項目才顯示。
+- id→權限鍵對應：12→`角色_使用說明`「使用說明」、21→`角色_專案項目`「專案項目」、22→`角色_待辦事項`「待辦事項」、61→`角色_會議紀錄`「會議紀錄」、3→`角色_系統管理`「系統管理功能」、31→`角色_使用者管理`「使用者管理」、32→`角色_角色管理`「角色管理」、5→`角色_資料定義`「資料定義管理功能」、51→`角色_分類清單`「分類清單」、52→`角色_團隊清單`「團隊清單」、53→`角色_提示詞清單`「提示詞清單」、4→`角色_登出`「登出」。1.0.30 起 33 不再對應權限鍵（改為管理者限定），原權限鍵「AI 用量分析」退役（`已退役權限鍵_AI用量分析`，由 `RbacBackfillService` 啟動時清除）。
 - 選單過濾僅隱藏無權項目，並非授權邊界；實際資料存取由 API 端 `[HasPermission]` 與團隊可見範圍（`ProjectAccessService`，專案的主責＋協作團隊）把關（見「紀錄分類與團隊權控 PRD」與「團隊清單 PRD」）。
 - 管理員（`IsAdmin`）於 `CheckAccessPage` 短路，選單全可見（含 `AdminOnlyMenuIds`）。
 - 右上角使用者選單與「關於」對話窗不做權限過濾：任何已登入者皆可開啟；內容僅為系統識別資訊，不含連線字串、金鑰或其他機敏設定。
@@ -81,7 +81,8 @@
 ## 七、驗收與測試
 
 - `MeetingRecord.Tests/MenuIconTests.cs::MenuJson_AllIcons_ShouldBeNonEmptyAndAllowed`：`Menu.json` 每項圖示非空且屬允許集合。
-- `MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`（0.4.120）：選單 id 全樹唯一、系統管理下兩個分組、管理者限定頁不在權限目錄、非管理者即使殘留舊權限也看不到、只有「AI 用量分析」權限的人看得到完整路徑、分組名稱不會被當成權限鍵。
+- `MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`（0.4.120）：選單 id 全樹唯一、系統管理下三個分組（1.0.30 起）、管理者限定頁不在權限目錄、非管理者即使殘留舊權限（含 1.0.30 退役的「AI 用量分析」）也看不到、分組名稱不會被當成權限鍵。
+- `MeetingRecord.Tests/AiManagementMenuRegistrationTests.cs`（1.0.30）：「AI 管理」分組在系統管理下、依序為 AI 對話紀錄與 Token 用量、Token 用量已離開「監控與診斷」、兩頁只限管理者、分組列在 `GroupOnlyMenuIds`、權限目錄不含這兩頁與退役鍵。
 - 手動驗收：以不同角色登入，確認選單僅顯示具權限之項目；管理員可見全部；重排 `Menu.json` 順序不影響權限對應；收合側邊欄後，經第二層 flyout 可點到每個第三層項目。
 - 手動驗收（關於）：點右上角使用者名稱 →「關於」，對話窗顯示七列資訊，系統版本須與 `appsettings.json` 之 `SystemVersion` 一致；關閉後再次開啟，「已運作時間」應有增加。
 - 權限判定來源之測試見 `PermissionCheckerTests.cs`（詳「紀錄分類與團隊權控 PRD」）。

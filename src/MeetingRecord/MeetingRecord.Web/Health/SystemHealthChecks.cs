@@ -123,7 +123,7 @@ public static class SystemHealthChecks
             return new(
                 SystemHealthStatus.Degraded,
                 evidence,
-                $"以下模型沒有設定單價（LlmSettings:Pricing），AI 用量分析的金額會顯示「—」：{string.Join("、", missingPricing)}。");
+                $"以下模型沒有設定單價（LlmSettings:Pricing），Token 用量的金額會顯示「—」：{string.Join("、", missingPricing)}。");
         }
 
         return new(SystemHealthStatus.Healthy, evidence);
@@ -182,7 +182,7 @@ public static class SystemHealthChecks
             return new(
                 SystemHealthStatus.Unhealthy,
                 $"目標幣別：{settings.TargetCurrency}；目前沒有任何匯率{failure}。",
-                "抓不到即時匯率、帳本裡沒有舊匯率、也沒有設定保底值，AI 用量分析的金額會顯示「—」。");
+                "抓不到即時匯率、帳本裡沒有舊匯率、也沒有設定保底值，Token 用量的金額會顯示「—」。");
         }
 
         var evidence = $"1 {current.BaseCurrency} = {current.Rate} {current.TargetCurrency}；"
@@ -271,7 +271,7 @@ public static class SystemHealthChecks
 
         if (total >= MinimumCallsForFailureRate && rate > 0.5)
         {
-            return new(SystemHealthStatus.Unhealthy, evidence, "AI 呼叫有一半以上失敗，請到「AI 用量分析」看失敗原因。");
+            return new(SystemHealthStatus.Unhealthy, evidence, "AI 呼叫有一半以上失敗，請到「Token 用量」看失敗原因。");
         }
 
         var failedTooOften = total >= MinimumCallsForFailureRate ? rate > 0.2 : aiFailed > 0;
@@ -280,7 +280,7 @@ public static class SystemHealthChecks
             var reasons = new List<string>();
             if (failedTooOften)
             {
-                reasons.Add("AI 呼叫失敗偏多，可到「AI 用量分析」看失敗原因");
+                reasons.Add("AI 呼叫失敗偏多，可到「Token 用量」看失敗原因");
             }
 
             if (exceptionCount > 0)

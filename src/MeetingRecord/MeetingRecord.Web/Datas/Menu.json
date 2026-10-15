@@ -93,12 +93,25 @@
             "name": "資料庫用量",
             "icon": "data_usage",
             "url": "/database-usage"
+          }
+        ]
+      },
+      {
+        "id": 62,
+        "name": "AI 管理",
+        "icon": "psychology",
+        "subMenu": [
+          {
+            "id": 63,
+            "name": "AI 對話紀錄",
+            "icon": "forum",
+            "url": "/ai-call-logs"
           },
           {
             "id": 33,
-            "name": "AI 用量分析",
-            "icon": "monetization_on",
-            "url": "/ai-usage"
+            "name": "Token 用量",
+            "icon": "toll",
+            "url": "/token-usage"
           }
         ]
       }

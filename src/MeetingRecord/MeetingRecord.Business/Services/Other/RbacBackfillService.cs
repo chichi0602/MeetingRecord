@@ -34,7 +34,8 @@ public sealed class RbacBackfillService : IRbacBackfillService
     }
 
     /// <summary>
-    /// 已退役、不能再勾給角色的權限鍵（0.4.120：「系統健康度」改為只限管理者的「系統健康監控」）。
+    /// 已退役、不能再勾給角色的權限鍵（0.4.120：「系統健康度」改為只限管理者的「系統健康監控」；
+    /// 1.0.30：「AI 用量分析」改名為只限管理者的「Token 用量」）。
     /// 刪掉 <see cref="Permission"/>（含「系統健康度:view」這類動作鍵）與掛在上面的 <see cref="RolePermissionMap"/>，
     /// 並從角色的 TabViewJson 移除。冪等，第二次執行不會有任何變動。
     /// ⚠️ 必須在 <see cref="BackfillRolePermissionsAsync"/> 之前跑：那一步依 TabViewJson 補對應，
@@ -42,7 +43,7 @@ public sealed class RbacBackfillService : IRbacBackfillService
     /// </summary>
     private async Task RetireLegacyPermissionKeysAsync()
     {
-        string[] retired = [MagicObjectHelper.已退役權限鍵_系統健康度];
+        string[] retired = [MagicObjectHelper.已退役權限鍵_系統健康度, MagicObjectHelper.已退役權限鍵_AI用量分析];
         // 裸鍵（＝全部動作）與「舊鍵:動作」都要清。PageOf 對裸鍵回傳 null，所以兩個都比。
         bool IsRetired(string key) => retired.Contains(PermissionKey.PageOf(key) ?? key, StringComparer.Ordinal);
 

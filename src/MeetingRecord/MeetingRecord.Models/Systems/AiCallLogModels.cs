@@ -1,3 +1,4 @@
+using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Models.Systems;
@@ -110,3 +111,16 @@ public sealed class AiCallLogResponse
 
     public int? CachedInputTokens { get; set; }
 }
+
+/// <summary>
+/// 明細窗的內容（1.0.30）：列本身、內容檔（讀不到時為 null）、同一次呼叫的用量、同一趟工作的其他呼叫。
+/// </summary>
+/// <param name="RawJson">內容檔原文（下載 JSON 用）；檔案不存在時為 null。</param>
+/// <param name="Usage">用量帳本裡 CallId 相同的那一列；帳本被清除或 1.0.29 之前沒有 CallId 時為 null。</param>
+/// <param name="Thread">同一個 ThreadKey 的所有呼叫（含自己），依時間排序；沒有 ThreadKey 時只有自己。</param>
+public sealed record AiCallLogDetail(
+    AiCallLogAdapterModel Row,
+    AiCallLogEntry? Content,
+    string? RawJson,
+    AiCallLogUsage? Usage,
+    IReadOnlyList<AiCallLogAdapterModel> Thread);

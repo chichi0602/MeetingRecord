@@ -1,10 +1,10 @@
 ﻿# 系統例外紀錄 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.122（移植自 NET10-Blazor-Starter；不含 Email 告警、AI 例外分析只做單次分析）
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
 
@@ -75,4 +75,4 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ExceptionLogService.cs`、`Services/Other/ExceptionStackFileStore.cs`、`Helpers/ExceptionSignature.cs`
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/ExceptionLog.cs`、`Migrations/20261014052712_AddExceptionLog.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/ExceptionLogPage.razor`、`Components/Views/Monitoring/ExceptionLogView.razor(.cs/.css)`、`ExceptionLogClipboardText.cs`、`Web/Export/CsvExport.cs`
-- 交叉連結：[日誌檢視 PRD](日誌檢視-prd.md)、[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[AI 用量分析 PRD](AI用量分析-prd.md)
+- 交叉連結：[日誌檢視 PRD](日誌檢視-prd.md)、[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[AI 用量分析 PRD](AI用量分析-prd.md)（1.0.30 起為「Token 用量」）、[AI 對話紀錄 PRD](AI對話紀錄-prd.md)（每次 AI 例外分析的送出內容與回應）

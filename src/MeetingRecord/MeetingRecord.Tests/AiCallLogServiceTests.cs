@@ -2,9 +2,12 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.DataAccess;
+using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Web.Components.Views.AiManagement;
 
 namespace MeetingRecord.Tests;
 
@@ -176,6 +179,168 @@ public sealed class AiCallLogServiceTests : IAsyncDisposable
         Assert.Equal(1, removed);
         Assert.Equal(recent.CallId, (await context.AiCallLog.AsNoTracking().SingleAsync()).CallId);
         Assert.False(Directory.Exists(orphanFolder));
+    }
+
+    // ───────── 1.0.30：AI 對話紀錄頁的查詢、明細與刪除 ─────────
+
+    [Fact]
+    public async Task Get_ShouldFilterSortAndPage()
+    {
+        var service = CreateService();
+        var day = new DateTime(2026, 10, 15, 9, 0, 0);
+        await service.RecordAsync(Entry(occurredAt: day.AddMinutes(1), relatedInfo: "會議 #1 分段摘要 1/2"));
+        await service.RecordAsync(Entry(occurredAt: day.AddMinutes(2), relatedInfo: "會議 #1 分段摘要 2/2"));
+        var chat = Entry(occurredAt: day.AddMinutes(3), relatedInfo: "專案 #5 AI 問答：進度");
+        chat.Feature = AiUsageFeature.AiChat;
+        chat.Outcome = AiUsageOutcome.Failed;
+        await service.RecordAsync(chat);
+
+        var byKeyword = await service.GetAsync(new AiCallLogQuery { Keyword = "分段摘要", PageSize = 1 });
+        Assert.Equal(2, byKeyword.Count);
+        Assert.Equal("會議 #1 分段摘要 2/2", Assert.Single(byKeyword.Result).RelatedInfo);   // 預設新到舊
+
+        var byFeature = await service.GetAsync(new AiCallLogQuery { Feature = AiUsageFeature.AiChat, Outcome = AiUsageOutcome.Failed });
+        Assert.Equal("失敗", Assert.Single(byFeature.Result).OutcomeText);
+
+        var byCallId = await service.GetAsync(new AiCallLogQuery { Keyword = chat.CallId.ToString() });
+        Assert.Equal(chat.CallId, Assert.Single(byCallId.Result).CallId);
+
+        var oldestFirst = await service.GetAsync(new AiCallLogQuery { SortField = nameof(AiCallLogAdapterModel.OccurredAt), SortDescending = false });
+        Assert.Equal("會議 #1 分段摘要 1/2", oldestFirst.Result.First().RelatedInfo);
+    }
+
+    [Fact]
+    public async Task Detail_ShouldIncludeContentUsageAndThread()
+    {
+        var service = CreateService();
+        var first = Entry(meetingId: 1);
+        first.ThreadKey = "draft:1:run";
+        var second = Entry(meetingId: 1, occurredAt: first.OccurredAt.AddMinutes(1));
+        second.ThreadKey = "draft:1:run";
+        await service.RecordAsync(first);
+        await service.RecordAsync(second);
+        context.AiUsageLog.Add(new AiUsageLog
+        {
+            Feature = AiUsageFeature.MeetingDraft,
+            Provider = "AzureOpenAI",
+            Model = "gpt-5.6-sol",
+            InputTokens = 1000,
+            OutputTokens = 200,
+            EstimatedCost = 0.008m,
+            Currency = "USD",
+            CallId = second.CallId,
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var id = (await service.FindIdByCallIdAsync(second.CallId))!.Value;
+        var detail = (await service.GetDetailAsync(id))!;
+
+        Assert.Equal("會議紀錄草稿", detail.Content!.Response.Text);
+        Assert.Contains("逐字稿內容", detail.RawJson);
+        Assert.Equal(1000, detail.Usage!.InputTokens);
+        Assert.Equal([first.CallId, second.CallId], detail.Thread.Select(x => x.CallId));
+    }
+
+    [Fact]
+    public async Task Detail_MissingContentFile_ShouldStillReturnTheRow()
+    {
+        var service = CreateService();
+        var entry = Entry();
+        await service.RecordAsync(entry);
+        File.Delete(Path.Combine(rootPath, "202610", $"{entry.CallId:N}.json"));
+
+        var detail = await service.GetDetailAsync((await service.FindIdByCallIdAsync(entry.CallId))!.Value);
+
+        Assert.NotNull(detail);
+        Assert.Null(detail!.Content);
+        Assert.Null(detail.Usage);
+        Assert.Single(detail.Thread);
+    }
+
+    [Fact]
+    public async Task DeletePurgeAndClearAll_ShouldRemoveRowsAndFiles()
+    {
+        var service = CreateService();
+        var day = new DateTime(2026, 10, 15, 9, 0, 0);
+        var old = Entry(occurredAt: day.AddDays(-10));
+        var recent = Entry(occurredAt: day);
+        var another = Entry(occurredAt: day.AddMinutes(5));
+        await service.RecordAsync(old);
+        await service.RecordAsync(recent);
+        await service.RecordAsync(another);
+
+        Assert.Equal(1, await service.PurgeBeforeAsync(day.Date));
+        Assert.True((await service.DeleteAsync((await service.FindIdByCallIdAsync(recent.CallId))!.Value)).Success);
+        Assert.False(File.Exists(Path.Combine(rootPath, "202610", $"{recent.CallId:N}.json")));
+        Assert.False((await service.DeleteAsync(99999)).Success);
+
+        Assert.True((await service.ClearAllAsync()).Success);
+        Assert.False(await context.AiCallLog.AnyAsync());
+        Assert.Empty(Directory.EnumerateFileSystemEntries(rootPath));
+    }
+
+    [Fact]
+    public async Task FilterOptions_ShouldListUsersAndModelsSeen()
+    {
+        var service = CreateService();
+        await service.RecordAsync(Entry());
+        var other = Entry();
+        other.Model = "gpt-4o-mini";
+        other.UserId = null;
+        other.UserName = null;
+        await service.RecordAsync(other);
+
+        var options = await service.GetFilterOptionsAsync();
+
+        Assert.Equal([(7, "王小明")], options.Users);
+        Assert.Equal(["gpt-4o-mini", "gpt-5.6-sol"], options.Models);
+    }
+
+    [Fact]
+    public void View_CsvColumns_ShouldNotContainTheContent()
+    {
+        // 匯出只有中繼資料：內容是逐字稿與問答全文，要看請進明細窗（有稽核）。
+        var headers = AiCallLogView.CsvColumns.Select(x => x.Header).ToList();
+
+        Assert.Contains("呼叫識別碼", headers);
+        Assert.DoesNotContain(headers, x => x.Contains("內容") || x.Contains("回應文字") || x.Contains("Prompt"));
+    }
+
+    [Fact]
+    public void View_BuildBlocks_ShouldFollowTheChosenMode()
+    {
+        var entry = Entry();
+        entry.Request.Images.Add(new AiCallLogImage { MediaType = "image/png", Bytes = 2048 });
+        var detail = new AiCallLogDetail(new AiCallLogAdapterModel(), entry, "{}", null, []);
+
+        var conversation = AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Conversation);
+        Assert.Equal(["系統指示", "送出內容", "附帶圖片", "回應"], conversation.Select(x => x.Label));
+        Assert.True(conversation[^1].IsAssistant);
+
+        Assert.DoesNotContain(AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Request), x => x.IsAssistant);
+        Assert.Equal("會議紀錄草稿", Assert.Single(AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Response)).Content);
+    }
+
+    [Fact]
+    public void View_BuildBlocks_TranscriptionShouldDescribeTheAudioInsteadOfMessages()
+    {
+        var entry = Entry();
+        entry.Request = new AiCallLogRequest
+        {
+            Kind = AiCallLogRequest.TranscriptionKind,
+            FileName = "part-001.mp3",
+            AudioSeconds = 900,
+            SegmentIndex = 2,
+            SegmentCount = 3,
+        };
+        var detail = new AiCallLogDetail(new AiCallLogAdapterModel(), entry, "{}", null, []);
+
+        var request = Assert.Single(AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Request));
+
+        Assert.Contains("part-001.mp3（第 2/3 段）", request.Content);
+        Assert.Contains("00:15:00", request.Content);
+        Assert.Contains("音訊本身不保存", request.Content);
     }
 
     [Fact]

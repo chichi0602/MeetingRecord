@@ -1,10 +1,10 @@
 ﻿# 儀表板 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
 - 現行系統版本：0.4.118
 - 首次實作版本：0.4.54
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
 
@@ -17,7 +17,7 @@
   - 可點擊下鑽到明細、待處理清單（失敗的轉錄／生成、逾期待辦）——討論過、未做。
   - 依團隊或個人切換範圍、匯出報表、快取。
   - 使用者與帳號狀態、登入失敗統計——0.4.74 明確不做（需要額外權限閘門）。
-  - AI 費用：另見 [AI 用量分析 PRD](AI用量分析-prd.md)（有權限控管的獨立頁）。
+  - AI 費用：另見 [AI 用量分析 PRD](AI用量分析-prd.md)（1.0.30 起為只限管理者的「Token 用量」頁）。
 
 ## 二、使用者與入口
 
@@ -125,7 +125,7 @@
   - 待辦：逾期與 7 天內到期的邊界、由會議擷取占比、無待辦時占比為 null、未完成優先度排除已完成與空切片。
   - 專案：已過結束日／14 天內到期／暫緩等待、平均完成度只算進行中。
   - 會議時數（1.0.29 起）：讀 `MediaDurationSeconds` 而非帳本、沒有時長的會議不計、無紀錄顯示「—」。原本「重轉錄只算最後一輪、失敗紀錄不計」的規則測試搬到 `MeetingDurationBackfillSqlTests`（回填 SQL）。
-- `src/MeetingRecord/MeetingRecord.Tests/DashboardMetricsTests.cs`（純函式）：日桶與日標籤（AI 用量分析共用）、`ToPercentages`（`SumLatestRunAudioSeconds` 已於 1.0.29 移除）、`BuildArcPath`（四分之一圓、整圓兩段弧、大弧旗標）、`DescribeDuration`、`CalculateFailureRate`、`AverageDuration`、`FileSizeFormatter`、`CountUnusedEnabledTemplates`（含改名契約）、`DirectorySizeCalculator`。
+- `src/MeetingRecord/MeetingRecord.Tests/DashboardMetricsTests.cs`（純函式）：日桶與日標籤（Token 用量共用）、`ToPercentages`（`SumLatestRunAudioSeconds` 已於 1.0.29 移除）、`BuildArcPath`（四分之一圓、整圓兩段弧、大弧旗標）、`DescribeDuration`、`CalculateFailureRate`、`AverageDuration`、`FileSizeFormatter`、`CountUnusedEnabledTemplates`（含改名契約）、`DirectorySizeCalculator`。
 - `src/MeetingRecord/MeetingRecord.Tests/AiChatStoreTests.cs`「儀表板計數」區與 `AiChatConversationTests`：問答次數要遞迴到 `meeting/<id>/` 子目錄、根目錄不存在不拋例外。
 - 人工驗收：[上架前人工測試清單](../guides/上架前人工測試清單.md) 12-1（一般使用者選單含儀表板）、14-1（每個帳號開儀表板數字一致）。
 - ⚠️ 「不套團隊過濾」原有的守門測試 `PromptTemplatesAndMeetings_ShouldCountAllTeams` 已隨 0.4.103 移除舊團隊標籤一併刪除；目前**沒有測試**守住「儀表板不得套 `ProjectAccessService`」這條例外，`DashboardServiceTests` 類別註解仍寫著有。

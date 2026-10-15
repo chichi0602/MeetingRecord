@@ -22,7 +22,6 @@ public sealed class SidebarMenuService
         [3] = MagicObjectHelper.角色_系統管理,
         [31] = MagicObjectHelper.角色_使用者管理,
         [32] = MagicObjectHelper.角色_角色管理,
-        [33] = MagicObjectHelper.角色_AI用量分析,
         [5] = MagicObjectHelper.角色_資料定義,
         [51] = MagicObjectHelper.角色_分類清單,
         [52] = MagicObjectHelper.角色_團隊清單,
@@ -38,17 +37,18 @@ public sealed class SidebarMenuService
     public static readonly IReadOnlySet<int> PublicMenuIds = new HashSet<int> { 11 };
 
     /// <summary>
-    /// 只有管理者看得到的選單項目 Id（0.4.120：「監控與診斷」的系統健康監控 34、日誌等級設定 38、資料庫用量 30；0.4.121：日誌檢視 37；0.4.122：系統例外紀錄 39）。
+    /// 只有管理者看得到的選單項目 Id（0.4.120：「監控與診斷」的系統健康監控 34、日誌等級設定 38、資料庫用量 30；0.4.121：日誌檢視 37；0.4.122：系統例外紀錄 39；
+    /// 1.0.30：「AI 管理」的 Token 用量 33（原「AI 用量分析」，以前可勾給角色）、AI 對話紀錄 63）。
     /// 非管理者一律排除、**不看權限**——這些頁面不在權限目錄裡，但 0.4.119 以前「系統健康度」可以勾給角色，
     /// 舊資料庫可能還留著權限列；只靠權限鍵擋，殘留的列就會讓選單冒出來。頁面本身另以 CheckIsAdmin 守門。
     /// </summary>
-    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 37, 38, 39, 30 };
+    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 37, 38, 39, 30, 33, 63 };
 
     /// <summary>
-    /// 純分組、本身沒有權限的選單節點 Id（0.4.120：「帳號與權限」35、「監控與診斷」36）：
+    /// 純分組、本身沒有權限的選單節點 Id（0.4.120：「帳號與權限」35、「監控與診斷」36；1.0.30：「AI 管理」62）：
     /// 底下有任何一項看得到才顯示。⚠️ 不能讓它們退回「拿 Name 當權限鍵」那條路。
     /// </summary>
-    public static readonly IReadOnlySet<int> GroupOnlyMenuIds = new HashSet<int> { 35, 36 };
+    public static readonly IReadOnlySet<int> GroupOnlyMenuIds = new HashSet<int> { 35, 36, 62 };
 
     private readonly IWebHostEnvironment environment;
     private readonly ILogger<SidebarMenuService> logger;

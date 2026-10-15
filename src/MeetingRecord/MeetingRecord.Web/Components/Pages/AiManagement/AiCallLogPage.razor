@@ -1,0 +1,12 @@
+@page "/ai-call-logs"
+@layout MainLayout
+
+<PageTitle>AI 對話紀錄</PageTitle>
+
+<AiCallLogView CallId="@CallId" />
+
+@code {
+    /// <summary>從 Token 用量的明細跳過來時帶的呼叫識別碼（<c>/ai-call-logs?callId=…</c>）。</summary>
+    [SupplyParameterFromQuery(Name = "callId")]
+    public string? CallId { get; set; }
+}

@@ -84,12 +84,14 @@ public sealed class RbacBackfillServiceTests
         Assert.DoesNotContain("資料群組", stored.TabViewJson);
     }
 
-    [Fact]
-    public async Task RunAsync_ShouldRetireLegacySystemHealthKeyWithoutTouchingOtherGrants()
+    [Theory]
+    [InlineData(MagicObjectHelper.已退役權限鍵_系統健康度)]
+    [InlineData(MagicObjectHelper.已退役權限鍵_AI用量分析)]
+    public async Task RunAsync_ShouldRetireLegacyKeyWithoutTouchingOtherGrants(string legacy)
     {
-        // 0.4.93～0.4.119 的「系統健康度」可以勾給角色；0.4.120 起只限管理者，權限列、對應與勾選都要清掉。
+        // 0.4.93～0.4.119 的「系統健康度」、0.4.80～1.0.29 的「AI 用量分析」可以勾給角色；
+        // 之後改為只限管理者（系統健康監控、Token 用量），權限列、對應與勾選都要清掉。
         await using var fixture = await Fixture.CreateAsync();
-        const string legacy = MagicObjectHelper.已退役權限鍵_系統健康度;
         var role = await fixture.AddRoleAsync("主管", [legacy, $"{legacy}:view", MagicObjectHelper.角色_會議紀錄]);
         // 0.4.119 的資料庫：權限表裡有舊鍵，角色已經勾了。
         fixture.Context.Permission.AddRange(

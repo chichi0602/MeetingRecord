@@ -17,7 +17,8 @@ public sealed class MonitoringMenuRegistrationTests
     private const int AccountGroupId = 35;
     private const int MonitoringGroupId = 36;
     private const int SystemHealthId = 34;
-    private const int AiUsageId = 33;
+    private const int AiGroupId = 62;
+    private const int TokenUsageId = 33;
 
     [Fact]
     public void MenuJson_IdsShouldBeUniqueAcrossTheWholeTree()
@@ -28,13 +29,15 @@ public sealed class MonitoringMenuRegistrationTests
     }
 
     [Fact]
-    public void MenuJson_SystemAdministrationShouldHaveTwoGroups()
+    public void MenuJson_SystemAdministrationShouldHaveThreeGroups()
     {
+        // 1.0.30 起多了「AI 管理」（62）。
         var system = LoadMenu().Single(x => x.Id == SystemAdminId);
 
-        Assert.Equal([AccountGroupId, MonitoringGroupId], system.SubMenu.Select(x => x.Id));
+        Assert.Equal([AccountGroupId, MonitoringGroupId, AiGroupId], system.SubMenu.Select(x => x.Id));
         Assert.Equal(MagicObjectHelper.角色_帳號與權限, system.SubMenu[0].Name);
         Assert.Equal(MagicObjectHelper.角色_監控與診斷, system.SubMenu[1].Name);
+        Assert.Equal(MagicObjectHelper.角色_AI管理, system.SubMenu[2].Name);
         Assert.All(system.SubMenu, group => Assert.True(string.IsNullOrEmpty(group.Url)));
     }
 
@@ -76,7 +79,7 @@ public sealed class MonitoringMenuRegistrationTests
 
         var monitoring = Flatten(items).Single(x => x.Id == MonitoringGroupId);
         Assert.Contains(monitoring.SubMenu, x => x.Id == SystemHealthId);
-        Assert.Contains(monitoring.SubMenu, x => x.Id == AiUsageId);
+        Assert.Contains(Flatten(items).Single(x => x.Id == AiGroupId).SubMenu, x => x.Id == TokenUsageId);
         Assert.Contains(Flatten(items), x => x.Id == AccountGroupId);
     }
 
@@ -109,14 +112,15 @@ public sealed class MonitoringMenuRegistrationTests
     }
 
     [Fact]
-    public void Filter_NonAdminWithAiUsageOnly_ShouldSeeFullPathToAiUsage()
+    public void Filter_NonAdminWithStaleAiUsagePermission_ShouldSeeNothingUnderSystemAdministration()
     {
-        var items = Filter(isAdmin: false, key => key == MagicObjectHelper.角色_AI用量分析);
+        // 0.4.80～1.0.29「AI 用量分析」可以勾給角色；1.0.30 起改名 Token 用量並只限管理者。
+        // 退役清理沒跑到、舊權限還在的角色也不能讓選單冒出來。
+        var items = Filter(isAdmin: false, key => key == MagicObjectHelper.已退役權限鍵_AI用量分析
+                                                  || key == MagicObjectHelper.角色_Token用量
+                                                  || key == MagicObjectHelper.角色_AI對話紀錄);
 
-        var system = items.Single(x => x.Id == SystemAdminId);
-        var monitoring = Assert.Single(system.SubMenu);
-        Assert.Equal(MonitoringGroupId, monitoring.Id);
-        Assert.Equal(AiUsageId, Assert.Single(monitoring.SubMenu).Id);
+        Assert.DoesNotContain(items, x => x.Id == SystemAdminId);
     }
 
     [Fact]

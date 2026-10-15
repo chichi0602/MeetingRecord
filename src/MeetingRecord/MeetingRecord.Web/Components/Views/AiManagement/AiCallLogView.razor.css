@@ -1,0 +1,210 @@
+/* AI 對話紀錄（1.0.30）。工具列、面板、膠囊照「系統例外紀錄」複製（scoped CSS 沒有共用元件）；
+   顏色一律用 --oat-* 權杖。對話窗尺寸走全站的 form-modal-large，不在這裡設。 */
+.call-log-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.call-log-toolbar-left,
+.call-log-toolbar-right,
+.call-log-purge {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.call-log-purge {
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+
+.call-log-range-separator,
+.call-log-muted {
+    color: var(--oat-ink-mid);
+}
+
+.call-log-muted {
+    font-size: 0.78rem;
+}
+
+.call-log-toolbar ::deep .call-log-search-input {
+    width: 260px;
+}
+
+.call-log-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.call-log-note {
+    margin-bottom: 12px;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.call-log-panel {
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.call-log-number {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 結果膠囊：形狀比照全站狀態膠囊；失敗用錯誤色、取消用警示色。 */
+.call-log-pill {
+    display: inline-block;
+    padding: 1px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    color: var(--oat-ink);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.call-log-pill-warn {
+    border-color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+.call-log-pill-err {
+    border-color: var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.call-log-warning {
+    margin: 8px 0;
+    padding: 10px 14px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 10px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+    font-size: 0.82rem;
+}
+
+/* ───────── 明細對話窗 ───────── */
+.call-log-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.call-log-detail-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    margin: 0 0 14px;
+    font-size: 0.85rem;
+}
+
+.call-log-detail-list > div {
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: 8px;
+}
+
+.call-log-detail-list dt {
+    color: var(--oat-ink-mid);
+    font-weight: 600;
+}
+
+.call-log-detail-list dd {
+    margin: 0;
+    color: var(--oat-ink);
+    overflow-wrap: anywhere;
+}
+
+.call-log-error-text {
+    margin-left: 8px;
+    color: var(--oat-err);
+}
+
+.call-log-detail-title {
+    margin: 4px 0 6px;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.call-log-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.call-log-thread-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 10px;
+    border: 1px solid var(--oat-200);
+    border-radius: 8px;
+    background: var(--oat-surface);
+    color: var(--oat-ink);
+    font-size: 0.82rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.call-log-thread-item:hover:not(:disabled) {
+    border-color: var(--oat-300);
+    background: var(--oat-50);
+}
+
+.call-log-thread-current {
+    border-color: var(--oat-ink-mid);
+    cursor: default;
+}
+
+.call-log-view-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.call-log-block {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-surface);
+}
+
+.call-log-block-assistant {
+    background: var(--oat-50);
+}
+
+.call-log-block-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.call-log-text {
+    max-height: 50vh;
+    margin: 0;
+    overflow: auto;
+    color: var(--oat-ink);
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

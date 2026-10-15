@@ -1,10 +1,10 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.13
+- 文件版本：1.14
 - 文件狀態：維護中
-- 現行系統版本：0.4.123
+- 現行系統版本：1.0.30
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/10/15
 
 本目錄是產品需求的單一入口。PRD 以**產品能力**為單位；「已實作／部分實作」描述程式現況，「規劃中」必須獨立分區，不代表系統已提供。本系統源自 NET10-Blazor-Starter 樣板，0.4.25 起更名為 MeetingRecord 並發展為「AI 會議紀錄系統」，0.4.26 納入「會議紀錄提示詞」能力，**0.4.27 起實際呼叫 Azure OpenAI 完成影音檔的語音轉文字**（見 [會議紀錄](會議紀錄-prd.md)）。**0.4.31 起完成後半段**：套用提示詞範本、呼叫 Azure OpenAI 產生會議紀錄，並把逐字稿歸屬到專案項目（見 [會議紀錄產生流程](會議紀錄產生流程-prd.md)）。系統仍不含 RAG 能力。PRD 內容一律以程式碼、`Menu.json` 與測試為準。
 
@@ -12,7 +12,7 @@
 
 | 產品能力 | PRD | 入口／路由 | 主要程式來源 | 狀態 | 核對版本 |
 |----------|-----|-----------|--------------|------|----------|
-| 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`） | `Pages/Home.razor`、`SidebarMenuService`、`Menu.json`、`MainLayout`（含「關於」對話窗） | 已實作（0.4.120 起選單三層、`AdminOnlyMenuIds`／`GroupOnlyMenuIds`） | 0.4.122 |
+| 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`） | `Pages/Home.razor`、`SidebarMenuService`、`Menu.json`、`MainLayout`（含「關於」對話窗） | 已實作（0.4.120 起選單三層、`AdminOnlyMenuIds`／`GroupOnlyMenuIds`；1.0.30 起系統管理下三個分組，新增「AI 管理」） | 1.0.30 |
 | 儀表板 | [儀表板](儀表板-prd.md) | `/dashboard` | `Pages/Dashboards/DashboardPage.razor`、`DashboardService`、`DashboardMetrics` | 已實作（0.4.54；0.4.97 起全員可看、全公司彙總、不放明細） | 0.4.118 |
 | 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Components/Auths/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作（0.4.113 起首次登入強制改密碼） | 0.4.118 |
 | 專案項目 | [專案項目](專案項目-prd.md) | `/projects` | `Pages/Projects/ProjectPage.razor`、`ProjectService`、`ProjectController`、`ProjectTeamWriter` | 已實作 | 0.4.118 |
@@ -21,7 +21,8 @@
 | 使用說明 | [使用說明](使用說明-prd.md) | `/help` | `Pages/Helps/HelpPage.razor`、`HelpView`（內嵌 `docs/guides/系統使用說明.md` 為資源）、`MarkdownRenderer` | 已實作（0.4.78） | 0.4.118 |
 | 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Pages/Admins/MyUserPage.razor`、`MyUserService` | 已實作 | 0.4.118 |
 | 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Pages/Admins/RoleViewPage.razor`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
-| AI 用量分析 | [AI 用量分析](AI用量分析-prd.md) | `/ai-usage` | `Pages/AiUsages/AiUsagePage.razor`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別） | 0.4.122 |
+| Token 用量（原 AI 用量分析） | [AI 用量分析](AI用量分析-prd.md) | `/token-usage`（別名 `/ai-usage`） | `Pages/AiManagement/TokenUsagePage.razor`、`TokenUsageView`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別；1.0.30 起改名 Token 用量、移到「AI 管理」並只限管理者） | 1.0.30 |
+| AI 對話紀錄 | [AI 對話紀錄](AI對話紀錄-prd.md) | `/ai-call-logs` | `Pages/AiManagement/AiCallLogPage.razor`、`AiCallLogView`、`AiCallGateway`、`AiCallLogService`、`AiCallLogFileStore`、`AiLogRetentionBackgroundService` | 已實作（1.0.29 記錄、1.0.30 頁面；只限管理者） | 1.0.30 |
 | 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Pages/Categories/CategoryPage.razor`、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
 | 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Pages/Teams/TeamPage.razor`、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
 | 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |

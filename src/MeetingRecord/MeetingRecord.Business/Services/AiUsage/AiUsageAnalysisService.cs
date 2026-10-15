@@ -9,7 +9,7 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Business.Services.AiUsage;
 
 /// <summary>
-/// 「AI 用量分析」頁的讀取層。
+/// 「Token 用量」頁（1.0.30 前名為「AI 用量分析」）的讀取層。
 ///
 /// <para>
 /// ⚠️ <b>金額一律撈進記憶體再加總，絕不在 SQL 端 SUM 或 ORDER BY。</b>

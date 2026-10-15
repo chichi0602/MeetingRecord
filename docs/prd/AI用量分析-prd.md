@@ -1,14 +1,16 @@
 ﻿# AI 用量分析 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.80
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/10/15
+
+> **1.0.30 起頁面改名「Token 用量」**：位置改為「系統管理 → AI 管理 → Token 用量」（id 33），網址 `/token-usage`（舊網址 `/ai-usage` 保留為別名），**只限管理者**；原本可勾給角色的權限鍵「AI 用量分析」已退役。頁面功能不變。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
 ## 一、目標與範圍
 
-讓管理者看得到「AI 花了多少錢、花在哪裡、誰用的」。系統在 0.4.80 之前**完全沒有記錄任何用量**，所以本能力分成兩半：先在每一個會付費的 AI 呼叫點寫進**用量帳本**（`AiUsageLog`），再提供 `/ai-usage` 分析頁呈現。
+讓管理者看得到「AI 花了多少錢、花在哪裡、誰用的」。系統在 0.4.80 之前**完全沒有記錄任何用量**，所以本能力分成兩半：先在每一個會付費的 AI 呼叫點寫進**用量帳本**（`AiUsageLog`），再提供分析頁呈現（1.0.30 起為 `/token-usage`「Token 用量」）。
 
 - 範圍：
   - 用量帳本：一次 API 呼叫一列、預設永久保留（1.0.29 起可設 `LogRetentionSettings:AiUsageLogDays` 自動清除）；失敗與取消也記；寫入當下算好估算金額並存單價與匯率快照；1.0.29 起每列帶 `CallId`，對應同一次呼叫的 AI 對話紀錄。
@@ -40,12 +42,12 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/ai-usage`（`Components/Pages/AiUsages/AiUsagePage.razor`，掛 `MainLayout`，內容在 `AiUsageView`） |
+| UI 路由 | `/token-usage`，別名 `/ai-usage`（1.0.30 前的網址與書籤照樣能用）（`Components/Pages/AiManagement/TokenUsagePage.razor`，掛 `MainLayout`，內容在 `TokenUsageView`） |
 | REST API | 無 |
-| 選單路徑 | 系統管理（`Menu.json` id=3）→ 監控與診斷（id=36，0.4.120 起）→ AI 用量分析（id=33，icon `monetization_on`）。同組的系統健康監控、日誌檢視（0.4.121）、日誌等級設定、資料庫用量只限管理者；本頁仍是可勾給角色的頁面權限 |
-| 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[33] = MagicObjectHelper.角色_AI用量分析` |
-| 權限鍵 | 頁面鍵「AI 用量分析」（`MagicObjectHelper.角色_AI用量分析`，**值與 `Menu.json` 的 name 一字不差、尾端不加空白**）；單一開關、沒有動作鍵（`RolePermissionService.GetRoleListPermissionAllName` 中為單元素群組）；管理員短路 |
-| 主要使用者 | 管理者。預設角色目錄（`RolePresets`）中只有「管理者」含此鍵，一般使用者／檢視者／主管都沒有 |
+| 選單路徑 | 系統管理（`Menu.json` id=3）→ AI 管理（id=62，`psychology`，1.0.30 起）→ Token 用量（id=33，icon `toll`）。同組另有「AI 對話紀錄」（id=63）。0.4.120～1.0.29 位於「監控與診斷」（id=36）底下、名稱「AI 用量分析」、icon `monetization_on` |
+| 選單過濾 | 1.0.30 起列在 `SidebarMenuService.AdminOnlyMenuIds`（非管理者看不到）；分組 62 列在 `GroupOnlyMenuIds`。`MenuPermissionMap` 已無 id 33 |
+| 權限鍵 | **無，只限管理者**（1.0.30 起）。頁面以 `CheckIsAdmin()` 守門，不在權限目錄、不能勾給角色。0.4.80～1.0.29 的頁面鍵「AI 用量分析」改為 `MagicObjectHelper.已退役權限鍵_AI用量分析`，由 `RbacBackfillService` 在啟動時刪除權限列、角色對應與勾選（做法同 0.4.120 的「系統健康度」）。`角色_Token用量` 只是選單名稱常數，不是權限鍵 |
+| 主要使用者 | 管理者 |
 
 ## 三、畫面與欄位
 
@@ -88,7 +90,7 @@
 
 ### 讀取：分析頁
 
-- `AiUsageView` →（注入）`AiUsageAnalysisService`：
+- `TokenUsageView`（1.0.30 前為 `AiUsageView`）→（注入）`AiUsageAnalysisService`：
   - `GetSummaryAsync(AiUsageFeature? feature)`：撈上月同期起的投影（`UsageFact`），功能篩選在 SQL 端（int 列舉欄位）；金額一律撈進記憶體加總。期間由 `AiUsageMetrics.BuildMonthToDateRanges` 算，曲線由 `AiUsageMetrics.BuildMonthToDateCumulative` 算。
   - `GetRecentCallsAsync(AiUsageQuery)`：`OrderByDescending(OccurredAt).ThenByDescending(Id)`，`Skip`／`Take` **無條件套用**。
 - 「要不要換算、怎麼加總、怎麼格式化」集中在私有的 `CostView`，五個顯示點（卡片、曲線、三張分佈、明細）共用；單列換算走 `AiUsageExchange.ToTargetCurrency`（用該列自己的匯率）。
@@ -136,12 +138,12 @@
 | 曲線怎麼累加 | 先累加原始金額、最後才換成「分」（每筆先換分會把小額呼叫全捨成 0）；上月較短時延續月底值；只畫到今天 |
 | 選了特定功能 | 卡片、曲線、模型／使用者分佈、警示筆數都只算該功能；功能別圓餅隱藏；不適用的單位卡顯示「—」 |
 | 期間下拉位置 | 放明細表標題列。曲線改成本月累計後，「最近 N 天」只剩明細表在用，放右上角會變成「選了上面沒反應」的下拉 |
-| 不做團隊過濾 | 成本帳本套部分過濾會讓「依使用者分佈」加總對不上總額；這是刻意的全公司彙總頁，靠權限限定給管理者 |
+| 不做團隊過濾 | 成本帳本套部分過濾會讓「依使用者分佈」加總對不上總額；這是刻意的全公司彙總頁，1.0.30 起只限管理者（之前靠權限鍵限定） |
 
 ## 五、權限與安全
 
-- 頁面進入：`AuthenticationStateHelper.Check` 通過後以 `CheckAccessPage(MagicObjectHelper.角色_AI用量分析)` 守門，不通過顯示「你沒有權限存取此頁面」；管理員短路。沒有動作級權限，也沒有 API。
-- ⚠️ **本頁看得到全公司的用量與人名，不經 `ProjectAccessService`、不套團隊過濾**——與儀表板同屬「全公司彙總」的刻意例外。把「AI 用量分析」勾給非管理者角色，那個人就會看到全部團隊的用量（`RolePermissionService` 註解與 [上線前全面審查](../changelog/2026-10-02-上線前全面審查與修正.md)「四、未修，請判斷」都列了這點，待產品確認）。
+- 頁面進入：`AuthenticationStateHelper.Check` 通過後以 `CheckIsAdmin()` 守門（1.0.30 起；之前是 `CheckAccessPage(角色_AI用量分析)`），非管理者顯示「你沒有權限存取此頁面」。舊資料庫殘留的「AI 用量分析」勾選不再有作用，並在啟動時由 `RbacBackfillService` 清掉。沒有動作級權限，也沒有 API。
+- ⚠️ **本頁看得到全公司的用量與人名，不經 `ProjectAccessService`、不套團隊過濾**——與儀表板同屬「全公司彙總」的刻意例外。1.0.29 以前可以把「AI 用量分析」勾給非管理者角色，那個人就會看到全部團隊的用量（[上線前全面審查](../changelog/2026-10-02-上線前全面審查與修正.md)「四、未修，請判斷」列過這點）；1.0.30 改為只限管理者，這個疑慮已不存在。
 - 帳本只存 `ErrorMessage`（截斷 500 字），不存提示詞、逐字稿或回答內容。
 - 匯率來源免金鑰，沒有任何機密進入設定或日誌。
 
@@ -169,11 +171,11 @@
 - `AzureOpenAiUsageParsingTests`、`AzureOpenAiStreamingTests`：從最後一片讀用量、中間片段的 `"usage": null`、快取 token；樣本為實際錄下的回應。
 - `MediaDurationParserTests`：FFmpeg `Duration:` 解析。
 - `MeetingDraftJobRunnerTests`：分段摘要回空白仍記帳、記帳不會提早提交草稿。
-- `AiUsageRegistrationTests`：權限目錄含此頁且為單一開關、`Menu.json` 有此節點且位於「系統管理」之下。
+- `AiManagementMenuRegistrationTests`（1.0.30 由 `AiUsageRegistrationTests` 改名重寫）：`Menu.json` 的「AI 管理」節點、名稱與網址、只限管理者、不在權限目錄。`RbacBackfillServiceTests`：退役鍵「AI 用量分析」在啟動時清除。
 - `MigrationSnapshotTests.ModelSnapshot_ShouldMatchCurrentModel`：模型變更必須產生 migration。
 - `SystemHealthChecksTests`：AI 設定缺單價、匯率各種狀態、`ExchangeRateCache.MarkFailed` 不動目前匯率。
 
-人工驗收：見 [上架前人工測試清單](../guides/上架前人工測試清單.md)；操作說明見 [系統使用說明](../guides/系統使用說明.md) 的 AI 用量分析段落與 FAQ。
+人工驗收：見 [上架前人工測試清單](../guides/上架前人工測試清單.md)；操作說明見 [系統使用說明](../guides/系統使用說明.md) 的 Token 用量段落與 FAQ。
 
 ## 八、相關程式與文件
 
@@ -188,10 +190,11 @@
 - **0.4.122**：新增功能別 `AiUsageFeature.ExceptionAnalysis = 6`（「AI 例外分析」，token 計費，系統例外紀錄的明細窗觸發），同樣由 `DiagnosticAiService` 寫帳；功能下拉自動多一項。
 - **0.4.124**：補上 Azure 轉錄部署 `gpt-transcribe` 的單價（每分鐘 0.0045 美元，依 OpenAI 官方價目）；之前健康監控「AI 供應商設定」亮黃燈，轉錄金額記成「—」。本機帳本沒有這個模型的舊紀錄，未回填。`SystemHealthChecksTests.AiProvider_ShippedPricing_ShouldCoverTheDeploymentsInUse` 以出貨的單價表守住。
 - **1.0.29**：所有呼叫端改經 `AiCallGateway` 寫帳；帳本新增 `CallId`（migration `AddAiCallLogAndMeetingDuration`），對應新的 AI 對話紀錄（`AiCallLog`，頁面在 1.0.30）；帳本可設自動保留期限 `LogRetentionSettings:AiUsageLogDays`（預設 0＝永久，啟用時至少 62 天，`AiLogRetentionBackgroundService` 每天清，稽核 `AiUsage.AutoPurge`），手動清除在 1.0.31 提供；新增每月用量上限 `AiQuotaSettings`，依本帳本計算。儀表板會議時數改讀 `Meeting.MediaDurationSeconds`，不再依賴本帳本。
+- **1.0.30**：頁面改名「Token 用量」，從「監控與診斷」搬到新分組「系統管理 → AI 管理」（id 62），網址改為 `/token-usage`（`/ai-usage` 保留為別名），icon 改 `toll`；改為只限管理者（`CheckIsAdmin()`＋`AdminOnlyMenuIds`），權限鍵「AI 用量分析」退役（`已退役權限鍵_AI用量分析`，`RbacBackfillService` 啟動時清除）。檔案搬到 `Pages/AiManagement/TokenUsagePage.razor`、`Views/AiManagement/TokenUsageView.*`。頁面功能不變。見 [AI 管理 AI 對話紀錄頁與選單](../changelog/2026-10-15-AI管理AI對話紀錄頁與選單.md)。
 
 ### 程式
 
-- 頁面與檢視：`src/MeetingRecord/MeetingRecord.Web/Components/Pages/AiUsages/AiUsagePage.razor`、`src/MeetingRecord/MeetingRecord.Web/Components/Views/AiUsages/AiUsageView.razor`（`.razor.cs`：`OnInitializedAsync` 權限檢查、`ReloadAsync`、`LoadRowsAsync`、`OnFeatureChangedAsync`、`OnTrendDaysChangedAsync`）
+- 頁面與檢視：`src/MeetingRecord/MeetingRecord.Web/Components/Pages/AiManagement/TokenUsagePage.razor`、`src/MeetingRecord/MeetingRecord.Web/Components/Views/AiManagement/TokenUsageView.razor`（`.razor.cs`：`OnInitializedAsync` 管理者檢查、`ReloadAsync`、`LoadRowsAsync`、`OnFeatureChangedAsync`、`OnTrendDaysChangedAsync`）
 - 讀取服務：`src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiUsageAnalysisService.cs`（`GetSummaryAsync`、`GetRecentCallsAsync`、`BuildCards`、`BuildCumulativeCost`、`BuildSlices`、`CostView`）、`AiUsageModels.cs`
 - 純函式：`AiUsageMetrics`（`BuildMonthToDateRanges`、`BuildMonthToDateCumulative`、`CalculateChangeRate`、`ToChartCents`、`FormatConverted`）、`AiUsagePricing`、`AiUsageExchange`（同目錄）
 - 寫入：`AiUsageRecorder.cs`（`AiUsageRecorder.RecordAsync`、`AiUsageEntry`、`AiTokenUsage`、`AiUsageAttribution.Resolve`）；呼叫點 `MeetingDraftJobRunner`、`TranscriptionJobRunner`、`AiChatService`、`TodoExtractionService`、`DiagnosticAiService`（0.4.121，`src/MeetingRecord/MeetingRecord.Business/Services/Diagnostics/`）
@@ -200,13 +203,13 @@
 - 資料：`src/MeetingRecord/MeetingRecord.AccessDatas/Models/AiUsageLog.cs`；`src/MeetingRecord/MeetingRecord.Share/Enums/AiUsageFeature.cs`（`AiUsageFeatureText.Describe`／`IsTokenBased`）、`AiUsageOutcome.cs`
 - 設定：`src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs`（`Pricing`、`LlmPricingSettings`、`Validate`）、`ExchangeRateSettings.cs`（`Validate`）、`src/MeetingRecord/MeetingRecord.Web/appsettings.json`（`LlmSettings:Pricing`、`ExchangeRateSettings`）
 - 註冊：`src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddExchangeRateServices`）、`Program.cs`（`AddOptions<ExchangeRateSettings>`）
-- 權限與選單：`src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`角色_AI用量分析`）、`src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`GetRoleListPermissionAllName`）、`src/MeetingRecord/MeetingRecord.Business/Helpers/RolePresets.cs`、`src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 33）
+- 權限與選單：`src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`角色_Token用量`、`已退役權限鍵_AI用量分析`）、`src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacBackfillService.cs`（清除退役鍵）、`src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`GetRoleListPermissionAllName`，1.0.30 起不含本頁）、`src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`AdminOnlyMenuIds`、`GroupOnlyMenuIds`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 62、33）
 - 健康檢查：`src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthChecks.cs`（`EvaluateAiProvider`、`EvaluateExchangeRate`）
 - 一次性腳本：`scripts/Backfill-AiUsageCost.mjs`（Node 內建 `node:sqlite`；只補空欄位、動手前備份含 `-wal`／`-shm`；⚠️ 回填用執行當天匯率，是使用者要求下的例外，自動路徑一律不回填）
 
 ### 交叉連結
 
-- [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)（token 計量的決策沿革）、[系統健康監控 PRD](系統健康監控-prd.md)、[儀表板 PRD](儀表板-prd.md)、[AI 問答 PRD](AI問答-prd.md)
+- [AI 對話紀錄 PRD](AI對話紀錄-prd.md)（同一個 `CallId` 的送出內容與回應）、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)（token 計量的決策沿革）、[系統健康監控 PRD](系統健康監控-prd.md)、[儀表板 PRD](儀表板-prd.md)、[AI 問答 PRD](AI問答-prd.md)
 - [日誌與設定檔說明](../operations/日誌與設定檔說明.md)（`LlmSettings`、`ExchangeRateSettings`）、[資料模型與資料庫](../architecture/資料模型與資料庫.md)（`AiUsageLog`）、[系統健康監控（機制）](../features/系統健康監控.md)
 - changelog：[AI 用量分析](../changelog/2026-09-17-AI用量分析.md)、[AI 用量台幣換算](../changelog/2026-09-18-AI用量台幣換算.md)、[AI 用量功能篩選連動與累計曲線](../changelog/2026-09-22-AI用量功能篩選連動與累計曲線.md)
 - 決策來源：[MeetingInk 對標項目決策清單](../planning/08-MeetingInk-對標項目決策清單.md)（D11 用量帳本）

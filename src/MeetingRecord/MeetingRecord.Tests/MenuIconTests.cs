@@ -47,6 +47,11 @@ public sealed class MenuIconTests
         "description",
         // 系統例外紀錄（0.4.122）。
         "bug_report",
+        // AI 管理群組、AI 對話紀錄、Token 用量（1.0.30，與 NET10-Blazor-Starter 同名）。
+        // 都是 classic Material Icons（App.razor 載的 Material+Icons+Outlined 有這三個名稱）。
+        "psychology",
+        "forum",
+        "toll",
     };
 
     [Fact]

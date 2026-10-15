@@ -1,6 +1,6 @@
 ﻿# MeetingRecord — AI 會議記錄小助手
 
-以 **.NET 10** 與 **Blazor Server** 打造的 AI 會議紀錄系統：上傳會議影音檔，系統以 FFmpeg 轉檔切段後呼叫 **Azure OpenAI 語音轉文字**產生逐字稿，再套用提示詞範本由 LLM 整理成會議紀錄草稿；會議依「專案」歸檔，可從紀錄抽出待辦事項、對專案或單一會議做 AI 問答，並以儀表板與 AI 用量分析掌握全貌。
+以 **.NET 10** 與 **Blazor Server** 打造的 AI 會議紀錄系統：上傳會議影音檔，系統以 FFmpeg 轉檔切段後呼叫 **Azure OpenAI 語音轉文字**產生逐字稿，再套用提示詞範本由 LLM 整理成會議紀錄草稿；會議依「專案」歸檔，可從紀錄抽出待辦事項、對專案或單一會議做 AI 問答，並以儀表板與 Token 用量掌握全貌；管理者可在「AI 對話紀錄」查每次 AI 呼叫實際送出與回覆的內容。
 
 本系統源自內部樣板 NET10-Blazor-Starter（0.4.25 更名為 MeetingRecord），沿用其分層架構、Cookie／JWT 認證、RBAC 與 Ant Design Blazor 介面基礎。
 
@@ -72,13 +72,15 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 **系統管理與資料定義**
 
 - **帳號與權限**：使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
-- **監控與診斷**（0.4.120 起；除 AI 用量分析外都只限管理者，不能勾給角色）：
+- **監控與診斷**（0.4.120 起；都只限管理者，不能勾給角色）：
   - **系統健康監控**（`/system-health`）：18 項檢查（0.4.123 新增登入金鑰、快取服務、例外紀錄管線；1.0.29 新增 AI 用量上限）的健康分數、紅黃綠燈號，與展開才載入的最近 24 小時警告以上日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
   - **日誌檢視**（`/logs`，0.4.121）：依時間、等級、關鍵字、TraceId 查 NLog 檔案日誌，展開看堆疊、複製、匯出 .log；**AI 日誌分析**把最新 100 筆送給 AI 整理重點與建議（會產生費用，記入 AI 用量）（見[日誌檢視 PRD](docs/prd/日誌檢視-prd.md)）
   - **日誌等級設定**（`/log-level-setting`）：執行期調整 NLog 等級（只在記憶體、重啟即回預設）（見[日誌等級設定 PRD](docs/prd/日誌等級設定-prd.md)）
   - **系統例外紀錄**（`/system-exceptions`，0.4.122，含 AI 例外分析、錯誤追蹤碼）：畫面、Web API、背景作業、系統啟動與瀏覽器的例外自動收集，相同例外合併計次、完整堆疊另存檔案；可篩選、複製、匯出 CSV、清除；**AI 例外分析**把單筆例外送給 AI 找根因與修正建議（會產生費用，記入 AI 用量）；錯誤畫面顯示 8 碼錯誤追蹤碼，可在此頁與日誌檢視查到同一次操作（見[系統例外紀錄 PRD](docs/prd/系統例外紀錄-prd.md)）
   - **資料庫用量**（`/database-usage`）：SQLite 檔案與各資料表用量，以及各外部目錄大小與磁碟剩餘空間（見[資料庫用量 PRD](docs/prd/資料庫用量-prd.md)）
-  - **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣；1.0.29 起所有付費 AI 呼叫經 `AiCallGateway`，同時寫 AI 對話紀錄，並可設每月用量上限（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
+- **AI 管理**（1.0.30 起；都只限管理者，不能勾給角色）：
+  - **AI 對話紀錄**（`/ai-call-logs`）：每次付費 AI 呼叫的完整送出內容與回應，可依日期、功能、結果、使用者、模型、關鍵字篩選；明細含用量與費用、「同一趟工作」的其他呼叫，可下載 JSON、匯出 PDF；CSV 不含內容；可手動清除，並依保留天數自動清除（見[AI 對話紀錄 PRD](docs/prd/AI對話紀錄-prd.md)）
+  - **Token 用量**（`/token-usage`，舊網址 `/ai-usage` 仍可用；1.0.29 以前叫「AI 用量分析」、在監控與診斷底下）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣；1.0.29 起所有付費 AI 呼叫經 `AiCallGateway`，同時寫 AI 對話紀錄，並可設每月用量上限（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
 - 資料定義：分類清單、團隊清單、提示詞清單（內建範本、`{{transcript}}` 等變數、啟用狀態就地切換）
 - AI 供應商可換：`ITranscriptionProvider` 與文字生成供應商為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
 
@@ -326,7 +328,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
 - 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
-- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 用量分析](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[AI 用量分析（Token 用量）](docs/prd/AI用量分析-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
 
 ### 設計規格（superpowers）
 

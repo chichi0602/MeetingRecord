@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/10/15
 
 ## 摘要
 
@@ -99,6 +99,7 @@
 | 會議紀錄**檢視**（唯讀） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal form-modal-standard` |
 | 角色維護 | `Views/Admins/RoleViewView.razor` | `form-modal-large` |
 | 專案維護 | `Views/Projects/ProjectViewView.razor` | `form-modal-large` |
+| AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
 | 會議紀錄維護（含影音上傳） | `Views/Meetings/MeetingViewView.razor` | `meeting-view-modal` |
 | 會議紀錄**編修** | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
 | AI 問答 | `Views/Projects/AiChatModal.razor` | `meeting-view-modal ai-chat-modal` |
@@ -221,7 +222,7 @@
 
 ## 八、二次確認框：`ModalService.ConfirmAsync`
 
-全站約有 25 個呼叫點（含 `FormDirtyHelper` 內那一個共用點），一律用 `await modalService.ConfirmAsync(new ConfirmOptions { … })`，回傳 `bool`。確認框吃第三節的基準線，不掛尺寸 class。
+全站約有 25 個呼叫點（含 `FormDirtyHelper` 內那一個共用點；1.0.30 的 AI 對話紀錄再加 3 個），一律用 `await modalService.ConfirmAsync(new ConfirmOptions { … })`，回傳 `bool`。確認框吃第三節的基準線，不掛尺寸 class。
 
 ### 8.1 共同格式
 
@@ -240,6 +241,13 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 - `OkText` 寫**動作本身**（「刪除」「取代並開始轉錄」「覆蓋並重新產生」），不寫「確定」。
 - 一律 `MaskClosable = false`。
 - **`Danger` 跟著「覆蓋或刪除」走，不跟著「花錢」走。**會刪掉或覆蓋既有資料時才套紅色確認鈕。非破壞性的方向不套，例如啟用膠囊；停用則要套。
+- 例：「AI 對話紀錄」（1.0.30，`AiCallLogView`）的三個刪除動作都套 `Danger`，內容都註明「無法復原。Token 用量不受影響。」：
+
+  | 動作 | 標題 | `OkText` |
+  |---|---|---|
+  | 列上「刪除」 | 刪除 AI 對話紀錄（內容：確定要刪除這一筆嗎？送出內容與回應的檔案會一併刪除） | 刪除 |
+  | 清除此日之前 | 清除 yyyy-MM-dd 之前的 AI 對話紀錄（不含當天，連同內容檔） | 清除 |
+  | 全部清除 | 清空全部 AI 對話紀錄（刪除所有紀錄與整個內容檔目錄） | 全部清除 |
 
 ### 8.2 付費動作一律二次確認（速查表 §6.3）
 

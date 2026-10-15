@@ -1,0 +1,241 @@
+@using MeetingRecord.Business.Helpers
+@using MeetingRecord.Models.Systems
+@using MeetingRecord.Share.Enums
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="call-log-empty">@RoleMessage</div>
+}
+else
+{
+    <div class="call-log-toolbar">
+        <div class="call-log-toolbar-left">
+            <DatePicker TValue="DateTime?" @bind-Value="startTime" Format="yyyy-MM-dd" Placeholder="@("開始日期")" Style="width: 140px;" />
+            <span class="call-log-range-separator">～</span>
+            <DatePicker TValue="DateTime?" @bind-Value="endTime" Format="yyyy-MM-dd" Placeholder="@("結束日期")" Style="width: 140px;" />
+
+            <Select TItem="string" TItemValue="string" @bind-Value="featureFilter" Style="width: 150px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="功能：不限" />
+                @foreach (var feature in Enum.GetValues<AiUsageFeature>())
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@feature.ToString()" Label="@AiUsageFeatureText.Describe(feature)" />
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="outcomeFilter" Style="width: 120px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="結果：不限" />
+                <SelectOption TItemValue="string" TItem="string" Value="@nameof(AiUsageOutcome.Succeeded)" Label="成功" />
+                <SelectOption TItemValue="string" TItem="string" Value="@nameof(AiUsageOutcome.Failed)" Label="失敗" />
+                <SelectOption TItemValue="string" TItem="string" Value="@nameof(AiUsageOutcome.Cancelled)" Label="已取消" />
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="userFilter" Style="width: 140px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="使用者：不限" />
+                @foreach (var (userId, userName) in filterOptions.Users)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@userId.ToString()" Label="@userName" />
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="modelFilter" Style="width: 160px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="模型：不限" />
+                @foreach (var model in filterOptions.Models)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@model" Label="@model" />
+                }
+            </Select>
+
+            <Input class="call-log-search-input" @bind-Value="keyword" Placeholder="關聯說明關鍵字，或貼上呼叫識別碼" AllowClear="true" />
+        </div>
+
+        <div class="call-log-toolbar-right">
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnSearchAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>查詢</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnRefreshAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+            </Button>
+            <Tooltip Title="@("匯出目前查詢結果（CSV，不含送出內容與回應）")">
+                <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnExportAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
+                </Button>
+            </Tooltip>
+        </div>
+    </div>
+
+    <div class="call-log-purge">
+        <DatePicker TValue="DateTime?" @bind-Value="purgeBefore" Format="yyyy-MM-dd" Placeholder="@("清除此日之前")" Style="width: 150px;" />
+        <Button Type="ButtonType.Default" Danger="true" Disabled="@isLoading" OnClick="OnPurgeAsync">
+            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>清除此日之前</span></span>
+        </Button>
+        <Button Type="ButtonType.Default" Danger="true" Disabled="@isLoading" OnClick="OnClearAllAsync">
+            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete_forever" /><span>全部清除</span></span>
+        </Button>
+    </div>
+
+    <div class="call-log-note">
+        每一次付費 AI 呼叫（會議紀錄生成、分段摘要、語音轉錄、AI 問答、抽出待辦、AI 日誌／例外分析）送出的內容與收到的回應。
+        內容含會議逐字稿與問答全文，只有管理者看得到，查看與下載都會留下稽核紀錄。
+        語音轉錄只記檔名、時長與轉出的文字，不保存音訊。刪除會議或專案時，相關紀錄會一併刪除；用量與費用請看「Token 用量」。
+        @RetentionText
+    </div>
+
+    <div class="call-log-panel">
+        <Table TItem="AiCallLogAdapterModel"
+               RemoteDataSource="true"
+               DataSource="@rows"
+               Loading="@isLoading"
+               Size="TableSize.Small"
+               OnChange="OnTableChange"
+               @bind-PageIndex="_pageIndex"
+               @bind-PageSize="_pageSize"
+               @bind-Total="_total"
+               ScrollX="1000">
+            <ColumnDefinitions>
+                <Column TData="DateTime" DataIndex="@nameof(AiCallLogAdapterModel.OccurredAt)"
+                        Title="時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                    <span class="call-log-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                </Column>
+                <Column TData="string" Title="功能" Width="130">@context.FeatureText</Column>
+                <Column TData="string" Title="結果" Width="150">
+                    @if (string.IsNullOrWhiteSpace(context.ErrorMessage))
+                    {
+                        <span class="@GetOutcomeClass(context)">@context.OutcomeText</span>
+                    }
+                    else
+                    {
+                        <Tooltip Title="@context.ErrorMessage">
+                            <span class="@GetOutcomeClass(context)">@context.OutcomeText</span>
+                        </Tooltip>
+                    }
+                </Column>
+                <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.UserName ?? "（系統）")</Column>
+                <Column TData="string" Title="關聯說明" Ellipsis>@(context.RelatedInfo ?? context.TargetText)</Column>
+                <Column TData="string" Title="模型" Width="140" Ellipsis>@context.Model</Column>
+                <Column TData="long" DataIndex="@nameof(AiCallLogAdapterModel.ElapsedMilliseconds)"
+                        Title="耗時" Width="90" Sortable Align="ColumnAlign.Right">
+                    <span class="call-log-number">@context.ElapsedText</span>
+                </Column>
+                <Column TData="int" DataIndex="@nameof(AiCallLogAdapterModel.RequestCharacters)"
+                        Title="送出／回應字元" Width="140" Sortable Align="ColumnAlign.Right">
+                    <span class="call-log-number">@context.RequestCharacters.ToString("N0")／@context.ResponseCharacters.ToString("N0")</span>
+                </Column>
+                <ActionColumn Title="操作" Width="100" Fixed="ColumnFixPlacement.Right">
+                    <Space>
+                        <SpaceItem>
+                            <CrudActionButton Title="查看" Icon="visibility" OnClick="@(() => OnViewAsync(context))" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <CrudActionButton Title="刪除" Icon="delete" Danger="true" OnClick="@(() => OnDeleteAsync(context))" />
+                        </SpaceItem>
+                    </Space>
+                </ActionColumn>
+            </ColumnDefinitions>
+        </Table>
+    </div>
+
+    <Modal Title="AI 對話紀錄明細"
+           Class="form-modal-large"
+           Visible="@detailVisible"
+           MaskClosable="false"
+           Footer="null"
+           OnCancel="OnDetailCancel">
+        @if (isDetailLoading || detail is null)
+        {
+            <div class="call-log-empty"><Spin Size="SpinSize.Small" /> 讀取中…</div>
+        }
+        else
+        {
+            var row = detail.Row;
+            <div class="call-log-detail-actions">
+                <Button Type="ButtonType.Default" Disabled="@(isExporting || detail.RawJson is null)" OnClick="OnDownloadJsonAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="data_object" /><span>下載 JSON</span></span>
+                </Button>
+                <Button Type="ButtonType.Default" Disabled="@(detail.Content is null)" Loading="@isExporting" OnClick="OnExportPdfAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="picture_as_pdf" /><span>匯出 PDF</span></span>
+                </Button>
+            </div>
+
+            <dl class="call-log-detail-list">
+                <div><dt>時間</dt><dd>@row.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>功能</dt><dd>@row.FeatureText</dd></div>
+                <div>
+                    <dt>結果</dt>
+                    <dd>
+                        <span class="@GetOutcomeClass(row)">@row.OutcomeText</span>
+                        @if (!string.IsNullOrWhiteSpace(row.ErrorMessage))
+                        {
+                            <span class="call-log-error-text">@row.ErrorMessage</span>
+                        }
+                    </dd>
+                </div>
+                <div><dt>使用者</dt><dd>@(row.UserName ?? "（系統）")@(row.UserId is { } uid ? $"（Id {uid}）" : string.Empty)</dd></div>
+                <div><dt>對象</dt><dd>@row.TargetText</dd></div>
+                <div><dt>關聯說明</dt><dd>@(row.RelatedInfo ?? "—")</dd></div>
+                <div><dt>供應商／模型</dt><dd>@row.Provider／@row.Model</dd></div>
+                <div><dt>HTTP 狀態</dt><dd>@(row.HttpStatus?.ToString() ?? "—")</dd></div>
+                <div><dt>耗時</dt><dd>@row.ElapsedText</dd></div>
+                <div><dt>用量與費用</dt><dd>@UsageText</dd></div>
+                <div><dt>呼叫識別碼</dt><dd class="call-log-number">@row.CallId</dd></div>
+            </dl>
+
+            @if (detail.Thread.Count > 1)
+            {
+                <div class="call-log-detail-title">同一趟工作（共 @detail.Thread.Count 次呼叫）</div>
+                <div class="call-log-thread">
+                    @foreach (var item in detail.Thread)
+                    {
+                        var isCurrent = item.Id == row.Id;
+                        <button type="button"
+                                class="call-log-thread-item @(isCurrent ? "call-log-thread-current" : string.Empty)"
+                                disabled="@isCurrent"
+                                @onclick="@(() => OpenDetailAsync(item.Id))">
+                            <span class="call-log-number">@item.OccurredAt.ToString("HH:mm:ss")</span>
+                            <span>@(item.RelatedInfo ?? item.FeatureText)</span>
+                            <span class="@GetOutcomeClass(item)">@item.OutcomeText</span>
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (detail.Content is null)
+            {
+                <div class="call-log-warning">內容檔不存在（可能已被清除，或當初寫檔失敗），只剩上面的摘要資料。</div>
+            }
+            else
+            {
+                <div class="call-log-view-switch">
+                    <RadioGroup TValue="ViewMode" @bind-Value="viewMode" ButtonStyle="RadioButtonStyle.Outline">
+                        <Radio RadioButton TValue="ViewMode" Value="ViewMode.Conversation">完整對話</Radio>
+                        <Radio RadioButton TValue="ViewMode" Value="ViewMode.Request">送出內容</Radio>
+                        <Radio RadioButton TValue="ViewMode" Value="ViewMode.Response">回應</Radio>
+                    </RadioGroup>
+                    <Switch @bind-Value="renderMarkdown" CheckedChildren="Markdown" UnCheckedChildren="純文字" />
+                </div>
+
+                @foreach (var block in CurrentBlocks)
+                {
+                    <section class="call-log-block @(block.IsAssistant ? "call-log-block-assistant" : string.Empty)">
+                        <div class="call-log-block-heading">
+                            <span class="call-log-pill">@block.Label</span>
+                            <span class="call-log-muted">@block.Content.Length.ToString("N0") 字</span>
+                            <CrudActionButton Title="複製" Icon="content_copy" OnClick="@(() => OnCopyBlockAsync(block.Content))" />
+                        </div>
+                        @if (renderMarkdown && block.IsAssistant && block.Content.Length <= MaxDisplayCharacters)
+                        {
+                            <div class="markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(block.Content))</div>
+                        }
+                        else
+                        {
+                            <pre class="call-log-text">@Truncate(block.Content)</pre>
+                        }
+                    </section>
+                }
+            }
+        }
+    </Modal>
+}

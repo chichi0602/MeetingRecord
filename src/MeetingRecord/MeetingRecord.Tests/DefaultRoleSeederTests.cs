@@ -35,7 +35,7 @@ public sealed class DefaultRoleSeederTests
         await using var fixture = await Fixture.CreateAsync();
         var legacy = await fixture.AddRoleAsync(
             MagicObjectHelper.舊版預設角色,
-            [MagicObjectHelper.角色_會議紀錄, MagicObjectHelper.角色_使用者管理, MagicObjectHelper.角色_AI用量分析]);
+            [MagicObjectHelper.角色_會議紀錄, MagicObjectHelper.角色_使用者管理, MagicObjectHelper.已退役權限鍵_AI用量分析]);
         await fixture.CreateBackfillService().RunAsync();
 
         await fixture.CreateService().RunAsync();
@@ -46,7 +46,7 @@ public sealed class DefaultRoleSeederTests
         Assert.Contains(PermissionKey.For(MagicObjectHelper.角色_專案項目, PermissionActions.View), keys);
         Assert.DoesNotContain(MagicObjectHelper.角色_會議紀錄, keys);
         Assert.DoesNotContain(MagicObjectHelper.角色_使用者管理, keys);
-        Assert.DoesNotContain(MagicObjectHelper.角色_AI用量分析, keys);
+        Assert.DoesNotContain(MagicObjectHelper.已退役權限鍵_AI用量分析, keys);
         Assert.DoesNotContain(MagicObjectHelper.角色_提示詞清單, keys);
     }
 

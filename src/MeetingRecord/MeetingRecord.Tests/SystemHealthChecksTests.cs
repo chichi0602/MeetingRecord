@@ -169,7 +169,8 @@ public sealed class SystemHealthChecksTests
         settings.DefaultProvider = "AzureOpenAI";
         settings.TranscriptionProvider = "AzureOpenAI";
 
-        foreach (var (model, transcriptionModel) in new[] { ("gpt-5.6-sol", "gpt-transcribe"), ("gpt-4o-mini", "gpt-4o-transcribe") })
+        // 1.0.36：部署改用 gpt-6.1-sol，出貨的單價表沒有它時金額會變「—」。
+        foreach (var (model, transcriptionModel) in new[] { ("gpt-6.1-sol", "gpt-transcribe"), ("gpt-5.6-sol", "gpt-transcribe"), ("gpt-4o-mini", "gpt-4o-transcribe") })
         {
             provider.Model = model;
             provider.TranscriptionModel = transcriptionModel;
@@ -180,6 +181,10 @@ public sealed class SystemHealthChecksTests
         }
 
         Assert.Equal(0.0045m, settings.Pricing["gpt-transcribe"].AudioPerMinute);
+
+        // OpenAI 官方模型頁的標準層價格（2026/10/15）：輸入 $2、輸出 $10／每百萬 token。
+        Assert.Equal(2.0m, settings.Pricing["gpt-6.1-sol"].InputPerMillionTokens);
+        Assert.Equal(10.0m, settings.Pricing["gpt-6.1-sol"].OutputPerMillionTokens);
     }
 
     // ───────── 語音轉錄 ─────────

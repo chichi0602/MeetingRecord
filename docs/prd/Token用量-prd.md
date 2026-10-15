@@ -1,8 +1,8 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.1
+- 文件版本：2.2
 - 文件狀態：已實作
-- 現行系統版本：1.0.35
+- 現行系統版本：1.0.36
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
 - 最後核對日期：2026/10/15
 
@@ -189,7 +189,7 @@
 | 區段 | 鍵 | 現行值 | 說明 |
 |---|---|---|---|
 | `LlmSettings` | `Currency` | `USD` | 定價幣別 |
-| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
+| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-6.1-sol`（1.0.36）、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
 | `ExchangeRateSettings` | `Enabled` | `true` | 總開關；`false` 時整頁退回定價幣別 |
 | `ExchangeRateSettings` | `SourceUrl` | `https://open.er-api.com/v6/latest/USD` | 必須是 http(s) 絕對網址 |
 | `ExchangeRateSettings` | `TargetCurrency` | `TWD` | 必須是三碼英文字母 |
@@ -331,5 +331,6 @@
 - **1.0.29**：所有呼叫端改經 `AiCallGateway` 寫帳；帳本新增 `CallId`（migration `AddAiCallLogAndMeetingDuration`），對應新的 AI 對話紀錄（`AiCallLog`，頁面在 1.0.30）；帳本可設自動保留期限 `LogRetentionSettings:AiUsageLogDays`（預設 0＝永久，啟用時至少 62 天，`AiLogRetentionBackgroundService` 每天清，稽核 `AiUsage.AutoPurge`）；新增每月用量上限 `AiQuotaSettings`，依本帳本計算。儀表板會議時數改讀 `Meeting.MediaDurationSeconds`，不再依賴本帳本。見 [AI 管理（一）](../changelog/2026-10-15-AI管理基礎記錄管線與用量上限.md)。
 - **1.0.30**：頁面改名「Token 用量」，從「監控與診斷」搬到新分組「系統管理 → AI 管理」（id 62），網址改為 `/token-usage`（`/ai-usage` 保留為別名），icon 改 `toll`；改為只限管理者（`CheckIsAdmin()`＋`AdminOnlyMenuIds`），權限鍵「AI 用量分析」退役（`已退役權限鍵_AI用量分析`，`RbacBackfillService` 啟動時清除）。檔案搬到 `Pages/AiManagement/TokenUsagePage.razor`、`Views/AiManagement/TokenUsageView.*`。頁面功能不變。見 [AI 管理（二）](../changelog/2026-10-15-AI管理AI對話紀錄頁與選單.md)。
 - **1.0.31**：頁面升級成完整的分析與管理頁：上限列（接上 1.0.29 的 `GetStatusAsync`／`GetTopUsersAsync`）、篩選（按查詢才套用）、篩選範圍合計卡、六個頁籤（新增元件 `TokenUsageGroupTable`）、明細窗（單價與匯率快照，可跳 AI 對話紀錄）、CSV／PDF 匯出（新增 `TokenUsageReportExporter`）、單筆刪除／清除此日之前／全部清除與 `AiUsage.*` 稽核。本月概況改為固定全部功能、本月，原本的功能下拉與「最近 N 天」下拉拿掉。服務新增 `AiUsageFilter`、`GetReportAsync` 等方法。PRD 由 `AI用量分析-prd.md` 改名為本檔並全文改寫。見 [AI 管理（三）](../changelog/2026-10-15-AI管理Token用量升級.md)。
+- **1.0.36**：出貨的單價表加入 `gpt-6.1-sol`（輸入 $2、輸出 $10／每百萬 token，OpenAI 官方模型頁標準層）。部署改用它之後的呼叫才有金額；之前已記錄、金額為「—」的紀錄不回填。
 
 > 返回 [PRD 主控台](README.md)

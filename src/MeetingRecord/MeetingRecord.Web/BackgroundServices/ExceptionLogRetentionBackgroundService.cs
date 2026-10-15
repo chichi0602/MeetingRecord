@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Diagnostics;
 
 namespace MeetingRecord.Web.BackgroundServices;
@@ -75,7 +76,7 @@ public sealed class ExceptionLogRetentionBackgroundService : BackgroundService
             {
                 var audit = scope.ServiceProvider.GetRequiredService<IAuditLogService>();
                 await audit.WriteAsync(
-                    "ExceptionLog.AutoPurge",
+                    AuditActions.ExceptionLogAutoPurge,
                     success: true,
                     targetType: "ExceptionLog",
                     targetId: "*",

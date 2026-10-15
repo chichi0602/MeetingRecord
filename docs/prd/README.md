@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.15
+- 文件版本：1.16
 - 文件狀態：維護中
-- 現行系統版本：1.0.31
+- 現行系統版本：1.0.32
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/10/15
 
@@ -23,6 +23,7 @@
 | 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Pages/Admins/RoleViewPage.razor`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
 | Token 用量（原 AI 用量分析） | [Token 用量](Token用量-prd.md) | `/token-usage`（別名 `/ai-usage`） | `Pages/AiManagement/TokenUsagePage.razor`、`TokenUsageView`、`TokenUsageGroupTable`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiQuotaService`、`TokenUsageReportExporter`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別；1.0.30 起改名 Token 用量、移到「AI 管理」並只限管理者；1.0.31 起有上限列、篩選、圖表／每日／依使用者／依功能／依模型／明細頁籤、明細窗（可跳 AI 對話紀錄）、CSV／PDF 匯出、刪除與清除） | 1.0.31 |
 | AI 對話紀錄 | [AI 對話紀錄](AI對話紀錄-prd.md) | `/ai-call-logs` | `Pages/AiManagement/AiCallLogPage.razor`、`AiCallLogView`、`AiCallGateway`、`AiCallLogService`、`AiCallLogFileStore`、`AiLogRetentionBackgroundService` | 已實作（1.0.29 記錄、1.0.30 頁面；只限管理者） | 1.0.30 |
+| 稽核紀錄 | [稽核紀錄](稽核紀錄-prd.md) | `/audit-logs` | `Pages/Admins/AuditLogPage.razor`、`AuditLogView`、`AuditLogService`、`AuditLogQueryService`、`ClientIpProvider`、`AuditLogRetentionBackgroundService`、`AuditActions` | 部分實作（寫入自樣板時期；1.0.32 起有查詢頁、來源 IP、保留 365 天，只限管理者；帳號安全事件、權限拒絕、業務資料事件待第二、三批） | 1.0.32 |
 | 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Pages/Categories/CategoryPage.razor`、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
 | 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Pages/Teams/TeamPage.razor`、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
 | 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |

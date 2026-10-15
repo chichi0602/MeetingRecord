@@ -96,6 +96,7 @@ public sealed class AiLogRetentionBackgroundServiceTests : IAsyncDisposable
         services.AddScoped<AiCallLogService>();
         services.AddScoped<AiUsageAnalysisService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddSingleton(TestAuditLogs.OptionsFor(connection));
         var provider = services.BuildServiceProvider();
 
         return new AiLogRetentionBackgroundService(

@@ -7,6 +7,7 @@ using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.AiUsage;
 
@@ -229,7 +230,7 @@ public class AiCallGateway
             context.MeetingId);
 
         await auditLogService.WriteAsync(
-            "Ai.QuotaBlocked",
+            AuditActions.AiQuotaBlocked,
             success: false,
             actorUserId: context.UserId,
             actorAccount: context.UserName,

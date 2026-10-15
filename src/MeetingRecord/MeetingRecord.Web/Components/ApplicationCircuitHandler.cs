@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Diagnostics;
 
 namespace MeetingRecord.Web.Components;
@@ -19,6 +20,9 @@ namespace MeetingRecord.Web.Components;
 /// <para>身分取自 <see cref="AuthenticationStateProvider"/> 而不是 <c>CurrentUserService</c>：後者要等頁面的
 /// <c>AuthenticationStateHelper.Check()</c> 跑過才有值。⚠️ Cookie 的 claim：<c>Sid</c>＝使用者編號、
 /// <c>NameIdentifier</c>＝帳號、<c>Name</c>＝**姓名（個資，不記錄）**。</para>
+///
+/// <para>1.0.32 起另外在連線建立與重連時把來源 IP 記進 <see cref="ClientIpProvider"/>（稽核紀錄用）：
+/// 之後的互動事件裡沒有可靠的 HttpContext。</para>
 /// </summary>
 public sealed class ApplicationCircuitHandler : CircuitHandler, IDisposable
 {
@@ -26,6 +30,8 @@ public sealed class ApplicationCircuitHandler : CircuitHandler, IDisposable
     private readonly NavigationManager navigationManager;
     private readonly AuthenticationStateProvider authenticationStateProvider;
     private readonly ExceptionContextAccessor exceptionContextAccessor;
+    private readonly ClientIpProvider clientIpProvider;
+    private readonly IHttpContextAccessor httpContextAccessor;
 
     private string circuitId = string.Empty;
     private string currentPath = "/";
@@ -37,12 +43,16 @@ public sealed class ApplicationCircuitHandler : CircuitHandler, IDisposable
         ILogger<ApplicationCircuitHandler> logger,
         NavigationManager navigationManager,
         AuthenticationStateProvider authenticationStateProvider,
-        ExceptionContextAccessor exceptionContextAccessor)
+        ExceptionContextAccessor exceptionContextAccessor,
+        ClientIpProvider clientIpProvider,
+        IHttpContextAccessor httpContextAccessor)
     {
         this.logger = logger;
         this.navigationManager = navigationManager;
         this.authenticationStateProvider = authenticationStateProvider;
         this.exceptionContextAccessor = exceptionContextAccessor;
+        this.clientIpProvider = clientIpProvider;
+        this.httpContextAccessor = httpContextAccessor;
     }
 
     /// <summary>
@@ -76,6 +86,7 @@ public sealed class ApplicationCircuitHandler : CircuitHandler, IDisposable
         circuitId = circuit.Id;
         currentPath = ToRelativePath(navigationManager.Uri);
         await ResolveIdentityAsync();
+        CaptureClientIp();
 
         navigationManager.LocationChanged += OnLocationChanged;
         subscribed = true;
@@ -85,6 +96,7 @@ public sealed class ApplicationCircuitHandler : CircuitHandler, IDisposable
 
     public override Task OnConnectionUpAsync(Circuit circuit, CancellationToken cancellationToken)
     {
+        CaptureClientIp();
         logger.LogDebug("Blazor circuit connection up. CircuitId={CircuitId}", circuit.Id);
         return Task.CompletedTask;
     }
@@ -121,6 +133,19 @@ public sealed class ApplicationCircuitHandler : CircuitHandler, IDisposable
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Could not resolve identity for circuit. CircuitId={CircuitId}", circuitId);
+        }
+    }
+
+    /// <summary>記下這條連線的來源 IP。⚠️ 失敗只記 Warning，不能讓連線建立失敗。</summary>
+    private void CaptureClientIp()
+    {
+        try
+        {
+            clientIpProvider.SetCircuitClientIp(httpContextAccessor.HttpContext?.Connection.RemoteIpAddress);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not capture client IP for circuit. CircuitId={CircuitId}", circuitId);
         }
     }
 

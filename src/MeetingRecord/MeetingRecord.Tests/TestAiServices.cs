@@ -25,7 +25,7 @@ internal static class TestAiServices
             new AiUsageRecorder(context, llmSettings, exchangeRates ?? new ExchangeRateCache(), NullLogger<AiUsageRecorder>.Instance),
             callLogRecorder ?? new RecordingAiCallLogRecorder(),
             quotaService ?? new FakeAiQuotaService(),
-            new AuditLogService(context, NullLogger<AuditLogService>.Instance),
+            TestAuditLogs.CreateService(context),
             NullLogger<AiCallGateway>.Instance);
 
     /// <summary>真的 <see cref="AiCallLogService"/>（刪除會議／專案的連帶刪除要用）。</summary>

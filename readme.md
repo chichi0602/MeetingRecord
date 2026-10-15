@@ -71,7 +71,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 
 **系統管理與資料定義**
 
-- **帳號與權限**：使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
+- **帳號與權限**：使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）、**稽核紀錄**（`/audit-logs`，1.0.32，只限管理者：誰、何時、從哪個 IP、做了什麼，可篩選、匯出 CSV、清除，預設保留 365 天；見[稽核紀錄 PRD](docs/prd/稽核紀錄-prd.md)）
 - **監控與診斷**（0.4.120 起；都只限管理者，不能勾給角色）：
   - **系統健康監控**（`/system-health`）：18 項檢查（0.4.123 新增登入金鑰、快取服務、例外紀錄管線；1.0.29 新增 AI 用量上限）的健康分數、紅黃綠燈號，與展開才載入的最近 24 小時警告以上日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
   - **日誌檢視**（`/logs`，0.4.121）：依時間、等級、關鍵字、TraceId 查 NLog 檔案日誌，展開看堆疊、複製、匯出 .log；**AI 日誌分析**把最新 100 筆送給 AI 整理重點與建議（會產生費用，記入 AI 用量）（見[日誌檢視 PRD](docs/prd/日誌檢視-prd.md)）
@@ -219,7 +219,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `NLog.BasePath` | NLog 寫入的根目錄；專案會在其下建立 `MeetingRecord.Web` 子目錄並輸出檔案日誌。 |
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `CookieSettings` | 網頁登入 Cookie 效期（0.4.119）：`ExpireMinutes`（沒勾記住我，預設 480＝8 小時）、`RememberMeDays`（勾了記住我與 Google 登入，預設 30 天）、`SlidingExpiration`（預設 `true`，期間回來使用會自動延長）。 |
-| `LogRetentionSettings` | 系統例外紀錄保存天數（0.4.122）：`ExceptionLogDays`（預設 90，「最後發生」超過的每天自動刪除，`0`＝不自動清理）；AI 用量帳本保存天數（1.0.29）：`AiUsageLogDays`（預設 `0`＝永久保留，啟用時至少 62）。 |
+| `LogRetentionSettings` | 系統例外紀錄保存天數（0.4.122）：`ExceptionLogDays`（預設 90，「最後發生」超過的每天自動刪除，`0`＝不自動清理）；AI 用量帳本保存天數（1.0.29）：`AiUsageLogDays`（預設 `0`＝永久保留，啟用時至少 62）；稽核紀錄保存天數（1.0.32）：`AuditLogDays`（預設 365，`0`＝不自動清理）。 |
 | `AiCallLogSettings` | AI 對話紀錄（1.0.29）：`Enabled`（預設 `true`，記錄每次付費 AI 呼叫的送出內容與回應）、`RetentionDays`（預設 90，1～3650，沒有永久保留）。 |
 | `AiQuotaSettings` | AI 用量上限（1.0.29，新台幣）：`GlobalMonthlyTwd`（全系統每月）、`PerUserMonthlyTwd`（每人每月），`0`＝不限制（預設）；改設定檔即生效、不必重啟。 |
 | `ClientErrorReporting` | 瀏覽器端錯誤回報（0.4.122）：`Enabled`（預設 `true`）、`MaxPerCircuitPerMinute`（每個連線每分鐘上限，預設 10）。 |
@@ -328,7 +328,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
 - 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
-- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[Token 用量](docs/prd/Token用量-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[稽核紀錄](docs/prd/稽核紀錄-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[Token 用量](docs/prd/Token用量-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
 
 ### 設計規格（superpowers）
 

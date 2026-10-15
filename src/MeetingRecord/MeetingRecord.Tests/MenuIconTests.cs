@@ -52,6 +52,8 @@ public sealed class MenuIconTests
         "psychology",
         "forum",
         "toll",
+        // 稽核紀錄（1.0.32，與 NET10-Blazor-Starter 同名）。classic Material Icons 有這個名稱。
+        "fact_check",
     };
 
     [Fact]

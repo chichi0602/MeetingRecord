@@ -1,0 +1,132 @@
+@using MeetingRecord.Models.Systems
+@using MeetingRecord.Share.Helpers
+
+@* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
+@if (!isAccessChecked)
+{
+}
+else if (!string.IsNullOrEmpty(RoleMessage))
+{
+    <div class="audit-log-empty">@RoleMessage</div>
+}
+else
+{
+    <div class="audit-log-toolbar">
+        <div class="audit-log-toolbar-left">
+            <DatePicker TValue="DateTime?" @bind-Value="startTime"
+                        ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                        Placeholder="@("發生時間（起）")" Style="width: 190px;" />
+            <span class="audit-log-range-separator">～</span>
+            <DatePicker TValue="DateTime?" @bind-Value="endTime"
+                        ShowTime="@true" Format="yyyy-MM-dd HH:mm:ss"
+                        Placeholder="@("發生時間（迄）")" Style="width: 190px;" />
+
+            <Select TItem="string" TItemValue="string" @bind-Value="actionFilter" Style="width: 200px;"
+                    EnableSearch="true">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="動作：不限" />
+                @foreach (var action in actionOptions)
+                {
+                    <SelectOption TItemValue="string" TItem="string" Value="@action" Label="@AuditActions.Describe(action)" />
+                }
+            </Select>
+
+            <Select TItem="string" TItemValue="string" @bind-Value="resultFilter" Style="width: 120px;">
+                <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="結果：不限" />
+                <SelectOption TItemValue="string" TItem="string" Value="@ResultSuccess" Label="成功" />
+                <SelectOption TItemValue="string" TItem="string" Value="@ResultFailed" Label="失敗" />
+            </Select>
+
+            <Input class="audit-log-account-input" @bind-Value="actorAccount" Placeholder="操作者帳號" AllowClear="true" />
+            <Input class="audit-log-ip-input" @bind-Value="clientIp" Placeholder="來源 IP（前綴）" AllowClear="true" />
+            <Input class="audit-log-search-input" @bind-Value="keyword" Placeholder="關鍵字（動作／目標／摘要／IP）" AllowClear="true" />
+        </div>
+
+        <div class="audit-log-toolbar-right">
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnSearchAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>查詢</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnRefreshAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
+            </Button>
+            <Tooltip Title="@("匯出目前查詢結果（CSV）")">
+                <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnExportAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
+                </Button>
+            </Tooltip>
+            <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnPurgeAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>清除 @PurgeDays 天前</span></span>
+            </Button>
+            <Button Type="ButtonType.Default" Danger="true" Disabled="@isLoading" OnClick="OnClearAllAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete_forever" /><span>全部清除</span></span>
+            </Button>
+        </div>
+    </div>
+
+    <div class="audit-log-note">
+        本頁記錄「誰、何時、從哪裡、對什麼、做了什麼、結果如何」，涵蓋登入、使用者與角色異動、各管理頁的匯出與清除等事件。
+        時間以<strong>伺服器本地時區</strong>顯示（資料庫存的是 UTC）。清除與全部清除本身也會留下一筆紀錄。
+        @RetentionText
+    </div>
+
+    <div class="audit-log-panel">
+        <Table TItem="AuditLogAdapterModel"
+               RemoteDataSource="true"
+               DataSource="@rows"
+               Loading="@isLoading"
+               Size="TableSize.Small"
+               OnChange="OnTableChange"
+               @bind-PageIndex="_pageIndex"
+               @bind-PageSize="_pageSize"
+               @bind-Total="_total"
+               ScrollX="1100">
+            <ColumnDefinitions>
+                <Column TData="DateTime" DataIndex="@nameof(AuditLogAdapterModel.OccurredAt)"
+                        Title="發生時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                    <span class="audit-log-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                </Column>
+                <Column TData="bool" Title="結果" Width="80">
+                    <span class="@GetResultClass(context)">@context.SuccessText</span>
+                </Column>
+                <Column TData="string" Title="動作" Width="190">
+                    <Tooltip Title="@context.Action">
+                        <span class="@GetActionClass(context)">@context.ActionDisplayName</span>
+                    </Tooltip>
+                </Column>
+                <Column TData="string" Title="操作者" Width="160" Ellipsis>@context.ActorDisplay</Column>
+                <Column TData="string" Title="來源 IP" Width="130">
+                    <span class="audit-log-number">@(context.ClientIp ?? "—")</span>
+                </Column>
+                <Column TData="string" Title="目標" Width="160" Ellipsis>@context.TargetDisplay</Column>
+                <Column TData="string" Title="摘要" Ellipsis>@(context.Detail ?? "—")</Column>
+                <ActionColumn Title="操作" Width="70" Fixed="ColumnFixPlacement.Right">
+                    <CrudActionButton Title="查看" Icon="visibility" OnClick="@(() => OnView(context))" />
+                </ActionColumn>
+            </ColumnDefinitions>
+        </Table>
+    </div>
+
+    <Modal Title="稽核明細"
+           Class="form-modal-large"
+           Visible="@detailVisible"
+           MaskClosable="false"
+           Footer="null"
+           OnCancel="OnDetailCancel">
+        @if (detail is { } row)
+        {
+            <dl class="audit-log-detail-list">
+                <div><dt>發生時間（本地）</dt><dd class="audit-log-number">@row.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>發生時間（UTC）</dt><dd class="audit-log-number">@row.OccurredAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</dd></div>
+                <div><dt>結果</dt><dd><span class="@GetResultClass(row)">@row.SuccessText</span></dd></div>
+                <div><dt>動作</dt><dd><span class="@GetActionClass(row)">@row.ActionDisplayName</span></dd></div>
+                <div><dt>動作代碼</dt><dd class="audit-log-number">@row.Action</dd></div>
+                <div><dt>操作者</dt><dd>@row.ActorDisplay</dd></div>
+                <div><dt>來源 IP</dt><dd class="audit-log-number">@(row.ClientIp ?? "—")</dd></div>
+                <div><dt>目標類型</dt><dd>@(row.TargetType ?? "—")</dd></div>
+                <div><dt>目標識別</dt><dd>@(row.TargetId ?? "—")</dd></div>
+            </dl>
+
+            <div class="audit-log-detail-title">摘要</div>
+            <pre class="audit-log-text">@(string.IsNullOrWhiteSpace(row.Detail) ? "（無）" : row.Detail)</pre>
+        }
+    </Modal>
+}

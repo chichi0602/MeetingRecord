@@ -315,7 +315,7 @@ public partial class AiCallLogView : ComponentBase
             renderMarkdown = BuildBlocks(detail, ViewMode.Conversation).All(x => x.Content.Length <= MaxDisplayCharacters);
 
             // 內容含逐字稿與問答全文：誰在什麼時候看了哪一筆要留下來。
-            await WriteAuditAsync("AiCallLog.View", detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}; feature={detail.Row.Feature}");
+            await WriteAuditAsync(AuditActions.AiCallLogView, detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}; feature={detail.Row.Feature}");
         }
         catch (Exception ex)
         {
@@ -452,7 +452,7 @@ public partial class AiCallLogView : ComponentBase
         {
             var fileName = $"MeetingRecord.Web-ai-call-{detail.Row.CallId:N}.json";
             await FileDownloadInterop.SaveBytesAsync(fileName, Encoding.UTF8.GetBytes(detail.RawJson), JsonContentType);
-            await WriteAuditAsync("AiCallLog.DownloadJson", detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}");
+            await WriteAuditAsync(AuditActions.AiCallLogDownloadJson, detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)
@@ -504,7 +504,7 @@ public partial class AiCallLogView : ComponentBase
             var fileName = DiagnosticReportExporter.BuildFileName("AI對話紀錄", exportedAt);
             await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
 
-            await WriteAuditAsync("AiCallLog.ExportPdf", row.Id.ToString(), $"callId={row.CallId:N}; bytes={pdf.Length}");
+            await WriteAuditAsync(AuditActions.AiCallLogExportPdf, row.Id.ToString(), $"callId={row.CallId:N}; bytes={pdf.Length}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)
@@ -536,7 +536,7 @@ public partial class AiCallLogView : ComponentBase
             var fileName = $"MeetingRecord.Web-ai-call-logs-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
 
-            await WriteAuditAsync("AiCallLog.Export", "*", $"format=csv; rows={items.Count}");
+            await WriteAuditAsync(AuditActions.AiCallLogExport, "*", $"format=csv; rows={items.Count}");
             NotifyDownloaded(fileName);
             if (items.Count >= AiCallLogService.MaxExportRows)
             {
@@ -580,7 +580,7 @@ public partial class AiCallLogView : ComponentBase
         var result = await AiCallLogService.DeleteAsync(row.Id);
         if (result.Success)
         {
-            await WriteAuditAsync("AiCallLog.Delete", row.Id.ToString(), $"callId={row.CallId:N}; feature={row.Feature}");
+            await WriteAuditAsync(AuditActions.AiCallLogDelete, row.Id.ToString(), $"callId={row.CallId:N}; feature={row.Feature}");
             _ = MessageService.SuccessAsync("刪除成功");
             await ReloadAsync();
         }
@@ -621,7 +621,7 @@ public partial class AiCallLogView : ComponentBase
         try
         {
             var removed = await AiCallLogService.PurgeBeforeAsync(before);
-            await WriteAuditAsync("AiCallLog.Purge", "*", $"before={before:yyyy-MM-dd}; rows={removed}");
+            await WriteAuditAsync(AuditActions.AiCallLogPurge, "*", $"before={before:yyyy-MM-dd}; rows={removed}");
             _ = MessageService.SuccessAsync($"已清除 {removed:N0} 筆。");
             _pageIndex = 1;
             await ReloadAsync();
@@ -658,7 +658,7 @@ public partial class AiCallLogView : ComponentBase
         var result = await AiCallLogService.ClearAllAsync();
         if (result.Success)
         {
-            await WriteAuditAsync("AiCallLog.ClearAll", "*", result.Message);
+            await WriteAuditAsync(AuditActions.AiCallLogClearAll, "*", result.Message);
             _ = MessageService.SuccessAsync("已清空全部 AI 對話紀錄");
             _pageIndex = 1;
             await OnRefreshAsync();

@@ -165,6 +165,17 @@ public partial class BackendDBContext : DbContext
             entity.Property(x => x.ContentFile).HasMaxLength(100);
         });
 
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            // 1.0.32 稽核紀錄頁：預設排序（新到舊）、時間區間與清除門檻都吃 OccurredAt；
+            // 動作下拉與篩選吃 Action；「某人的紀錄」吃 (ActorUserId, OccurredAt)。
+            entity.HasIndex(x => x.OccurredAt);
+            entity.HasIndex(x => x.Action);
+            entity.HasIndex(x => new { x.ActorUserId, x.OccurredAt });
+
+            entity.Property(x => x.ClientIp).HasMaxLength(64);
+        });
+
         modelBuilder.Entity<ExceptionLog>(entity =>
         {
             // 合併的唯一依據。寫入已由單一消費者序列化，這個索引是第二道防線。

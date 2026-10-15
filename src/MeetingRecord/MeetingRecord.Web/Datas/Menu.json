@@ -56,6 +56,12 @@
             "name": "角色管理",
             "icon": "shield_person",
             "url": "/roleviews"
+          },
+          {
+            "id": 40,
+            "name": "稽核紀錄",
+            "icon": "fact_check",
+            "url": "/audit-logs"
           }
         ]
       },

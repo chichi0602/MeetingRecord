@@ -38,4 +38,8 @@ public class AuditLog
     /// 該操作是否成功。
     /// </summary>
     public bool Success { get; set; } = true;
+    /// <summary>
+    /// 來源 IP（1.0.32 起）。由寫入服務自己取得，呼叫端不用傳；背景排程與更早的紀錄為 null。
+    /// </summary>
+    public string? ClientIp { get; set; }
 }

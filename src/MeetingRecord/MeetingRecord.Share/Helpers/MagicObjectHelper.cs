@@ -73,6 +73,13 @@ public class MagicObjectHelper
     /// 底下有任何一項看得到才顯示（見 <c>SidebarMenuService.GroupOnlyMenuIds</c>）。
     /// </summary>
     public const string 角色_帳號與權限 = "帳號與權限";
+
+    /// <summary>
+    /// 「帳號與權限」底下的稽核紀錄頁（1.0.32）。**只限管理者**、刻意不放進權限目錄：
+    /// 稽核紀錄是追究責任的證據，不能讓被稽核的人自己看或清。頁面以 <c>CheckIsAdmin()</c> 守門，
+    /// 側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者。與 Menu.json 的 name 一字不差。
+    /// </summary>
+    public const string 角色_稽核紀錄 = "稽核紀錄";
     public const string 角色_監控與診斷 = "監控與診斷";
 
     /// <summary>

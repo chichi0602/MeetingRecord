@@ -97,6 +97,7 @@ public sealed class ExceptionLogRetentionBackgroundServiceTests : IAsyncDisposab
         services.AddScoped<ExceptionStackFileStore>();
         services.AddScoped<ExceptionLogService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddSingleton(TestAuditLogs.OptionsFor(connection));
         var provider = services.BuildServiceProvider();
 
         return new ExceptionLogRetentionBackgroundService(

@@ -31,6 +31,17 @@ public class LogRetentionSettings : IValidatableObject
 
     public const int MinimumAiUsageLogDays = 62;
 
+    public const int DefaultAuditLogDays = 365;
+
+    /// <summary>
+    /// 稽核紀錄保留天數（1.0.32）。預設 365：稽核是追究責任的證據，不是雜訊，比例外紀錄留得久。0＝不自動清理。
+    /// </summary>
+    [Range(0, 36500)]
+    public int AuditLogDays { get; set; } = DefaultAuditLogDays;
+
+    /// <summary>稽核紀錄頁「清除 N 天前」用的天數：停用自動清理時退回預設天數。</summary>
+    public int ManualAuditLogDays => AuditLogDays > 0 ? AuditLogDays : DefaultAuditLogDays;
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (AiUsageLogDays is > 0 and < MinimumAiUsageLogDays)

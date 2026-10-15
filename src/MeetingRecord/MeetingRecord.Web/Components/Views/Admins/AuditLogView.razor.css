@@ -1,0 +1,145 @@
+/* 稽核紀錄（1.0.32）。工具列、面板、膠囊照「AI 對話紀錄」與「系統例外紀錄」複製（scoped CSS 沒有共用元件）；
+   顏色一律用 --oat-* 權杖。對話窗尺寸走全站的 form-modal-large，不在這裡設。 */
+.audit-log-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.audit-log-toolbar-left,
+.audit-log-toolbar-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.audit-log-range-separator {
+    color: var(--oat-ink-mid);
+}
+
+.audit-log-toolbar ::deep .audit-log-account-input,
+.audit-log-toolbar ::deep .audit-log-ip-input {
+    width: 160px;
+}
+
+.audit-log-toolbar ::deep .audit-log-search-input {
+    width: 260px;
+}
+
+.audit-log-empty {
+    padding: 24px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.audit-log-note {
+    margin-bottom: 12px;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.audit-log-panel {
+    padding: 16px;
+    background: var(--oat-surface);
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+}
+
+.audit-log-number {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 膠囊：形狀比照全站狀態膠囊。結果用成功／錯誤色；動作依類別換底色，清除稽核本身用警示色凸顯。 */
+.audit-log-pill {
+    display: inline-block;
+    padding: 1px 10px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    color: var(--oat-ink);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.audit-log-pill-ok {
+    border-color: var(--oat-ok);
+    background: var(--oat-ok-bg);
+    color: var(--oat-ok);
+}
+
+.audit-log-pill-err {
+    border-color: var(--oat-err);
+    background: var(--oat-err-bg);
+    color: var(--oat-err);
+}
+
+.audit-log-action-auth {
+    background: var(--oat-100);
+    border-color: var(--oat-400);
+}
+
+.audit-log-action-account {
+    background: var(--oat-200);
+    border-color: var(--oat-500);
+}
+
+.audit-log-action-ai,
+.audit-log-action-system {
+    background: var(--oat-50);
+}
+
+.audit-log-action-audit {
+    border-color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-warn);
+}
+
+/* ───────── 明細對話窗 ───────── */
+.audit-log-detail-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    margin: 0 0 14px;
+    font-size: 0.85rem;
+}
+
+.audit-log-detail-list > div {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr);
+    gap: 8px;
+}
+
+.audit-log-detail-list dt {
+    color: var(--oat-ink-mid);
+    font-weight: 600;
+}
+
+.audit-log-detail-list dd {
+    margin: 0;
+    color: var(--oat-ink);
+    overflow-wrap: anywhere;
+}
+
+.audit-log-detail-title {
+    margin: 4px 0 6px;
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.audit-log-text {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

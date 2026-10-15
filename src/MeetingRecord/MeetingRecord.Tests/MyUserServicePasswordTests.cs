@@ -258,7 +258,7 @@ public sealed class MyUserServicePasswordTests
                 mapper,
                 loggerFactory.CreateLogger<MyUserService>(),
                 new RbacWriteService(Context),
-                new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>()),
+                TestAuditLogs.CreateService(Context),
                 currentUserService);
         }
 

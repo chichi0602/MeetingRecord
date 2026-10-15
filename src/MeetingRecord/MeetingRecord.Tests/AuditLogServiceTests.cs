@@ -2,7 +2,9 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
 
@@ -45,6 +47,54 @@ public sealed class AuditLogServiceTests
         Assert.Null(exception);
     }
 
+    /// <summary>
+    /// 1.0.32：寫入改用自己新建的 context。呼叫端 context 裡還沒存的變更不能被順便存進去
+    /// （以前共用 Blazor 連線的 context 時就會）。
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_ShouldNotFlushCallerPendingChanges()
+    {
+        await using var fixture = await AuditFixture.CreateAsync();
+        fixture.Context.AuditLog.Add(new AuditLog { Action = "Pending.NotSaved", OccurredAt = DateTime.UtcNow });
+
+        await fixture.CreateService().WriteAsync(AuditActions.LoginSuccess, actorUserId: 1, actorAccount: "alice");
+
+        await using var fresh = new BackendDBContext(TestAuditLogs.OptionsOf(fixture.Context));
+        Assert.Equal([AuditActions.LoginSuccess], await fresh.AuditLog.Select(x => x.Action).ToListAsync());
+    }
+
+    [Fact]
+    public async Task WriteAsync_ShouldRecordClientIpFromProvider()
+    {
+        await using var fixture = await AuditFixture.CreateAsync();
+
+        await fixture.CreateService(new FixedClientIpProvider("203.0.113.9")).WriteAsync(AuditActions.LoginSuccess);
+
+        var saved = await fixture.Context.AuditLog.AsNoTracking().SingleAsync();
+        Assert.Equal("203.0.113.9", saved.ClientIp);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WhenIpProviderThrows_ShouldStillWriteWithoutIp()
+    {
+        await using var fixture = await AuditFixture.CreateAsync();
+
+        await fixture.CreateService(new ThrowingClientIpProvider()).WriteAsync(AuditActions.LoginSuccess);
+
+        var saved = await fixture.Context.AuditLog.AsNoTracking().SingleAsync();
+        Assert.Null(saved.ClientIp);
+    }
+
+    private sealed class FixedClientIpProvider(string ip) : IClientIpProvider
+    {
+        public string? GetClientIp() => ip;
+    }
+
+    private sealed class ThrowingClientIpProvider : IClientIpProvider
+    {
+        public string? GetClientIp() => throw new InvalidOperationException("no connection");
+    }
+
     private sealed class AuditFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -71,9 +121,9 @@ public sealed class AuditLogServiceTests
             return new AuditFixture(connection, context);
         }
 
-        public AuditLogService CreateService()
+        public AuditLogService CreateService(IClientIpProvider? clientIpProvider = null)
         {
-            return new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>());
+            return TestAuditLogs.CreateService(Context, clientIpProvider, loggerFactory.CreateLogger<AuditLogService>());
         }
 
         public async ValueTask DisposeAsync()

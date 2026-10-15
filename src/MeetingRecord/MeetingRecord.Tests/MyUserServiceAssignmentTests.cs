@@ -82,7 +82,7 @@ public sealed class MyUserServiceAssignmentTests
 
         public MyUserService CreateService()
             => new(Context, mapper, loggerFactory.CreateLogger<MyUserService>(), new RbacWriteService(Context),
-                new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>()), new CurrentUserService());
+                TestAuditLogs.CreateService(Context), new CurrentUserService());
 
         public async Task<RoleView> AddRoleAsync(string name)
         {

@@ -671,7 +671,7 @@ public sealed class ProjectAccessTests
                 mapper,
                 loggerFactory.CreateLogger<MyUserService>(),
                 new RbacWriteService(Context),
-                new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>()),
+                TestAuditLogs.CreateService(Context),
                 new CurrentUserService());
 
         public TeamConversionService CreateConversionService()

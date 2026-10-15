@@ -39,7 +39,7 @@ public sealed class RolePresetsTests : IAsyncDisposable
             loggerFactory.CreateLogger<RoleViewService>(),
             new RolePermissionService(),
             new RbacWriteService(context),
-            new AuditLogService(context, loggerFactory.CreateLogger<AuditLogService>()),
+            TestAuditLogs.CreateService(context),
             new CurrentUserService());
 
     private async Task<List<string>> PermissionKeysOfAsync(string roleName)

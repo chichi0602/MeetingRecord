@@ -242,7 +242,7 @@ public class MyUserService
 
             var (actorUserId, actorAccount) = ResolveActor();
             await auditLogService.WriteAsync(
-                "User.Create", success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+                AuditActions.UserCreate, success: true, actorUserId: actorUserId, actorAccount: actorAccount,
                 targetType: nameof(MyUser), targetId: itemParameter.Id.ToString(),
                 detail: BuildAssignmentDetail(itemParameter.Account, paraObject));
 
@@ -317,7 +317,7 @@ public class MyUserService
 
             var (actorUserId, actorAccount) = ResolveActor();
             await auditLogService.WriteAsync(
-                "User.Update", success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+                AuditActions.UserUpdate, success: true, actorUserId: actorUserId, actorAccount: actorAccount,
                 targetType: nameof(MyUser), targetId: itemData.Id.ToString(),
                 detail: BuildAssignmentDetail(itemData.Account, paraObject));
 
@@ -411,7 +411,7 @@ public class MyUserService
 
             var (actorUserId, actorAccount) = ResolveActor();
             await auditLogService.WriteAsync(
-                "User.Delete", success: true, actorUserId: actorUserId, actorAccount: actorAccount,
+                AuditActions.UserDelete, success: true, actorUserId: actorUserId, actorAccount: actorAccount,
                 targetType: nameof(MyUser), targetId: id.ToString(),
                 detail: $"account={item.Account}");
 

@@ -3,6 +3,7 @@ using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Diagnostics;
 
 namespace MeetingRecord.Web.BackgroundServices;
@@ -78,7 +79,7 @@ public sealed class AiLogRetentionBackgroundService : BackgroundService
 
             if (removed > 0)
             {
-                await WriteAuditAsync(scope, "AiCallLog.AutoPurge", "AiCallLog", $"rows={removed}; days={service.RetentionDays}");
+                await WriteAuditAsync(scope, AuditActions.AiCallLogAutoPurge, "AiCallLog", $"rows={removed}; days={service.RetentionDays}");
             }
 
             return removed;
@@ -109,7 +110,7 @@ public sealed class AiLogRetentionBackgroundService : BackgroundService
 
             if (removed > 0)
             {
-                await WriteAuditAsync(scope, "AiUsage.AutoPurge", "AiUsageLog", $"rows={removed}; days={days}");
+                await WriteAuditAsync(scope, AuditActions.AiUsageAutoPurge, "AiUsageLog", $"rows={removed}; days={days}");
             }
 
             return removed;

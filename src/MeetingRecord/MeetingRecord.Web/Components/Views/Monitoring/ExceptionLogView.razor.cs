@@ -400,7 +400,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             var fileName = $"MeetingRecord.Web-exceptions-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
 
-            await WriteAuditAsync("ExceptionLog.Export", "*", $"format=csv; rows={result.Count}");
+            await WriteAuditAsync(AuditActions.ExceptionLogExport, "*", $"format=csv; rows={result.Count}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)
@@ -440,7 +440,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         var result = await ExceptionLogService.DeleteAsync(item.Id);
         if (result.Success)
         {
-            await WriteAuditAsync("ExceptionLog.Delete", item.Id.ToString(), $"type={item.ShortExceptionType}");
+            await WriteAuditAsync(AuditActions.ExceptionLogDelete, item.Id.ToString(), $"type={item.ShortExceptionType}");
             _ = MessageService.SuccessAsync("刪除成功");
             await ReloadAsync();
         }
@@ -476,7 +476,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         var result = await ExceptionLogService.PurgeAsync(days);
         if (result.Success)
         {
-            await WriteAuditAsync("ExceptionLog.Purge", "*", $"days={days}; {result.Message}");
+            await WriteAuditAsync(AuditActions.ExceptionLogPurge, "*", $"days={days}; {result.Message}");
             _ = MessageService.SuccessAsync(string.IsNullOrWhiteSpace(result.Message) ? "清除完成" : result.Message);
             await ReloadAsync();
         }
@@ -511,7 +511,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         var result = await ExceptionLogService.ClearAllAsync();
         if (result.Success)
         {
-            await WriteAuditAsync("ExceptionLog.ClearAll", "*", "清空全部例外紀錄");
+            await WriteAuditAsync(AuditActions.ExceptionLogClearAll, "*", "清空全部例外紀錄");
             _ = MessageService.SuccessAsync("已清空全部例外紀錄");
             _pageIndex = 1;
             await ReloadAsync();
@@ -627,13 +627,13 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             aiMeta.Add(("耗時", $"{result.Elapsed.TotalSeconds:F1} 秒"));
             aiState = AiState.Succeeded;
 
-            await WriteAuditAsync("ExceptionLog.AiAnalyze", item.Id.ToString(),
+            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(),
                 $"chars={prompt.Length}; model={result.ModelName}; elapsedMs={(long)result.Elapsed.TotalMilliseconds}");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             // 使用者關掉視窗：服務已記成 Cancelled，畫面不再跳錯誤。
-            await WriteAuditAsync("ExceptionLog.AiAnalyze", item.Id.ToString(), $"chars={prompt.Length}; 使用者取消", success: false);
+            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(), $"chars={prompt.Length}; 使用者取消", success: false);
         }
         catch (Exception ex)
         {
@@ -646,7 +646,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
                 Logger.LogError(ex, "AI exception analysis failed. ExceptionLogId={ExceptionLogId}", item.Id);
             }
 
-            await WriteAuditAsync("ExceptionLog.AiAnalyze", item.Id.ToString(), $"chars={prompt.Length}; 失敗：{ex.GetType().Name}", success: false);
+            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(), $"chars={prompt.Length}; 失敗：{ex.GetType().Name}", success: false);
             ShowAiFailure(ex.Message.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase)
                 ? "這筆例外的內容（多半是堆疊）超過模型的內容上限，無法送交 AI 分析。"
                 : $"AI 分析未完成：{ex.Message}");
@@ -742,7 +742,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             var fileName = DiagnosticReportExporter.BuildFileName("AI例外分析", exportedAt);
             await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
 
-            await WriteAuditAsync("ExceptionLog.AiAnalyzeExportPdf", detailItem?.Id.ToString() ?? "*", $"bytes={pdf.Length}");
+            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyzeExportPdf, detailItem?.Id.ToString() ?? "*", $"bytes={pdf.Length}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)

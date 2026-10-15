@@ -132,7 +132,7 @@ public partial class LogLevelSettingView : ComponentBase
             selectedLevel = effectiveLevel;
             _ = MessageService.SuccessAsync($"已套用日誌等級：{LogLevelRankHelper.ToLevelText(target)}");
 
-            await WriteAuditAsync("LogLevel.Apply", previous, target);
+            await WriteAuditAsync(AuditActions.LogLevelApply, previous, target);
         }
         finally
         {
@@ -161,7 +161,7 @@ public partial class LogLevelSettingView : ComponentBase
             selectedLevel = effectiveLevel;
             _ = MessageService.SuccessAsync($"已還原為系統預設等級：{LogLevelRankHelper.ToLevelText(effectiveLevel)}");
 
-            await WriteAuditAsync("LogLevel.Restore", previous, effectiveLevel);
+            await WriteAuditAsync(AuditActions.LogLevelRestore, previous, effectiveLevel);
         }
         finally
         {

@@ -101,6 +101,9 @@ public static class ServiceCollectionExtensions
         // AI 對話紀錄（預設 90 天）與用量帳本（預設不清）的自動保留期限（1.0.29）。
         services.AddHostedService<AiLogRetentionBackgroundService>();
 
+        // 稽核紀錄的自動保留期限（1.0.32，預設 365 天）。
+        services.AddHostedService<AuditLogRetentionBackgroundService>();
+
         // 程序層級的未處理例外、管線自我監控（Program.cs 在 Build 後呼叫 Register）、瀏覽器錯誤回報（每個 circuit 一份）。
         services.AddSingleton<ProcessExceptionHooks>();
         services.AddSingleton<LoggingPipelineMonitor>();
@@ -115,6 +118,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AuthenticationStateHelper>();
         services.AddScoped<CurrentUserService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<AuditLogQueryService>();
+
+        // 來源 IP（1.0.32）：⚠️ 介面必須解析到同一個實例，circuit handler 記下的 IP 寫稽核時才讀得到。
+        services.AddScoped<ClientIpProvider>();
+        services.AddScoped<IClientIpProvider>(sp => sp.GetRequiredService<ClientIpProvider>());
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IRbacBackfillService, RbacBackfillService>();
         services.AddScoped<DefaultRoleSeeder>();

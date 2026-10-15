@@ -41,7 +41,7 @@ public sealed class StatusToggleTests : IAsyncDisposable
             mapper,
             loggerFactory.CreateLogger<MyUserService>(),
             new RbacWriteService(context),
-            new AuditLogService(context, loggerFactory.CreateLogger<AuditLogService>()),
+            TestAuditLogs.CreateService(context),
             new CurrentUserService());
 
         Assert.True((await service.SetStatusAsync(user.Id, false)).Success);

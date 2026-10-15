@@ -311,7 +311,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
             await FileDownloadInterop.SaveBytesAsync(fileName, Utf8WithBom(BuildRawText()), LogContentType);
 
             Logger.LogInformation("Log export downloaded. Rows={Rows}", entriesAscending.Count);
-            await WriteAuditAsync("LogViewer.Export", success: true, $"format=log; rows={entriesAscending.Count}");
+            await WriteAuditAsync(AuditActions.LogViewerExport, success: true, $"format=log; rows={entriesAscending.Count}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)
@@ -438,7 +438,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
             aiMeta = BuildAiMeta(prompt, result);
             aiState = AiState.Succeeded;
 
-            await WriteAuditAsync("LogViewer.AiAnalyze", success: true, BuildAiAuditDetail(prompt, result.ModelName, result.Elapsed));
+            await WriteAuditAsync(AuditActions.LogViewerAiAnalyze, success: true, BuildAiAuditDetail(prompt, result.ModelName, result.Elapsed));
 
             if (prompt.DroppedByEntryLimit)
             {
@@ -449,7 +449,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
         {
             // 使用者關掉視窗：服務已把這次記成 Cancelled，畫面不再跳錯誤。
             Logger.LogInformation("AI log analysis cancelled by user.");
-            await WriteAuditAsync("LogViewer.AiAnalyze", success: false, BuildAiAuditDetail(prompt, null, null) + "；使用者取消");
+            await WriteAuditAsync(AuditActions.LogViewerAiAnalyze, success: false, BuildAiAuditDetail(prompt, null, null) + "；使用者取消");
         }
         catch (Exception ex)
         {
@@ -462,7 +462,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
                 Logger.LogError(ex, "AI log analysis failed. Entries={Entries}, Characters={Characters}", prompt.IncludedEntryCount, prompt.CharacterCount);
             }
 
-            await WriteAuditAsync("LogViewer.AiAnalyze", success: false, BuildAiAuditDetail(prompt, null, null) + $"；失敗：{ex.GetType().Name}");
+            await WriteAuditAsync(AuditActions.LogViewerAiAnalyze, success: false, BuildAiAuditDetail(prompt, null, null) + $"；失敗：{ex.GetType().Name}");
             ShowAiFailure(DescribeFailure(ex));
         }
     }
@@ -599,7 +599,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
             var fileName = DiagnosticReportExporter.BuildFileName("AI日誌分析", exportedAt);
             await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
 
-            await WriteAuditAsync("LogViewer.AiAnalyzeExportPdf", success: true, $"rows={aiPrompt.IncludedEntryCount}; bytes={pdf.Length}");
+            await WriteAuditAsync(AuditActions.LogViewerAiAnalyzeExportPdf, success: true, $"rows={aiPrompt.IncludedEntryCount}; bytes={pdf.Length}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)

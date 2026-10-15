@@ -225,7 +225,7 @@ public sealed class MyUserServiceLoginTests
                 new ConfigurationBuilder().Build(),
                 loggerFactory.CreateLogger<MyUserServiceLogin>(),
                 new RolePermissionService(),
-                new AuditLogService(Context, loggerFactory.CreateLogger<AuditLogService>()));
+                TestAuditLogs.CreateService(Context));
         }
 
         public async Task<MyUser> AddUserAsync(string account, string password, bool legacy)

@@ -470,7 +470,7 @@ public partial class TokenUsageView : ComponentBase
             var fileName = $"MeetingRecord.Web-token-usage-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
 
-            await WriteAuditAsync("AiUsage.Export", "*", $"format=csv; rows={items.Count}; range={RangeText}");
+            await WriteAuditAsync(AuditActions.AiUsageExport, "*", $"format=csv; rows={items.Count}; range={RangeText}");
             NotifyDownloaded(fileName);
             if (items.Count >= AiUsageAnalysisService.MaxExportRows)
             {
@@ -518,7 +518,7 @@ public partial class TokenUsageView : ComponentBase
             var fileName = TokenUsageReportExporter.BuildFileName(exportedAt);
             await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
 
-            await WriteAuditAsync("AiUsage.ExportPdf", "*", $"rows={report.CallCount}; range={RangeText}; bytes={pdf.Length}");
+            await WriteAuditAsync(AuditActions.AiUsageExportPdf, "*", $"rows={report.CallCount}; range={RangeText}; bytes={pdf.Length}");
             NotifyDownloaded(fileName);
         }
         catch (Exception ex)
@@ -570,7 +570,7 @@ public partial class TokenUsageView : ComponentBase
         {
             if (await AiUsageAnalysisService.DeleteAsync(row.Id))
             {
-                await WriteAuditAsync("AiUsage.Delete", row.Id.ToString(), $"feature={row.Feature}; callId={row.CallId:N}");
+                await WriteAuditAsync(AuditActions.AiUsageDelete, row.Id.ToString(), $"feature={row.Feature}; callId={row.CallId:N}");
                 _ = MessageService.SuccessAsync("刪除成功");
             }
             else
@@ -619,7 +619,7 @@ public partial class TokenUsageView : ComponentBase
         try
         {
             var removed = await AiUsageAnalysisService.PurgeBeforeAsync(before);
-            await WriteAuditAsync("AiUsage.Purge", "*", $"before={before:yyyy-MM-dd}; rows={removed}");
+            await WriteAuditAsync(AuditActions.AiUsagePurge, "*", $"before={before:yyyy-MM-dd}; rows={removed}");
             _ = MessageService.SuccessAsync($"已清除 {removed:N0} 筆。");
             pageIndex = 1;
             await OnRefreshAsync();
@@ -656,7 +656,7 @@ public partial class TokenUsageView : ComponentBase
         try
         {
             var removed = await AiUsageAnalysisService.ClearAllAsync();
-            await WriteAuditAsync("AiUsage.ClearAll", "*", $"rows={removed}");
+            await WriteAuditAsync(AuditActions.AiUsageClearAll, "*", $"rows={removed}");
             _ = MessageService.SuccessAsync($"已清空全部用量紀錄（{removed:N0} 筆）。");
             pageIndex = 1;
             await OnRefreshAsync();

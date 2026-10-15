@@ -209,6 +209,10 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<int?>("ActorUserId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ClientIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Detail")
                         .HasColumnType("TEXT");
 
@@ -225,6 +229,12 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Action");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.HasIndex("ActorUserId", "OccurredAt");
 
                     b.ToTable("AuditLog");
                 });

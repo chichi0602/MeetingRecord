@@ -159,7 +159,7 @@ public sealed class AuditEventsTests
             return new Fixture(connection, context, actorId, actorAccount);
         }
 
-        private AuditLogService Audit() => new(Context, loggerFactory.CreateLogger<AuditLogService>());
+        private AuditLogService Audit() => TestAuditLogs.CreateService(Context);
 
         public MyUserService CreateUserService()
             => new(Context, mapper, loggerFactory.CreateLogger<MyUserService>(), new RbacWriteService(Context), Audit(), currentUserService);

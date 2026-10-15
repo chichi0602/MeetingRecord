@@ -10,6 +10,12 @@ public enum BackgroundJobKind
 
     /// <summary>AI 會議紀錄生成。</summary>
     MeetingDraft = 1,
+
+    /// <summary>
+    /// 影音檔上傳（1.0.37）。不在背景佇列裡，由 <c>MeetingService.SaveMediaAsync</c> 在寫檔期間登記，
+    /// 右下角面板才能和清單那顆「取消上傳」一樣中斷它。
+    /// </summary>
+    Upload = 2,
 }
 
 /// <summary>

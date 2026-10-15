@@ -386,6 +386,85 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task SaveMediaAsync_CancelledFromPanel_ShouldDiscardFileAndNotEnqueue()
+    {
+        // 1.0.37：右下角面板上傳中也能取消，走 JobCancellationRegistry，頁面的取消來源不會被觸發。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("面板取消上傳的會議");
+        var upload = NewUpload("錄音.mp3", Encoding.UTF8.GetBytes("fake-audio-bytes"));
+        upload.Content = new PanelCancellingStream(fixture.CancellationRegistry, existing.Id);
+
+        var result = await fixture.CreateService().SaveMediaAsync(existing.Id, upload);
+
+        Assert.False(result.Success);
+        Assert.Equal(MeetingService.UploadCancelledMessage, result.Message);
+        Assert.Empty(fixture.Queue.Enqueued);
+        Assert.False(Directory.Exists(fixture.MediaRoot) && Directory.EnumerateFiles(fixture.MediaRoot, "*", SearchOption.AllDirectories).Any());
+        Assert.True(await fixture.Context.Meeting.AsNoTracking().AnyAsync(x => x.Id == existing.Id));
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_CancelledWithDeleteMeetingOnCancel_ShouldDeleteMeetingAndDismissProgress()
+    {
+        // 1.0.37：這次存檔才新增的會議，上傳被取消時連會議一起刪，面板也不留「失敗」那一列。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("新增後取消上傳的會議");
+        var upload = NewUpload("錄音.mp3", Encoding.UTF8.GetBytes("fake-audio-bytes"));
+        upload.Content = new PanelCancellingStream(fixture.CancellationRegistry, existing.Id);
+
+        var result = await fixture.CreateService().SaveMediaAsync(existing.Id, upload, deleteMeetingOnCancel: true);
+
+        Assert.False(result.Success);
+        Assert.Equal(MeetingService.UploadCancelledAndMeetingDeletedMessage, result.Message);
+        Assert.False(await fixture.Context.Meeting.AsNoTracking().AnyAsync(x => x.Id == existing.Id));
+        Assert.Null(fixture.ProgressNotifier.Find(existing.Id));
+        Assert.Empty(fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_UploadFailureWithDeleteMeetingOnCancel_ShouldKeepMeeting()
+    {
+        // 只有使用者取消才刪；連線中斷之類的失敗，會議要留著讓使用者重傳。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("上傳失敗的新會議");
+        var upload = NewUpload("錄音.mp3", [1, 2, 3]);
+        upload.Content = new ThrowingStream();
+
+        var result = await fixture.CreateService().SaveMediaAsync(existing.Id, upload, deleteMeetingOnCancel: true);
+
+        Assert.False(result.Success);
+        Assert.True(await fixture.Context.Meeting.AsNoTracking().AnyAsync(x => x.Id == existing.Id));
+        Assert.Equal(TranscriptionPhase.Failed, fixture.ProgressNotifier.Find(existing.Id)!.Phase);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_CancelRequestedAfterUploadFinished_ShouldNotSkipNextUploadOrTranscription()
+    {
+        // 面板在上傳剛寫完時按到「取消」：只會留下 Upload 的待取消標記，不能影響這趟轉錄，也不能誤殺下一次上傳。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("來不及取消的會議");
+        var service = fixture.CreateService();
+
+        var first = await service.SaveMediaAsync(existing.Id, NewUpload("錄音.mp3", [1, 2, 3]));
+        fixture.CancellationRegistry.RequestCancel(BackgroundJobKind.Upload, existing.Id);
+
+        Assert.True(first.Success);
+        Assert.False(fixture.CancellationRegistry.TryConsumePendingCancel(BackgroundJobKind.Transcription, existing.Id));
+
+        // 讓背景轉錄那一趟結束，下一次上傳才會被允許。
+        var meeting = await fixture.Context.Meeting.SingleAsync(x => x.Id == existing.Id);
+        meeting.TranscriptionStatus = TranscriptionStatus.Completed;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        fixture.ProgressNotifier.Dismiss(existing.Id);
+
+        var second = await service.SaveMediaAsync(existing.Id, NewUpload("新錄音.mp3", [4, 5, 6]));
+
+        Assert.True(second.Success);
+        Assert.Equal(2, fixture.Queue.Enqueued.Count);
+    }
+
+    [Fact]
     public async Task SaveMediaAsync_ShouldReject_WhileAnotherWindowIsUploading()
     {
         // 上傳中還沒寫進資料庫，IsJobActive 擋不到，要靠通知器擋。
@@ -1579,6 +1658,17 @@ public sealed class MeetingServiceTests
         }
     }
 
+    /// <summary>讀第一塊時從「右下角面板」要求取消（1.0.37），模擬上傳到一半被面板中斷。</summary>
+    private sealed class PanelCancellingStream(IJobCancellationRegistry registry, int meetingId) : MemoryStream
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            registry.RequestCancel(BackgroundJobKind.Upload, meetingId);
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(0);
+        }
+    }
+
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue
     {
         /// <summary>入列的會議 Id。刻意維持 List&lt;int&gt;，讓既有的 23 處斷言一行都不用改。</summary>
@@ -1715,7 +1805,8 @@ public sealed class MeetingServiceTests
                 CurrentUserService,
                 TestAiServices.CreateCallLogService(Context, AiCallLogPath),
                 Quota,
-                TestAuditLogs.CreateService(Context, TestAuditActor.From(CurrentUserService)));
+                TestAuditLogs.CreateService(Context, TestAuditActor.From(CurrentUserService)),
+                CancellationRegistry);
         }
 
         /// <summary>1.0.29：用量上限（預設不限制）。</summary>
@@ -1723,6 +1814,9 @@ public sealed class MeetingServiceTests
 
         /// <summary>1.0.29：AI 對話紀錄內容檔的目錄（刪除會議時連帶刪除的測試用）。</summary>
         public string AiCallLogPath => Path.Combine(rootPath, "AiCallLog");
+
+        /// <summary>右下角面板取消上傳走的登記處（1.0.37）；沒有外部相依，直接用真的。</summary>
+        public JobCancellationRegistry CancellationRegistry { get; } = new();
 
         public async Task<Meeting> AddMeetingAsync(
             string title,

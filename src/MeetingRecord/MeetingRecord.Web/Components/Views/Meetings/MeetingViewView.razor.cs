@@ -524,6 +524,9 @@ public partial class MeetingViewView : IDisposable
 
     private async Task SaveModalAsync()
     {
+        // 這次存檔才新增出來的會議，上傳被取消時連會議一起刪（1.0.37）；下面新增成功後 isNewRecordMode 會被改掉，要先記下。
+        var createdInThisSave = isNewRecordMode;
+
         if (LocalEditContext?.Validate() == false)
         {
             IEnumerable<string> allErrors = LocalEditContext.GetValidationMessages();
@@ -646,7 +649,7 @@ public partial class MeetingViewView : IDisposable
             // 刻意不 await：等下去的話 isSaving 會一路亮到上傳結束，整張表單與其他紀錄的新增、修改都會被卡住。
             // 失敗、取消與結束後的重載都在 UploadPendingMediaAsync 裡處理。它在第一個 await 之前就記下了檔案與會議 Id，
             // 所以下面 ResetUploadState 清掉 pendingMediaFile 不影響這趟上傳。
-            _ = UploadPendingMediaAsync();
+            _ = UploadPendingMediaAsync(createdInThisSave);
             ResetUploadState();
             return;
         }
@@ -778,8 +781,9 @@ public partial class MeetingViewView : IDisposable
     /// <summary>
     /// 上傳待上傳的影音檔。進度不在視窗裡顯示（1.0.27）：服務層寫進共用通知器，
     /// 清單這一列的「轉錄狀態」與右下角面板直接顯示「上傳中 xx%」。
+    /// <paramref name="deleteMeetingOnCancel"/>：這筆是這次存檔才新增的，取消上傳時連會議一起刪（1.0.37）。
     /// </summary>
-    private async Task UploadPendingMediaAsync()
+    private async Task UploadPendingMediaAsync(bool deleteMeetingOnCancel)
     {
         if (pendingMediaFile is null)
         {
@@ -792,6 +796,7 @@ public partial class MeetingViewView : IDisposable
 
         isUploading = true;
         uploadingMeetingId = meetingId;
+        uploadDeletesMeetingOnCancel = deleteMeetingOnCancel;
         using var cancellation = new CancellationTokenSource();
         uploadCancellation = cancellation;
         StateHasChanged();
@@ -809,13 +814,19 @@ public partial class MeetingViewView : IDisposable
                     FileSize = file.Size,
                     Content = stream,
                 },
-                cancellationToken: cancellation.Token);
+                cancellationToken: cancellation.Token,
+                deleteMeetingOnCancel: deleteMeetingOnCancel);
 
             if (!result.Success)
             {
-                if (cancellation.IsCancellationRequested)
+                // 看服務層的訊息而不是本頁的取消來源（1.0.37）：從右下角面板取消時，本頁的取消來源沒被觸發。
+                // 已傳的部分服務層已經刪掉；新增的會議連資料列一起刪了，修改既有的會議（或刪除失敗）則保留。
+                if (result.Message == MeetingService.UploadCancelledAndMeetingDeletedMessage)
                 {
-                    // 已傳的部分服務層已經刪掉；會議資料還在。
+                    NotifySuccess(result.Message);
+                }
+                else if (result.Message == MeetingService.UploadCancelledMessage)
+                {
                     NotifySuccess("已取消上傳。會議資料已保留，要重新上傳請按這一列的「修改」再選一次檔案。");
                 }
                 else
@@ -825,7 +836,10 @@ public partial class MeetingViewView : IDisposable
                 return;
             }
 
-            NotifySuccess("影音檔已上傳，系統已排入背景轉錄，進度會顯示在「轉錄狀態」。");
+            // 取消只作用在寫檔：按下取消時檔案已經寫完，就會走到這裡，要講清楚沒取消成（1.0.37 以前這裡照樣說「已排入轉錄」）。
+            NotifySuccess(cancellation.IsCancellationRequested
+                ? UploadTooLateToCancelMessage
+                : "影音檔已上傳，系統已排入背景轉錄，進度會顯示在「轉錄狀態」。");
         }
         catch (Exception ex)
         {
@@ -836,6 +850,7 @@ public partial class MeetingViewView : IDisposable
         {
             isUploading = false;
             uploadingMeetingId = null;
+            uploadDeletesMeetingOnCancel = false;
             uploadCancellation = null;
 
             // 上傳在背景跑，使用者可能早就離開這一頁了；元件已經釋放就不再碰畫面。
@@ -873,6 +888,12 @@ public partial class MeetingViewView : IDisposable
     /// <summary>上傳中的取消來源；只有上傳期間不是 null。</summary>
     private CancellationTokenSource? uploadCancellation;
 
+    /// <summary>正在上傳的這筆取消時會不會連會議一起刪（1.0.37），確認框要照實講。</summary>
+    private bool uploadDeletesMeetingOnCancel;
+
+    private const string UploadTooLateToCancelMessage =
+        "影音檔已經上傳完成，來不及取消；如果不需要轉錄，可以在右下角的進度面板取消轉錄。";
+
     /// <summary>
     /// 上傳期間唯一能按的按鈕（1.0.25）。不提供「暫停」：檔案經 Blazor 連線傳送，
     /// 伺服器超過 1 分鐘沒收到資料就會切斷整條連線，暫停稍久頁面就壞了。
@@ -887,18 +908,29 @@ public partial class MeetingViewView : IDisposable
         var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
         {
             Title = "取消上傳",
-            Content = "已上傳的部分會被丟棄，會議資料會保留，之後可以重新上傳。確定要取消嗎？",
+            Content = uploadDeletesMeetingOnCancel
+                ? "已上傳的部分會被丟棄，這筆剛新增的會議紀錄也會一併刪除。確定要取消嗎？"
+                : "已上傳的部分會被丟棄，會議資料會保留，之後可以重新上傳。確定要取消嗎？",
             OkText = "取消上傳",
             CancelText = "繼續上傳",
             OkButtonProps = new ButtonProps { Danger = true },
             MaskClosable = false
         });
 
-        // 確認框開著時上傳可能已經跑完了，這時 uploadCancellation 已經是 null。
-        if (confirmed && uploadCancellation is { } cancellation)
+        if (!confirmed)
+        {
+            return;
+        }
+
+        // 確認框開著時上傳可能已經跑完了，這時 uploadCancellation 已經是 null；以前這裡什麼都不說（1.0.37 補上通知）。
+        if (uploadCancellation is { } cancellation)
         {
             logger.LogInformation("Meeting media upload cancellation requested. MeetingId={MeetingId}", uploadingMeetingId);
             cancellation.Cancel();
+        }
+        else
+        {
+            NotifySuccess(UploadTooLateToCancelMessage);
         }
     }
 

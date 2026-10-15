@@ -1,8 +1,8 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.10
+- 文件版本：2.11
 - 文件狀態：已實作
-- 現行系統版本：1.0.34
+- 現行系統版本：1.0.37
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/10/15
 
@@ -59,7 +59,7 @@
 - **轉錄進度通知器**（0.4.36）：右下角常駐面板（形式比照雲端硬碟的上傳進度），顯示每筆轉錄的階段與百分比，完成打勾、失敗顯示錯誤；掛在 `MainLayout`，切到其他頁面也看得到。轉錄結束時清單會自動重新載入，狀態欄自動翻成已完成／失敗，不必手動按 🔄。進度只存在記憶體（Singleton），**沒有資料庫欄位**。**0.4.55 起進行中的項目多一顆「取消」**（走 `IJobCancellationRegistry`，排隊中與執行中都能停），同時修正既有誤導——關閉鈕在工作進行中的文案改為「關閉通知（工作會繼續執行）」，先前它讀起來像取消，實際上只是關掉通知、轉錄照跑照計費。**0.4.117 起上傳也進面板**：
   - 通知器新增「上傳中」階段（`TranscriptionPhase.Uploading`）。`MeetingService.SaveMediaAsync` 開始寫檔前呼叫 `StartUpload`，每個百分比呼叫 `ReportUpload`，入列時被 `Enqueued` 覆蓋成排隊中；上傳失敗（含上傳頁籤斷線）標成失敗。
   - 同一個帳號的其他頁籤、瀏覽器、電腦，以及看得到這筆會議的其他人，面板與清單都看得到「上傳中 xx%」。
-  - 上傳中**不顯示「取消」**：上傳不在背景佇列裡，`RequestCancel` 會留下待取消標記，入列後那趟轉錄會被默默跳過。要停止上傳只能關掉上傳的那個頁籤。
+  - 上傳中**不顯示「取消」**：上傳不在背景佇列裡，`RequestCancel` 會留下待取消標記，入列後那趟轉錄會被默默跳過。要停止上傳只能關掉上傳的那個頁籤。**1.0.37 起上傳中也有「取消」**：`SaveMediaAsync` 寫檔期間以 `BackgroundJobKind.Upload` 登記進 `IJobCancellationRegistry`（寫完即撤銷），面板依階段用 Upload 或 Transcription 種類取消，不會再誤殺入列後的轉錄。
   - 同一筆會議已經在別的視窗上傳中時，再上傳會被拒絕。
   - ⚠️ **0.4.84～1.0.24 面板其實沒有掛在 `MainLayout` 上**（改寫註解時誤刪，連同 `blazor-error-ui`），這段期間整站都看不到它；1.0.25 補回，並以 `LayoutMountTests` 釘住。
 - 新增／編輯表單欄位：
@@ -70,7 +70,7 @@
   - ~~團隊 `Teams`~~ —— **0.4.35 已從表單移除**且不再恢復，可見性跟著專案走。資料庫欄位 **0.4.103 已刪除**；當時的影響（0.4.35～0.4.98 新建會議一律公開）見第五節的歷史註記
   - 影音檔（單檔，**0.4.77 起改用共用的 `FileDropZone`，可拖拉或點擊**；`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生，⚠️ 但 `accept` 對「拖入」不可信，副檔名把關以服務層的 `IsAllowedFileName` 為準）
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
-- **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。**0.4.116 起**主資料存好、開始上傳前，先把 Modal 留住並重新整理清單：先前 AntDesign 在確定鈕按下後就把 Modal 關掉，進度列跟著看不見，清單也要等上傳完才出現新會議，使用者只看到「新增成功」與一片沒變的畫面。**1.0.25 起**存檔到上傳結束前整張表單鎖住：欄位、移除檔案、取消鈕、右上角關閉、Esc 都不能用，唯一能按的是「取消上傳」（先確認）。主資料在上傳之前就存了，先前上傳期間還能改欄位，改的內容不會再存，標題改了也會默默消失。取消後服務層刪掉已傳的部分，會議資料保留，進度面板標成「已取消上傳。」；取消只作用在寫檔，寫完檔後的存檔與入列不受影響，避免留下已存檔卻沒入列的會議。不提供暫停：檔案經 Blazor 連線傳送，伺服器超過 1 分鐘沒收到資料就會切斷整條連線。**1.0.27 起不再在視窗裡顯示進度**（使用者要求）：主資料存好就關窗、重新整理清單，上傳進度直接顯示在該列的「轉錄狀態」（徽章「上傳中」＋百分比，來自 `TranscriptionPhase.Uploading`），上傳完接著是轉錄進度。上傳在背景跑（存檔流程不等它結束），**只鎖正在上傳的那一筆**：該列操作欄只剩「取消上傳」（只在發起上傳的頁面出現；其他頁籤的同一列只顯示「上傳中」，判斷依據是共用通知器），其他紀錄、工具列、排序、換頁照常可用。同一頁一次只上傳一個：上傳期間開其他視窗時選檔區停用並說明，開視窗也不會清掉上傳狀態或重建選檔區（背景還在讀那個檔案），上傳結束才重建並自行重載清單。離開頁面不取消上傳。上傳與頁面其他操作共用同一個 DbContext，因 Microsoft.Data.Sqlite 的非同步方法實為同步完成、Blazor 又逐段執行，兩者不會真正交錯；改用真正非同步的資料庫時要重新檢查。上傳失敗或取消時會議資料保留，提示改按「修改」再選檔重傳。對話框只是隱藏（AntDesign Modal 預設不 DestroyOnClose），裡面的 InputFile 還在，檔案串流才讀得到。
+- **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。**0.4.116 起**主資料存好、開始上傳前，先把 Modal 留住並重新整理清單：先前 AntDesign 在確定鈕按下後就把 Modal 關掉，進度列跟著看不見，清單也要等上傳完才出現新會議，使用者只看到「新增成功」與一片沒變的畫面。**1.0.25 起**存檔到上傳結束前整張表單鎖住：欄位、移除檔案、取消鈕、右上角關閉、Esc 都不能用，唯一能按的是「取消上傳」（先確認）。主資料在上傳之前就存了，先前上傳期間還能改欄位，改的內容不會再存，標題改了也會默默消失。取消後服務層刪掉已傳的部分，會議資料保留，進度面板標成「已取消上傳。」；取消只作用在寫檔，寫完檔後的存檔與入列不受影響，避免留下已存檔卻沒入列的會議。不提供暫停：檔案經 Blazor 連線傳送，伺服器超過 1 分鐘沒收到資料就會切斷整條連線。**1.0.27 起不再在視窗裡顯示進度**（使用者要求）：主資料存好就關窗、重新整理清單，上傳進度直接顯示在該列的「轉錄狀態」（徽章「上傳中」＋百分比，來自 `TranscriptionPhase.Uploading`），上傳完接著是轉錄進度。上傳在背景跑（存檔流程不等它結束），**只鎖正在上傳的那一筆**：該列操作欄只剩「取消上傳」（只在發起上傳的頁面出現；其他頁籤的同一列只顯示「上傳中」，判斷依據是共用通知器），其他紀錄、工具列、排序、換頁照常可用。同一頁一次只上傳一個：上傳期間開其他視窗時選檔區停用並說明，開視窗也不會清掉上傳狀態或重建選檔區（背景還在讀那個檔案），上傳結束才重建並自行重載清單。離開頁面不取消上傳。上傳與頁面其他操作共用同一個 DbContext，因 Microsoft.Data.Sqlite 的非同步方法實為同步完成、Blazor 又逐段執行，兩者不會真正交錯；改用真正非同步的資料庫時要重新檢查。上傳失敗或取消時會議資料保留，提示改按「修改」再選檔重傳。**1.0.37 起**：取消上傳時，若這筆是這次存檔才新增的會議，連資料列一起刪（`SaveMediaAsync(deleteMeetingOnCancel: true)`，沿用 `DeleteAsync` 的檔案與 AI 對話清理），面板那一筆直接移除，清單該列消失；修改既有會議（含換檔）時取消仍保留會議與舊檔。上傳失敗（非取消）一律保留。取消結果改看服務層回傳的訊息（`UploadCancelledMessage`／`UploadCancelledAndMeetingDeletedMessage`），從面板取消時發起上傳的頁面也會跳通知；按取消時檔案已寫完（確認框開著時傳完、或已過寫檔階段）會跳「來不及取消」，不再無聲無息或誤報「已排入轉錄」。對話框只是隱藏（AntDesign Modal 預設不 DestroyOnClose），裡面的 InputFile 還在，檔案串流才讀得到。
 - 操作按鈕：
   - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
   - **AI 轉會議紀錄（0.4.73，`edit`）**：開對話框選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員。按確定會再跳一次費用確認
@@ -141,7 +141,7 @@
 4. `FfmpegMediaConverter` 以外部 FFmpeg 執行檔轉檔：
    `-vn -ac 1 -ar 16000 -c:a libmp3lame -b:a 32k -f segment -segment_time 900 -segment_format mp3`
    輸出到系統暫存目錄，轉錄結束即整個目錄刪除。
-5. 經 `AiCallGateway.TranscribeAsync`（1.0.29 起；記用量帳本與 AI 對話紀錄，關聯說明「會議 #N〈標題〉語音轉錄 i/n」，同一個音檔共用 ThreadKey；對話紀錄只記檔名、時長、分段與轉出的文字，不存音訊）由 `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.28）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
+5. 經 `AiCallGateway.TranscribeAsync`（1.0.29 起；記用量帳本與 AI 對話紀錄，關聯說明「會議 #N〈標題〉語音轉錄 i/n」，同一個音檔共用 ThreadKey；對話紀錄只記檔名、時長、分段與轉出的文字，不存音訊）由 `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.37）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
 6. 各段文字以空行接合寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。1.0.29 起同時寫入 `Meeting.MediaDurationSeconds`（各段時長加總，儀表板「會議時數」讀這一欄）；重新上傳影音時清空。
 
 > **為什麼一律切段**：Azure OpenAI 的音訊轉錄有單檔 25MB 上限，而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，不必為「檔案夠小就不切」多維護一個分支；15 分鐘 @32kbps 約 3.6MB，遠低於上限，同時順帶解決長會議的時長問題。
@@ -202,7 +202,7 @@
 - 1GB 檔案經 Blazor Server 的 SignalR 傳輸相當慢，進度列會如實反映；這是 Blazor Server 的架構天花板，不在本版處理範圍。
 - **大檔上傳可能整條連線中斷**（0.4.116 記錄）：IIS Production 上 127MB 的 mp4 傳到第 11 秒，Blazor 讀檔串流判定逾時並終止連線，整頁空白，會議已建立但沒有影音檔（可重新整理後編輯該筆再上傳）。根本原因尚未確認，先檢查 IIS 是否啟用 WebSocket；若啟用後仍中斷，改走 HTTP 上傳 API。見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)。
 - 清單上的轉錄狀態**不會自動更新**，需要按「重新整理」才會看到背景轉錄的最新進度。
-- 1.0.28 起文字生成走 v1 API、不需要版本；轉錄的 api-version 內建 `2025-03-01-preview`，`TranscriptionApiVersion` 只在需要換版本時填。
+- 1.0.37 起文字生成走 v1 API、不需要版本；轉錄的 api-version 內建 `2025-03-01-preview`，`TranscriptionApiVersion` 只在需要換版本時填。
 
 ## 七、設定
 
@@ -227,7 +227,7 @@
 ```
 
 - `TranscriptionProvider` 留空 → 沿用 `DefaultProvider`（轉錄端與生成端可指向不同廠商）。
-- `TranscriptionApiVersion` 選填，留空 → 用內建的 `2025-03-01-preview`（1.0.28 起不再有 `ApiVersion`）。
+- `TranscriptionApiVersion` 選填，留空 → 用內建的 `2025-03-01-preview`（1.0.37 起不再有 `ApiVersion`）。
 - **只設 `DefaultProvider`、不填 `TranscriptionModel` 的部署視為未啟用轉錄**，啟動驗證不會擋。
 - `FfmpegPath` 可填完整路徑，也可只填 `ffmpeg` 走 PATH（0.4.29 起為預設值）。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。
 - 服務一律以 `IOptions<LlmSettings>` / `IOptions<MediaSettings>` 取設定，**禁止**直接讀 `IConfiguration`。

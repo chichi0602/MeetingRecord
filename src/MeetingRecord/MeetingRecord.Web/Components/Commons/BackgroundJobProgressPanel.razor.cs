@@ -133,9 +133,12 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
             return;
         }
 
-        var kind = job.Kind == JobKind.Transcription
-            ? BackgroundJobKind.Transcription
-            : BackgroundJobKind.MeetingDraft;
+        // 上傳中（1.0.37）中斷的是寫檔，結果由發起上傳的會議頁通知使用者。
+        var kind = job.IsUploading
+            ? BackgroundJobKind.Upload
+            : job.Kind == JobKind.Transcription
+                ? BackgroundJobKind.Transcription
+                : BackgroundJobKind.MeetingDraft;
 
         CancellationRegistry.RequestCancel(kind, job.MeetingId);
 
@@ -194,10 +197,12 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
         bool IsUploading = false)
     {
         /// <summary>
-        /// 能不能顯示「取消」（0.4.117）：上傳中不行。上傳不在背景佇列裡，<c>RequestCancel</c> 找不到執行中的工作，
-        /// 會留下「待取消」標記，等上傳完成入列，那趟轉錄就被默默跳過。要停上傳只能關掉上傳的那個頁籤。
+        /// 能不能顯示「取消」。0.4.117 起上傳中不行；1.0.37 起上傳寫檔期間也登記進取消登記處
+        /// （<see cref="BackgroundJobKind.Upload"/>），上傳中也能取消。
+        /// ⚠️ 上傳要用 Upload 種類取消，不能用 Transcription：後者找不到執行中的工作會留下「待取消」標記，
+        /// 上傳完入列的那趟轉錄就被默默跳過。
         /// </summary>
-        public bool CanBeCancelled => IsRunning && !IsUploading;
+        public bool CanBeCancelled => IsRunning;
 
         /// <summary>同一筆會議可能同時有轉錄與生成兩種工作，所以 key 要帶上種類。</summary>
         public string Key => $"{Kind}-{MeetingId}";

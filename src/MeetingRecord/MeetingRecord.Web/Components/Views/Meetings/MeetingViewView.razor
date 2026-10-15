@@ -136,7 +136,7 @@ else
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     @* 上傳在背景跑（1.0.27），只鎖住正在上傳的那一筆，其他紀錄照常操作。
                        看通知器而不是本頁狀態：別的頁籤正在上傳的同一筆也會一起鎖住。
-                       「取消上傳」只出現在發起上傳的這一頁——取消來源在這個元件裡。 *@
+                       「取消上傳」只出現在發起上傳的這一頁——取消來源在這個元件裡；其他頁籤可從右下角面板取消（1.0.37）。 *@
                     @if (GetLiveProgress(context.Id) is { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading })
                     {
                         @if (context.Id == uploadingMeetingId)

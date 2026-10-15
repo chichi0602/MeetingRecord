@@ -42,6 +42,16 @@ public class MeetingService
     private readonly AiCallLogService aiCallLogService;
     private readonly IAiQuotaService quotaService;
     private readonly IAuditLogService auditLogService;
+    private readonly IJobCancellationRegistry cancellationRegistry;
+
+    /// <summary>
+    /// 使用者取消上傳時 <see cref="SaveMediaAsync"/> 回傳的訊息（1.0.37）。
+    /// 頁面靠它辨識「取消」：從右下角面板取消時，頁面自己的取消來源不會被觸發。
+    /// </summary>
+    public const string UploadCancelledMessage = "已取消上傳。";
+
+    /// <summary>取消上傳且已依要求連會議一起刪除時的訊息（1.0.37）。刪除失敗時回 <see cref="UploadCancelledMessage"/>。</summary>
+    public const string UploadCancelledAndMeetingDeletedMessage = "已取消上傳，這筆會議紀錄已一併移除。";
 
     public IMapper Mapper { get; }
     public ILogger<MeetingService> Logger { get; }
@@ -60,7 +70,8 @@ public class MeetingService
         CurrentUserService currentUserService,
         AiCallLogService aiCallLogService,
         IAiQuotaService quotaService,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        IJobCancellationRegistry cancellationRegistry)
     {
         this.context = context;
         Mapper = mapper;
@@ -76,6 +87,7 @@ public class MeetingService
         this.aiCallLogService = aiCallLogService;
         this.quotaService = quotaService;
         this.auditLogService = auditLogService;
+        this.cancellationRegistry = cancellationRegistry;
     }
 
     /// <summary>
@@ -495,12 +507,15 @@ public class MeetingService
     /// <summary>
     /// 上傳（或替換）會議影音檔：落地實體檔案 → 更新中繼資料並標記為待處理 → 排入轉錄佇列。
     /// <paramref name="progress"/> 會在複製過程中回報 0-100 的百分比，供畫面顯示進度列。
+    /// <paramref name="deleteMeetingOnCancel"/>：使用者取消上傳時連會議一起刪（1.0.37）——
+    /// 只給「這次存檔才新增出來」的會議用；修改既有會議時取消，會議與舊檔都要留著。
     /// </summary>
     public async Task<VerifyRecordResult> SaveMediaAsync(
         int meetingId,
         MeetingMediaUploadInput uploadFile,
         IProgress<int>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool deleteMeetingOnCancel = false)
     {
         Logger.LogInformation(
             "Uploading meeting media. MeetingId={MeetingId}, FileName={FileName}, FileSize={FileSize}",
@@ -523,6 +538,7 @@ public class MeetingService
         StoredMediaFile? stored = null;
         var committed = false;
         var uploadStarted = false;
+        var cancelledFromPanel = false;
         try
         {
             CleanTrackingHelper.Clean<Meeting>(context);
@@ -569,7 +585,19 @@ public class MeetingService
                 progress?.Report(percent);
             });
 
-            stored = await fileStore.SaveMediaAsync(meeting.CreatedAt, uploadFile, sharedProgress, cancellationToken);
+            // 寫檔期間登記進取消登記處（1.0.37），右下角面板的「取消」才中斷得到；寫完就撤銷登記，
+            // 理由同下面 SaveChangesAsync 那段：取消只作用在寫檔。
+            using (var uploadHandle = cancellationRegistry.BeginJob(BackgroundJobKind.Upload, meetingId, cancellationToken))
+            {
+                try
+                {
+                    stored = await fileStore.SaveMediaAsync(meeting.CreatedAt, uploadFile, sharedProgress, uploadHandle.Token);
+                }
+                finally
+                {
+                    cancelledFromPanel = uploadHandle.IsCancelledByUser;
+                }
+            }
 
             meeting.MediaOriginalFileName = stored.OriginalFileName;
             meeting.MediaStoredFileName = stored.StoredFileName;
@@ -620,7 +648,9 @@ public class MeetingService
             }
 
             // 使用者按「取消上傳」不是錯誤，記 Information 就好（1.0.25）。
-            var cancelledByUser = ex is OperationCanceledException && cancellationToken.IsCancellationRequested;
+            // 不要求例外一定是 OperationCanceledException（1.0.37）：瀏覽器檔案串流被取消時不保證丟這個型別，
+            // 只要使用者按過取消（本頁或右下角面板），之後的中斷一律當取消。
+            var cancelledByUser = cancellationToken.IsCancellationRequested || cancelledFromPanel;
             if (cancelledByUser)
             {
                 Logger.LogInformation("Meeting media upload cancelled by user. MeetingId={MeetingId}", meetingId);
@@ -636,13 +666,30 @@ public class MeetingService
                 fileStore.TryDeleteMedia(stored.RelativePath);
             }
 
+            // 新增時就帶著檔案、上傳被取消的會議，連資料列一起刪（1.0.37，使用者要求）。
+            // 刪掉了就把通知器那筆也移掉，不留一列指向不存在會議的「失敗」。
+            if (cancelledByUser && deleteMeetingOnCancel && uploadStarted && !committed)
+            {
+                var deleteResult = await DeleteAsync(meetingId);
+                if (deleteResult.Success)
+                {
+                    progressNotifier.Dismiss(meetingId);
+                    return VerifyRecordResultFactory.Build(false, UploadCancelledAndMeetingDeletedMessage);
+                }
+
+                Logger.LogWarning(
+                    "Meeting kept after upload cancellation because deletion failed. MeetingId={MeetingId}, Reason={Reason}",
+                    meetingId,
+                    deleteResult.Message);
+            }
+
             // 其他視窗正看著「上傳中 xx%」，不標成失敗就會永遠卡在那個百分比（0.4.117）。
             if (uploadStarted && !committed)
             {
-                progressNotifier.ReportFailed(meetingId, cancelledByUser ? "已取消上傳。" : "影音檔上傳失敗，請重新上傳。");
+                progressNotifier.ReportFailed(meetingId, cancelledByUser ? UploadCancelledMessage : "影音檔上傳失敗，請重新上傳。");
             }
             return cancelledByUser
-                ? VerifyRecordResultFactory.Build(false, "已取消上傳。")
+                ? VerifyRecordResultFactory.Build(false, UploadCancelledMessage)
                 : VerifyRecordResultFactory.Build(false, "影音檔上傳失敗。", ex);
         }
     }

@@ -43,6 +43,13 @@ public class Meeting
 
     public long? MediaFileSize { get; set; }
 
+    /// <summary>
+    /// 影音時長（秒，1.0.29）。轉錄完成時由 <c>TranscriptionJobRunner</c> 寫入，重新上傳影音時清空。
+    /// 儀表板「會議時數」讀這一欄——以前是加總用量帳本的轉錄秒數，但帳本可以被清除了。
+    /// 1.0.29 之前轉錄完成的會議由 migration 從帳本回填。
+    /// </summary>
+    public double? MediaDurationSeconds { get; set; }
+
     #endregion
 
     #region 轉錄結果

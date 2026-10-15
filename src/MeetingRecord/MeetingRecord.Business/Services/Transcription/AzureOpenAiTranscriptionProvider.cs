@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Business.Services.AiUsage;
 
 namespace MeetingRecord.Business.Services.Transcription;
 
@@ -75,7 +76,8 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
                 (int)response.StatusCode,
                 fileName);
 
-            throw new InvalidOperationException(
+            throw new AiProviderHttpException(
+                (int)response.StatusCode,
                 $"語音轉錄 API 回應 {(int)response.StatusCode} {response.ReasonPhrase}：{Truncate(body, 500)}");
         }
 

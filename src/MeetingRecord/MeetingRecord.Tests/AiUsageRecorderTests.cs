@@ -58,6 +58,28 @@ public sealed class AiUsageRecorderTests : IAsyncDisposable
         Tokens: new AiTokenUsage(1_000_000, 100_000));
 
     [Fact]
+    public async Task RecordAsync_ShouldStoreTheCallId()
+    {
+        var callId = Guid.NewGuid();
+
+        await BuildRecorder(new ExchangeRateCache()).RecordAsync(Entry() with { CallId = callId });
+
+        Assert.Equal(callId, (await context.AiUsageLog.AsNoTracking().SingleAsync()).CallId);
+    }
+
+    [Fact]
+    public async Task RecordAsync_WhenSaveFails_ShouldDetachItsRow()
+    {
+        // 1.0.29：context 是同一個 scope 共用的。寫不進去的列若留在追蹤裡，
+        // 呼叫端下一次 SaveChanges 會再送一次（再失敗一次，連累呼叫端自己的存檔）。
+        await context.Database.ExecuteSqlRawAsync("DROP TABLE \"AiUsageLog\"");
+
+        await BuildRecorder(new ExchangeRateCache()).RecordAsync(Entry());
+
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [Fact]
     public async Task RecordAsync_WithoutExchangeRate_ShouldStillWriteTheRow()
     {
         // ⭐ 匯率服務從來沒抓成功過（斷網、剛重啟、對方掛掉）。

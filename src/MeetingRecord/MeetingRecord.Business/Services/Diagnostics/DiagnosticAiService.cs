@@ -28,20 +28,20 @@ public class DiagnosticAiService
 {
     private readonly IEnumerable<ITextGenerationProvider> textGenerationProviders;
     private readonly IOptions<LlmSettings> llmSettings;
-    private readonly AiUsageRecorder usageRecorder;
+    private readonly AiCallGateway gateway;
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<DiagnosticAiService> logger;
 
     public DiagnosticAiService(
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         IOptions<LlmSettings> llmSettings,
-        AiUsageRecorder usageRecorder,
+        AiCallGateway gateway,
         CurrentUserService currentUserService,
         ILogger<DiagnosticAiService> logger)
     {
         this.textGenerationProviders = textGenerationProviders;
         this.llmSettings = llmSettings;
-        this.usageRecorder = usageRecorder;
+        this.gateway = gateway;
         this.currentUserService = currentUserService;
         this.logger = logger;
     }
@@ -70,31 +70,30 @@ public class DiagnosticAiService
     /// 送出一次分析並等到完成。
     /// </summary>
     /// <param name="onDelta">串流時逐段回報新增的文字（不是累積後的全文）；不需要時傳 null。</param>
+    /// <param name="relatedInfo">AI 對話紀錄清單上的關聯說明（1.0.29），例如查詢區間或例外編號。</param>
     /// <exception cref="OperationCanceledException">呼叫端取消；帳本已記為 Cancelled。</exception>
+    /// <exception cref="AiQuotaExceededException">已達 AI 用量上限（沒有送出）。</exception>
     /// <exception cref="InvalidOperationException">未設定供應商。</exception>
     public async Task<DiagnosticAiResult> AnalyzeAsync(
         AiUsageFeature feature,
         string systemPrompt,
         string userPrompt,
         Action<string>? onDelta,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? relatedInfo = null)
     {
         var provider = ResolveProvider();
         var started = DateTime.UtcNow;
 
-        TextGenerationResult generated;
-        try
-        {
-            generated = await provider.GenerateAsync(systemPrompt, userPrompt, onDelta, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            var outcome = ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed;
-            await RecordUsageAsync(feature, provider, outcome, tokens: null, errorMessage: ex.Message);
-            throw;
-        }
-
-        await RecordUsageAsync(feature, provider, AiUsageOutcome.Succeeded, generated.Usage, errorMessage: null);
+        // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理。
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var generated = await gateway.GenerateAsync(
+            provider,
+            new AiCallContext(feature, userId, userName, RelatedInfo: relatedInfo),
+            systemPrompt,
+            userPrompt,
+            onDelta,
+            cancellationToken);
 
         var elapsed = DateTime.UtcNow - started;
         logger.LogInformation(
@@ -106,27 +105,6 @@ public class DiagnosticAiService
             (long)elapsed.TotalMilliseconds);
 
         return new DiagnosticAiResult(generated.Content, generated.Usage, provider.ModelName, elapsed);
-    }
-
-    /// <summary>把這次呼叫寫進用量帳本。這條路徑走在使用者的請求裡，所以拿得到 CurrentUserService。</summary>
-    private Task RecordUsageAsync(
-        AiUsageFeature feature,
-        ITextGenerationProvider provider,
-        AiUsageOutcome outcome,
-        AiTokenUsage? tokens,
-        string? errorMessage)
-    {
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
-
-        return usageRecorder.RecordAsync(new AiUsageEntry(
-            feature,
-            outcome,
-            provider.ProviderName,
-            provider.ModelName,
-            Tokens: tokens,
-            UserId: userId,
-            UserName: userName,
-            ErrorMessage: errorMessage));
     }
 
     /// <summary>依 <c>LlmSettings.DefaultProvider</c> 挑出供應商，形狀比照 <c>TodoExtractionService</c>。</summary>

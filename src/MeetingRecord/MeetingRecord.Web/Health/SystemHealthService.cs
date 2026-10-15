@@ -49,6 +49,8 @@ public sealed class SystemHealthService : ISystemHealthService
     private readonly IOptions<MediaSettings> mediaOptions;
     private readonly IOptions<ExportSettings> exportOptions;
     private readonly IOptions<ExchangeRateSettings> exchangeRateOptions;
+    private readonly IAiQuotaService quotaService;
+    private readonly IOptionsMonitor<AiQuotaSettings> quotaOptions;
     private readonly ExchangeRateCache exchangeRateCache;
     private readonly ITranscriptionProgressNotifier transcriptionProgress;
     private readonly IMeetingDraftProgressNotifier draftProgress;
@@ -75,6 +77,8 @@ public sealed class SystemHealthService : ISystemHealthService
         IOptions<MediaSettings> mediaOptions,
         IOptions<ExportSettings> exportOptions,
         IOptions<ExchangeRateSettings> exchangeRateOptions,
+        IAiQuotaService quotaService,
+        IOptionsMonitor<AiQuotaSettings> quotaOptions,
         ExchangeRateCache exchangeRateCache,
         ITranscriptionProgressNotifier transcriptionProgress,
         IMeetingDraftProgressNotifier draftProgress)
@@ -100,6 +104,8 @@ public sealed class SystemHealthService : ISystemHealthService
         this.mediaOptions = mediaOptions;
         this.exportOptions = exportOptions;
         this.exchangeRateOptions = exchangeRateOptions;
+        this.quotaService = quotaService;
+        this.quotaOptions = quotaOptions;
         this.exchangeRateCache = exchangeRateCache;
         this.transcriptionProgress = transcriptionProgress;
         this.draftProgress = draftProgress;
@@ -124,6 +130,7 @@ public sealed class SystemHealthService : ISystemHealthService
             CheckTranscription(),
             await CheckBackgroundJobsAsync(cancellationToken),
             await CheckRecentErrorsAsync(cancellationToken),
+            await CheckAiQuotaAsync(cancellationToken),
             CheckPdfExport(),
             CheckExchangeRate()
         };
@@ -320,7 +327,9 @@ public sealed class SystemHealthService : ISystemHealthService
             ["AiChat"] = systemSettingsOptions.Value.ExternalFileSystem.AiChatPath,
             // 0.4.123 補上：登入金鑰、例外堆疊。
             ["DataProtectionKey"] = systemSettingsOptions.Value.ExternalFileSystem.DataProtectionKeyPath,
-            ["Exception"] = systemSettingsOptions.Value.ExternalFileSystem.ExceptionPath
+            ["Exception"] = systemSettingsOptions.Value.ExternalFileSystem.ExceptionPath,
+            // 1.0.29 補上：AI 對話紀錄。
+            ["AiCallLog"] = systemSettingsOptions.Value.ExternalFileSystem.AiCallLogPath
         };
 
         var failures = paths
@@ -349,7 +358,7 @@ public sealed class SystemHealthService : ISystemHealthService
             {
                 fileSystem.DatabasePath, fileSystem.DownloadPath, fileSystem.UploadPath, fileSystem.ProjectFilePath,
                 fileSystem.MeetingMediaPath, fileSystem.MeetingTranscriptPath, fileSystem.AiChatPath,
-                fileSystem.DataProtectionKeyPath, fileSystem.ExceptionPath
+                fileSystem.DataProtectionKeyPath, fileSystem.ExceptionPath, fileSystem.AiCallLogPath
             }
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetPathRoot)
@@ -479,6 +488,29 @@ public sealed class SystemHealthService : ISystemHealthService
     {
         return CreateFeatureItem("PDF 匯出", "PdfExport", SystemHealthWeights.PdfExport,
             SystemHealthChecks.EvaluatePdfExport(exportOptions.Value.BrowserPath));
+    }
+
+    /// <summary>AI 用量上限（1.0.29）：只讀帳本與設定。</summary>
+    private async Task<SystemHealthItem> CheckAiQuotaAsync(CancellationToken cancellationToken)
+    {
+        const string name = "AI 用量上限";
+        try
+        {
+            var statuses = await quotaService.GetStatusAsync(null, cancellationToken);
+            var global = statuses.First(x => x.Scope == AiQuotaScope.Global);
+            var perUserLimit = quotaOptions.CurrentValue.PerUserMonthlyTwd;
+            var topUsers = perUserLimit > 0
+                ? await quotaService.GetTopUsersAsync(20, cancellationToken)
+                : [];
+
+            return CreateFeatureItem(name, "AiQuota", SystemHealthWeights.AiQuota,
+                SystemHealthChecks.EvaluateAiQuota(global, perUserLimit, topUsers));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return CreateFeatureItem(name, "AiQuota", SystemHealthWeights.AiQuota,
+                new SystemHealthVerdict(SystemHealthStatus.Unhealthy, $"檢查時發生 {ex.GetType().Name}。", "無法讀取用量帳本。"));
+        }
     }
 
     private SystemHealthItem CheckExchangeRate()

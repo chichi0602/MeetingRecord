@@ -39,6 +39,9 @@ public partial class BackendDBContext : DbContext
     /// <summary>系統例外紀錄（0.4.122）。相同簽章合併成一列並累加次數，完整堆疊存在 ExceptionPath 的檔案裡。</summary>
     public virtual DbSet<ExceptionLog> ExceptionLog { get; set; }
 
+    /// <summary>AI 對話紀錄（1.0.29）。中繼資料一列一次呼叫，送出內容與回應存在 AiCallLogPath 的檔案裡。</summary>
+    public virtual DbSet<AiCallLog> AiCallLog { get; set; }
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -138,6 +141,28 @@ public partial class BackendDBContext : DbContext
             // 刻意不為 Feature／UserId 另建索引：它們只在日期過濾之後才用到，
             // 選擇性不足以打敗表掃描，徒增寫入成本——而帳本是全系統寫入最頻繁的表。
             entity.HasIndex(x => x.OccurredAt);
+
+            // 1.0.29：從 AI 對話紀錄的明細找回同一次呼叫的用量。
+            entity.HasIndex(x => x.CallId);
+        });
+
+        modelBuilder.Entity<AiCallLog>(entity =>
+        {
+            entity.HasIndex(x => x.CallId).IsUnique();
+            entity.HasIndex(x => x.OccurredAt);
+
+            // 刪除會議／專案時連帶刪除，以及明細窗列出同一趟呼叫。
+            entity.HasIndex(x => x.MeetingId);
+            entity.HasIndex(x => x.ProjectId);
+            entity.HasIndex(x => x.ThreadKey);
+
+            entity.Property(x => x.Provider).HasMaxLength(100);
+            entity.Property(x => x.Model).HasMaxLength(200);
+            entity.Property(x => x.UserName).HasMaxLength(200);
+            entity.Property(x => x.RelatedInfo).HasMaxLength(500);
+            entity.Property(x => x.ThreadKey).HasMaxLength(100);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(500);
+            entity.Property(x => x.ContentFile).HasMaxLength(100);
         });
 
         modelBuilder.Entity<ExceptionLog>(entity =>

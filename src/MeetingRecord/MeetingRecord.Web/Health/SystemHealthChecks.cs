@@ -17,7 +17,7 @@ public sealed record SystemHealthVerdict(SystemHealthStatus Status, string Evide
 public sealed record BackgroundJobRecord(BackgroundJobKind Kind, int MeetingId, string Title, bool IsProcessing, DateTime? StartedAt);
 
 /// <summary>
-/// 各檢查項目的權重（0.4.123 重新分配，17 項）。合計必須恰好 100，由 <c>SystemHealthChecksTests</c> 守住——
+/// 各檢查項目的權重（1.0.29 重新分配，18 項：本系統功能加「AI 用量上限」）。合計必須恰好 100，由 <c>SystemHealthChecksTests</c> 守住——
 /// 日後加減項目時忘了重配，總分的意義就會悄悄改變。測試會加總這裡所有 public const，所以這個類別只放權重。
 /// </summary>
 public static class SystemHealthWeights
@@ -36,10 +36,11 @@ public static class SystemHealthWeights
     public const int ExceptionPipeline = 4;
 
     // 本系統功能（28）
-    public const int AiProvider = 9;
-    public const int Transcription = 6;
-    public const int BackgroundJobs = 5;
+    public const int AiProvider = 8;
+    public const int Transcription = 5;
+    public const int BackgroundJobs = 4;
     public const int RecentErrors = 4;
+    public const int AiQuota = 3;
     public const int PdfExport = 2;
     public const int ExchangeRate = 2;
 }
@@ -479,6 +480,58 @@ public static class SystemHealthChecks
         {
             return new(SystemHealthStatus.Unhealthy, $"{evidence}；讀寫測試發生 {ex.GetType().Name}。", $"快取讀寫失敗：{ex.GetType().Name}。");
         }
+    }
+
+    /// <summary>
+    /// AI 用量上限（1.0.29）。只看設定與帳本，不呼叫 AI。
+    /// 全系統每月達上限＝紅燈（所有人的 AI 功能都被擋）；全系統達八成，或有使用者達到每人上限＝黃燈。
+    /// </summary>
+    /// <param name="global">全系統每月的狀態。</param>
+    /// <param name="perUserLimit">每人每月上限；0＝不限制。</param>
+    /// <param name="topUsers">本月用量最高的使用者（由高到低）。</param>
+    public static SystemHealthVerdict EvaluateAiQuota(
+        AiQuotaStatus global,
+        int perUserLimit,
+        IReadOnlyList<AiQuotaUserUsage> topUsers)
+    {
+        if (!global.IsLimited && perUserLimit <= 0)
+        {
+            return new(SystemHealthStatus.Healthy, $"未設定用量上限（AiQuotaSettings 皆為 0）；本月全系統已用 {global.Used:N0} 元。");
+        }
+
+        var usersAtLimit = perUserLimit > 0 ? topUsers.Where(x => x.Used >= perUserLimit).ToList() : [];
+        var usersNearLimit = perUserLimit > 0 ? topUsers.Count(x => x.Used >= perUserLimit * 0.8m) : 0;
+
+        var evidence =
+            (global.IsLimited ? $"全系統本月 {global.Used:N0}／{global.Limit:N0} 元（{global.Ratio:P0}）" : $"全系統本月 {global.Used:N0} 元（不限制）")
+            + "；"
+            + (perUserLimit > 0
+                ? $"每人每月上限 {perUserLimit:N0} 元，已達上限 {usersAtLimit.Count} 人、達八成以上 {usersNearLimit} 人"
+                : "每人每月不限制")
+            + $"；{global.ResetAt:M/d} 重新計算。";
+
+        if (global.IsReached)
+        {
+            return new(SystemHealthStatus.Unhealthy, evidence, "全系統本月已達 AI 用量上限，所有 AI 功能都會被擋下，請到「Token 用量」查看或調高 AiQuotaSettings:GlobalMonthlyTwd。");
+        }
+
+        if (global.IsWarning || usersAtLimit.Count > 0)
+        {
+            var reasons = new List<string>();
+            if (global.IsWarning)
+            {
+                reasons.Add("全系統本月用量已達上限的八成");
+            }
+
+            if (usersAtLimit.Count > 0)
+            {
+                reasons.Add($"{string.Join("、", usersAtLimit.Select(x => x.UserName ?? $"#{x.UserId}"))} 已達每人每月上限，他們的 AI 功能會被擋下");
+            }
+
+            return new(SystemHealthStatus.Degraded, evidence, string.Join("；", reasons) + "。");
+        }
+
+        return new(SystemHealthStatus.Healthy, evidence);
     }
 
     private static bool HasTextPricing(LlmSettings settings, string model)

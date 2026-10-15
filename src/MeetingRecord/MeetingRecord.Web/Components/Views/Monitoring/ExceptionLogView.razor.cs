@@ -603,7 +603,8 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
                 AiDiagnosticPrompts.ExceptionAnalysis,
                 prompt,
                 OnAiDelta,
-                token);
+                token,
+                relatedInfo: $"例外紀錄 #{item.Id}（{item.ExceptionType}）");
 
             if (isDisposed)
             {
@@ -636,7 +637,15 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "AI exception analysis failed. ExceptionLogId={ExceptionLogId}", item.Id);
+            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
+            {
+                Logger.LogWarning("AI exception analysis blocked by AI quota. ExceptionLogId={ExceptionLogId}", item.Id);
+            }
+            else
+            {
+                Logger.LogError(ex, "AI exception analysis failed. ExceptionLogId={ExceptionLogId}", item.Id);
+            }
+
             await WriteAuditAsync("ExceptionLog.AiAnalyze", item.Id.ToString(), $"chars={prompt.Length}; 失敗：{ex.GetType().Name}", success: false);
             ShowAiFailure(ex.Message.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase)
                 ? "這筆例外的內容（多半是堆疊）超過模型的內容上限，無法送交 AI 分析。"

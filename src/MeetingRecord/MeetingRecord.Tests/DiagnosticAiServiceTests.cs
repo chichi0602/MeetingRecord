@@ -20,6 +20,8 @@ public sealed class DiagnosticAiServiceTests : IAsyncDisposable
 {
     private readonly SqliteConnection connection;
     private readonly BackendDBContext context;
+    private readonly RecordingAiCallLogRecorder callLogRecorder = new();
+    private readonly FakeAiQuotaService quota = new();
 
     public DiagnosticAiServiceTests()
     {
@@ -124,9 +126,33 @@ public sealed class DiagnosticAiServiceTests : IAsyncDisposable
         return new DiagnosticAiService(
             [provider],
             settings,
-            new AiUsageRecorder(context, settings, new ExchangeRateCache(), NullLogger<AiUsageRecorder>.Instance),
+            TestAiServices.CreateGateway(context, settings, callLogRecorder, quota),
             currentUser,
             NullLogger<DiagnosticAiService>.Instance);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_QuotaReached_ShouldThrowWithoutCallingTheModel()
+    {
+        quota.Blocked = FakeAiQuotaService.GlobalReached();
+        var provider = new FakeProvider { Response = "x" };
+
+        await Assert.ThrowsAsync<AiQuotaExceededException>(() => CreateService(provider)
+            .AnalyzeAsync(AiUsageFeature.LogAnalysis, "system", "user", null, CancellationToken.None));
+
+        Assert.Null(provider.LastCall);
+        Assert.False(await context.AiUsageLog.AnyAsync());
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_ShouldPassRelatedInfoToTheCallLog()
+    {
+        await CreateService(new FakeProvider { Response = "x" })
+            .AnalyzeAsync(AiUsageFeature.ExceptionAnalysis, "system", "user", null, CancellationToken.None, relatedInfo: "例外紀錄 #3（NullReferenceException）");
+
+        var entry = Assert.Single(callLogRecorder.Entries);
+        Assert.Equal("例外紀錄 #3（NullReferenceException）", entry.RelatedInfo);
+        Assert.Equal(7, entry.UserId);
     }
 
     private sealed class FakeProvider : ITextGenerationProvider

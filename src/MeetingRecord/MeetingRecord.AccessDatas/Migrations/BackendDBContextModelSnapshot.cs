@@ -19,6 +19,94 @@ namespace MeetingRecord.AccessDatas.Migrations
                 .UseCollation("Chinese_Taiwan_Stroke_CI_AS")
                 .HasAnnotation("ProductVersion", "10.0.5");
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AiCallLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("CallId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentFile")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ElapsedMilliseconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Feature")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HttpStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsResponsePartial")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MeetingId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelatedInfo")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RequestCharacters")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ResponseCharacters")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ThreadKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CallId")
+                        .IsUnique();
+
+                    b.HasIndex("MeetingId");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ThreadKey");
+
+                    b.ToTable("AiCallLog");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.AiUsageLog", b =>
                 {
                     b.Property<int>("Id")
@@ -33,6 +121,9 @@ namespace MeetingRecord.AccessDatas.Migrations
 
                     b.Property<int?>("CachedInputTokens")
                         .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("CallId")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ConvertedCurrency")
                         .HasColumnType("TEXT");
@@ -94,6 +185,8 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CallId");
 
                     b.HasIndex("OccurredAt");
 
@@ -291,6 +384,9 @@ namespace MeetingRecord.AccessDatas.Migrations
 
                     b.Property<string>("MediaContentType")
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("MediaDurationSeconds")
+                        .HasColumnType("REAL");
 
                     b.Property<long?>("MediaFileSize")
                         .HasColumnType("INTEGER");

@@ -159,7 +159,16 @@ public partial class TodoExtractionModal : ComponentBase
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to extract todos. MeetingId={MeetingId}", MeetingId);
+            // 已達用量上限是預期中的狀況，記 Warning、不進系統例外紀錄（1.0.29）。
+            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
+            {
+                Logger.LogWarning("Todo extraction blocked by AI quota. MeetingId={MeetingId}", MeetingId);
+            }
+            else
+            {
+                Logger.LogError(ex, "Failed to extract todos. MeetingId={MeetingId}", MeetingId);
+            }
+
             errorMessage = ex.Message;
         }
         finally

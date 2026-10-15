@@ -347,6 +347,46 @@ public sealed class MeetingDraftJobRunnerTests
     #region 失敗與跳過
 
     [Fact]
+    public async Task RunAsync_ShouldLinkEveryCallToOneThreadInTheCallLog()
+    {
+        // 1.0.29：一趟生成的分段摘要與最終整理共用一個 ThreadKey，對話紀錄與帳本用同一個 CallId 對應。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var longTranscript = string.Join("\n\n", new string('甲', 10000), new string('乙', 10000));
+        var meeting = await fixture.AddCompletedMeetingAsync("長會議", longTranscript, template);
+
+        await fixture.CreateRunner(new FakeTextGenerationProvider("段落摘要")).RunAsync(meeting.Id, CancellationToken.None);
+
+        var entries = fixture.CallLogRecorder.Entries;
+        Assert.Equal(3, entries.Count);
+        Assert.Single(entries.Select(x => x.ThreadKey).Distinct());
+        Assert.StartsWith($"draft:{meeting.Id}:", entries[0].ThreadKey);
+        Assert.EndsWith("分段摘要 1/2", entries[0].RelatedInfo);
+        Assert.EndsWith("會議紀錄", entries[2].RelatedInfo);
+        Assert.Equal(
+            (await fixture.ReadUsageLogAsync()).Select(x => x.CallId),
+            entries.Select(x => (Guid?)x.CallId));
+    }
+
+    [Fact]
+    public async Task RunAsync_QuotaReached_ShouldFailWithoutCallingTheModel()
+    {
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議", "內容", template);
+        fixture.Quota.Blocked = FakeAiQuotaService.GlobalReached();
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().FirstAsync(x => x.Id == meeting.Id);
+        Assert.Equal(DraftStatus.Failed, saved.DraftStatus);
+        Assert.Contains("已達 AI 用量上限", saved.DraftError);
+        Assert.Empty(provider.Calls);
+        Assert.Empty(await fixture.ReadUsageLogAsync());
+    }
+
+    [Fact]
     public async Task RunAsync_ShouldMarkFailedWithMessage_WhenProviderThrows()
     {
         await using var fixture = await DraftJobFixture.CreateAsync();
@@ -531,6 +571,11 @@ public sealed class MeetingDraftJobRunnerTests
         /// <summary>進度通知器沒有外部相依，直接用真的。</summary>
         public MeetingDraftProgressNotifier ProgressNotifier { get; } = new();
 
+        /// <summary>1.0.29：AI 對話紀錄（記在記憶體）與用量上限（預設不限制）。</summary>
+        public RecordingAiCallLogRecorder CallLogRecorder { get; } = new();
+
+        public FakeAiQuotaService Quota { get; } = new();
+
         public MeetingDraftJobRunner CreateRunner(ITextGenerationProvider provider)
         {
             return new MeetingDraftJobRunner(
@@ -541,7 +586,7 @@ public sealed class MeetingDraftJobRunnerTests
                 ProgressNotifier,
                 // 用真的 Recorder 而不是假的：它與 runner 共用同一個 context，
                 // 而「記帳的 SaveChanges 會不會提前提交 runner 的變更」正是要測的事情之一。
-                new AiUsageRecorder(Context, llmSettings, new ExchangeRateCache(), loggerFactory.CreateLogger<AiUsageRecorder>()),
+                TestAiServices.CreateGateway(Context, llmSettings, CallLogRecorder, Quota),
                 loggerFactory.CreateLogger<MeetingDraftJobRunner>());
         }
 

@@ -211,7 +211,8 @@ public sealed class ProjectServiceTests
                 loggerFactory.CreateLogger<ProjectService>(),
                 systemSettings,
                 chatStore,
-                TestProjectAccess.Admin(Context));
+                TestProjectAccess.Admin(Context),
+                TestAiServices.CreateCallLogService(Context));
         }
 
         public async ValueTask DisposeAsync()

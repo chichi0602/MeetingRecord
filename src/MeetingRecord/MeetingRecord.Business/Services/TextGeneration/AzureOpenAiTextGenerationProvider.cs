@@ -125,7 +125,8 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
                 "Azure OpenAI chat completion request failed. StatusCode={StatusCode}",
                 (int)response.StatusCode);
 
-            throw new InvalidOperationException(
+            throw new AiProviderHttpException(
+                (int)response.StatusCode,
                 $"文字生成 API 回應 {(int)response.StatusCode} {response.ReasonPhrase}：{Truncate(errorBody, 500)}");
         }
 

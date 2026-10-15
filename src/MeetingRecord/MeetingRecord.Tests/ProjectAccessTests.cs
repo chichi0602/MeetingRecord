@@ -653,7 +653,8 @@ public sealed class ProjectAccessTests
                 loggerFactory.CreateLogger<ProjectService>(),
                 systemSettings,
                 new AiChatStore(systemSettings, loggerFactory.CreateLogger<AiChatStore>()),
-                Access(userId, isAdmin));
+                Access(userId, isAdmin),
+                TestAiServices.CreateCallLogService(Context));
 
         public TodoService CreateTodoService(int userId, bool isAdmin = false)
             => new(Context, mapper, loggerFactory.CreateLogger<TodoService>(), Access(userId, isAdmin));

@@ -73,12 +73,12 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 
 - **帳號與權限**：使用者管理（含首次登入強制改密碼、停用帳號在登入頁擋下）、角色管理（一鍵建立預設角色）
 - **監控與診斷**（0.4.120 起；除 AI 用量分析外都只限管理者，不能勾給角色）：
-  - **系統健康監控**（`/system-health`）：17 項檢查（0.4.123 新增登入金鑰、快取服務、例外紀錄管線）的健康分數、紅黃綠燈號，與展開才載入的最近 24 小時警告以上日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
+  - **系統健康監控**（`/system-health`）：18 項檢查（0.4.123 新增登入金鑰、快取服務、例外紀錄管線；1.0.29 新增 AI 用量上限）的健康分數、紅黃綠燈號，與展開才載入的最近 24 小時警告以上日誌（見[系統健康監控 PRD](docs/prd/系統健康監控-prd.md)）
   - **日誌檢視**（`/logs`，0.4.121）：依時間、等級、關鍵字、TraceId 查 NLog 檔案日誌，展開看堆疊、複製、匯出 .log；**AI 日誌分析**把最新 100 筆送給 AI 整理重點與建議（會產生費用，記入 AI 用量）（見[日誌檢視 PRD](docs/prd/日誌檢視-prd.md)）
   - **日誌等級設定**（`/log-level-setting`）：執行期調整 NLog 等級（只在記憶體、重啟即回預設）（見[日誌等級設定 PRD](docs/prd/日誌等級設定-prd.md)）
   - **系統例外紀錄**（`/system-exceptions`，0.4.122，含 AI 例外分析、錯誤追蹤碼）：畫面、Web API、背景作業、系統啟動與瀏覽器的例外自動收集，相同例外合併計次、完整堆疊另存檔案；可篩選、複製、匯出 CSV、清除；**AI 例外分析**把單筆例外送給 AI 找根因與修正建議（會產生費用，記入 AI 用量）；錯誤畫面顯示 8 碼錯誤追蹤碼，可在此頁與日誌檢視查到同一次操作（見[系統例外紀錄 PRD](docs/prd/系統例外紀錄-prd.md)）
   - **資料庫用量**（`/database-usage`）：SQLite 檔案與各資料表用量，以及各外部目錄大小與磁碟剩餘空間（見[資料庫用量 PRD](docs/prd/資料庫用量-prd.md)）
-  - **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
+  - **AI 用量分析**（`/ai-usage`）：每次 LLM／轉錄呼叫記入用量帳本，依 `LlmSettings.Pricing` 計價，並以背景服務抓取匯率換算新台幣；1.0.29 起所有付費 AI 呼叫經 `AiCallGateway`，同時寫 AI 對話紀錄，並可設每月用量上限（見[AI 用量分析 PRD](docs/prd/AI用量分析-prd.md)）
 - 資料定義：分類清單、團隊清單、提示詞清單（內建範本、`{{transcript}}` 等變數、啟用狀態就地切換）
 - AI 供應商可換：`ITranscriptionProvider` 與文字生成供應商為擴充點，provider／endpoint／key／model 全部由 `appsettings.json` 決定，目前內建 Azure OpenAI
 
@@ -90,7 +90,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
 - 平行 API 路由：保留 `/api/...`，新增 `/api/v1/...` 作為新用戶端標準入口
 - Health checks：`/health/live`、`/health/ready`
-- 系統健康監控頁：`/system-health`，只限管理員，查看 17 項檢查的健康分數、紅黃綠燈號與最近 24 小時警告以上日誌
+- 系統健康監控頁：`/system-health`，只限管理員，查看 18 項檢查的健康分數、紅黃綠燈號與最近 24 小時警告以上日誌
 - 分散式快取：`ICacheService` 統一抽象，透過 `appsettings.json` 在 Memory ↔ Redis 間切換（側邊選單已套用）
 - Production 啟動安全檢查：JWT key、預設密碼、Swagger 暴露策略與 Redis 連線字串需明確設定
 - Sidebar 導覽：JSON 定義、三層選單（收合時浮出選單同樣支援第三層）、可收合、自動套用使用者角色權限
@@ -217,7 +217,9 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `NLog.BasePath` | NLog 寫入的根目錄；專案會在其下建立 `MeetingRecord.Web` 子目錄並輸出檔案日誌。 |
 | `JwtSettings` | Web API JWT 設定：`Issuer`、`Audience`、`SigningKey`、`AccessTokenMinutes`、`RefreshTokenDays`、`ClockSkewMinutes`；Production 啟動時若仍為開發用 `SigningKey` 會中止啟動。 |
 | `CookieSettings` | 網頁登入 Cookie 效期（0.4.119）：`ExpireMinutes`（沒勾記住我，預設 480＝8 小時）、`RememberMeDays`（勾了記住我與 Google 登入，預設 30 天）、`SlidingExpiration`（預設 `true`，期間回來使用會自動延長）。 |
-| `LogRetentionSettings` | 系統例外紀錄保存天數（0.4.122）：`ExceptionLogDays`（預設 90，「最後發生」超過的每天自動刪除，`0`＝不自動清理）。 |
+| `LogRetentionSettings` | 系統例外紀錄保存天數（0.4.122）：`ExceptionLogDays`（預設 90，「最後發生」超過的每天自動刪除，`0`＝不自動清理）；AI 用量帳本保存天數（1.0.29）：`AiUsageLogDays`（預設 `0`＝永久保留，啟用時至少 62）。 |
+| `AiCallLogSettings` | AI 對話紀錄（1.0.29）：`Enabled`（預設 `true`，記錄每次付費 AI 呼叫的送出內容與回應）、`RetentionDays`（預設 90，1～3650，沒有永久保留）。 |
+| `AiQuotaSettings` | AI 用量上限（1.0.29，新台幣）：`GlobalMonthlyTwd`（全系統每月）、`PerUserMonthlyTwd`（每人每月），`0`＝不限制（預設）；改設定檔即生效、不必重啟。 |
 | `ClientErrorReporting` | 瀏覽器端錯誤回報（0.4.122）：`Enabled`（預設 `true`）、`MaxPerCircuitPerMinute`（每個連線每分鐘上限，預設 10）。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
@@ -238,6 +240,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `SystemSettings.ExternalFileSystem.AiChatPath` | AI 問答對話與附件的存放根目錄（0.4.60 起對話改存檔案系統）；不對外服務。 |
 | `SystemSettings.ExternalFileSystem.DataProtectionKeyPath` | Data Protection 金鑰環目錄（0.4.119），登入 Cookie 靠它加密，存在這裡才撐得過 IIS 回收與重啟；留空啟動失敗、不可放在網站目錄內、刪掉＝所有人重登。 |
 | `SystemSettings.ExternalFileSystem.ExceptionPath` | 系統例外紀錄的完整堆疊檔目錄（0.4.122，`yyyyMM/` 細分），底下 `pending/` 放啟動失敗的補登檔；不對外服務。 |
+| `SystemSettings.ExternalFileSystem.AiCallLogPath` | AI 對話紀錄的內容檔目錄（1.0.29，`yyyyMM/{CallId}.json`），含逐字稿、會議紀錄與 AI 問答全文；只開放給應用程式身分、不可放在網站或下載目錄內；不對外服務。 |
 | `AutoMapper:LicenseKey` | AutoMapper 商業授權金鑰（可留空）。 |
 
 各區段詳解見 [docs/operations/日誌與設定檔說明.md](docs/operations/日誌與設定檔說明.md)。
@@ -298,7 +301,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [分散式快取機制](docs/features/分散式快取機制.md) — `ICacheService`、Memory ↔ Redis 切換、選單快取與失效行為。
 - [多語系與本地化](docs/features/多語系與本地化.md) — `RequestLocalization` 設定、`AntDesignLocaleFactory`、支援文化。
 - [檔案上傳機制](docs/features/檔案上傳機制.md) — 專案附件、會議影音、AI 問答附件、年月目錄、刪除同步、容量上限。
-- [系統健康監控](docs/features/系統健康監控.md) — 17 項檢查的健康分數、紅黃綠燈號、部署探針與最近 24 小時警告以上日誌。
+- [系統健康監控](docs/features/系統健康監控.md) — 18 項檢查的健康分數、紅黃綠燈號、部署探針與最近 24 小時警告以上日誌。
 
 ### 開發與操作指南（guides）
 

@@ -291,6 +291,18 @@ namespace MeetingRecord.Web
                     .Bind(builder.Configuration.GetSection(ClientErrorReportingSettings.SectionName))
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
+
+                // AI 對話紀錄與用量上限（1.0.29）。兩者都以 IOptionsMonitor 讀，改設定檔即生效。
+                builder.Services
+                    .AddOptions<AiCallLogSettings>()
+                    .Bind(builder.Configuration.GetSection(AiCallLogSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
+                builder.Services
+                    .AddOptions<AiQuotaSettings>()
+                    .Bind(builder.Configuration.GetSection(AiQuotaSettings.SectionName))
+                    .ValidateDataAnnotations()
+                    .ValidateOnStart();
                 #endregion
 
                 #region 系統使用的目錄準備
@@ -306,6 +318,7 @@ namespace MeetingRecord.Web
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.AiChatPath, "ai chat");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.DataProtectionKeyPath, "data protection key");
                 EnsureDirectoryExists(systemSettings.ExternalFileSystem.ExceptionPath, "exception stack trace");
+                EnsureDirectoryExists(systemSettings.ExternalFileSystem.AiCallLogPath, "ai call log");
                 #endregion
 
                 #region Data Protection 金鑰環

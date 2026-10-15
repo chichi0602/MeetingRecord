@@ -481,7 +481,16 @@ public partial class AiChatModal : ComponentBase
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "AI chat failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
+            // 已達用量上限是預期中的狀況，記 Warning、不進系統例外紀錄（1.0.29）。
+            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
+            {
+                Logger.LogWarning("AI chat blocked by AI quota. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
+            }
+            else
+            {
+                Logger.LogError(ex, "AI chat failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
+            }
+
             errorMessage = $"回答失敗：{ex.Message}";
 
             // 失敗時把樂觀加入的那則提問收回來，避免畫面上留下一則沒有回應的問題。
@@ -797,8 +806,16 @@ public partial class AiChatModal : ComponentBase
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Regenerating AI chat answer failed. Scope={Scope}, TargetId={TargetId}, Index={Index}",
-                Scope, TargetId, index);
+            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
+            {
+                Logger.LogWarning("Regenerating AI chat answer blocked by AI quota. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
+            }
+            else
+            {
+                Logger.LogError(ex, "Regenerating AI chat answer failed. Scope={Scope}, TargetId={TargetId}, Index={Index}",
+                    Scope, TargetId, index);
+            }
+
             errorMessage = $"重新產生失敗：{ex.Message}";
         }
         finally

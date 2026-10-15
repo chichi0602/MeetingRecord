@@ -38,6 +38,8 @@ public class MeetingService
     private readonly IMeetingDraftQueue draftQueue;
     private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
     private readonly CurrentUserService currentUserService;
+    private readonly AiCallLogService aiCallLogService;
+    private readonly IAiQuotaService quotaService;
 
     public IMapper Mapper { get; }
     public ILogger<MeetingService> Logger { get; }
@@ -53,7 +55,9 @@ public class MeetingService
         ITranscriptionProgressNotifier progressNotifier,
         IMeetingDraftQueue draftQueue,
         IMeetingDraftProgressNotifier draftProgressNotifier,
-        CurrentUserService currentUserService)
+        CurrentUserService currentUserService,
+        AiCallLogService aiCallLogService,
+        IAiQuotaService quotaService)
     {
         this.context = context;
         Mapper = mapper;
@@ -66,6 +70,8 @@ public class MeetingService
         this.draftQueue = draftQueue;
         this.draftProgressNotifier = draftProgressNotifier;
         this.currentUserService = currentUserService;
+        this.aiCallLogService = aiCallLogService;
+        this.quotaService = quotaService;
     }
 
     /// <summary>
@@ -281,6 +287,7 @@ public class MeetingService
             itemData.MediaRelativePath = item.MediaRelativePath;
             itemData.MediaContentType = item.MediaContentType;
             itemData.MediaFileSize = item.MediaFileSize;
+            itemData.MediaDurationSeconds = item.MediaDurationSeconds;
             itemData.TranscriptRelativePath = item.TranscriptRelativePath;
             itemData.TranscriptionStatus = item.TranscriptionStatus;
             itemData.TranscriptionError = item.TranscriptionError;
@@ -372,6 +379,9 @@ public class MeetingService
             // 0.4.60 起對話存在檔案系統，資料表已移除，Cascade 不會再幫我們清掉它。
             chatStore.TryDelete(AiChatScope.Meeting, id);
 
+            // 1.0.29：AI 對話紀錄含這場會議的逐字稿與會議紀錄全文，跟著會議一起刪（用量帳本不動）。
+            await TryDeleteAiCallLogsAsync(id);
+
             Logger.LogInformation("Meeting deleted successfully. MeetingId={MeetingId}, Title={Title}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -385,6 +395,34 @@ public class MeetingService
     }
 
     #endregion
+
+    /// <summary>刪除會議的 AI 對話紀錄。盡力而為：失敗只記日誌，不影響已完成的刪除。</summary>
+    private async Task TryDeleteAiCallLogsAsync(int meetingId)
+    {
+        try
+        {
+            var removed = await aiCallLogService.DeleteByMeetingAsync(meetingId);
+            if (removed > 0)
+            {
+                Logger.LogInformation("AI call logs deleted with meeting. MeetingId={MeetingId}, Rows={Rows}", meetingId, removed);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete AI call logs of meeting. MeetingId={MeetingId}", meetingId);
+        }
+    }
+
+    /// <summary>
+    /// 入列前的用量上限預檢（1.0.29）：已達上限就直接回訊息，不改任何狀態也不入列。
+    /// 背景工作開始時還會再檢查一次（上傳後自動入列的轉錄就靠那一次）。
+    /// </summary>
+    private async Task<string?> CheckQuotaAsync(CancellationToken cancellationToken)
+    {
+        var (userId, _) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var blocked = await quotaService.CheckAsync(userId, cancellationToken);
+        return blocked is null ? null : AiQuotaExceededException.BuildMessage(blocked);
+    }
 
     /// <summary>轉錄或會議紀錄生成正在排隊或執行中。</summary>
     private static bool IsJobActive(Meeting meeting)
@@ -516,6 +554,7 @@ public class MeetingService
             meeting.MediaRelativePath = stored.RelativePath;
             meeting.MediaContentType = stored.ContentType;
             meeting.MediaFileSize = stored.FileSize;
+            meeting.MediaDurationSeconds = null;
             meeting.TranscriptRelativePath = null;
             meeting.TranscriptionStatus = TranscriptionStatus.Pending;
             meeting.TranscriptionError = null;
@@ -621,6 +660,12 @@ public class MeetingService
             if (meeting.TranscriptionStatus is TranscriptionStatus.Processing or TranscriptionStatus.Pending)
             {
                 return VerifyRecordResultFactory.Build(false, "這筆會議紀錄已排入轉錄，請稍候。");
+            }
+
+            if (await CheckQuotaAsync(cancellationToken) is { } quotaMessage)
+            {
+                Logger.LogWarning("Transcription requeue blocked by AI quota. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, quotaMessage);
             }
 
             meeting.TranscriptionStatus = TranscriptionStatus.Pending;
@@ -914,6 +959,12 @@ public class MeetingService
             if (template is null || !template.IsEnabled)
             {
                 return VerifyRecordResultFactory.Build(false, "找不到指定的提示詞，或該提示詞已停用。");
+            }
+
+            if (await CheckQuotaAsync(cancellationToken) is { } quotaMessage)
+            {
+                Logger.LogWarning("Draft request blocked by AI quota. MeetingId={MeetingId}", meetingId);
+                return VerifyRecordResultFactory.Build(false, quotaMessage);
             }
 
             meeting.ProjectId = effectiveProjectId;

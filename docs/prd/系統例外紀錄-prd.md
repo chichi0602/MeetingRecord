@@ -1,6 +1,6 @@
 ﻿# 系統例外紀錄 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.122（移植自 NET10-Blazor-Starter；不含 Email 告警、AI 例外分析只做單次分析）
@@ -42,7 +42,7 @@
 5. **其他來源**：`LoggingErrorBoundary`（`Routes.razor` 兩層：頁面、浮層）；`ProcessExceptionHooks`（未觀察的 Task 例外記為「系統」；程序層級未處理例外寫補登檔）；`BrowserErrorReporter`（登入後 `MainLayout` 註冊，瀏覽器的 `error`／`unhandledrejection` 經 circuit 回報，每 circuit 每分鐘最多 10 筆，忽略外掛腳本）。
 6. **啟動失敗補登**：`Program.cs` 的 catch（排除 `HostAbortedException`，`dotnet ef` 不會留假紀錄）先寫 `ExceptionPath/pending/*.json`；下次成功啟動、Migration 之後匯入並刪檔。
 7. **保留期限**：`ExceptionLogRetentionBackgroundService` 啟動先跑一次、之後每 24 小時，刪除「最後發生」（本地時間）超過 `LogRetentionSettings:ExceptionLogDays` 天的紀錄與堆疊檔；0＝不清。
-8. **AI**：`AiExceptionPromptBuilder` 組使用者訊息（只寫「有／無登入使用者」），系統提示詞 `AiDiagnosticPrompts.ExceptionAnalysis`，經 `DiagnosticAiService` 呼叫並記入 AI 用量（`AiUsageFeature.ExceptionAnalysis = 6`「AI 例外分析」，成功／失敗／取消都記）。
+8. **AI**：`AiExceptionPromptBuilder` 組使用者訊息（只寫「有／無登入使用者」），系統提示詞 `AiDiagnosticPrompts.ExceptionAnalysis`，經 `DiagnosticAiService` 呼叫並記入 AI 用量（`AiUsageFeature.ExceptionAnalysis = 6`「AI 例外分析」，成功／失敗／取消都記）。1.0.29 起 `DiagnosticAiService` 經 `AiCallGateway`，同時以同一個 CallId 記進 AI 對話紀錄（完整送出內容與回應，關聯說明「例外紀錄 #N（例外類型）」）；送出前檢查 AI 用量上限。
 
 ## 五、權限與安全
 
@@ -59,6 +59,7 @@
 - 兩筆同簽章同時新增：唯一索引擋下第二筆，改為累加。
 - 刪除列一定同時刪堆疊檔（`ExceptionStackFileStore` 是唯一出入口），不留孤兒檔。
 - AI 內容超過模型上限：顯示「這筆例外的內容（多半是堆疊）超過模型的內容上限」。
+- 已達 AI 用量上限（1.0.29）：顯示「已達 AI 用量上限…」訊息，不送出、不記帳；記 Warning，**不會**再被收進系統例外紀錄。
 
 ## 七、驗收與測試
 

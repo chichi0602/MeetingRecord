@@ -28,7 +28,7 @@ public class TranscriptionJobRunner
     private readonly MeetingFileStore fileStore;
     private readonly IOptions<LlmSettings> llmSettings;
     private readonly ITranscriptionProgressNotifier progressNotifier;
-    private readonly AiUsageRecorder usageRecorder;
+    private readonly AiCallGateway gateway;
     private readonly ILogger<TranscriptionJobRunner> logger;
 
     public TranscriptionJobRunner(
@@ -38,7 +38,7 @@ public class TranscriptionJobRunner
         MeetingFileStore fileStore,
         IOptions<LlmSettings> llmSettings,
         ITranscriptionProgressNotifier progressNotifier,
-        AiUsageRecorder usageRecorder,
+        AiCallGateway gateway,
         ILogger<TranscriptionJobRunner> logger)
     {
         this.context = context;
@@ -47,7 +47,7 @@ public class TranscriptionJobRunner
         this.fileStore = fileStore;
         this.llmSettings = llmSettings;
         this.progressNotifier = progressNotifier;
-        this.usageRecorder = usageRecorder;
+        this.gateway = gateway;
         this.logger = logger;
     }
 
@@ -78,6 +78,30 @@ public class TranscriptionJobRunner
             logger.LogWarning("Transcription skipped because meeting has no media file. MeetingId={MeetingId}", meetingId);
             return;
         }
+
+        // 1.0.29：一個音檔的所有段落共用同一個 ThreadKey，AI 對話紀錄才看得出是同一次轉錄。
+        var callContext = new AiCallContext(
+            AiUsageFeature.Transcription,
+            requestedByUserId,
+            requestedByUserName,
+            meeting.Id,
+            meeting.ProjectId,
+            ThreadKey: $"transcription:{meeting.Id}:{Guid.NewGuid():N}");
+
+        // 1.0.29：用量上限在工作開始時檢查一次（轉檔之前）；一旦開始就做完——
+        // 轉到第 5 段才擋下的話，前 4 段的錢白花了又沒有逐字稿。
+        var blocked = await gateway.AdmitAsync(callContext, cancellationToken);
+        if (blocked is not null)
+        {
+            logger.LogWarning(
+                "Transcription blocked by AI quota. MeetingId={MeetingId}, Scope={Scope}",
+                meetingId,
+                blocked.Scope);
+            await MarkFailedAsync(meeting, AiQuotaExceededException.BuildMessage(blocked));
+            return;
+        }
+
+        callContext = callContext with { QuotaAdmitted = true };
 
         meeting.TranscriptionStatus = TranscriptionStatus.Processing;
         meeting.TranscriptionStartedAt = DateTime.Now;
@@ -117,41 +141,26 @@ public class TranscriptionJobRunner
 
                 var thisSegmentSeconds = index < segmentSeconds.Count ? segmentSeconds[index] : (double?)null;
 
+                // 記帳與 AI 對話紀錄由 gateway 處理（失敗時音檔多半已上傳、已計費，照樣記）。
+                // ⚠️ gateway 在呼叫結束時就記帳，所以下面兩個 continue（指令洩漏被丟棄、整段無人說話）不會漏記——
+                //    那一次轉錄照樣花了錢。轉錄每段一筆（每 15 分鐘一段），按時長計費。
                 string segmentText;
                 await using (var segmentStream = File.OpenRead(segmentPath))
                 {
-                    try
-                    {
-                        segmentText = await provider.TranscribeAsync(
-                            segmentStream, Path.GetFileName(segmentPath), cancellationToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        // 音檔已經上傳出去了，多半已計費。先記帳再往外拋。
-                        await RecordUsageAsync(
-                            provider,
-                            meeting,
-                            requestedByUserId,
-                            requestedByUserName,
-                            ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
-                            audioSeconds: null,
-                            segments.IsDurationEstimated,
-                            ex.Message);
-                        throw;
-                    }
+                    segmentText = await gateway.TranscribeAsync(
+                        provider,
+                        callContext with
+                        {
+                            RelatedInfo = $"會議 #{meeting.Id}〈{meeting.Title}〉語音轉錄 {index + 1}/{segments.SegmentFullPaths.Count}",
+                        },
+                        segmentStream,
+                        Path.GetFileName(segmentPath),
+                        thisSegmentSeconds,
+                        segments.IsDurationEstimated,
+                        index + 1,
+                        segments.SegmentFullPaths.Count,
+                        cancellationToken);
                 }
-
-                // ⚠️ 記帳與進度一樣，都必須在下面兩個 continue **之前**：
-                //    指令洩漏被丟棄、或整段無人說話的段落，那一次轉錄照樣花了錢。
-                await RecordUsageAsync(
-                    provider,
-                    meeting,
-                    requestedByUserId,
-                    requestedByUserName,
-                    AiUsageOutcome.Succeeded,
-                    thisSegmentSeconds,
-                    segments.IsDurationEstimated,
-                    errorMessage: null);
 
                 // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
                 progressNotifier.ReportSegment(meetingId, index + 1, segments.SegmentFullPaths.Count);
@@ -188,6 +197,9 @@ public class TranscriptionJobRunner
                 cancellationToken);
 
             meeting.TranscriptRelativePath = transcriptRelativePath;
+
+            // 1.0.29：會議自己記時長（儀表板「會議時數」讀這一欄）；以前是加總帳本的轉錄秒數，但帳本可以被清除了。
+            meeting.MediaDurationSeconds = segmentSeconds.Count > 0 ? segmentSeconds.Sum() : null;
             meeting.TranscriptionStatus = TranscriptionStatus.Completed;
             meeting.TranscriptionError = null;
             meeting.TranscriptionCompletedAt = DateTime.Now;
@@ -236,36 +248,6 @@ public class TranscriptionJobRunner
     /// <summary>
     /// 依 <c>LlmSettings.TranscriptionProvider</c>（或 DefaultProvider）挑出對應的供應商實作。
     /// </summary>
-    /// <summary>
-    /// 把一段轉錄呼叫寫進用量帳本。
-    ///
-    /// <para>
-    /// ⚠️ 一個音檔會寫下 <b>N 筆</b>（每 15 分鐘一段各打一次 API），不是一筆。
-    /// 轉錄按**時長**計費，所以這裡填的是 <c>AudioSeconds</c> 而不是 token。
-    /// </para>
-    /// </summary>
-    private Task RecordUsageAsync(
-        ITranscriptionProvider provider,
-        Meeting meeting,
-        int? requestedByUserId,
-        string? requestedByUserName,
-        AiUsageOutcome outcome,
-        double? audioSeconds,
-        bool isDurationEstimated,
-        string? errorMessage)
-        => usageRecorder.RecordAsync(new AiUsageEntry(
-            AiUsageFeature.Transcription,
-            outcome,
-            provider.ProviderName,
-            provider.ModelName,
-            AudioSeconds: audioSeconds,
-            IsAudioDurationEstimated: isDurationEstimated,
-            UserId: requestedByUserId,
-            UserName: requestedByUserName,
-            MeetingId: meeting.Id,
-            ProjectId: meeting.ProjectId,
-            ErrorMessage: errorMessage));
-
     private ITranscriptionProvider ResolveProvider()
     {
         var settings = llmSettings.Value;

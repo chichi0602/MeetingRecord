@@ -53,6 +53,12 @@ public class ExternalFileSystem
     /// 資料庫只存摘要，完整堆疊在這裡；刪除紀錄時一併刪檔（<c>ExceptionStackFileStore</c>）。
     /// </summary>
     public string ExceptionPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// AI 對話紀錄的內容檔（<c>yyyyMM/{CallId}.json</c>）根目錄（1.0.29）。
+    /// ⚠️ 內容含會議逐字稿、會議紀錄、專案文件與 AI 問答全文：只開放給應用程式身分，不可放在網站目錄或下載目錄內。
+    /// </summary>
+    public string AiCallLogPath { get; set; } = string.Empty;
 }
 
 public class BootstrapSettings

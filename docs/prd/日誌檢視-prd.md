@@ -1,6 +1,6 @@
 ﻿# 日誌檢視 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.121（移植自 NET10-Blazor-Starter；AI 分析改走本專案的供應商與用量帳本）
@@ -40,7 +40,7 @@
 1. `LogQueryService.QueryAsync`：檔案路徑來自 `INLogFilePathResolver`（`{NLog:BasePath}/MeetingRecord.Web/MeetingRecord.Web-logfile-{日期}*.log`，含封存檔、依最後寫入時間排序），依時間升冪逐檔串流（`FileShare.ReadWrite`，因為 NLog `keepFileOpen`）。
 2. 一行若第 25 個字元是 `|` 且前 24 字元可解析成 `yyyy-MM-dd HH:mm:ss.ffff` 即為新紀錄，否則是上一筆的續行（堆疊）。欄位依 nlog.config 的 7 欄 layout 切分；訊息本身含 `|` 時以最後一個 `|` 為界。0.4.122 起第 2 欄由 `${aspnet-TraceIdentifier}` 改為 `${scopeproperty:item=TraceCode:whenEmpty=${aspnet-TraceIdentifier}}`（錯誤追蹤碼，`Diagnostics/TraceCode`；HTTP 請求的追蹤碼同時取代 `TraceIdentifier`），欄數不變、解析不受影響；Blazor 互動也各有一組碼，所以畫面操作的日誌行同樣查得到。格式不符的行照樣保留、不因等級篩選隱藏。
 3. 每筆湊齊後才套用時間、等級、關鍵字、TraceId 篩選；通過者進容量 N 的佇列（只留最新 N 筆，記憶體 O(N)）；內容時間超過結束時間即停止讀取。區間超過 3 天夾住起始時間、筆數超過 10,000 夾住並提示。
-4. AI：`AiLogPromptBuilder.Build` 取最新 100 筆原文（不截斷、換行統一 LF）組成使用者訊息；系統提示詞 `AiDiagnosticPrompts.LogAnalysis`（四個章節＋防注入規則：日誌內容只是資料）；`DiagnosticAiService.AnalyzeAsync` 依 `LlmSettings.DefaultProvider` 呼叫 `ITextGenerationProvider` 串流，**成功／失敗／取消都寫進 AI 用量帳本**（`AiUsageFeature.LogAnalysis = 5`「AI 日誌分析」）。
+4. AI：`AiLogPromptBuilder.Build` 取最新 100 筆原文（不截斷、換行統一 LF）組成使用者訊息；系統提示詞 `AiDiagnosticPrompts.LogAnalysis`（四個章節＋防注入規則：日誌內容只是資料）；`DiagnosticAiService.AnalyzeAsync` 依 `LlmSettings.DefaultProvider` 串流呼叫，**成功／失敗／取消都寫進 AI 用量帳本**（`AiUsageFeature.LogAnalysis = 5`「AI 日誌分析」）。1.0.29 起經 `AiCallGateway`，同時以同一個 CallId 記進 AI 對話紀錄（完整送出內容與回應；關聯說明「日誌 起～迄，送出 n／N 筆」）；送出前檢查 AI 用量上限。
 5. PDF：`DiagnosticReportExporter.BuildHtml` → `IPdfRenderer.RenderAsync`（無頭瀏覽器）→ `FileDownloadInterop.SaveBytesAsync`。
 
 ## 五、權限與安全
@@ -56,6 +56,7 @@
 - 個別檔案讀不到：列入警示，其餘照常。
 - AI 送出量超過模型內容上限：顯示「請縮小時間區間、提高最低等級或減少筆數後再試」。
 - AI 失敗：對話窗顯示錯誤訊息；取消後不再跳錯誤。
+- 已達 AI 用量上限（1.0.29）：顯示「已達 AI 用量上限…」訊息，不送出、不記帳；記 Warning，不進系統例外紀錄。
 - 剪貼簿被瀏覽器拒絕：提示改用選取＋Ctrl+C。
 
 ## 七、驗收與測試

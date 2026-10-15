@@ -426,7 +426,8 @@ public partial class LogViewerView : ComponentBase, IDisposable
                 AiDiagnosticPrompts.LogAnalysis,
                 prompt.UserMessage,
                 OnAiDelta,
-                token);
+                token,
+                relatedInfo: $"日誌 {startTime:yyyy-MM-dd HH:mm}～{endTime:yyyy-MM-dd HH:mm}，送出 {prompt.IncludedEntryCount}／{prompt.TotalEntryCount} 筆");
 
             if (isDisposed)
             {
@@ -452,7 +453,15 @@ public partial class LogViewerView : ComponentBase, IDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "AI log analysis failed. Entries={Entries}, Characters={Characters}", prompt.IncludedEntryCount, prompt.CharacterCount);
+            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
+            {
+                Logger.LogWarning("AI log analysis blocked by AI quota.");
+            }
+            else
+            {
+                Logger.LogError(ex, "AI log analysis failed. Entries={Entries}, Characters={Characters}", prompt.IncludedEntryCount, prompt.CharacterCount);
+            }
+
             await WriteAuditAsync("LogViewer.AiAnalyze", success: false, BuildAiAuditDetail(prompt, null, null) + $"；失敗：{ex.GetType().Name}");
             ShowAiFailure(DescribeFailure(ex));
         }

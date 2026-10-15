@@ -76,7 +76,7 @@ public class AiChatService
     private readonly AttachmentTextExtractor attachmentTextExtractor;
     private readonly CurrentUserService currentUserService;
     private readonly IOptions<LlmSettings> llmSettings;
-    private readonly AiUsageRecorder usageRecorder;
+    private readonly AiCallGateway gateway;
     private readonly ILogger<AiChatService> logger;
     private readonly ProjectAccessService projectAccess;
 
@@ -88,7 +88,7 @@ public class AiChatService
         AttachmentTextExtractor attachmentTextExtractor,
         CurrentUserService currentUserService,
         IOptions<LlmSettings> llmSettings,
-        AiUsageRecorder usageRecorder,
+        AiCallGateway gateway,
         ILogger<AiChatService> logger,
         ProjectAccessService projectAccess)
     {
@@ -99,7 +99,7 @@ public class AiChatService
         this.attachmentTextExtractor = attachmentTextExtractor;
         this.currentUserService = currentUserService;
         this.llmSettings = llmSettings;
-        this.usageRecorder = usageRecorder;
+        this.gateway = gateway;
         this.logger = logger;
         this.projectAccess = projectAccess;
     }
@@ -466,59 +466,41 @@ public class AiChatService
         // 記帳放在這裡而不是 AskAsync／RegenerateAsync，是因為這一支是兩條路徑共用的唯一出口。
         // ⚠️ 特別重要的是 RegenerateAsync：它在模型呼叫**成功之後**還可能因為樂觀鎖失敗而拋例外，
         //    那時錢已經花了。帳記在這裡才不會漏掉那一種。
-        TextGenerationResult generated;
-        try
-        {
-            generated = await provider.GenerateAsync(SystemPrompt, userPrompt, onDelta, cancellationToken, images);
-        }
-        catch (Exception ex)
-        {
-            await RecordUsageAsync(
-                provider,
-                scope,
-                targetId,
-                ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
-                tokens: null,
-                errorMessage: ex.Message);
-            throw;
-        }
-
-        await RecordUsageAsync(
-            provider, scope, targetId, AiUsageOutcome.Succeeded, generated.Usage, errorMessage: null);
+        // ⚠️ 「重新產生答案」也會走到這裡，所以帳本的呼叫次數會**高於**儀表板的「AI 問答次數」——
+        //    後者是數對話檔裡的提問行，而重新產生是覆寫原訊息、不增行。
+        // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理；已達上限時拋 AiQuotaExceededException。
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var generated = await gateway.GenerateAsync(
+            provider,
+            new AiCallContext(
+                AiUsageFeature.AiChat,
+                userId,
+                userName,
+                MeetingId: scope == AiChatScope.Meeting ? targetId : null,
+                ProjectId: scope == AiChatScope.Project ? targetId : null,
+                RelatedInfo: BuildRelatedInfo(scope, targetId, question),
+                ThreadKey: $"chat:{scope}:{targetId}:{conversationId}"),
+            SystemPrompt,
+            userPrompt,
+            onDelta,
+            cancellationToken,
+            images);
 
         return (generated.Content, contextResult);
     }
 
-    /// <summary>
-    /// 把這次問答寫進用量帳本。
-    ///
-    /// <para>
-    /// ⚠️ 「重新產生答案」也會走到這裡，所以帳本的呼叫次數會**高於**儀表板既有的
-    /// 「AI 問答次數」——後者是數對話檔裡的提問行，而重新產生是覆寫原訊息、不增行。
-    /// 那個數字一直在低估，帳本不重蹈覆轍。
-    /// </para>
-    /// </summary>
-    private Task RecordUsageAsync(
-        ITextGenerationProvider provider,
-        AiChatScope scope,
-        int targetId,
-        AiUsageOutcome outcome,
-        AiTokenUsage? tokens,
-        string? errorMessage)
+    /// <summary>AI 對話紀錄清單上的關聯說明：對象＋問題開頭。</summary>
+    internal static string BuildRelatedInfo(AiChatScope scope, int targetId, string question)
     {
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        const int maxQuestionLength = 60;
+        var target = scope == AiChatScope.Project ? $"專案 #{targetId}" : $"會議 #{targetId}";
+        var trimmed = question.ReplaceLineEndings(" ").Trim();
+        if (trimmed.Length > maxQuestionLength)
+        {
+            trimmed = trimmed[..maxQuestionLength] + "…";
+        }
 
-        return usageRecorder.RecordAsync(new AiUsageEntry(
-            AiUsageFeature.AiChat,
-            outcome,
-            provider.ProviderName,
-            provider.ModelName,
-            Tokens: tokens,
-            UserId: userId,
-            UserName: userName,
-            MeetingId: scope == AiChatScope.Meeting ? targetId : null,
-            ProjectId: scope == AiChatScope.Project ? targetId : null,
-            ErrorMessage: errorMessage));
+        return $"{target} AI 問答：{trimmed}";
     }
 
     /// <summary>

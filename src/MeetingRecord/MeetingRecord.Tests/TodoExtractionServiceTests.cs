@@ -144,7 +144,7 @@ public sealed class TodoExtractionServiceTests
                 Context,
                 [],
                 settings,
-                new AiUsageRecorder(Context, settings, new ExchangeRateCache(), loggerFactory.CreateLogger<AiUsageRecorder>()),
+                TestAiServices.CreateGateway(Context, settings),
                 new CurrentUserService(),
                 loggerFactory.CreateLogger<TodoExtractionService>(),
                 TestProjectAccess.Admin(Context));

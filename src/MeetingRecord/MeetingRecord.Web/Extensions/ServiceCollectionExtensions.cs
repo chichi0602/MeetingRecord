@@ -98,6 +98,9 @@ public static class ServiceCollectionExtensions
         // 清理服務關機時記的錯誤才還有寫入器收。
         services.AddHostedService<ExceptionLogRetentionBackgroundService>();
 
+        // AI 對話紀錄（預設 90 天）與用量帳本（預設不清）的自動保留期限（1.0.29）。
+        services.AddHostedService<AiLogRetentionBackgroundService>();
+
         // 程序層級的未處理例外、管線自我監控（Program.cs 在 Build 後呼叫 Register）、瀏覽器錯誤回報（每個 circuit 一份）。
         services.AddSingleton<ProcessExceptionHooks>();
         services.AddSingleton<LoggingPipelineMonitor>();
@@ -145,6 +148,14 @@ public static class ServiceCollectionExtensions
         // job runner 在該 scope 內解析，所以轉錄與生成那兩條背景路徑也用得到。
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiUsageRecorder>();
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiUsageAnalysisService>();
+
+        // AI 對話紀錄、用量上限、付費 AI 呼叫的唯一出入口（1.0.29）。全部 Scoped：都要 BackendDBContext，
+        // 背景工作在自建的 scope 裡解析 job runner，所以轉錄與生成兩條背景路徑也用得到。
+        services.AddScoped<AiCallLogFileStore>();
+        services.AddScoped<AiCallLogService>();
+        services.AddScoped<IAiCallLogRecorder>(sp => sp.GetRequiredService<AiCallLogService>());
+        services.AddScoped<MeetingRecord.Business.Services.AiUsage.IAiQuotaService, MeetingRecord.Business.Services.AiUsage.AiQuotaService>();
+        services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiCallGateway>();
         services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
         services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
         services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();

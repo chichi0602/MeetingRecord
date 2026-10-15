@@ -119,6 +119,7 @@ public class MeetingRepository
         meeting.MediaRelativePath = existing.MediaRelativePath;
         meeting.MediaContentType = existing.MediaContentType;
         meeting.MediaFileSize = existing.MediaFileSize;
+        meeting.MediaDurationSeconds = existing.MediaDurationSeconds;
         meeting.TranscriptRelativePath = existing.TranscriptRelativePath;
         meeting.TranscriptionStatus = existing.TranscriptionStatus;
         meeting.TranscriptionError = existing.TranscriptionError;

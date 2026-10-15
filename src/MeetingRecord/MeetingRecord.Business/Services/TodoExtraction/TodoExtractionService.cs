@@ -38,7 +38,7 @@ public class TodoExtractionService
     private readonly BackendDBContext context;
     private readonly IEnumerable<ITextGenerationProvider> textGenerationProviders;
     private readonly IOptions<LlmSettings> llmSettings;
-    private readonly AiUsageRecorder usageRecorder;
+    private readonly AiCallGateway gateway;
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<TodoExtractionService> logger;
     private readonly ProjectAccessService projectAccess;
@@ -47,7 +47,7 @@ public class TodoExtractionService
         BackendDBContext context,
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         IOptions<LlmSettings> llmSettings,
-        AiUsageRecorder usageRecorder,
+        AiCallGateway gateway,
         CurrentUserService currentUserService,
         ILogger<TodoExtractionService> logger,
         ProjectAccessService projectAccess)
@@ -55,7 +55,7 @@ public class TodoExtractionService
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
         this.llmSettings = llmSettings;
-        this.usageRecorder = usageRecorder;
+        this.gateway = gateway;
         this.currentUserService = currentUserService;
         this.logger = logger;
         this.projectAccess = projectAccess;
@@ -92,26 +92,21 @@ public class TodoExtractionService
         var userPrompt = BuildUserPrompt(meeting.DraftContent, meeting.MeetingDate);
 
         // onDelta 傳 null：輸出是 JSON，逐字顯示對使用者沒有意義。
-        TextGenerationResult generated;
-        try
-        {
-            generated = await provider.GenerateAsync(SystemPrompt, userPrompt, null, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            // 先記帳再往外拋：串流跑到一半斷掉時，已經生成的 token 供應商照算。
-            await RecordUsageAsync(
-                provider,
+        // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理（這條路徑走在使用者的請求裡，拿得到 CurrentUserService）。
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var generated = await gateway.GenerateAsync(
+            provider,
+            new AiCallContext(
+                AiUsageFeature.TodoExtraction,
+                userId,
+                userName,
                 meetingId,
                 meeting.ProjectId,
-                ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
-                tokens: null,
-                errorMessage: ex.Message);
-            throw;
-        }
-
-        await RecordUsageAsync(
-            provider, meetingId, meeting.ProjectId, AiUsageOutcome.Succeeded, generated.Usage, errorMessage: null);
+                RelatedInfo: $"會議 #{meetingId}〈{meeting.Title}〉抽出待辦"),
+            SystemPrompt,
+            userPrompt,
+            null,
+            cancellationToken);
 
         var results = TodoExtractionParser.Parse(generated.Content);
 
@@ -122,30 +117,6 @@ public class TodoExtractionService
             results.Count);
 
         return results;
-    }
-
-    /// <summary>把這次呼叫寫進用量帳本。這條路徑走在使用者的請求裡，所以拿得到 CurrentUserService。</summary>
-    private Task RecordUsageAsync(
-        ITextGenerationProvider provider,
-        int meetingId,
-        int? projectId,
-        AiUsageOutcome outcome,
-        AiTokenUsage? tokens,
-        string? errorMessage)
-    {
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
-
-        return usageRecorder.RecordAsync(new AiUsageEntry(
-            AiUsageFeature.TodoExtraction,
-            outcome,
-            provider.ProviderName,
-            provider.ModelName,
-            Tokens: tokens,
-            UserId: userId,
-            UserName: userName,
-            MeetingId: meetingId,
-            ProjectId: projectId,
-            ErrorMessage: errorMessage));
     }
 
     /// <summary>

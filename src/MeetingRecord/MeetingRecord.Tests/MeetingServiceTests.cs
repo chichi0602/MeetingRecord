@@ -133,9 +133,69 @@ public sealed class MeetingServiceTests
         Assert.Equal(TranscriptionStatus.Completed, saved.TranscriptionStatus);
     }
 
+    [Fact]
+    public async Task UpdateAsync_ShouldKeepMediaDuration()
+    {
+        // 1.0.29：時長由轉錄工作寫入，畫面上的舊複本（AdapterModel 沒有這個欄位）不得把它清掉——儀表板會議時數讀這一欄。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("季度檢討");
+        var service = fixture.CreateService();
+        var model = await service.GetAsync(existing.Id);
+
+        var tracked = await fixture.Context.Meeting.SingleAsync(x => x.Id == existing.Id);
+        tracked.MediaDurationSeconds = 3600;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        model.Title = "季度檢討（修訂）";
+        await service.UpdateAsync(model);
+
+        Assert.Equal(3600d, (await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id)).MediaDurationSeconds);
+    }
+
     #endregion
 
     #region 刪除連同實體檔案
+
+    [Fact]
+    public async Task DeleteAsync_ShouldAlsoDeleteAiCallLogsButKeepTheLedger()
+    {
+        // 1.0.29：AI 對話紀錄含逐字稿與會議紀錄全文，跟著會議刪；用量帳本是成本紀錄，不動。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("要刪除的會議");
+        var other = await fixture.AddMeetingAsync("另一場會議");
+        var callLogs = TestAiServices.CreateCallLogService(fixture.Context, fixture.AiCallLogPath);
+        await callLogs.RecordAsync(CallLogEntry(existing.Id));
+        await callLogs.RecordAsync(CallLogEntry(other.Id));
+        fixture.Context.AiUsageLog.Add(new AiUsageLog
+        {
+            Feature = AiUsageFeature.MeetingDraft,
+            Provider = "AzureOpenAI",
+            Model = "gpt-5.6-sol",
+            MeetingId = existing.Id,
+        });
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await fixture.CreateService().DeleteAsync(existing.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal([other.Id], await fixture.Context.AiCallLog.AsNoTracking().Select(x => x.MeetingId!.Value).ToListAsync());
+        Assert.Single(Directory.EnumerateFiles(fixture.AiCallLogPath, "*.json", SearchOption.AllDirectories));
+        Assert.Equal(1, await fixture.Context.AiUsageLog.CountAsync());
+    }
+
+    private static AiCallLogEntry CallLogEntry(int meetingId) => new()
+    {
+        CallId = Guid.NewGuid(),
+        OccurredAt = DateTime.Now,
+        Feature = AiUsageFeature.MeetingDraft,
+        Provider = "AzureOpenAI",
+        Model = "gpt-5.6-sol",
+        MeetingId = meetingId,
+        Request = new AiCallLogRequest { Messages = [new() { Role = "user", Content = "逐字稿" }] },
+        Response = new AiCallLogResponse { Text = "會議紀錄" },
+    };
 
     [Fact]
     public async Task DeleteAsync_ShouldRemoveRecordAndPhysicalFiles()
@@ -471,6 +531,26 @@ public sealed class MeetingServiceTests
         Assert.Equal(TranscriptionStatus.Pending, saved.TranscriptionStatus);
         Assert.Null(saved.TranscriptionError);
         Assert.Equal([existing.Id], fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequeueTranscriptionAsync_QuotaReached_ShouldRejectWithoutChangingState()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("失敗的會議");
+        existing.MediaRelativePath = "2026/08/media.mp3";
+        existing.TranscriptionStatus = TranscriptionStatus.Failed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        fixture.Quota.Blocked = FakeAiQuotaService.GlobalReached();
+
+        var result = await fixture.CreateService().RequeueTranscriptionAsync(existing.Id);
+
+        Assert.False(result.Success);
+        Assert.Contains("已達 AI 用量上限", result.Message);
+        Assert.Equal(TranscriptionStatus.Failed, (await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id)).TranscriptionStatus);
+        Assert.Empty(fixture.Queue.Enqueued);
     }
 
     [Fact]
@@ -1533,8 +1613,16 @@ public sealed class MeetingServiceTests
                 ProgressNotifier,
                 DraftQueue,
                 DraftProgressNotifier,
-                CurrentUserService);
+                CurrentUserService,
+                TestAiServices.CreateCallLogService(Context, AiCallLogPath),
+                Quota);
         }
+
+        /// <summary>1.0.29：用量上限（預設不限制）。</summary>
+        public FakeAiQuotaService Quota { get; } = new();
+
+        /// <summary>1.0.29：AI 對話紀錄內容檔的目錄（刪除會議時連帶刪除的測試用）。</summary>
+        public string AiCallLogPath => Path.Combine(rootPath, "AiCallLog");
 
         public async Task<Meeting> AddMeetingAsync(
             string title,

@@ -14,6 +14,7 @@ namespace MeetingRecord.Business.Services.AiUsage;
 /// </summary>
 /// <param name="Tokens">供應商回報的 token 用量；null 代表沒回報（失敗、取消、或不支援）。</param>
 /// <param name="AudioSeconds">這一段音訊的秒數（僅語音轉錄）。</param>
+/// <param name="CallId">這次呼叫的識別碼（1.0.29），與 AI 對話紀錄相同；由 <c>AiCallGateway</c> 產生。</param>
 public sealed record AiUsageEntry(
     AiUsageFeature Feature,
     AiUsageOutcome Outcome,
@@ -26,7 +27,8 @@ public sealed record AiUsageEntry(
     string? UserName = null,
     int? MeetingId = null,
     int? ProjectId = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    Guid? CallId = null);
 
 /// <summary>
 /// 供應商回報的 token 用量。
@@ -127,6 +129,7 @@ public class AiUsageRecorder
     {
         ArgumentNullException.ThrowIfNull(entry);
 
+        AiUsageLog? row = null;
         try
         {
             var settings = llmSettings.Value;
@@ -146,7 +149,7 @@ public class AiUsageRecorder
                 rate = null;
             }
 
-            context.AiUsageLog.Add(new AiUsageLog
+            row = new AiUsageLog
             {
                 OccurredAt = DateTime.Now,
                 Feature = entry.Feature,
@@ -176,12 +179,21 @@ public class AiUsageRecorder
                 MeetingId = entry.MeetingId,
                 ProjectId = entry.ProjectId,
                 ErrorMessage = Truncate(entry.ErrorMessage, ErrorMessageMaxLength),
-            });
+                CallId = entry.CallId,
+            };
+            context.AiUsageLog.Add(row);
 
             await context.SaveChangesAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
+            // 1.0.29：寫不進去的列要從追蹤中移除。context 是同一個 scope 共用的，
+            // 不移除的話呼叫端下一次 SaveChanges 會把這一列再送一次（再失敗一次，連累呼叫端自己的存檔）。
+            if (row is not null)
+            {
+                context.Entry(row).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+            }
+
             logger.LogError(
                 ex,
                 "Failed to write AI usage ledger. Feature={Feature}, Outcome={Outcome}, MeetingId={MeetingId}",

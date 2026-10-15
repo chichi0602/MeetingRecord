@@ -1,6 +1,6 @@
 ﻿# 儀表板 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
 - 現行系統版本：0.4.118
 - 首次實作版本：0.4.54
@@ -80,7 +80,7 @@
 - **平均耗時在記憶體算**：SQLite／EF Core 無法對 `TimeSpan` 做 `AVG`，取回 `TranscriptionStartedAt`／`CompletedAt` 與 `DraftStartedAt`／`CompletedAt` 有頭有尾的區間後由 `DashboardMetrics.AverageDuration` 平均。資料量成長後要改在 SQL 端用 `julianday` 相減。
 - **轉錄失敗率**：`DashboardMetrics.CalculateFailureRate`，分母為「完成＋失敗」，兩者皆 0 回 null。
 - **未歸屬逐字稿**：轉錄完成、`ProjectId` 為 null **且會議紀錄尚未生成完成**（0.4.73 收緊；不必先建專案就能生成之後，「未歸屬但已生成」是正常終態）。
-- **會議時數**：`Meeting` 沒有時長欄位，改取 AI 用量帳本 `AiUsageLog` 中轉錄成功、有 `MeetingId` 與 `AudioSeconds` 的列。帳本一段音訊一列、重轉錄會再寫一整輪，所以每場只取 `OccurredAt >= TranscriptionStartedAt` 的列（最後一輪，`DashboardMetrics.SumLatestRunAudioSeconds`），且只算轉錄完成的會議。0.4.80 之前轉錄的會議沒有帳本紀錄、也沒有回填。
+- **會議時數**：1.0.29 起讀會議自己的 `Meeting.MediaDurationSeconds`（轉錄完成時寫入、重新上傳影音時清空、編輯會議時保留），只算轉錄完成且有時長的會議。用量帳本 1.0.29 起可以被清除，所以不再從帳本加總。1.0.29 之前轉錄完成的會議由 migration `AddAiCallLogAndMeetingDuration` 從帳本回填，算法與改版前相同（轉錄成功、有 `AudioSeconds` 的列，每場只取 `OccurredAt >= TranscriptionStartedAt` 的最後一輪），升級後數字不變。0.4.80 之前轉錄的會議沒有帳本紀錄，回填不到、仍不計入。
 - **儲存空間**：影音檔＝`Meeting.MediaFileSize` 加總；逐字稿＝`DirectorySizeCalculator.Measure(SystemSettings.ExternalFileSystem.MeetingTranscriptPath)` 實際掃目錄（`Meeting` 沒有逐字稿容量欄位）；專案附件＝`ProjectFile.FileSize` 加總；合計三項相加。數字卡與細分列共用同一個 `StorageSummary`，保證同源。顯示格式統一用 `FileSizeFormatter.Describe`。
 - **AI 問答次數**：`AiChatStore.CountQuestions()` 遞迴掃 AI 對話根目錄下所有 `*.jsonl`，數使用者發言（0.4.60 起對話存在檔案系統而非資料庫）。
 - **啟用但未使用**：`DashboardMetrics.CountUnusedEnabledTemplates` 以**名稱**比對 `Meeting.DraftPromptTemplateName`（不分大小寫、先 Trim）。
@@ -124,8 +124,8 @@
   - 儲存空間：影音檔加總、專案附件加總、掃逐字稿目錄、目錄不存在不拋例外、合計＝三項之和、數字卡顯示合計而非只有影音檔。
   - 待辦：逾期與 7 天內到期的邊界、由會議擷取占比、無待辦時占比為 null、未完成優先度排除已完成與空切片。
   - 專案：已過結束日／14 天內到期／暫緩等待、平均完成度只算進行中。
-  - 會議時數：重轉錄只算最後一輪、失敗紀錄與無時長的會議不計、無紀錄顯示「—」。
-- `src/MeetingRecord/MeetingRecord.Tests/DashboardMetricsTests.cs`（純函式）：日桶與日標籤（AI 用量分析共用）、`SumLatestRunAudioSeconds`、`ToPercentages`、`BuildArcPath`（四分之一圓、整圓兩段弧、大弧旗標）、`DescribeDuration`、`CalculateFailureRate`、`AverageDuration`、`FileSizeFormatter`、`CountUnusedEnabledTemplates`（含改名契約）、`DirectorySizeCalculator`。
+  - 會議時數（1.0.29 起）：讀 `MediaDurationSeconds` 而非帳本、沒有時長的會議不計、無紀錄顯示「—」。原本「重轉錄只算最後一輪、失敗紀錄不計」的規則測試搬到 `MeetingDurationBackfillSqlTests`（回填 SQL）。
+- `src/MeetingRecord/MeetingRecord.Tests/DashboardMetricsTests.cs`（純函式）：日桶與日標籤（AI 用量分析共用）、`ToPercentages`（`SumLatestRunAudioSeconds` 已於 1.0.29 移除）、`BuildArcPath`（四分之一圓、整圓兩段弧、大弧旗標）、`DescribeDuration`、`CalculateFailureRate`、`AverageDuration`、`FileSizeFormatter`、`CountUnusedEnabledTemplates`（含改名契約）、`DirectorySizeCalculator`。
 - `src/MeetingRecord/MeetingRecord.Tests/AiChatStoreTests.cs`「儀表板計數」區與 `AiChatConversationTests`：問答次數要遞迴到 `meeting/<id>/` 子目錄、根目錄不存在不拋例外。
 - 人工驗收：[上架前人工測試清單](../guides/上架前人工測試清單.md) 12-1（一般使用者選單含儀表板）、14-1（每個帳號開儀表板數字一致）。
 - ⚠️ 「不套團隊過濾」原有的守門測試 `PromptTemplatesAndMeetings_ShouldCountAllTeams` 已隨 0.4.103 移除舊團隊標籤一併刪除；目前**沒有測試**守住「儀表板不得套 `ProjectAccessService`」這條例外，`DashboardServiceTests` 類別註解仍寫著有。
@@ -140,6 +140,7 @@
 - 0.4.74：加入提示詞範本統計與儲存空間細分；「音檔總容量」卡改為「儲存空間」三項合計。
 - 0.4.96：移除趨勢折線圖與天數下拉。
 - 0.4.97：登入即可看（`PublicMenuIds`）、全公司同一份數字；新增未完成待辦優先度圓餅、待辦概況、專案概況、會議時數。
+- 1.0.29：會議時數改讀 `Meeting.MediaDurationSeconds`（migration 從帳本回填，數字不變）。
 
 ### 程式
 

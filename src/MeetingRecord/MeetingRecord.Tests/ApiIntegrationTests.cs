@@ -661,7 +661,7 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 
     [Fact]
-    public async Task SystemHealthService_ShouldResolveAndReportAll17ItemsWithoutLeakingSecrets()
+    public async Task SystemHealthService_ShouldResolveAndReportAll18ItemsWithoutLeakingSecrets()
     {
         // 0.4.123：新檢查注入了 IKeyManager、ICacheService、例外佇列等，DI 少一個就整頁打不開。
         using var scope = factory.Services.CreateScope();
@@ -669,11 +669,12 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
 
         var report = await service.GetReportAsync();
 
-        Assert.Equal(17, report.Items.Count);
+        Assert.Equal(18, report.Items.Count);
         Assert.Equal(100, report.Items.Sum(item => item.Weight));
         Assert.Contains(report.Items, item => item.Category == "DataProtection");
         Assert.Contains(report.Items, item => item.Category == "Cache" && item.Status == MeetingRecord.Web.Health.SystemHealthStatus.Healthy);
         Assert.Contains(report.Items, item => item.Category == "ExceptionPipeline");
+        Assert.Contains(report.Items, item => item.Category == "AiQuota" && item.Status == MeetingRecord.Web.Health.SystemHealthStatus.Healthy);
         Assert.DoesNotContain(report.Items, item => item.Evidence.Contains("<key", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -846,7 +847,8 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
             ["SystemSettings:ExternalFileSystem:MeetingTranscriptPath"] = Path.Combine(rootPath, "MeetingTranscript"),
             ["SystemSettings:ExternalFileSystem:AiChatPath"] = Path.Combine(rootPath, "AiChat"),
             ["SystemSettings:ExternalFileSystem:DataProtectionKeyPath"] = Path.Combine(rootPath, "Keys"),
-            ["SystemSettings:ExternalFileSystem:ExceptionPath"] = Path.Combine(rootPath, "Exception")
+            ["SystemSettings:ExternalFileSystem:ExceptionPath"] = Path.Combine(rootPath, "Exception"),
+            ["SystemSettings:ExternalFileSystem:AiCallLogPath"] = Path.Combine(rootPath, "AiCallLog")
         };
     }
 }

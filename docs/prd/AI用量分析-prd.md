@@ -1,6 +1,6 @@
 ﻿# AI 用量分析 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
 - 現行系統版本：0.4.122
 - 首次實作版本：0.4.80
@@ -11,13 +11,13 @@
 讓管理者看得到「AI 花了多少錢、花在哪裡、誰用的」。系統在 0.4.80 之前**完全沒有記錄任何用量**，所以本能力分成兩半：先在每一個會付費的 AI 呼叫點寫進**用量帳本**（`AiUsageLog`），再提供 `/ai-usage` 分析頁呈現。
 
 - 範圍：
-  - 用量帳本：一次 API 呼叫一列、永久保留；失敗與取消也記；寫入當下算好估算金額並存單價與匯率快照。
+  - 用量帳本：一次 API 呼叫一列、預設永久保留（1.0.29 起可設 `LogRetentionSettings:AiUsageLogDays` 自動清除）；失敗與取消也記；寫入當下算好估算金額並存單價與匯率快照；1.0.29 起每列帶 `CallId`，對應同一次呼叫的 AI 對話紀錄。
   - 模型單價設定（`LlmSettings:Pricing`，以 deployment 名稱為鍵）。
   - 美金→台幣換算：背景服務定期抓匯率（`ExchangeRateBackgroundService`），帳本存「呼叫當下」的匯率。
   - 分析頁：四張概況卡片、本月累計 vs 上月同期累計曲線、依功能別／模型／使用者分佈、最近呼叫明細（真的分頁），功能下拉連動整頁。
   - 一次性回填腳本 `scripts/Backfill-AiUsageCost.mjs`（0.4.88 人工執行過，不是自動路徑）。
 - 非範圍：
-  - **上限、配額、擋呼叫**——本頁純呈現，不擋任何 AI 呼叫（[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md) 只推翻了「不做計量」，上限與配額仍不做）。
+  - **在本頁設定上限、擋呼叫**——本頁純呈現。1.0.29 起另有每月用量上限（`AiQuotaSettings`，在設定檔設定），由 `AiCallGateway` 依本帳本計算並擋下呼叫，見「四、內部系統運作」的「用量上限」。
   - 0.4.80 之前的用量（事後補不回來，帳本不回填）。
   - 快取輸入 token 的差別計價（`CachedInputTokens` 有存，但不參與計價；快取命中率上升時本頁會**高估**）。
   - 匯出、REST API、團隊過濾（見「五、權限與安全」）。
@@ -73,12 +73,18 @@
 
 ### 寫入：帳本
 
-- 呼叫端在每次 AI 呼叫結束後呼叫 `AiUsageRecorder.RecordAsync(AiUsageEntry)`；provider 只回用量（`TextGenerationResult`／`AiTokenUsage`），**寫帳是呼叫端的事**——只有呼叫端知道使用者／會議／專案，而失敗是以例外表達、`catch` 只能寫在呼叫端。
+- 1.0.29 起五個呼叫端一律經 `AiCallGateway`（`GenerateAsync`／`TranscribeAsync`），由 gateway 在呼叫結束後呼叫 `AiUsageRecorder.RecordAsync(AiUsageEntry)`，並以同一個 `CallId` 寫 AI 對話紀錄（`AiCallLog`）；成功、失敗、取消都記，兩邊一對一。呼叫端把使用者／會議／專案放進 `AiCallContext` 傳給 gateway。provider 只回用量（`TextGenerationResult`／`AiTokenUsage`），不寫帳。1.0.28 以前是各呼叫端自己呼叫 `RecordAsync`。
 - `RecordAsync` **永不拋例外**（寫不進去只記 log，不能讓使用者的工作失敗），一律以 `CancellationToken.None` 存檔（取消的呼叫照樣花了錢）。
 - 金額由 `AiUsagePricing.EstimateTokenCost`／`EstimateAudioCost` 依 `Model` 查 `LlmSettings.Pricing` 算出；連同單價、`Currency`、`ExchangeRate`、`ConvertedCurrency` 一起寫入當下的快照。
 - 匯率只讀 `ExchangeRateCache.Current`（同步欄位）；匯率的 `BaseCurrency` 與 `LlmSettings.Currency` 不同時整組留空。
 - 使用者歸屬：`AiUsageAttribution.Resolve(CurrentUser)`，`Id <= 0` 視為無人。背景工作（生成、轉錄）的觸發者在**入列那一刻**由 `MeetingJobRequest` 帶進佇列，recorder 刻意不注入 `CurrentUserService`（背景 scope 會解析成空白使用者且不報錯）。
 - 串流用量：`AzureOpenAiTextGenerationProvider` 送 `stream_options.include_usage = true`，每個片段**先取 usage（`ExtractUsage`）再檢查 delta**——帶用量的那一片 `choices` 是空陣列。轉錄時長由 FFmpeg 以 `-loglevel info -nostats` 輸出、`MediaDurationParser` 解析 `Duration:`，取不到時以位元組回推並標 `IsAudioDurationEstimated`。
+
+### 用量上限（1.0.29）
+
+- `AiQuotaService` 以本帳本計算：本月各列 `EstimatedCost` 依**該列自己的匯率**換算台幣後加總（有金額但沒有匯率的列用目前匯率；未設定單價的列算 0 元；讀不到帳本時放行並記錯誤）。全系統每月與每人每月兩種（`AiQuotaSettings:GlobalMonthlyTwd`／`PerUserMonthlyTwd`，0＝不限制），以 `IOptionsMonitor` 讀取。
+- 達上限時 `AiCallGateway` 寫稽核 `Ai.QuotaBlocked`、拋 `AiQuotaExceededException`，該次呼叫不送出、**不記帳**。即時功能每次呼叫前檢查；轉錄與會議紀錄生成在工作開始時檢查一次。
+- 因為上限要讀到上個月初，`AiUsageLogDays` 要啟用時至少 62 天。設定細節見 [日誌與設定檔說明](../operations/日誌與設定檔說明.md) §4.3.0.1.2。
 
 ### 讀取：分析頁
 
@@ -181,6 +187,7 @@
 - **0.4.121**：新增功能別 `AiUsageFeature.LogAnalysis = 5`（「AI 日誌分析」，token 計費），由 `DiagnosticAiService` 寫帳（成功／失敗／取消都記，不帶會議／專案）；功能下拉自動多一項。
 - **0.4.122**：新增功能別 `AiUsageFeature.ExceptionAnalysis = 6`（「AI 例外分析」，token 計費，系統例外紀錄的明細窗觸發），同樣由 `DiagnosticAiService` 寫帳；功能下拉自動多一項。
 - **0.4.124**：補上 Azure 轉錄部署 `gpt-transcribe` 的單價（每分鐘 0.0045 美元，依 OpenAI 官方價目）；之前健康監控「AI 供應商設定」亮黃燈，轉錄金額記成「—」。本機帳本沒有這個模型的舊紀錄，未回填。`SystemHealthChecksTests.AiProvider_ShippedPricing_ShouldCoverTheDeploymentsInUse` 以出貨的單價表守住。
+- **1.0.29**：所有呼叫端改經 `AiCallGateway` 寫帳；帳本新增 `CallId`（migration `AddAiCallLogAndMeetingDuration`），對應新的 AI 對話紀錄（`AiCallLog`，頁面在 1.0.30）；帳本可設自動保留期限 `LogRetentionSettings:AiUsageLogDays`（預設 0＝永久，啟用時至少 62 天，`AiLogRetentionBackgroundService` 每天清，稽核 `AiUsage.AutoPurge`），手動清除在 1.0.31 提供；新增每月用量上限 `AiQuotaSettings`，依本帳本計算。儀表板會議時數改讀 `Meeting.MediaDurationSeconds`，不再依賴本帳本。
 
 ### 程式
 

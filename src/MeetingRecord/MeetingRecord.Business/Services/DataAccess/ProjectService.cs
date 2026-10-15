@@ -22,6 +22,7 @@ public class ProjectService
     private readonly string projectFileRootPath;
     private readonly AiChatStore chatStore;
     private readonly ProjectAccessService projectAccess;
+    private readonly AiCallLogService aiCallLogService;
 
     public IMapper Mapper { get; }
     public ILogger<ProjectService> Logger { get; }
@@ -32,7 +33,8 @@ public class ProjectService
         ILogger<ProjectService> logger,
         IOptions<SystemSettings> systemSettings,
         AiChatStore chatStore,
-        ProjectAccessService projectAccess)
+        ProjectAccessService projectAccess,
+        AiCallLogService aiCallLogService)
     {
         this.context = context;
         Mapper = mapper;
@@ -40,6 +42,7 @@ public class ProjectService
         projectFileRootPath = systemSettings.Value.ExternalFileSystem.ProjectFilePath;
         this.chatStore = chatStore;
         this.projectAccess = projectAccess;
+        this.aiCallLogService = aiCallLogService;
     }
 
     public async Task<DataRequestResult<ProjectAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -345,6 +348,17 @@ public class ProjectService
 
             // 0.4.60 起對話存在檔案系統，資料表已移除，Cascade 不會再幫我們清掉它。
             chatStore.TryDelete(AiChatScope.Project, id);
+
+            // 1.0.29：專案本身的 AI 對話紀錄（專案 AI 問答）一起刪。會議在刪專案後仍然存在（外鍵是 SetNull），
+            // 會議的紀錄跟著會議走，不在這裡刪；用量帳本不動。
+            try
+            {
+                await aiCallLogService.DeleteByProjectAsync(id);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to delete AI call logs of project. ProjectId={ProjectId}", id);
+            }
 
             Logger.LogInformation("Project deleted successfully. ProjectId={ProjectId}, Title={Title}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);

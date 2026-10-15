@@ -276,18 +276,15 @@ public sealed class DashboardServiceTests
     #region 會議時數
 
     [Fact]
-    public async Task MeetingHours_ShouldOnlyCountLatestTranscriptionRun()
+    public async Task MeetingHours_ShouldReadMeetingDurationNotTheLedger()
     {
+        // 1.0.29：會議時數讀 Meeting.MediaDurationSeconds。帳本可以被清除了，清掉也不影響時數；
+        // 反過來，帳本裡多出來的列（例如重轉錄前的上一輪）也不會被算進去。
+        // 「只算最後一輪」的規則改由 migration 回填 SQL 負責（MeetingDurationBackfillSqlTests）。
         await using var fixture = await DashboardServiceFixture.CreateAsync();
-        var latestStart = DateTime.Now.AddHours(-1);
-        var meetingId = await fixture.AddMeetingAsync("重轉錄過的會議", transcriptionStartedAt: latestStart);
-
-        // 第一輪（最後一輪開始之前）兩段各 30 分鐘，重轉錄後又是同樣兩段。
-        // 全部加總會變成 2 小時；會議實際只有 1 小時。
-        await fixture.AddTranscriptionUsageAsync(meetingId, latestStart.AddHours(-2), 1800);
-        await fixture.AddTranscriptionUsageAsync(meetingId, latestStart.AddHours(-2), 1800);
-        await fixture.AddTranscriptionUsageAsync(meetingId, latestStart.AddMinutes(5), 1800);
-        await fixture.AddTranscriptionUsageAsync(meetingId, latestStart.AddMinutes(9), 1800);
+        var start = DateTime.Now.AddHours(-1);
+        var meetingId = await fixture.AddMeetingAsync("一小時的會議", transcriptionStartedAt: start, mediaDurationSeconds: 3600);
+        await fixture.AddTranscriptionUsageAsync(meetingId, start.AddHours(-2), 1800);
 
         var summary = await fixture.CreateService().GetSummaryAsync();
 
@@ -297,14 +294,12 @@ public sealed class DashboardServiceTests
     }
 
     [Fact]
-    public async Task MeetingHours_ShouldIgnoreFailedUsageAndUnmeasuredMeetings()
+    public async Task MeetingHours_ShouldIgnoreUnmeasuredMeetings()
     {
         await using var fixture = await DashboardServiceFixture.CreateAsync();
         var start = DateTime.Now.AddHours(-1);
-        var measured = await fixture.AddMeetingAsync("有時長", transcriptionStartedAt: start);
+        await fixture.AddMeetingAsync("有時長", transcriptionStartedAt: start, mediaDurationSeconds: 600);
         await fixture.AddMeetingAsync("0.4.80 之前轉錄的", transcriptionStartedAt: start);
-        await fixture.AddTranscriptionUsageAsync(measured, start.AddMinutes(1), 600);
-        await fixture.AddTranscriptionUsageAsync(measured, start.AddMinutes(2), 600, AiUsageOutcome.Failed);
 
         var summary = await fixture.CreateService().GetSummaryAsync();
 
@@ -435,12 +430,14 @@ public sealed class DashboardServiceTests
             string title,
             long? mediaFileSize = null,
             string? draftTemplateName = null,
-            DateTime? transcriptionStartedAt = null)
+            DateTime? transcriptionStartedAt = null,
+            double? mediaDurationSeconds = null)
         {
             var meeting = new Meeting
             {
                 Title = title,
                 MediaFileSize = mediaFileSize,
+                MediaDurationSeconds = mediaDurationSeconds,
                 DraftPromptTemplateName = draftTemplateName,
                 DraftStatus = draftTemplateName is null ? DraftStatus.NotGenerated : DraftStatus.Completed,
                 TranscriptionStatus = TranscriptionStatus.Completed,

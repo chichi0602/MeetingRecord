@@ -71,7 +71,8 @@ public class DashboardService
                 x.DraftPromptTemplateName,
                 x.TranscriptionStartedAt,
                 x.TranscriptionCompletedAt,
-                x.DraftStartedAt))
+                x.DraftStartedAt,
+                x.MediaDurationSeconds))
             .ToListAsync(cancellationToken);
 
         var projects = await context.Project.AsNoTracking()
@@ -84,15 +85,6 @@ public class DashboardService
 
         var promptTemplateFacts = await context.PromptTemplate.AsNoTracking()
             .Select(x => new PromptTemplateFact(x.Name, x.IsEnabled))
-            .ToListAsync(cancellationToken);
-
-        // AudioSeconds 是 REAL 不是 decimal，在 SQL 端篩選沒有 TEXT 比較的問題。
-        var transcriptionUsages = await context.AiUsageLog.AsNoTracking()
-            .Where(x => x.Feature == AiUsageFeature.Transcription
-                && x.Outcome == AiUsageOutcome.Succeeded
-                && x.MeetingId != null
-                && x.AudioSeconds != null)
-            .Select(x => new { MeetingId = x.MeetingId!.Value, x.OccurredAt, Seconds = x.AudioSeconds!.Value })
             .ToListAsync(cancellationToken);
 
         var attachmentBytes = await context.ProjectFile.AsNoTracking()
@@ -131,10 +123,7 @@ public class DashboardService
             storage,
             BuildTodoOverview(todoFacts, today),
             BuildProjectOverview(projects, today),
-            BuildMeetingHours(
-                meetingFacts,
-                transcriptionUsages.Select(x => (x.MeetingId, x.OccurredAt, x.Seconds)),
-                monthStart));
+            BuildMeetingHours(meetingFacts, monthStart));
     }
 
     #region 概況指標
@@ -174,21 +163,23 @@ public class DashboardService
     /// <summary>
     /// 會議時數。只看**轉錄完成**的會議：還在跑或失敗的那一輪是不完整的分段，
     /// 算進去會讓會議看起來比實際短。
+    ///
+    /// <para>
+    /// 1.0.29 起讀 <c>Meeting.MediaDurationSeconds</c>（轉錄完成時寫入）。以前是加總用量帳本最後一輪的轉錄秒數，
+    /// 但帳本可以被清除了；1.0.29 之前轉錄完成的會議由 migration 從帳本回填，數字與改版前一致。
+    /// </para>
     /// </summary>
     private static MeetingHoursSummary BuildMeetingHours(
         IReadOnlyList<MeetingFact> meetings,
-        IEnumerable<(int MeetingId, DateTime OccurredAt, double Seconds)> usages,
         DateTime monthStart)
     {
         var transcribed = meetings
             .Where(x => x.TranscriptionStatus == TranscriptionStatus.Completed)
             .ToList();
 
-        var seconds = DashboardMetrics.SumLatestRunAudioSeconds(
-            usages,
-            transcribed
-                .Where(x => x.TranscriptionStartedAt is not null)
-                .ToDictionary(x => x.Id, x => x.TranscriptionStartedAt!.Value));
+        var seconds = transcribed
+            .Where(x => x.MediaDurationSeconds is not null)
+            .ToDictionary(x => x.Id, x => x.MediaDurationSeconds!.Value);
 
         var thisMonthIds = transcribed
             .Where(x => x.CreatedAt >= monthStart)
@@ -400,7 +391,8 @@ public class DashboardService
         string? DraftPromptTemplateName,
         DateTime? TranscriptionStartedAt,
         DateTime? TranscriptionCompletedAt,
-        DateTime? DraftStartedAt);
+        DateTime? DraftStartedAt,
+        double? MediaDurationSeconds);
 
     /// <summary>提示詞範本的投影。只需要名稱（比對使用情形）與啟用狀態。</summary>
     private sealed record PromptTemplateFact(string Name, bool IsEnabled);

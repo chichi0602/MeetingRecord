@@ -51,6 +51,14 @@ public class AiUsageAnalysisService
     }
 
     /// <summary>
+    /// 刪除 <paramref name="before"/> 之前（不含）的帳本列（1.0.29，自動保留期限與手動清除用）。
+    /// 用 <c>ExecuteDelete</c>：不經變更追蹤，不會連帶送出同一個 scope 裡其他人的變更。
+    /// </summary>
+    /// <returns>刪除的列數。</returns>
+    public Task<int> PurgeBeforeAsync(DateTime before, CancellationToken cancellationToken = default)
+        => context.AiUsageLog.Where(x => x.OccurredAt < before).ExecuteDeleteAsync(cancellationToken);
+
+    /// <summary>
     /// 這一頁要用哪一種幣別顯示（0.4.88）。
     ///
     /// <para>

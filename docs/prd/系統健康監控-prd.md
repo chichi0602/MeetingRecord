@@ -1,10 +1,10 @@
 ﻿# 系統健康監控 PRD
 
-- 文件版本：3.0
+- 文件版本：3.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.123
-- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.93 擴充為「系統健康度」，0.4.120 改名「系統健康監控」並改為只限管理者，0.4.123 改版為 17 項並重做畫面）
-- 最後核對日期：2026/10/14
+- 現行系統版本：1.0.29
+- 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.93 擴充為「系統健康度」，0.4.120 改名「系統健康監控」並改為只限管理者，0.4.123 改版為 17 項並重做畫面，1.0.29 新增「AI 用量上限」成為 18 項）
+- 最後核對日期：2026/10/15
 
 ## 一、目標與範圍
 
@@ -12,7 +12,7 @@
 
 - 範圍：
   - `/system-health` 巡檢頁。
-  - 17 項健康檢查：基礎設施 11 項、本系統功能 6 項。
+  - 18 項健康檢查：基礎設施 11 項、本系統功能 7 項。
   - 加權計分與燈號、重新檢查。
   - 「最近 24 小時警告以上日誌」區塊。
   - `/health/live` 與 `/health/ready` 探針。
@@ -45,9 +45,9 @@
   - 每張卡片：燈號、名稱、類別、權重、狀態膠囊、佐證（Evidence）。
   - 有問題時另顯示失敗訊息（FailureMessage），底色跟著燈號。
   - 證據欄的長路徑可任意斷行，窄螢幕（390px）也不產生整頁橫向捲動。
-- **17 項檢查與權重**（總計 100）：
+- **18 項檢查與權重**（總計 100）：
   - 基礎設施 72：網站/應用程式(4)、API(4)、資料庫(18)、日誌(6)、身分驗證(8)、**登入金鑰(6)**、檔案系統(8)、主機資源(5)、安全設定(5)、**快取服務(4)**、**例外紀錄管線(4)**。
-  - 本系統功能 28：AI 供應商設定(9)、語音轉錄 FFmpeg(6)、背景工作(5)、近期錯誤(4)、PDF 匯出(2)、匯率(2)。
+  - 本系統功能 28：AI 供應商設定(8)、語音轉錄 FFmpeg(5)、背景工作(4)、近期錯誤(4)、**AI 用量上限(3)**（1.0.29）、PDF 匯出(2)、匯率(2)。1.0.29 前為 AI 供應商設定(9)、語音轉錄(6)、背景工作(5)。
 - **最近 24 小時警告以上日誌**：
   - 預設收合，點標題列展開（`expand_more`／`expand_less`）。展開後標題旁顯示「共 N 筆」，達 200 筆時加註「只列最新 200 筆」。
   - 表格欄位：時間、等級（WARN 警示色、ERROR／FATAL 錯誤色）、記錄器、訊息。最新在前，每頁 20 筆，左側箭頭展開看原文 `<pre>`。
@@ -60,13 +60,14 @@
    1. `AuthenticationStateHelper.Check` 驗證登入。
    2. `CheckIsAdmin()`：非管理者顯示「你沒有權限存取此頁面」並中止。0.4.120 起不再看權限鍵。
    3. 呼叫 `RefreshAsync`。開頭以 `isLoading` 早退，避免同一個 circuit 的 DbContext 被並行使用。
-2. **產生報告**：`ISystemHealthService.GetReportAsync`（`SystemHealthService`）依序執行 17 項檢查。判斷都放在 `SystemHealthChecks` 的純函式，服務只蒐集輸入：
+2. **產生報告**：`ISystemHealthService.GetReportAsync`（`SystemHealthService`）依序執行 18 項檢查。判斷都放在 `SystemHealthChecks` 的純函式，服務只蒐集輸入：
    - **日誌**：`INLogFilePathResolver` 算目錄與今日檔、`FileInfo.Length`、`LogLevelRuntimeState.EffectiveLevel／OverrideLevel` → `EvaluateLogging`。0.4.123 起不讀檔內容。
    - **登入金鑰**：`ExternalFileSystem.DataProtectionKeyPath`、`key-*.xml` 檔數、`IKeyManager.GetAllKeys()` 過濾未撤銷且未過期 → `EvaluateDataProtection`。
    - **快取服務**：`CacheSettings.GetProvider()`（解析失敗直接紅燈）→ `ProbeCacheAsync` 對 `ICacheService` 寫、讀、刪一筆哨兵，5 秒逾時。
    - **例外紀錄管線**：`LoggingPipelineMonitor.Snapshot()`、`ChannelReader<ExceptionLogEntry>.Count`、`ExceptionLogProvider.QueueCapacity／DroppedCount`、日誌目錄所在磁碟剩餘空間 → `EvaluateExceptionPipeline`。
-   - **檔案系統、主機資源**：九個資料目錄，0.4.123 補上 `DataProtectionKeyPath`、`ExceptionPath`。
+   - **檔案系統、主機資源**：十個資料目錄，0.4.123 補上 `DataProtectionKeyPath`、`ExceptionPath`，1.0.29 補上 `AiCallLogPath`。
    - **近期錯誤**：近 24 小時 `AiUsageLog.Outcome` 分組計數，加上 `ExceptionLog` 中 `LastOccurredAt` 在 24 小時內的列數 → `EvaluateRecentErrors`。
+   - **AI 用量上限**（1.0.29）：`IAiQuotaService.GetStatusAsync`（全系統本月用量，依每列匯率換算台幣）、`AiQuotaSettings.PerUserMonthlyTwd`（`IOptionsMonitor`），有每人上限時再取用量最高的 20 人 → `EvaluateAiQuota`。兩個上限都是 0 → 綠燈；全系統達上限 → 紅燈；全系統達八成，或有使用者達每人上限 → 黃燈。只讀帳本，不呼叫 AI。
    - 其他各項的輸入見機制文件 §4。
 3. **計分**（`SystemHealthScoreCalculator`）：
    - Healthy 計滿分、Degraded 計半、Unhealthy 計 0。
@@ -102,24 +103,25 @@
 
 - 報告載入前顯示「正在檢查系統健康狀態…」；整份報告失敗時顯示錯誤框，頁面不崩潰。
 - 各項目擲例外時降級為 Unhealthy，佐證寫例外型別，不影響其他項目：
-  - 資料庫、背景工作、近期錯誤、登入金鑰、快取服務。
+  - 資料庫、背景工作、近期錯誤、登入金鑰、快取服務、AI 用量上限（讀不到帳本時失敗訊息為「無法讀取用量帳本。」）。
 - 快取 5 秒內沒回應 → Unhealthy「快取在 5 秒內沒有回應」。
 - 日誌目錄所在磁碟讀不到時，「例外紀錄管線」證據寫「未設定或無法讀取」，不扣分。
 - 今日日誌檔尚未建立 → 日誌 Degraded（例如剛過午夜、還沒有任何紀錄）。
 - 沒有有效登入金鑰 → Degraded。下一次登入時框架會自動建立，不算故障。
 - 例外紀錄管線的計數是本次啟動以來的累計，重啟歸零。
-- 沒啟用的功能（轉錄、匯率換算）顯示綠燈並說明「未啟用」，不扣分。
+- 沒啟用的功能（轉錄、匯率換算）顯示綠燈並說明「未啟用」，不扣分；沒設用量上限時「AI 用量上限」也是綠燈。
 
 ## 七、驗收與測試
 
 - **`MeetingRecord.Tests/SystemHealthChecksTests.cs`**：
-  - 權重合計恰好 100（17 項）。
+  - 權重合計恰好 100（18 項）。
   - 0.4.93 起的本系統功能六項：AI 設定、FFmpeg、PDF、匯率、卡住工作、近期錯誤門檻。
   - 0.4.123 新增：
     - 近期錯誤指向「系統例外紀錄」。
     - `EvaluateLogging`：BasePath 未設定、目錄不可寫、今日檔未建立、執行期覆寫標示。
     - `EvaluateDataProtection`：路徑未設定、不存在、不可寫為紅；無有效金鑰為黃；正常為綠，且只列數量。
     - `ProbeCacheAsync`：正常且刪掉哨兵為綠、讀回不符為黃、拋例外為紅、逾時為紅。
+  - 1.0.29 新增：`EvaluateAiQuota` 三種燈號（不限制為綠、全系統達上限為紅、達八成或有人達每人上限為黃）。
   - 選單註冊。
 - **`MeetingRecord.Tests/LoggingPipelineHealthTests.cs`**（0.4.123，移植）：
   - 監控計數累加。
@@ -130,11 +132,11 @@
 - **`MeetingRecord.Tests/SystemHealthTests.cs`**：計分與燈號門檻、狀態對應燈號。
 - **`MeetingRecord.Tests/ApiIntegrationTests.cs`**：
   - `/health/ready`、`/health/live` 探針回應。
-  - `SystemHealthService_ShouldResolveAndReportAll17ItemsWithoutLeakingSecrets`：從 DI 取得服務，報告 17 項、權重 100、快取綠燈，證據不含金鑰 XML。
+  - `SystemHealthService_ShouldResolveAndReportAll18ItemsWithoutLeakingSecrets`：從 DI 取得服務，報告 18 項（1.0.29 前為 17 項）、權重 100、快取綠燈，證據不含金鑰 XML。
   - 未登入開 `/system-health` 時，不出現「最近 24 小時警告以上日誌」與「例外紀錄管線」。
 - **`MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`**、**`RbacBackfillServiceTests.cs`**、**`MenuIconTests.cs`**：選單、退役權限鍵、圖示。
 - **0.4.123 實跑**：未登入不外洩、探針 200、日誌沒有新 ERROR。待使用者以管理者實測：
-  - 17 項分兩組。
+  - 17 項分兩組（1.0.29 起 18 項）。
   - 停機時移走金鑰檔，重啟後登入金鑰的證據會變化。
   - 快取指向不存在的 Redis → 快取紅燈。
   - 警告日誌區塊展開才載入。
@@ -150,10 +152,10 @@
 - `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthService.cs`：
   - `GetReportAsync`。
   - `CheckLogging`、`CheckDataProtection`、`CheckFileSystem`、`CheckHostResources`、`CheckCacheAsync`、`CheckExceptionPipeline`。
-  - 本系統功能六項的 `Check*`。
+  - 本系統功能七項的 `Check*`（1.0.29 加 `CheckAiQuotaAsync`）。
 - `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthChecks.cs`：
   - `SystemHealthWeights`。
-  - 判斷純函式：`EvaluateLogging`、`EvaluateDataProtection`、`EvaluateExceptionPipeline`、`ProbeCacheAsync`、`EvaluateAiProvider`、`EvaluateTranscription`、`EvaluatePdfExport`、`EvaluateExchangeRate`、`EvaluateBackgroundJobs`、`EvaluateRecentErrors`。
+  - 判斷純函式：`EvaluateLogging`、`EvaluateDataProtection`、`EvaluateExceptionPipeline`、`ProbeCacheAsync`、`EvaluateAiProvider`、`EvaluateTranscription`、`EvaluatePdfExport`、`EvaluateExchangeRate`、`EvaluateBackgroundJobs`、`EvaluateRecentErrors`、`EvaluateAiQuota`（1.0.29）。
 - `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs`、`SystemHealthModels.cs`、`DatabaseHealthCheck.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Diagnostics/`：`LoggingPipelineMonitor`、`ExceptionLogProvider`、`NLogFilePathResolver`、`LogLevelRuntimeState`、`LogQueryService`
 - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`：`AddConfiguredHealthChecks`（探針 tag `live`/`ready`）、`AddConfiguredDataProtection`、`AddConfiguredCache`。

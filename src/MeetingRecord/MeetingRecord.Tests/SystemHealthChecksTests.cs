@@ -475,6 +475,40 @@ public sealed class SystemHealthChecksTests
         }
     }
 
+    // ───────── AI 用量上限（1.0.29） ─────────
+
+    [Fact]
+    public void AiQuota_NoLimits_ShouldBeHealthy()
+    {
+        var verdict = SystemHealthChecks.EvaluateAiQuota(Quota(limit: 0, used: 9999), perUserLimit: 0, []);
+
+        Assert.Equal(SystemHealthStatus.Healthy, verdict.Status);
+        Assert.Contains("未設定用量上限", verdict.Evidence);
+    }
+
+    [Theory]
+    [InlineData(1000, 500, SystemHealthStatus.Healthy)]
+    [InlineData(1000, 800, SystemHealthStatus.Degraded)]     // 達八成
+    [InlineData(1000, 1000, SystemHealthStatus.Unhealthy)]   // 達上限：所有人的 AI 功能都被擋
+    public void AiQuota_GlobalLimit_ShouldApplyThresholds(int limit, int used, SystemHealthStatus expected)
+        => Assert.Equal(expected, SystemHealthChecks.EvaluateAiQuota(Quota(limit, used), 0, []).Status);
+
+    [Fact]
+    public void AiQuota_UserAtLimit_ShouldBeDegradedAndNameTheUser()
+    {
+        var verdict = SystemHealthChecks.EvaluateAiQuota(
+            Quota(limit: 0, used: 300),
+            perUserLimit: 200,
+            [new AiQuotaUserUsage(7, "王小明", 250m), new AiQuotaUserUsage(8, "李小華", 50m)]);
+
+        Assert.Equal(SystemHealthStatus.Degraded, verdict.Status);
+        Assert.Contains("王小明", verdict.FailureMessage);
+        Assert.DoesNotContain("李小華", verdict.FailureMessage);
+    }
+
+    private static AiQuotaStatus Quota(int limit, decimal used)
+        => new(AiQuotaScope.Global, limit, used, new DateTime(2026, 10, 1), new DateTime(2026, 11, 1));
+
     // ───────── 選單／權限註冊 ─────────
 
     [Fact]

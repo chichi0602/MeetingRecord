@@ -1,6 +1,6 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.8
+- 文件版本：2.9
 - 文件狀態：已實作
 - 現行系統版本：1.0.27
 - 首次實作版本：0.4.27
@@ -108,13 +108,13 @@
 ## 四、內部系統運作
 
 - UI 路徑：`MeetingViewView` →（注入）`MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`（Blazor Server 直接呼叫服務，不經 HTTP）。
-- API 路徑：`MeetingController` → `MeetingRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。**刪除例外，走 `MeetingService.DeleteAsync`**（0.4.115）：和畫面同一套，一併清影音、逐字稿與 AI 問答對話，背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
+- API 路徑：`MeetingController` → `MeetingRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。**刪除例外，走 `MeetingService.DeleteAsync`**（0.4.115）：和畫面同一套，一併清影音、逐字稿與 AI 問答對話（1.0.29 起也刪這場會議的 AI 對話紀錄，用量帳本不動），背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
 - Entity `Meeting`（DbSet 為 `context.Meeting`）。**刻意不叫 `MeetingRecord`**——會與根命名空間 `MeetingRecord` 衝突；`Meeting` 也與 0.4.24 移除前的舊表同名。
   因為「一筆會議只有一個影音檔」，媒體欄位直接內嵌，**不另開附件子表**，省掉 Cascade 與附件集合的整套機制。
 - 標籤欄位 `Categories` 以 `TagStringHelper` 的「換行包夾」格式儲存；AutoMapper 以 `ForMember` 搭配 `ToList`／`ToStored` 轉換（`Teams` 0.4.103 已刪除）。
 - 查詢一律 `AsNoTracking()`；寫入前後以 `CleanTrackingHelper.Clean<Meeting>` 清追蹤。
 - 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製；`Clone()` 為淺複製後另建 `Categories` 新清單。
-- **`UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位**，只寫回標題／日期／描述／標籤。使用者開著 Modal 時背景轉錄若剛好完成，畫面上的舊複本不會把新狀態蓋掉；`MeetingRepository.UpdateAsync` 對 API 路徑做同樣保護。
+- **`UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位**（1.0.29 起含 `MediaDurationSeconds`），只寫回標題／日期／描述／標籤。使用者開著 Modal 時背景轉錄若剛好完成，畫面上的舊複本不會把新狀態蓋掉；`MeetingRepository.UpdateAsync` 對 API 路徑做同樣保護。
 
 ### 檔案存放
 
@@ -137,12 +137,12 @@
 
 1. `MeetingFileStore.SaveMediaAsync` 以 80KB 緩衝區逐段複製串流，每當百分比變動就回報一次 `IProgress<int>`（進度列的資料來源）。
 2. 落檔成功 → 狀態設為「待處理」→ `ITranscriptionQueue.EnqueueAsync(meetingId)`。
-3. `TranscriptionBackgroundService`（單一 worker）取件，為每筆工作建立獨立 DI scope 執行 `TranscriptionJobRunner`。
+3. `TranscriptionBackgroundService`（單一 worker）取件，為每筆工作建立獨立 DI scope 執行 `TranscriptionJobRunner`。**1.0.29 起**工作開始時（轉檔之前）先以 `AiCallGateway.AdmitAsync` 檢查一次 AI 用量上限：被擋就標為「失敗」，`TranscriptionError` 寫「已達 AI 用量上限（…），M/d 起恢復；如需提高上限請聯絡系統管理員。」，不轉檔、不送出；之後可按「重新轉錄」。通過後各段不再檢查，一旦開始就做完。
 4. `FfmpegMediaConverter` 以外部 FFmpeg 執行檔轉檔：
    `-vn -ac 1 -ar 16000 -c:a libmp3lame -b:a 32k -f segment -segment_time 900 -segment_format mp3`
    輸出到系統暫存目錄，轉錄結束即整個目錄刪除。
-5. `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.28）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
-6. 各段文字以空行接合寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。
+5. 經 `AiCallGateway.TranscribeAsync`（1.0.29 起；記用量帳本與 AI 對話紀錄，關聯說明「會議 #N〈標題〉語音轉錄 i/n」，同一個音檔共用 ThreadKey；對話紀錄只記檔名、時長、分段與轉出的文字，不存音訊）由 `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.28）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
+6. 各段文字以空行接合寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。1.0.29 起同時寫入 `Meeting.MediaDurationSeconds`（各段時長加總，儀表板「會議時數」讀這一欄）；重新上傳影音時清空。
 
 > **為什麼一律切段**：Azure OpenAI 的音訊轉錄有單檔 25MB 上限，而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，不必為「檔案夠小就不切」多維護一個分支；15 分鐘 @32kbps 約 3.6MB，遠低於上限，同時順帶解決長會議的時長問題。
 
@@ -152,6 +152,7 @@
 - 單一 worker：轉錄同時受外部 API 速率限制與 FFmpeg 的 CPU 佔用影響，併發只會互相拖慢。
 - 應用程式重啟時，`Program.cs` 的 `#region 轉錄狀態修復` 會把殘留在「處理中」**與「待處理」**的紀錄一律改為「失敗」（訊息「應用程式重啟導致轉錄中斷，請重新執行轉錄。」），避免永久卡住——佇列不持久化，已入列但還沒被 worker 撿走的同樣沒有人會接手。
 - 重啟後不會自動重跑，由使用者按「重新轉錄」重新入列。
+- 「重新轉錄」入列前 1.0.29 起先預檢 AI 用量上限（`MeetingService` 的 `CheckQuotaAsync`）：已達上限直接回「已達 AI 用量上限…」訊息，不改任何狀態也不入列。上傳後自動入列的轉錄不預檢，由工作開始時那一次檢查擋下。
 - `TranscriptionJobRunner` 全程 try/catch，失敗寫入 `TranscriptionError` 供畫面顯示；背景服務再加一層保險，單筆例外不會讓整個 worker 停掉。
 
 ## 五、權限與安全

@@ -35,7 +35,7 @@ public class MeetingDraftJobRunner
     private readonly MeetingFileStore fileStore;
     private readonly IOptions<LlmSettings> llmSettings;
     private readonly IMeetingDraftProgressNotifier progressNotifier;
-    private readonly AiUsageRecorder usageRecorder;
+    private readonly AiCallGateway gateway;
     private readonly ILogger<MeetingDraftJobRunner> logger;
 
     public MeetingDraftJobRunner(
@@ -44,7 +44,7 @@ public class MeetingDraftJobRunner
         MeetingFileStore fileStore,
         IOptions<LlmSettings> llmSettings,
         IMeetingDraftProgressNotifier progressNotifier,
-        AiUsageRecorder usageRecorder,
+        AiCallGateway gateway,
         ILogger<MeetingDraftJobRunner> logger)
     {
         this.context = context;
@@ -52,7 +52,7 @@ public class MeetingDraftJobRunner
         this.fileStore = fileStore;
         this.llmSettings = llmSettings;
         this.progressNotifier = progressNotifier;
-        this.usageRecorder = usageRecorder;
+        this.gateway = gateway;
         this.logger = logger;
     }
 
@@ -98,6 +98,30 @@ public class MeetingDraftJobRunner
             return;
         }
 
+        // 1.0.29：一趟工作的所有呼叫共用同一個 ThreadKey，AI 對話紀錄才看得出「這幾筆是同一次生成」。
+        var callContext = new AiCallContext(
+            AiUsageFeature.MeetingDraft,
+            requestedByUserId,
+            requestedByUserName,
+            meeting.Id,
+            meeting.ProjectId,
+            RelatedInfo: $"會議 #{meeting.Id}〈{meeting.Title}〉會議紀錄",
+            ThreadKey: $"draft:{meeting.Id}:{Guid.NewGuid():N}");
+
+        // 1.0.29：用量上限在工作開始時檢查一次；一旦開始就做完（中途擋下會白花分段摘要的錢又沒有紀錄）。
+        var blocked = await gateway.AdmitAsync(callContext, cancellationToken);
+        if (blocked is not null)
+        {
+            logger.LogWarning(
+                "Draft generation blocked by AI quota. MeetingId={MeetingId}, Scope={Scope}",
+                meetingId,
+                blocked.Scope);
+            await MarkFailedAsync(meeting, AiQuotaExceededException.BuildMessage(blocked));
+            return;
+        }
+
+        callContext = callContext with { QuotaAdmitted = true };
+
         meeting.DraftStatus = DraftStatus.Processing;
         meeting.DraftStartedAt = DateTime.Now;
         meeting.DraftCompletedAt = null;
@@ -131,7 +155,7 @@ public class MeetingDraftJobRunner
                 TagStringHelper.ToList(meeting.DraftAttendees));
 
             var condensed = await CondenseAsync(
-                provider, transcript, guidance, meeting, requestedByUserId, requestedByUserName, cancellationToken);
+                provider, transcript, guidance, meeting, callContext, cancellationToken);
 
             // 名單放最前面：範本形狀不可控，多數把 {{transcript}} 擺在結尾，
             // 附加在最後會緊貼逐字稿、容易被讀成逐字稿的一部分。
@@ -152,48 +176,23 @@ public class MeetingDraftJobRunner
             progressNotifier.ReportGenerating(meetingId);
             // 供應商回報的是「增量」，這裡自己累加成長度——進度只在意產出了多少字。
             var generatedCharacters = 0;
-            TextGenerationResult generated;
-            try
-            {
-                generated = await provider.GenerateAsync(
-                    SystemPrompt,
-                    userPrompt,
-                    delta =>
-                    {
-                        generatedCharacters += delta.Length;
-                        progressNotifier.ReportGeneratedCharacters(meetingId, generatedCharacters);
-                    },
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                // 先記帳再往外拋：串流跑到一半斷掉時，已經生成的 token 供應商照算。
-                await RecordUsageAsync(
-                    provider,
-                    AiUsageFeature.MeetingDraft,
-                    meeting,
-                    requestedByUserId,
-                    requestedByUserName,
-                    ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
-                    tokens: null,
-                    errorMessage: ex.Message);
-                throw;
-            }
+
+            // 記帳與 AI 對話紀錄由 gateway 處理（成功、失敗、取消都記；串流斷掉時已生成的 token 供應商照算）。
+            // ⚠️ 它們在 gateway 裡、也就是下面修改 meeting 之前寫入——context 是同一個 scope 共用的，
+            //    記在後面的話，記錄器的 SaveChanges 會把半成品的 meeting 狀態一起提交出去。
+            var generated = await gateway.GenerateAsync(
+                provider,
+                callContext,
+                SystemPrompt,
+                userPrompt,
+                delta =>
+                {
+                    generatedCharacters += delta.Length;
+                    progressNotifier.ReportGeneratedCharacters(meetingId, generatedCharacters);
+                },
+                cancellationToken);
 
             var draft = generated.Content;
-
-            // ⚠️ 記帳必須在下面那幾行修改 meeting 之前。context 是同一個 scope 共用的，
-            //    Recorder 的 SaveChanges 會把這裡對 meeting 的修改一起提交出去——
-            //    記在後面的話，生成失敗時反而會把半成品的狀態寫進資料庫。
-            await RecordUsageAsync(
-                provider,
-                AiUsageFeature.MeetingDraft,
-                meeting,
-                requestedByUserId,
-                requestedByUserName,
-                AiUsageOutcome.Succeeded,
-                generated.Usage,
-                errorMessage: null);
 
             meeting.DraftContent = draft;
             meeting.DraftStatus = DraftStatus.Completed;
@@ -223,36 +222,6 @@ public class MeetingDraftJobRunner
     }
 
     /// <summary>
-    /// 把一次生成呼叫寫進用量帳本。
-    ///
-    /// <para>
-    /// ⚠️ 一趟工作會寫下 <b>N 筆</b> <see cref="AiUsageFeature.MeetingDraftChunkSummary"/>
-    /// 加 <b>1 筆</b> <see cref="AiUsageFeature.MeetingDraft"/>——「一次生成 = 一次呼叫」是錯的。
-    /// 兩者分開記，才答得出「這個月會議紀錄為什麼特別貴」（答案幾乎都是「有長會議走了分段摘要」）。
-    /// </para>
-    /// </summary>
-    private Task RecordUsageAsync(
-        ITextGenerationProvider provider,
-        AiUsageFeature feature,
-        Meeting meeting,
-        int? requestedByUserId,
-        string? requestedByUserName,
-        AiUsageOutcome outcome,
-        AiTokenUsage? tokens,
-        string? errorMessage)
-        => usageRecorder.RecordAsync(new AiUsageEntry(
-            feature,
-            outcome,
-            provider.ProviderName,
-            provider.ModelName,
-            Tokens: tokens,
-            UserId: requestedByUserId,
-            UserName: requestedByUserName,
-            MeetingId: meeting.Id,
-            ProjectId: meeting.ProjectId,
-            ErrorMessage: errorMessage));
-
-    /// <summary>
     /// map-reduce 的 map 段：逐字稿超過單次上限時先逐段摘要再合併，否則直接使用原文。
     ///
     /// 只有一段時刻意不做摘要——對短會議而言「摘要後再整理」等於資訊被壓縮兩次，
@@ -263,8 +232,7 @@ public class MeetingDraftJobRunner
         string transcript,
         string guidance,
         Meeting meeting,
-        int? requestedByUserId,
-        string? requestedByUserName,
+        AiCallContext callContext,
         CancellationToken cancellationToken)
     {
         var meetingId = meeting.Id;
@@ -305,37 +273,20 @@ public class MeetingDraftJobRunner
                 chunks[index];
 
             // 這裡不接字元進度：分段摘要本來就是逐段回報，粒度已經夠細。
-            TextGenerationResult generated;
-            try
-            {
-                generated = await provider.GenerateAsync(SystemPrompt, chunkPrompt, null, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                await RecordUsageAsync(
-                    provider,
-                    AiUsageFeature.MeetingDraftChunkSummary,
-                    meeting,
-                    requestedByUserId,
-                    requestedByUserName,
-                    ex is OperationCanceledException ? AiUsageOutcome.Cancelled : AiUsageOutcome.Failed,
-                    tokens: null,
-                    errorMessage: ex.Message);
-                throw;
-            }
-
-            // ⚠️ 記帳與進度一樣，都必須在下面的 continue **之前**：
-            //    這一段就算摘出空白，那一次呼叫照樣花了錢。
-            //    （進度回報當初就踩過同一個坑，所以上面那行註解才會存在。）
-            await RecordUsageAsync(
+            // ⚠️ 一趟工作會記下 N 筆分段摘要加 1 筆會議紀錄——「一次生成 = 一次呼叫」是錯的。
+            //    分開記，才答得出「這個月會議紀錄為什麼特別貴」（幾乎都是長會議走了分段摘要）。
+            //    gateway 在呼叫結束時就記帳，所以下面的 continue 不會漏記空白的段落。
+            var generated = await gateway.GenerateAsync(
                 provider,
-                AiUsageFeature.MeetingDraftChunkSummary,
-                meeting,
-                requestedByUserId,
-                requestedByUserName,
-                AiUsageOutcome.Succeeded,
-                generated.Usage,
-                errorMessage: null);
+                callContext with
+                {
+                    Feature = AiUsageFeature.MeetingDraftChunkSummary,
+                    RelatedInfo = $"會議 #{meetingId}〈{meeting.Title}〉分段摘要 {index + 1}/{chunks.Count}",
+                },
+                SystemPrompt,
+                chunkPrompt,
+                null,
+                cancellationToken);
 
             var summary = generated.Content;
 

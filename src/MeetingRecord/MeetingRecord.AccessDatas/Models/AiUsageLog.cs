@@ -3,7 +3,8 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.AccessDatas.Models;
 
 /// <summary>
-/// 一次會產生外部 API 費用的 AI 呼叫。**一次呼叫一列**，永久保留。
+/// 一次會產生外部 API 費用的 AI 呼叫。**一次呼叫一列**。
+/// 1.0.29 起可在「Token 用量」頁手動清除，並可設定自動保留期限（<c>LogRetentionSettings:AiUsageLogDays</c>，預設 0＝永久保留）。
 ///
 /// <para>
 /// ⚠️ 「一次使用者動作 = 一次呼叫」是錯的：一趟會議紀錄生成會寫下 N 筆分段摘要＋1 筆最終整理，
@@ -160,4 +161,10 @@ public class AiUsageLog
 
     /// <summary>失敗原因（截斷）。成功時為 null。</summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// 這次呼叫的識別碼（1.0.29），與 <see cref="AiCallLog.CallId"/> 相同，用來從用量跳到當次的完整對話。
+    /// 1.0.29 之前的紀錄為 null。
+    /// </summary>
+    public Guid? CallId { get; set; }
 }

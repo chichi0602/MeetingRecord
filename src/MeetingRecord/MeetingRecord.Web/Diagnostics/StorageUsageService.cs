@@ -71,6 +71,7 @@ public sealed class StorageUsageService
             ("下載", "/UploadFiles 對外服務的目錄", fs.DownloadPath),
             ("登入金鑰", "Data Protection 金鑰（刪除會讓所有人被登出）", fs.DataProtectionKeyPath),
             ("例外堆疊", "系統例外紀錄的完整堆疊與啟動失敗補登檔", fs.ExceptionPath),
+            ("AI 對話紀錄", "每次 AI 呼叫送出的內容與回應全文（1.0.29）", fs.AiCallLogPath),
             ("日誌", "NLog 日誌檔（保留 30 天）", logPathResolver.GetLogDirectory()),
         ];
     }

@@ -192,33 +192,6 @@ public static class DashboardMetrics
         return ticks.Count == 0 ? null : TimeSpan.FromTicks((long)ticks.Average());
     }
 
-    /// <summary>
-    /// 每場會議「最後一輪轉錄」送出的音訊秒數合計，當作會議時長。
-    ///
-    /// <para>
-    /// 帳本一段音訊一列，而且**重轉錄會再寫一整輪**——全部加總會把重轉錄過的會議算成兩倍長。
-    /// 每輪開始時 <c>TranscriptionStartedAt</c> 會被重設，所以只取
-    /// <c>OccurredAt &gt;= 最後一輪開始時間</c> 的列，剛好就是最後一輪的所有分段。
-    /// </para>
-    /// <para>
-    /// <paramref name="latestRunStartedAt"/> 裡沒有的會議（已刪除、沒有開始時間、
-    /// 或呼叫端只放轉錄完成的會議而它還沒完成）一律不計。
-    /// </para>
-    /// </summary>
-    public static IReadOnlyDictionary<int, double> SumLatestRunAudioSeconds(
-        IEnumerable<(int MeetingId, DateTime OccurredAt, double Seconds)> usages,
-        IReadOnlyDictionary<int, DateTime> latestRunStartedAt)
-    {
-        ArgumentNullException.ThrowIfNull(usages);
-        ArgumentNullException.ThrowIfNull(latestRunStartedAt);
-
-        return usages
-            .Where(usage => latestRunStartedAt.TryGetValue(usage.MeetingId, out var startedAt)
-                && usage.OccurredAt >= startedAt)
-            .GroupBy(usage => usage.MeetingId)
-            .ToDictionary(group => group.Key, group => group.Sum(usage => usage.Seconds));
-    }
-
     private static string PointOnCircle(double centerX, double centerY, double radius, double degrees)
     {
         // -90 度是為了讓 0 度落在正上方（一般人讀圓餅圖的起點），而不是數學慣例的正右方。

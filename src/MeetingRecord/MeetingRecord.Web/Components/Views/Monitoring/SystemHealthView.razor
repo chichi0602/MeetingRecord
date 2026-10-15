@@ -13,9 +13,14 @@ else
 {
     <div class="health-toolbar">
         <div class="health-toolbar-left">
-            <Button Type="ButtonType.Default" Disabled="@isLoading" Loading="@isLoading" OnClick="RefreshAsync">
+            <Button Type="ButtonType.Default" Disabled="@(isLoading || isTestingAi)" Loading="@isLoading" OnClick="RefreshAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新檢查</span></span>
             </Button>
+            <Tooltip Title="@("實際呼叫一次文字生成與語音轉錄，確認 Azure 上的部署存在、金鑰可用（會產生極少費用）")">
+                <Button Type="ButtonType.Default" Disabled="@(isLoading || isTestingAi)" Loading="@isTestingAi" OnClick="OnTestAiConnectionAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="network_check" /><span>測試 AI 連線</span></span>
+                </Button>
+            </Tooltip>
         </div>
         <div class="health-toolbar-right">
             @if (report is not null)
@@ -75,6 +80,26 @@ else
                         @if (!string.IsNullOrWhiteSpace(item.FailureMessage))
                         {
                             <div class="health-failure">@item.FailureMessage</div>
+                        }
+                        @if (item.Category == AiProviderCategory && aiProbeResults is not null)
+                        {
+                            @* 手動測試的結果，不併入分數（1.0.35）。 *@
+                            <div class="health-probes">
+                                <div class="health-muted">AI 連線測試（@aiProbeTestedAt?.ToString("HH:mm:ss")）</div>
+                                @foreach (var probe in aiProbeResults)
+                                {
+                                    <div class="health-probe @(probe.Success ? "health-ok" : "health-err")">
+                                        <span class="health-pill">@(probe.Success ? "成功" : "失敗")</span>
+                                        <span class="health-probe-item">@probe.Item</span>
+                                        <span class="health-muted">
+                                            部署：@(string.IsNullOrEmpty(probe.Deployment) ? "未設定" : probe.Deployment)
+                                            @(string.IsNullOrEmpty(probe.Host) ? string.Empty : $"（{probe.Host}）")
+                                            @(probe.Elapsed is { } elapsed ? $"· {elapsed.TotalSeconds:0.0} 秒" : string.Empty)
+                                        </span>
+                                        <div class="health-probe-message">@probe.Message</div>
+                                    </div>
+                                }
+                            </div>
                         }
                     </article>
                 }

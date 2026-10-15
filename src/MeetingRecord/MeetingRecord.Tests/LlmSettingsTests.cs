@@ -104,8 +104,12 @@ public sealed class LlmSettingsTests
         Assert.Single(results);
     }
 
+    /// <summary>
+    /// 1.0.35 起 Endpoint、Model 空白不再擋啟動（使用者決定）：照常啟動、AI 功能停用、健康監控亮紅燈，
+    /// 用到時的錯誤訊息寫明缺哪個鍵。以前空白會讓整個站台起不來。
+    /// </summary>
     [Fact]
-    public void Validate_ShouldReportError_WhenRequiredProviderFieldsAreBlank()
+    public void Validate_BlankEndpointAndModel_ShouldNotBlockStartup()
     {
         var settings = new LlmSettings
         {
@@ -113,10 +117,16 @@ public sealed class LlmSettingsTests
             Providers = { ["AzureOpenAI"] = new LlmProviderSettings() },
         };
 
-        var results = Validate(settings);
+        Assert.Empty(Validate(settings));
+    }
 
-        // Endpoint / Model 各一筆（1.0.28 起不再要求 ApiVersion）
-        Assert.Equal(2, results.Count);
+    [Fact]
+    public void Validate_UnknownDefaultProvider_ShouldStillFail()
+    {
+        var settings = new LlmSettings { DefaultProvider = "Gemini" };
+
+        var result = Assert.Single(Validate(settings));
+        Assert.Contains("Gemini", result.ErrorMessage);
     }
 
     [Fact]
@@ -238,8 +248,9 @@ public sealed class LlmSettingsTests
         Assert.Contains("TranscriptionProvider", result.ErrorMessage);
     }
 
+    /// <summary>1.0.35 起 TranscriptionModel 空白不擋啟動：轉錄停用、健康監控亮紅燈。</summary>
     [Fact]
-    public void Validate_ShouldReportError_WhenTranscriptionProviderHasBlankTranscriptionModel()
+    public void Validate_TranscriptionProviderWithBlankTranscriptionModel_ShouldNotBlockStartup()
     {
         var settings = new LlmSettings
         {
@@ -255,8 +266,8 @@ public sealed class LlmSettingsTests
             },
         };
 
-        var result = Assert.Single(Validate(settings));
-        Assert.Contains("TranscriptionModel", result.ErrorMessage);
+        Assert.Empty(Validate(settings));
+        Assert.False(settings.IsTranscriptionConfigured);
     }
 
     [Fact]
@@ -272,6 +283,53 @@ public sealed class LlmSettingsTests
         var provider = settings.Providers["AzureOpenAI"];
         Assert.Equal("gpt-4o-transcribe", provider.TranscriptionModel);
         Assert.Equal(LlmProviderSettings.DefaultTranscriptionApiVersion, provider.EffectiveTranscriptionApiVersion);
+    }
+
+    #endregion
+
+    #region Deployment 別名（1.0.35）
+
+    /// <summary>
+    /// 1.0.34 部署到 IIS 的實際設定：部署名稱寫在 Deployment、沒有 Model。
+    /// 以前 Deployment 被靜默忽略、Model 退回預設的 gpt-4o-mini，Azure 回 404 DeploymentNotFound。
+    /// </summary>
+    [Fact]
+    public void Bind_DeploymentOnly_ShouldBeUsedAsModel()
+    {
+        var settings = Bind(new Dictionary<string, string?>
+        {
+            ["LlmSettings:DefaultProvider"] = "AzureOpenAI",
+            ["LlmSettings:TranscriptionProvider"] = "AzureOpenAI",
+            ["LlmSettings:Providers:AzureOpenAI:Endpoint"] = "https://kmengineopenai1.services.ai.azure.com",
+            ["LlmSettings:Providers:AzureOpenAI:ApiKey"] = "",
+            ["LlmSettings:Providers:AzureOpenAI:Deployment"] = "gpt-5.6-sol",
+        });
+
+        Assert.Equal("gpt-5.6-sol", settings.GetDefaultProvider()!.Model);
+        Assert.Empty(Validate(settings));
+    }
+
+    [Fact]
+    public void Bind_ModelAndDeployment_ModelShouldWin()
+    {
+        var settings = Bind(BaseSettings(), new Dictionary<string, string?>
+        {
+            ["LlmSettings:Providers:AzureOpenAI:Deployment"] = "gpt-5.6-sol",
+        });
+
+        Assert.Equal("gpt-4o-mini", settings.GetDefaultProvider()!.Model);
+    }
+
+    [Fact]
+    public void Bind_TranscriptionDeploymentOnly_ShouldEnableTranscription()
+    {
+        var settings = Bind(BaseSettings(), new Dictionary<string, string?>
+        {
+            ["LlmSettings:Providers:AzureOpenAI:TranscriptionDeployment"] = "gpt-transcribe",
+        });
+
+        Assert.True(settings.IsTranscriptionConfigured);
+        Assert.Equal("gpt-transcribe", settings.GetTranscriptionProvider()!.TranscriptionModel);
     }
 
     #endregion

@@ -237,6 +237,9 @@ public static class ServiceCollectionExtensions
         // 監控與診斷的 AI 分析（0.4.121：AI 日誌分析）：同一個 ITextGenerationProvider，成功／失敗／取消都記帳。
         services.AddScoped<DiagnosticAiService>();
 
+        // 系統健康監控的「測試 AI 連線」（1.0.35，管理者手動按、會產生極少費用）。
+        services.AddScoped<AiConnectionTestService>();
+
         // 長逐字稿的生成可能耗時數分鐘，預設的 100 秒逾時不夠。
         services.AddHttpClient(AzureOpenAiTextGenerationProvider.HttpClientName, client =>
         {

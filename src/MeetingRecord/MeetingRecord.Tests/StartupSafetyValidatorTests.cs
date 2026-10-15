@@ -111,15 +111,29 @@ public sealed class StartupSafetyValidatorTests
         StartupSafetyValidator.Validate(Build(ValidTranscriptionProductionConfig()), "Production", FfmpegInstalled);
     }
 
+    /// <summary>1.0.35 起 TranscriptionModel 空白不擋 Production 啟動（轉錄停用、健康監控亮紅燈）。</summary>
     [Fact]
-    public void Validate_Production_WithTranscriptionProviderButBlankModel_ShouldThrow()
+    public void Validate_Production_WithTranscriptionProviderButBlankModel_ShouldNotThrow()
     {
         var settings = ValidTranscriptionProductionConfig();
         settings["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = string.Empty;
 
+        StartupSafetyValidator.Validate(Build(settings), "Production", FfmpegInstalled);
+    }
+
+    /// <summary>TranscriptionDeployment 是 TranscriptionModel 的別名（1.0.35）：只填它也算啟用轉錄，照樣檢查 FFmpeg。</summary>
+    [Fact]
+    public void Validate_Production_TranscriptionDeploymentAlias_ShouldCountAsTranscriptionEnabled()
+    {
+        var settings = ValidTranscriptionProductionConfig();
+        settings["LlmSettings:TranscriptionProvider"] = string.Empty;
+        settings["LlmSettings:Providers:AzureOpenAI:TranscriptionModel"] = string.Empty;
+        settings["LlmSettings:Providers:AzureOpenAI:TranscriptionDeployment"] = "gpt-transcribe";
+        settings["MediaSettings:FfmpegPath"] = string.Empty;
+
         var ex = Assert.Throws<InvalidOperationException>(
             () => StartupSafetyValidator.Validate(Build(settings), "Production", FfmpegInstalled));
-        Assert.Contains("TranscriptionModel", ex.Message);
+        Assert.Contains("FfmpegPath", ex.Message);
     }
 
     [Fact]

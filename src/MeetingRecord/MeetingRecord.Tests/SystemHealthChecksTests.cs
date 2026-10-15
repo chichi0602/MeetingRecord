@@ -6,6 +6,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Caching;
+using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
 
@@ -96,6 +97,58 @@ public sealed class SystemHealthChecksTests
 
         Assert.Equal(SystemHealthStatus.Healthy, verdict.Status);
         Assert.DoesNotContain("real-secret-key", verdict.Evidence);
+    }
+
+    /// <summary>1.0.35：佐證列顯示實際生效的端點主機與部署名稱，設定鍵打錯時一眼看得出送的是哪個部署。</summary>
+    [Fact]
+    public void AiProvider_Evidence_ShouldShowEffectiveHostAndDeployments()
+    {
+        var verdict = SystemHealthChecks.EvaluateAiProvider(CreateLlmSettings());
+
+        Assert.Contains("端點：contoso.openai.azure.com", verdict.Evidence);
+        Assert.Contains("生成部署：gpt-4o-mini", verdict.Evidence);
+        Assert.Contains("轉錄部署：gpt-4o-transcribe", verdict.Evidence);
+    }
+
+    /// <summary>1.0.35：Model 空白不再擋啟動，改在這裡亮紅燈並寫明缺哪個鍵。</summary>
+    [Fact]
+    public void AiProvider_BlankModel_ShouldBeUnhealthyAndNameTheKey()
+    {
+        var settings = CreateLlmSettings();
+        settings.Providers["AzureOpenAI"].Model = string.Empty;
+
+        var verdict = SystemHealthChecks.EvaluateAiProvider(settings);
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+        Assert.Contains("LlmSettings:Providers:AzureOpenAI:Model", verdict.FailureMessage);
+    }
+
+    [Fact]
+    public void AiProvider_ExplicitTranscriptionWithoutModel_ShouldBeUnhealthy()
+    {
+        var settings = CreateLlmSettings();
+        settings.Providers["AzureOpenAI"].TranscriptionModel = string.Empty;
+
+        var verdict = SystemHealthChecks.EvaluateAiProvider(settings);
+
+        Assert.Equal(SystemHealthStatus.Unhealthy, verdict.Status);
+        Assert.Contains("TranscriptionModel", verdict.FailureMessage);
+    }
+
+    /// <summary>1.0.35：設定檔裡有不認得的鍵時亮黃燈，並把它講出來。</summary>
+    [Fact]
+    public void AiProvider_UnknownKeys_ShouldBeDegradedWithSuggestion()
+    {
+        var findings = LlmConfigurationInspector.Inspect(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["LlmSettings:Providers:AzureOpenAI:ModelName"] = "gpt-5.6-sol",
+        }).Build());
+
+        var verdict = SystemHealthChecks.EvaluateAiProvider(CreateLlmSettings(), findings);
+
+        Assert.Equal(SystemHealthStatus.Degraded, verdict.Status);
+        Assert.Contains("ModelName", verdict.FailureMessage);
+        Assert.Contains("是不是要寫 Model", verdict.FailureMessage);
     }
 
     [Fact]

@@ -472,7 +472,7 @@ public sealed class SystemHealthService : ISystemHealthService
     private SystemHealthItem CheckAiProvider()
     {
         return CreateFeatureItem("AI 供應商設定", "AiProvider", SystemHealthWeights.AiProvider,
-            SystemHealthChecks.EvaluateAiProvider(llmOptions.Value));
+            SystemHealthChecks.EvaluateAiProvider(llmOptions.Value, LlmConfigurationInspector.Inspect(configuration)));
     }
 
     private SystemHealthItem CheckTranscription()

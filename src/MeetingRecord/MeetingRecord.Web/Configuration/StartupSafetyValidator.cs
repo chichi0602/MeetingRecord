@@ -82,12 +82,7 @@ public static class StartupSafetyValidator
 
         if (!string.IsNullOrWhiteSpace(effectiveTranscriptionProvider))
         {
-            var transcriptionModel = configuration[$"{transcriptionPath}:TranscriptionModel"];
-
-            if (transcriptionEnabled && string.IsNullOrWhiteSpace(transcriptionModel))
-            {
-                errors.Add($"{transcriptionPath}:TranscriptionModel 在 Production 啟用語音轉錄後不可留空（例如 gpt-4o-transcribe）。");
-            }
+            // 1.0.35 起 TranscriptionModel 空白不再擋啟動：照常啟動、轉錄停用、健康監控亮紅燈（使用者決定）。
 
             // 轉錄供應商若與生成端不同，其 ApiKey／Endpoint 尚未被上面的區塊檢查過。
             if (transcriptionEnabled
@@ -197,8 +192,10 @@ public static class StartupSafetyValidator
         }
 
         var providerPath = $"{LlmSettings.SectionName}:Providers:{effectiveProvider}";
+        // TranscriptionDeployment 是 TranscriptionModel 的別名（1.0.35）。
         var enabled = !string.IsNullOrWhiteSpace(transcriptionProvider)
-            || !string.IsNullOrWhiteSpace(configuration[$"{providerPath}:TranscriptionModel"]);
+            || !string.IsNullOrWhiteSpace(configuration[$"{providerPath}:TranscriptionModel"])
+            || !string.IsNullOrWhiteSpace(configuration[$"{providerPath}:TranscriptionDeployment"]);
 
         return (enabled, effectiveProvider, providerPath);
     }

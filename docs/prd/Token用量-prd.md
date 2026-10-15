@@ -1,8 +1,8 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.0
+- 文件版本：2.1
 - 文件狀態：已實作
-- 現行系統版本：1.0.31
+- 現行系統版本：1.0.35
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
 - 最後核對日期：2026/10/15
 
@@ -37,6 +37,8 @@
 | 待辦事項擷取 | 4 | token | `TodoExtractionService` | 1 |
 | AI 日誌分析（0.4.121） | 5 | token | `DiagnosticAiService`（監控與診斷 → 日誌檢視） | 1（不帶會議／專案，「對象」為「—」） |
 | AI 例外分析（0.4.122） | 6 | token | `DiagnosticAiService`（監控與診斷 → 系統例外紀錄） | 1（不帶會議／專案，「對象」為「—」） |
+| AI 連線測試（1.0.35） | 7 | token | `AiConnectionTestService`（系統健康監控 →「測試 AI 連線」，管理者手動按） | 1（一則極短提問） |
+| AI 連線測試（轉錄）（1.0.35） | 8 | 音訊 | `AiConnectionTestService` | 1（1 秒靜音） |
 
 1.0.29 起呼叫端一律經 `AiCallGateway`，由 gateway 寫帳（見「四、內部系統運作」）。
 
@@ -323,6 +325,7 @@
 - **0.4.97 起**：儀表板的會議時數取自本帳本的轉錄秒數；0.4.99 起啟動時以帳本中最早的轉錄紀錄回推舊會議的上傳者（0.4.99 為 `ProjectAccessBackfillService`，現為 `TeamConversionService.BackfillMeetingCreatorsAsync`）。
 - **0.4.120**：頁面移到「系統管理 → 監控與診斷」底下（仍以權限鍵「AI 用量分析」授權）。
 - **0.4.121**：新增功能別 `AiUsageFeature.LogAnalysis = 5`（「AI 日誌分析」，token 計費），由 `DiagnosticAiService` 寫帳（成功／失敗／取消都記，不帶會議／專案）；功能下拉自動多一項。
+- **1.0.35**：新增功能別 `ConnectionTest = 7`（「AI 連線測試」，token 計費）與 `TranscriptionConnectionTest = 8`（「AI 連線測試（轉錄）」，以音訊時長計費，`AiUsageFeatureText.IsTokenBased` 一併排除），由系統健康監控的「測試 AI 連線」觸發；功能下拉自動多兩項。
 - **0.4.122**：新增功能別 `AiUsageFeature.ExceptionAnalysis = 6`（「AI 例外分析」，token 計費，系統例外紀錄的明細窗觸發），同樣由 `DiagnosticAiService` 寫帳；功能下拉自動多一項。
 - **0.4.124**：補上 Azure 轉錄部署 `gpt-transcribe` 的單價（每分鐘 0.0045 美元，依 OpenAI 官方價目）；之前健康監控「AI 供應商設定」亮黃燈，轉錄金額記成「—」。本機帳本沒有這個模型的舊紀錄，未回填。`SystemHealthChecksTests.AiProvider_ShippedPricing_ShouldCoverTheDeploymentsInUse` 以出貨的單價表守住。
 - **1.0.29**：所有呼叫端改經 `AiCallGateway` 寫帳；帳本新增 `CallId`（migration `AddAiCallLogAndMeetingDuration`），對應新的 AI 對話紀錄（`AiCallLog`，頁面在 1.0.30）；帳本可設自動保留期限 `LogRetentionSettings:AiUsageLogDays`（預設 0＝永久，啟用時至少 62 天，`AiLogRetentionBackgroundService` 每天清，稽核 `AiUsage.AutoPurge`）；新增每月用量上限 `AiQuotaSettings`，依本帳本計算。儀表板會議時數改讀 `Meeting.MediaDurationSeconds`，不再依賴本帳本。見 [AI 管理（一）](../changelog/2026-10-15-AI管理基礎記錄管線與用量上限.md)。

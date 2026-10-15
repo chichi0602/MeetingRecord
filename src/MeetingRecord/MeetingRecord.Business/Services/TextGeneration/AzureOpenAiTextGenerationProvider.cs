@@ -75,6 +75,13 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
                 $"{LlmSettings.SectionName}:Providers:{settings.DefaultProvider.Trim()}:ApiKey 未設定，無法呼叫文字生成 API。");
         }
 
+        var modelKey = AzureDeploymentErrors.ProviderKey(settings.DefaultProvider, nameof(LlmProviderSettings.Model));
+        if (string.IsNullOrWhiteSpace(provider.Model))
+        {
+            // 1.0.35 起空白不擋啟動、預設值也清空了：用到時才在這裡講清楚缺哪個鍵。
+            throw new InvalidOperationException(AzureDeploymentErrors.MissingDeployment("文字生成", modelKey));
+        }
+
         var requestUri = BuildRequestUri(provider.Endpoint, provider.Model);
 
         var payload = new ChatCompletionRequest
@@ -127,7 +134,8 @@ public class AzureOpenAiTextGenerationProvider : ITextGenerationProvider
 
             throw new AiProviderHttpException(
                 (int)response.StatusCode,
-                $"文字生成 API 回應 {(int)response.StatusCode} {response.ReasonPhrase}：{Truncate(errorBody, 500)}");
+                AzureDeploymentErrors.Describe(
+                    "文字生成", (int)response.StatusCode, response.ReasonPhrase, errorBody, provider.Model, provider.Endpoint, modelKey));
         }
 
         var builder = new StringBuilder();

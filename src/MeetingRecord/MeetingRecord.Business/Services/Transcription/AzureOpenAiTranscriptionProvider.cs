@@ -52,6 +52,12 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
                 $"{LlmSettings.SectionName}:Providers:{settings.EffectiveTranscriptionProviderName}:ApiKey 未設定，無法呼叫語音轉錄 API。");
         }
 
+        var modelKey = AzureDeploymentErrors.ProviderKey(settings.EffectiveTranscriptionProviderName, nameof(LlmProviderSettings.TranscriptionModel));
+        if (string.IsNullOrWhiteSpace(provider.TranscriptionModel))
+        {
+            throw new InvalidOperationException(AzureDeploymentErrors.MissingDeployment("語音轉錄", modelKey));
+        }
+
         var requestUri = BuildRequestUri(provider.Endpoint, provider.TranscriptionModel, provider.EffectiveTranscriptionApiVersion);
 
         using var content = new MultipartFormDataContent();
@@ -78,7 +84,8 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
 
             throw new AiProviderHttpException(
                 (int)response.StatusCode,
-                $"語音轉錄 API 回應 {(int)response.StatusCode} {response.ReasonPhrase}：{Truncate(body, 500)}");
+                AzureDeploymentErrors.Describe(
+                    "語音轉錄", (int)response.StatusCode, response.ReasonPhrase, body, provider.TranscriptionModel, provider.Endpoint, modelKey));
         }
 
         return body.Trim();
@@ -112,15 +119,5 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
         var version = Uri.EscapeDataString(apiVersion.Trim());
 
         return new Uri($"{baseAddress}/openai/deployments/{deployment}/audio/transcriptions?api-version={version}");
-    }
-
-    private static string Truncate(string value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
-        {
-            return value;
-        }
-
-        return string.Concat(value.AsSpan(0, maxLength), "…");
     }
 }

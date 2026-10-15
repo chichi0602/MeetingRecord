@@ -125,9 +125,13 @@ public class LlmSettings : IValidatableObject
     }
 
     /// <summary>
-    /// 只驗證「結構一致性」：指定了供應商時，該供應商必須存在且必要欄位不可空白。
+    /// 只驗證「結構一致性」：指定了供應商時，該供應商必須存在。
     /// 刻意不驗證 <see cref="LlmProviderSettings.ApiKey"/>——正式環境由環境變數注入，
     /// 啟動驗證時可能尚未提供，該檢查改由 Production 專用的啟動安全檢查負責。
+    ///
+    /// <para>1.0.35 起 Endpoint、Model、TranscriptionModel 空白<b>不再擋啟動</b>：系統照常啟動、該 AI 功能停用，
+    /// 健康監控亮紅燈，用到時的錯誤訊息寫明缺哪個鍵。以前空白會讓整個站台起不來，
+    /// 而 appsettings.json 又放了預設值頂替，打錯鍵名（例如寫成 ModelName）時會悄悄改用別的部署。</para>
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -156,26 +160,12 @@ public class LlmSettings : IValidatableObject
         if (IsConfigured)
         {
             var name = DefaultProvider.Trim();
-            if (!Providers.TryGetValue(name, out var provider))
+            if (!Providers.ContainsKey(name))
             {
                 yield return new ValidationResult(
                     $"{SectionName}:DefaultProvider 指定的供應商「{name}」不存在於 {SectionName}:Providers。",
                     [nameof(DefaultProvider)]);
                 yield break;
-            }
-
-            if (string.IsNullOrWhiteSpace(provider.Endpoint))
-            {
-                yield return new ValidationResult(
-                    $"{SectionName}:Providers:{name}:Endpoint 不可為空白。",
-                    [nameof(Providers)]);
-            }
-
-            if (string.IsNullOrWhiteSpace(provider.Model))
-            {
-                yield return new ValidationResult(
-                    $"{SectionName}:Providers:{name}:Model 不可為空白。",
-                    [nameof(Providers)]);
             }
         }
 
@@ -187,21 +177,11 @@ public class LlmSettings : IValidatableObject
         }
 
         var transcriptionName = TranscriptionProvider.Trim();
-        if (!Providers.TryGetValue(transcriptionName, out var transcriptionProvider))
+        if (!Providers.ContainsKey(transcriptionName))
         {
             yield return new ValidationResult(
                 $"{SectionName}:TranscriptionProvider 指定的供應商「{transcriptionName}」不存在於 {SectionName}:Providers。",
                 [nameof(TranscriptionProvider)]);
-            yield break;
-        }
-
-        // 轉錄供應商的 Endpoint 與生成端共用，上方已檢查；這裡只補轉錄專屬欄位
-        // （TranscriptionApiVersion 選填，留空用內建值）。
-        if (string.IsNullOrWhiteSpace(transcriptionProvider.TranscriptionModel))
-        {
-            yield return new ValidationResult(
-                $"{SectionName}:Providers:{transcriptionName}:TranscriptionModel 不可為空白（語音轉錄的部署／模型名稱）。",
-                [nameof(Providers)]);
         }
     }
 }
@@ -237,17 +217,38 @@ public class LlmProviderSettings
     /// <summary>API 金鑰（機敏值，正式環境以環境變數或 user-secrets 提供）。</summary>
     public string ApiKey { get; set; } = string.Empty;
 
+    private string model = string.Empty;
+    private string transcriptionModel = string.Empty;
+
     /// <summary>
     /// 文字生成用：Azure OpenAI 為 deployment 名稱；其他廠商為 model id。
     /// 1.0.28 起文字生成走 Azure OpenAI v1 API（<c>/openai/v1/chat/completions</c>），此值放在 request 的 <c>model</c>，不需要 api-version。
+    /// 1.0.35 起沒填時改用別名 <see cref="Deployment"/>。
     /// </summary>
-    public string Model { get; set; } = string.Empty;
+    public string Model
+    {
+        get => !string.IsNullOrWhiteSpace(model) ? model : Deployment;
+        set => model = value ?? string.Empty;
+    }
+
+    /// <summary>
+    /// <see cref="Model"/> 的別名（1.0.35）。Azure 入口網站稱為「部署」，照著填 <c>Deployment</c> 也認得。
+    /// 兩個都填而且不同時以 <see cref="Model"/> 為準（啟動時與健康監控會提醒）。程式其他地方一律讀 <see cref="Model"/>。
+    /// </summary>
+    public string Deployment { get; set; } = string.Empty;
 
     /// <summary>
     /// 語音轉錄用的 deployment／model 名稱，例如 <c>gpt-4o-transcribe</c>。
-    /// 未啟用轉錄功能時可留空。
+    /// 未啟用轉錄功能時可留空。1.0.35 起沒填時改用別名 <see cref="TranscriptionDeployment"/>。
     /// </summary>
-    public string TranscriptionModel { get; set; } = string.Empty;
+    public string TranscriptionModel
+    {
+        get => !string.IsNullOrWhiteSpace(transcriptionModel) ? transcriptionModel : TranscriptionDeployment;
+        set => transcriptionModel = value ?? string.Empty;
+    }
+
+    /// <summary><see cref="TranscriptionModel"/> 的別名（1.0.35），規則同 <see cref="Deployment"/>。</summary>
+    public string TranscriptionDeployment { get; set; } = string.Empty;
 
     /// <summary>
     /// 語音轉錄的 api-version 內建值（1.0.28）。轉錄**沒有**改走 v1：實測 v1 的

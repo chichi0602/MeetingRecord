@@ -169,6 +169,34 @@
     line-height: 1.7;
 }
 
+.health-probes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--oat-200);
+}
+
+.health-probe {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    font-size: 0.82rem;
+}
+
+.health-probe-item {
+    font-weight: 600;
+}
+
+.health-probe-message {
+    flex-basis: 100%;
+    color: var(--oat-ink-mid);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
 .health-failure {
     padding: 8px 12px;
     border: 1px solid var(--health-tone);

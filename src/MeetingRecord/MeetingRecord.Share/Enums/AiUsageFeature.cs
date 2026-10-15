@@ -38,6 +38,12 @@ public enum AiUsageFeature
 
     /// <summary>AI 例外分析（0.4.122，監控與診斷 → 系統例外紀錄）。一次分析固定一次，不做追問。</summary>
     ExceptionAnalysis = 6,
+
+    /// <summary>AI 連線測試：文字生成（1.0.35，系統健康監控的「測試 AI 連線」，管理者手動按）。送一則極短提問。</summary>
+    ConnectionTest = 7,
+
+    /// <summary>AI 連線測試：語音轉錄（1.0.35）。送 1 秒靜音，以音訊時長計費。</summary>
+    TranscriptionConnectionTest = 8,
 }
 
 /// <summary>功能別的顯示文字與計費單位判斷（UI、日誌與計價共用）。</summary>
@@ -52,6 +58,8 @@ public static class AiUsageFeatureText
         AiUsageFeature.TodoExtraction => "待辦事項擷取",
         AiUsageFeature.LogAnalysis => "AI 日誌分析",
         AiUsageFeature.ExceptionAnalysis => "AI 例外分析",
+        AiUsageFeature.ConnectionTest => "AI 連線測試",
+        AiUsageFeature.TranscriptionConnectionTest => "AI 連線測試（轉錄）",
         _ => "未知",
     };
 
@@ -63,5 +71,6 @@ public static class AiUsageFeatureText
     /// 兩個並存必然會出現互相矛盾的資料。
     /// </para>
     /// </summary>
-    public static bool IsTokenBased(AiUsageFeature feature) => feature != AiUsageFeature.Transcription;
+    public static bool IsTokenBased(AiUsageFeature feature)
+        => feature is not (AiUsageFeature.Transcription or AiUsageFeature.TranscriptionConnectionTest);
 }

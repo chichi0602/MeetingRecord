@@ -52,6 +52,7 @@ public static class SystemHealthWeights
 /// <para>
 /// ⚠️ <b>這裡刻意沒有任何「實際打一次 AI」的檢查。</b> 程式裡能打的兩個 Azure 端點（chat、transcriptions）
 /// 都會計費，而健康頁每次打開、每按一次重新整理都會跑一輪（開發慣例 §6.3）。AI 只看設定。
+/// 要實際驗證部署存不存在，用頁面上管理者手動按的「測試 AI 連線」（1.0.35，<c>AiConnectionTestService</c>，會先二次確認）。
 /// </para>
 /// </summary>
 public static class SystemHealthChecks
@@ -65,14 +66,20 @@ public static class SystemHealthChecks
     /// <summary>AI 呼叫筆數少於這個值時不看失敗率（1 筆失敗就是 100%，沒有意義），只要有失敗就黃燈。</summary>
     public const int MinimumCallsForFailureRate = 5;
 
-    public static SystemHealthVerdict EvaluateAiProvider(LlmSettings settings)
+    /// <param name="findings">
+    /// 設定檔裡不認得的鍵與別名衝突（1.0.35，<see cref="LlmConfigurationInspector"/>）。
+    /// 例如把部署名稱寫成 <c>ModelName</c>：繫結時被靜默忽略，這裡把它講出來。
+    /// </param>
+    public static SystemHealthVerdict EvaluateAiProvider(LlmSettings settings, LlmConfigurationFindings? findings = null)
     {
+        findings ??= LlmConfigurationFindings.None;
+
         if (!settings.IsConfigured)
         {
             return new(
                 SystemHealthStatus.Unhealthy,
                 "LlmSettings:DefaultProvider 未設定。",
-                "沒有設定 AI 供應商，AI 轉會議紀錄、抽出待辦、AI 問答都無法使用。");
+                WithFindings("沒有設定 AI 供應商，AI 轉會議紀錄、抽出待辦、AI 問答都無法使用。", findings));
         }
 
         var providerName = settings.DefaultProvider.Trim();
@@ -91,7 +98,7 @@ public static class SystemHealthChecks
 
         // 單價只看「正在用的模型」：生成要輸入與輸出單價，轉錄要每分鐘單價。
         var missingPricing = new List<string>();
-        if (!HasTextPricing(settings, provider.Model))
+        if (!string.IsNullOrWhiteSpace(provider.Model) && !HasTextPricing(settings, provider.Model))
         {
             missingPricing.Add(provider.Model);
         }
@@ -102,20 +109,47 @@ public static class SystemHealthChecks
         }
 
         // ⚠️ 證據欄會顯示在頁面上：只能寫「已設定／未設定」，絕不能帶出金鑰本身。
-        var evidence = $"供應商：{providerName}；生成模型：{provider.Model}；轉錄模型：{transcriptionModel ?? "未啟用"}；"
+        // 1.0.35 起顯示「實際生效」的端點主機與部署名稱：設定鍵打錯時，這裡一眼看得出送出去的是哪個部署。
+        var evidence = $"供應商：{providerName}；端點：{DescribeHost(provider.Endpoint)}；"
+            + $"生成部署：{(string.IsNullOrWhiteSpace(provider.Model) ? "未設定" : provider.Model.Trim())}；轉錄部署：{transcriptionModel ?? "未啟用"}；"
             + $"金鑰：{(string.IsNullOrWhiteSpace(provider.ApiKey) ? "未設定" : "已設定")}；"
             + $"單價：{(missingPricing.Count == 0 ? "齊全" : "缺 " + string.Join("、", missingPricing))}。";
 
         if (string.IsNullOrWhiteSpace(provider.ApiKey)
             || string.Equals(provider.ApiKey, StartupSafetyValidator.DevelopmentLlmApiKey, StringComparison.Ordinal))
         {
-            return new(SystemHealthStatus.Unhealthy, evidence, "API 金鑰未設定或仍是開發預設值，所有 AI 呼叫都會失敗。");
+            return new(SystemHealthStatus.Unhealthy, evidence, WithFindings("API 金鑰未設定或仍是開發預設值，所有 AI 呼叫都會失敗。", findings));
         }
 
         if (string.IsNullOrWhiteSpace(provider.Endpoint)
             || provider.Endpoint.Contains(StartupSafetyValidator.DevelopmentLlmEndpointMarker, StringComparison.OrdinalIgnoreCase))
         {
-            return new(SystemHealthStatus.Unhealthy, evidence, "Endpoint 未設定或仍是範例值，所有 AI 呼叫都會失敗。");
+            return new(SystemHealthStatus.Unhealthy, evidence, WithFindings("Endpoint 未設定或仍是範例值，所有 AI 呼叫都會失敗。", findings));
+        }
+
+        // 1.0.35 起空白不再擋啟動，改在這裡亮紅燈並寫明缺哪個鍵。
+        if (string.IsNullOrWhiteSpace(provider.Model))
+        {
+            return new(
+                SystemHealthStatus.Unhealthy,
+                evidence,
+                WithFindings($"文字生成沒有設定 Azure 部署名稱（LlmSettings:Providers:{providerName}:Model 或 Deployment），AI 轉會議紀錄、抽出待辦、AI 問答都無法使用。", findings));
+        }
+
+        // 明確指定了轉錄供應商卻沒填部署名稱：轉錄會停用。
+        if (!string.IsNullOrWhiteSpace(settings.TranscriptionProvider)
+            && settings.Providers.TryGetValue(settings.TranscriptionProvider.Trim(), out var explicitTranscription)
+            && string.IsNullOrWhiteSpace(explicitTranscription.TranscriptionModel))
+        {
+            return new(
+                SystemHealthStatus.Unhealthy,
+                evidence,
+                WithFindings($"已指定語音轉錄供應商，但沒有設定轉錄的 Azure 部署名稱（LlmSettings:Providers:{settings.TranscriptionProvider.Trim()}:TranscriptionModel 或 TranscriptionDeployment），上傳的錄音不會被轉錄。", findings));
+        }
+
+        if (findings.HasAny)
+        {
+            return new(SystemHealthStatus.Degraded, evidence, string.Join(" ", findings.All));
         }
 
         if (missingPricing.Count > 0)
@@ -128,6 +162,15 @@ public static class SystemHealthChecks
 
         return new(SystemHealthStatus.Healthy, evidence);
     }
+
+    private static string WithFindings(string message, LlmConfigurationFindings findings)
+        => findings.HasAny ? $"{message} 另外：{string.Join(" ", findings.All)}" : message;
+
+    /// <summary>只顯示主機名稱；端點不是機敏值，但不必整串貼出來。</summary>
+    internal static string DescribeHost(string? endpoint)
+        => string.IsNullOrWhiteSpace(endpoint)
+            ? "未設定"
+            : Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) ? uri.Host : endpoint.Trim();
 
     public static SystemHealthVerdict EvaluateTranscription(bool transcriptionConfigured, string? ffmpegPath, Func<string, bool> ffmpegExists)
     {

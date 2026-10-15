@@ -359,6 +359,14 @@ namespace MeetingRecord.Web
                 app.Services.GetRequiredService<LogLevelRuntimeState>().Initialize();
                 #endregion
 
+                #region AI 設定的不認得鍵與別名衝突（1.0.35，所有環境，不中止啟動）
+                // 設定繫結會靜默忽略打錯的鍵；不提醒的話，只會在呼叫 AI 時才看到 404 DeploymentNotFound。
+                foreach (var finding in LlmConfigurationInspector.Inspect(app.Configuration).All)
+                {
+                    logger.LogWarning("LlmSettings configuration warning. {Finding}", finding);
+                }
+                #endregion
+
                 #region 非 Production 的設定提醒（不中止啟動）
                 // StartupSafetyValidator.Validate 在 NLog 接管之前就跑完，記不了 log；
                 // 開發環境的設定問題（例如沒裝 FFmpeg）因此改在這裡提醒，避免拖到轉錄失敗才發現。

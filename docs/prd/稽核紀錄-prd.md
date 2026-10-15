@@ -1,8 +1,8 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
-- 現行系統版本：1.0.34
+- 現行系統版本：1.0.35
 - 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
 - 最後核對日期：2026/10/15
 
@@ -126,7 +126,7 @@
 | 待辦（1.0.34） | `Todo.Create`（AI 抽出時 `via=AiExtract`）／`Update`／`Delete`、`Todo.Complete`／`Reopen` |
 | 團隊、分類、提示詞（1.0.34） | `Team.*`、`Category.*`、`PromptTemplate.*`：Create／Update／Delete／Enable／Disable；`Team.MembersChange`、`Category.TeamsChange`（有增減才記）、`PromptTemplate.AddPresets` |
 | AI 問答（1.0.34） | `AiChat.Create`／`Rename`／`ClearHistory`／`MessageUpdate`／`Regenerate`／`ExportPdf`／`AttachmentDownload` |
-| AI 用量上限、AI 對話紀錄、Token 用量 | `Ai.QuotaBlocked`、`AiCallLog.View`／`DownloadJson`／`ExportPdf`／`Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`、`AiUsage.Export`／`ExportPdf`／`Delete`／`Purge`／`ClearAll`／`AutoPurge` |
+| AI 用量上限、AI 對話紀錄、Token 用量 | `Ai.QuotaBlocked`、`Ai.ConnectionTest`（1.0.35，系統健康監控的「測試 AI 連線」）、`AiCallLog.View`／`DownloadJson`／`ExportPdf`／`Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`、`AiUsage.Export`／`ExportPdf`／`Delete`／`Purge`／`ClearAll`／`AutoPurge` |
 | 監控與診斷 | `ExceptionLog.Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`／`AiAnalyze`／`AiAnalyzeExportPdf`、`LogLevel.Apply`／`Restore`、`LogViewer.Export`／`AiAnalyze`／`AiAnalyzeExportPdf` |
 | 稽核紀錄本身 | `Audit.Export`、`Audit.Purge`、`Audit.ClearAll`、`Audit.AutoPurge` |
 

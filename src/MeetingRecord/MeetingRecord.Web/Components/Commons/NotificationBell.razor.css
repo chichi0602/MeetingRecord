@@ -1,0 +1,141 @@
+/* 右上角的站內通知（1.0.44）。外觀比照旁邊的使用者選單（圓形白底、奶茶色框）。 */
+.notification-bell {
+    position: relative;
+}
+
+.notification-bell-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border: 1px solid var(--oat-300);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.96) 100%);
+    box-shadow: 0 10px 26px rgba(67, 54, 44, 0.08);
+    color: var(--oat-ink);
+    cursor: pointer;
+}
+
+    .notification-bell-trigger:hover,
+    .notification-bell-open .notification-bell-trigger {
+        border-color: var(--oat-500);
+    }
+
+.notification-bell-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: var(--oat-err);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+}
+
+/* 透明遮罩：點下拉以外的地方就關。z-index 比下拉低一層。 */
+.notification-bell-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+}
+
+.notification-bell-panel {
+    position: absolute;
+    top: calc(100% + 0.55rem);
+    right: 0;
+    z-index: 20;
+    width: min(380px, 90vw);
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--oat-200);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+}
+
+.notification-bell-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--oat-200);
+}
+
+.notification-bell-title {
+    color: var(--oat-ink);
+    font-weight: 600;
+}
+
+.notification-bell-link {
+    border: none;
+    background: none;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+    .notification-bell-link:hover {
+        color: var(--oat-ink);
+        text-decoration: underline;
+    }
+
+.notification-bell-empty {
+    padding: 24px 16px;
+    color: var(--oat-ink-mid);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.notification-bell-list {
+    margin: 0;
+    padding: 4px;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.notification-bell-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 10px;
+    background: none;
+    color: var(--oat-ink-mid);
+    text-align: left;
+    cursor: pointer;
+}
+
+    .notification-bell-item:hover {
+        background: var(--oat-50);
+    }
+
+/* 未讀：字加深加粗，左邊一條提示色。 */
+.notification-bell-item-unread {
+    color: var(--oat-ink);
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 var(--oat-500);
+}
+
+.notification-bell-message {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.notification-bell-time {
+    color: var(--oat-ink-mid);
+    font-size: 0.75rem;
+    font-weight: 400;
+}

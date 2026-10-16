@@ -428,6 +428,73 @@ public partial class TodoViewView : IAsyncDisposable
         detailVisible = false;
     }
 
+    #region 異動紀錄與深連結（1.0.44）
+
+    /// <summary>
+    /// 從鈴鐺通知點進來時帶的待辦（<c>/todos?todoId=N</c>）：切到它的專案並打開它的異動紀錄。
+    /// 待辦頁已經開著時再點另一則通知，元件不會重建、只會重新設參數，所以在 OnParametersSet 處理。
+    /// </summary>
+    [Parameter]
+    public int? TodoId { get; set; }
+
+    private int? handledTodoId;
+
+    private bool changesVisible;
+    private bool changesLoading;
+    private string changesTitle = "異動紀錄";
+    private List<MeetingRecord.AccessDatas.Models.TodoChange> changes = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (TodoId is not { } id || id <= 0 || id == handledTodoId || !string.IsNullOrEmpty(RoleMessage))
+        {
+            return;
+        }
+
+        handledTodoId = id;
+        var todo = await todoService.GetAsync(id);
+        if (todo.Id == 0)
+        {
+            _ = messageService.WarningAsync("找不到這筆待辦，可能已經被刪除或你沒有權限看。");
+            return;
+        }
+
+        // 切到它所屬的專案，清單上才找得到它；異動紀錄直接打開，通知點進來最想看的就是「改了什麼」。
+        if (selectedProjectFilter != todo.ProjectId)
+        {
+            selectedProjectFilter = todo.ProjectId;
+            _pageIndex = 1;
+            await ReloadAsync();
+        }
+
+        await OpenChangesAsync(todo.Id, todo.Title);
+    }
+
+    private async Task OpenChangesAsync(int todoId, string? title)
+    {
+        changesTitle = $"異動紀錄 — {title}";
+        changes = [];
+        changesLoading = true;
+        changesVisible = true;
+        StateHasChanged();
+
+        try
+        {
+            changes = await todoService.GetChangesAsync(todoId);
+        }
+        finally
+        {
+            changesLoading = false;
+        }
+    }
+
+    private void OnChangesCancel(MouseEventArgs args)
+    {
+        changesVisible = false;
+    }
+
+    #endregion
+
     private async Task OnTableChange(QueryModel<TodoAdapterModel> args)
     {
         _pageIndex = args.PageIndex;

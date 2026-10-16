@@ -104,6 +104,9 @@ public static class ServiceCollectionExtensions
         // 稽核紀錄的自動保留期限（1.0.32，預設 365 天）。
         services.AddHostedService<AuditLogRetentionBackgroundService>();
 
+        // 站內通知的自動保留期限（1.0.44，預設 90 天）。
+        services.AddHostedService<NotificationRetentionBackgroundService>();
+
         // 程序層級的未處理例外、管線自我監控（Program.cs 在 Build 後呼叫 Register）、瀏覽器錯誤回報（每個 circuit 一份）。
         services.AddSingleton<ProcessExceptionHooks>();
         services.AddSingleton<LoggingPipelineMonitor>();
@@ -150,6 +153,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<PromptTemplateRepository>();
         services.AddScoped<TodoService>();
         services.AddScoped<TodoRepository>();
+
+        // 待辦異動紀錄與站內通知（1.0.44）：改待辦的每條路徑都經 TodoChangeRecorder；
+        // 通知器是 Singleton（跨連線廣播「誰有新通知」），通知服務只動自己的通知。
+        services.AddScoped<TodoChangeRecorder>();
+        services.AddSingleton<MeetingRecord.Business.Services.Notifications.IUserNotificationNotifier, MeetingRecord.Business.Services.Notifications.UserNotificationNotifier>();
+        services.AddScoped<MeetingRecord.Business.Services.Notifications.UserNotificationService>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();

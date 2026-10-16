@@ -74,6 +74,9 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     private string CurrentPageTitle { get; set; } = DefaultPageTitle;
     private string CurrentUserDisplayName { get; set; } = DefaultUserDisplayName;
     private bool CurrentUserIsAdmin { get; set; }
+
+    /// <summary>右上角鈴鐺（1.0.44）要知道是誰；登入檢查完成前是 0，鈴鐺就先不查。</summary>
+    private int CurrentUserId { get; set; }
     private bool isSidebarCollapsed = true;
     private bool isUserMenuOpen;
 
@@ -147,6 +150,7 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
                 : DefaultUserDisplayName;
 
         CurrentUserIsAdmin = currentUser.IsAdmin;
+        CurrentUserId = currentUser.Id;
     }
 
     private void UpdateCurrentPageTitle()

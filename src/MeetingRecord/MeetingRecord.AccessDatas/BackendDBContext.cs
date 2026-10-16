@@ -42,6 +42,12 @@ public partial class BackendDBContext : DbContext
     /// <summary>AI 對話紀錄（1.0.29）。中繼資料一列一次呼叫，送出內容與回應存在 AiCallLogPath 的檔案裡。</summary>
     public virtual DbSet<AiCallLog> AiCallLog { get; set; }
 
+    /// <summary>待辦的異動紀錄（1.0.44）。一個欄位一列，給專案成員看「誰把什麼改了」。</summary>
+    public virtual DbSet<TodoChange> TodoChange { get; set; }
+
+    /// <summary>站內通知（1.0.44），右上角鈴鐺。</summary>
+    public virtual DbSet<UserNotification> UserNotification { get; set; }
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -183,6 +189,40 @@ public partial class BackendDBContext : DbContext
 
             // 預設排序（最後發生 desc）與「清除 N 天未再發生」都吃這個索引。
             entity.HasIndex(x => x.LastOccurredAt);
+        });
+
+        modelBuilder.Entity<TodoChange>(entity =>
+        {
+            // 異動紀錄視窗（某筆待辦、新到舊）與清單的「期限已變更」子查詢（最近一筆 DueDate 異動）。
+            entity.HasIndex(x => new { x.TodoId, x.ChangedAt });
+            entity.HasIndex(x => new { x.Field, x.ChangedAt });
+
+            entity.Property(x => x.Field).HasMaxLength(20);
+            entity.Property(x => x.OldValue).HasMaxLength(200);
+            entity.Property(x => x.NewValue).HasMaxLength(200);
+            entity.Property(x => x.ChangedByName).HasMaxLength(100);
+            entity.Property(x => x.Via).HasMaxLength(20);
+            entity.Property(x => x.SourceMeetingTitle).HasMaxLength(200);
+
+            // 待辦刪了，它的異動紀錄就沒有意義；全站預設 Restrict，這裡要明寫，否則刪待辦會失敗。
+            entity.HasOne(x => x.Todo)
+                .WithMany()
+                .HasForeignKey(x => x.TodoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserNotification>(entity =>
+        {
+            // 鈴鐺：某人的未讀數與最近 N 則都從 UserId 開頭。
+            entity.HasIndex(x => new { x.UserId, x.ReadAt, x.CreatedAt });
+            entity.HasIndex(x => x.CreatedAt);
+
+            entity.Property(x => x.Message).HasMaxLength(500);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         OnModelCreatingPartial(modelBuilder);

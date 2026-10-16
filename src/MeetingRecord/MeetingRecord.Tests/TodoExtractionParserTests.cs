@@ -254,4 +254,65 @@ public sealed class TodoExtractionParserTests
     }
 
     #endregion
+
+    #region 對應既有待辦（1.0.44）
+
+    [Fact]
+    public void BuildUserPrompt_WithOpenTodos_ShouldListThemAndAskForMatchedTodoId()
+    {
+        var prompt = TodoExtractionService.BuildUserPrompt(
+            "內容",
+            new DateTime(2026, 10, 16),
+            [new OpenTodoSummary(12, "完成報表", "王小明", new DateTime(2026, 10, 20), "待辦", "10/08 週會")]);
+
+        Assert.Contains("matchedTodoId", prompt);
+        Assert.Contains("id=12｜完成報表｜負責人：王小明｜期限：2026-10-20", prompt);
+        Assert.Contains("不確定就給 null", prompt);
+    }
+
+    [Fact]
+    public void BuildUserPrompt_WithoutOpenTodos_ShouldNotMentionMatching()
+        => Assert.DoesNotContain("matchedTodoId", TodoExtractionService.BuildUserPrompt("內容", null, []));
+
+    [Fact]
+    public void Parse_MatchedTodoId_ShouldAcceptNumberOrStringWithinValidIds()
+    {
+        const string json = """
+            [
+              {"title":"A","priority":"中","matchedTodoId":12},
+              {"title":"B","priority":"中","matchedTodoId":"13"},
+              {"title":"C","priority":"中","matchedTodoId":null}
+            ]
+            """;
+
+        var results = TodoExtractionParser.Parse(json, new HashSet<int> { 12, 13 });
+
+        Assert.Equal([12, 13, null], results.Select(x => x.MatchedTodoId));
+    }
+
+    [Fact]
+    public void Parse_MatchedTodoId_UnknownOrRepeated_ShouldBecomeNew()
+    {
+        // 模型可能幻想出清單裡沒有的 id；同一筆既有待辦被兩條認領時，第二條當成新增。
+        const string json = """
+            [
+              {"title":"A","priority":"中","matchedTodoId":999},
+              {"title":"B","priority":"中","matchedTodoId":12},
+              {"title":"C","priority":"中","matchedTodoId":12},
+              {"title":"D","priority":"中","matchedTodoId":"不是數字"}
+            ]
+            """;
+
+        var results = TodoExtractionParser.Parse(json, new HashSet<int> { 12 });
+
+        Assert.Equal([null, 12, null, null], results.Select(x => x.MatchedTodoId));
+    }
+
+    [Fact]
+    public void Parse_WithoutValidIds_ShouldNeverMatch()
+        => Assert.All(
+            TodoExtractionParser.Parse("""[{"title":"A","priority":"中","matchedTodoId":12}]"""),
+            x => Assert.Null(x.MatchedTodoId));
+
+    #endregion
 }

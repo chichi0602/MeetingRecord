@@ -42,6 +42,15 @@ public class LogRetentionSettings : IValidatableObject
     /// <summary>稽核紀錄頁「清除 N 天前」用的天數：停用自動清理時退回預設天數。</summary>
     public int ManualAuditLogDays => AuditLogDays > 0 ? AuditLogDays : DefaultAuditLogDays;
 
+    public const int DefaultNotificationDays = 90;
+
+    /// <summary>
+    /// 站內通知（右上角鈴鐺）保留天數（1.0.44），已讀未讀都算。預設 90；0＝不自動清理。
+    /// 通知只是提醒，真正的修改紀錄在待辦的異動紀錄裡，跟著待辦保留。
+    /// </summary>
+    [Range(0, 36500)]
+    public int NotificationDays { get; set; } = DefaultNotificationDays;
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (AiUsageLogDays is > 0 and < MinimumAiUsageLogDays)

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Share.Helpers;
@@ -18,9 +19,15 @@ public class TodoRepository
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
     private readonly IAuditLogService auditLogService;
+    private readonly TodoChangeRecorder changeRecorder;
 
-    public TodoRepository(BackendDBContext context, ProjectAccessService projectAccess, IAuditLogService auditLogService)
+    public TodoRepository(
+        BackendDBContext context,
+        ProjectAccessService projectAccess,
+        IAuditLogService auditLogService,
+        TodoChangeRecorder changeRecorder)
     {
+        this.changeRecorder = changeRecorder;
         this.context = context;
         this.projectAccess = projectAccess;
         this.auditLogService = auditLogService;
@@ -171,13 +178,27 @@ public class TodoRepository
 
         var previousProjectId = existing.ProjectId;
 
+        // 1.0.44：SetValues 會蓋掉 existing，先留一份舊值給異動紀錄（API 改的也要讓專案成員知道）。
+        var before = new Todo
+        {
+            Id = existing.Id,
+            ProjectId = existing.ProjectId,
+            Title = existing.Title,
+            DueDate = existing.DueDate,
+            Owner = existing.Owner,
+            Status = existing.Status,
+            Priority = existing.Priority,
+        };
+
         todo.UpdatedAt = DateTime.Now;
         todo.CreatedAt = existing.CreatedAt;
         // 來源會議紀錄由系統寫入，不開放 API 用戶端覆寫；搬到別的專案時清掉（0.4.115）。
         todo.MeetingId = existing.ProjectId == todo.ProjectId ? existing.MeetingId : null;
 
         context.Entry(existing).CurrentValues.SetValues(todo);
+        var recipients = await changeRecorder.StageAsync(before, existing, AuditVia.Api);
         await context.SaveChangesAsync();
+        changeRecorder.Publish(recipients);
 
         var moved = previousProjectId != todo.ProjectId ? $"; movedFrom={previousProjectId}" : string.Empty;
         await AuditAsync(AuditActions.TodoUpdate, todo.Id, $"title={todo.Title}; projectId={todo.ProjectId}{moved}; via={AuditVia.Api}");

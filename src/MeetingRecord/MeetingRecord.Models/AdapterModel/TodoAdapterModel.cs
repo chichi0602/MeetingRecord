@@ -38,6 +38,17 @@ public class TodoAdapterModel : ICloneable
 
     public DateTime? DueDate { get; set; }
 
+    /// <summary>
+    /// 最近 7 天內改過期限的時間（1.0.44，清單的「期限已變更」標示）；沒改過或超過 7 天為 null。
+    /// 只在清單查詢時由 TodoService 填入，不寫回資料庫。
+    /// </summary>
+    public DateTime? DueDateChangedAt { get; set; }
+
+    /// <summary>「期限已變更」的說明文字，例：「原 2026/10/20，王小明 於 10/16 14:30 改為 2026/10/31（從〈週會〉抽出）」。</summary>
+    public string? DueDateChangeText { get; set; }
+
+    public bool HasRecentDueDateChange => DueDateChangedAt is not null;
+
     [Required(ErrorMessage = "優先度 不可為空白")]
     public string Priority { get; set; } = PriorityOptions[1];
 

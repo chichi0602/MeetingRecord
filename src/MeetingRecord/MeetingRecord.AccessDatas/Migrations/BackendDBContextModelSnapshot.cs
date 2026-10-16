@@ -808,6 +808,97 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.ToTable("Todo");
                 });
 
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.TodoChange", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChangedByName")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ChangedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SourceMeetingId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceMeetingTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TodoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Via")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Field", "ChangedAt");
+
+                    b.HasIndex("TodoId", "ChangedAt");
+
+                    b.ToTable("TodoChange");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.UserNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TodoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UserId", "ReadAt", "CreatedAt");
+
+                    b.ToTable("UserNotification");
+                });
+
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.UserRole", b =>
                 {
                     b.Property<int>("Id")
@@ -956,6 +1047,28 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Navigation("Meeting");
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.TodoChange", b =>
+                {
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Todo", "Todo")
+                        .WithMany()
+                        .HasForeignKey("TodoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Todo");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.UserNotification", b =>
+                {
+                    b.HasOne("MeetingRecord.AccessDatas.Models.MyUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.UserRole", b =>

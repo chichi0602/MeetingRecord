@@ -27,6 +27,8 @@
         <div class="top-row px-4">
             <div class="top-row-title">@CurrentPageTitle</div>
             <div class="top-row-status">
+                @* 1.0.44：站內通知。待辦的期限、負責人、狀態被改時，專案成員會收到。 *@
+                <NotificationBell UserId="@CurrentUserId" />
                 <div class="user-menu @(isUserMenuOpen ? "user-menu-open" : string.Empty)">
                     <button type="button"
                             class="user-menu-trigger"

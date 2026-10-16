@@ -74,6 +74,46 @@ public partial class TodoExtractionModal : ComponentBase
         public DateTime? DueDate { get; set; }
 
         public string Priority { get; set; } = TodoAdapterModel.PriorityOptions[1];
+
+        /// <summary>
+        /// AI 判斷這條就是本專案既有的那筆待辦（1.0.44）。後來的會議又講到同一件事、期限或負責人改了，
+        /// 預設更新既有那筆，不另外新增一筆。
+        /// </summary>
+        public OpenTodoSummary? Matched { get; init; }
+
+        /// <summary>有對應時：true＝更新既有（預設），false＝另外新增。</summary>
+        public bool UpdateExisting { get; set; }
+
+        public bool IsUpdating => Matched is not null && UpdateExisting;
+
+        /// <summary>
+        /// 更新既有時會改的地方（只看期限與負責人；沒填的不會清掉既有值，所以不算變更）。
+        /// 依畫面上目前的值即時算，使用者改了期限或負責人，差異跟著變。
+        /// </summary>
+        public IReadOnlyList<string> Changes
+        {
+            get
+            {
+                if (Matched is null)
+                {
+                    return [];
+                }
+
+                var changes = new List<string>();
+                if (DueDate is { } due && Matched.DueDate?.Date != due.Date)
+                {
+                    changes.Add($"期限 {Matched.DueDate?.ToString("yyyy/MM/dd") ?? "未設定"} → {due:yyyy/MM/dd}");
+                }
+
+                var owner = string.IsNullOrWhiteSpace(Owner) ? null : Owner.Trim();
+                if (owner is not null && !string.Equals(Matched.Owner?.Trim(), owner, StringComparison.Ordinal))
+                {
+                    changes.Add($"負責人 {(string.IsNullOrWhiteSpace(Matched.Owner) ? "未指定" : Matched.Owner)} → {owner}");
+                }
+
+                return changes;
+            }
+        }
     }
 
     private readonly List<Candidate> candidates = [];
@@ -97,6 +137,18 @@ public partial class TodoExtractionModal : ComponentBase
     private int? loadedMeetingId;
 
     private int SelectedCount => candidates.Count(x => x.Selected);
+
+    private int SelectedUpdateCount => candidates.Count(x => x.Selected && x.IsUpdating);
+
+    private int SelectedAddCount => SelectedCount - SelectedUpdateCount;
+
+    /// <summary>按鈕文字講清楚這次會新增幾條、更新幾條（1.0.44）。</summary>
+    private string ConfirmText => (SelectedAddCount, SelectedUpdateCount) switch
+    {
+        (_, 0) => $"加入 {SelectedAddCount} 條待辦",
+        (0, _) => $"更新 {SelectedUpdateCount} 條待辦",
+        _ => $"加入 {SelectedAddCount} 條、更新 {SelectedUpdateCount} 條",
+    };
 
     private bool AllSelected => candidates.Count > 0 && candidates.All(x => x.Selected);
 
@@ -129,23 +181,34 @@ public partial class TodoExtractionModal : ComponentBase
         {
             var existingTitles = await ExtractionService.GetExistingTitlesAsync(MeetingId);
 
-            var extracted = await ExtractionService.ExtractAsync(MeetingId);
+            // 1.0.44：先查好本專案未完成的待辦，同一份送給 AI 比對、也用在畫面的「對應既有」。
+            var openTodos = await ExtractionService.GetOpenTodosAsync(MeetingId);
+            var openById = openTodos.ToDictionary(x => x.Id);
+
+            var extracted = await ExtractionService.ExtractAsync(MeetingId, openTodos: openTodos);
 
             foreach (var item in extracted)
             {
-                // 預設不勾選重複項，但仍然列出來——使用者要再追蹤同一件事就自己勾回去。
-                var alreadyAdded = existingTitles.Contains(item.Title.Trim());
+                var matched = item.MatchedTodoId is { } id && openById.TryGetValue(id, out var summary) ? summary : null;
 
-                candidates.Add(new Candidate
+                // 預設不勾選重複項，但仍然列出來——使用者要再追蹤同一件事就自己勾回去。
+                var alreadyAdded = matched is null && existingTitles.Contains(item.Title.Trim());
+
+                var candidate = new Candidate
                 {
                     AlreadyAdded = alreadyAdded,
-                    Selected = !alreadyAdded,
                     Title = item.Title,
                     Description = item.Description,
                     Owner = item.Owner,
                     DueDate = item.DueDate,
                     Priority = item.Priority,
-                });
+                    Matched = matched,
+                    UpdateExisting = matched is not null,
+                };
+
+                // 對應到既有、但期限負責人都沒變：這次會議只是又提到它，預設不勾（勾了也只是什麼都不改）。
+                candidate.Selected = matched is not null ? candidate.Changes.Count > 0 : !alreadyAdded;
+                candidates.Add(candidate);
             }
 
             if (existingTitles.Count > 0)
@@ -217,12 +280,36 @@ public partial class TodoExtractionModal : ComponentBase
         errorMessage = null;
 
         var added = 0;
+        var updated = 0;
         var failures = new List<string>();
 
         try
         {
             foreach (var candidate in selected)
             {
+                // 1.0.44：更新既有——只改期限與負責人，異動紀錄記下來源會議並通知專案成員。
+                if (candidate.IsUpdating)
+                {
+                    var update = await TodoService.ApplyExtractedUpdateAsync(
+                        candidate.Matched!.Id,
+                        candidate.DueDate,
+                        string.IsNullOrWhiteSpace(candidate.Owner) ? null : candidate.Owner.Trim(),
+                        MeetingId,
+                        MeetingTitle);
+
+                    if (update.Success)
+                    {
+                        updated++;
+                        candidates.Remove(candidate);
+                    }
+                    else
+                    {
+                        failures.Add($"「{candidate.Matched.Title}」：{update.Message}");
+                    }
+
+                    continue;
+                }
+
                 if (string.IsNullOrWhiteSpace(candidate.Title))
                 {
                     failures.Add("有一條待辦沒有標題，已略過。");
@@ -261,16 +348,17 @@ public partial class TodoExtractionModal : ComponentBase
             }
 
             Logger.LogInformation(
-                "Todos created from meeting draft. MeetingId={MeetingId}, ProjectId={ProjectId}, Added={Added}, Failed={Failed}",
+                "Todos created from meeting draft. MeetingId={MeetingId}, ProjectId={ProjectId}, Added={Added}, Updated={Updated}, Failed={Failed}",
                 MeetingId,
                 ProjectId,
                 added,
+                updated,
                 failures.Count);
 
             if (failures.Count > 0)
             {
                 // 部分成功要講清楚成功幾條、哪幾條沒進去，不要只丟一句「失敗」。
-                errorMessage = $"已加入 {added} 條，其餘未加入：{string.Join("；", failures)}";
+                errorMessage = $"已加入 {added} 條、更新 {updated} 條，其餘未處理：{string.Join("；", failures)}";
                 return;
             }
 

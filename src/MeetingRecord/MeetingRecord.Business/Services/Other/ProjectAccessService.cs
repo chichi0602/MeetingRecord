@@ -173,4 +173,26 @@ public sealed class ProjectAccessService
 
         return new ProjectAccess(false, scope.UserId, teamIds, projectIds);
     }
+
+    /// <summary>
+    /// 這些專案的成員：主責＋協作團隊裡、帳號啟用中的使用者（1.0.44，待辦異動通知的收件人）。
+    /// 放在這裡而不是通知服務自己查：「誰屬於這個專案」是權控規則，唯一入口就是這支類別。
+    /// 管理者若不是團隊成員就不在名單裡——他看得到全部專案，全收的話會被所有專案的通知洗版。
+    /// </summary>
+    public async Task<IReadOnlyList<int>> GetProjectMemberIdsAsync(IEnumerable<int> projectIds)
+    {
+        var ids = projectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await context.ProjectTeam
+            .AsNoTracking()
+            .Where(pt => ids.Contains(pt.ProjectId))
+            .Join(context.UserTeam, pt => pt.TeamId, ut => ut.TeamId, (pt, ut) => ut.MyUserId)
+            .Join(context.MyUser.Where(u => u.Status), userId => userId, u => u.Id, (userId, u) => u.Id)
+            .Distinct()
+            .ToListAsync();
+    }
 }

@@ -65,9 +65,14 @@ public class TodoExtractionService
     /// 抽出待辦候選。抽不到東西時回空清單（不是錯誤）；
     /// 會議不存在或還沒有會議紀錄才拋例外。
     /// </summary>
+    /// <param name="openTodos">
+    /// 1.0.44：本專案未完成的待辦（<see cref="GetOpenTodosAsync"/>），送給模型比對「是不是同一件事」。
+    /// 畫面先查好傳進來，候選的「對應既有」才和畫面上顯示的是同一份；傳 null 時這裡自己查。
+    /// </param>
     public async Task<IReadOnlyList<ExtractedTodo>> ExtractAsync(
         int meetingId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<OpenTodoSummary>? openTodos = null)
     {
         var provider = ResolveProvider();
 
@@ -89,7 +94,8 @@ public class TodoExtractionService
             throw new InvalidOperationException("這場會議還沒有產生會議紀錄，沒有可以抽取待辦的內容。");
         }
 
-        var userPrompt = BuildUserPrompt(meeting.DraftContent, meeting.MeetingDate);
+        openTodos ??= await GetOpenTodosAsync(meetingId, cancellationToken);
+        var userPrompt = BuildUserPrompt(meeting.DraftContent, meeting.MeetingDate, openTodos);
 
         // onDelta 傳 null：輸出是 JSON，逐字顯示對使用者沒有意義。
         // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理（這條路徑走在使用者的請求裡，拿得到 CurrentUserService）。
@@ -108,7 +114,7 @@ public class TodoExtractionService
             null,
             cancellationToken);
 
-        var results = TodoExtractionParser.Parse(generated.Content);
+        var results = TodoExtractionParser.Parse(generated.Content, openTodos.Select(x => x.Id).ToHashSet());
 
         logger.LogInformation(
             "Todo extraction completed. MeetingId={MeetingId}, DraftLength={DraftLength}, ExtractedCount={ExtractedCount}",
@@ -151,6 +157,53 @@ public class TodoExtractionService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>送給模型比對的既有待辦最多幾筆（依最近更新排序）。太多會讓提示詞變長、比對也變差。</summary>
+    public const int MaxOpenTodosForMatching = 100;
+
+    /// <summary>
+    /// 這場會議所屬專案的未完成待辦（1.0.44），給模型比對「這次抽到的是不是既有的那件事」。
+    ///
+    /// <para>
+    /// 使用者問「兩場會議抽出同一件待辦、期限改了，會變兩筆還是只改時間」：以前只比同一場會議、標題完全相同，
+    /// AI 每次措辭都不一樣，跨會議一定變兩筆。改成讓 AI 對照既有待辦判斷，畫面上預設「更新既有」。
+    /// 未歸屬專案的會議（不會走到抽出待辦）或看不到的會議回空清單。
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<OpenTodoSummary>> GetOpenTodosAsync(
+        int meetingId,
+        CancellationToken cancellationToken = default)
+    {
+        var projectId = await context.Meeting.AsNoTracking()
+            .Where(x => x.Id == meetingId)
+            .Select(x => x.ProjectId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (projectId is null)
+        {
+            return [];
+        }
+
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewProject(projectId.Value))
+        {
+            return [];
+        }
+
+        return await access.Filter(context.Todo.AsNoTracking())
+            .Where(x => x.ProjectId == projectId.Value && x.Status != TodoAdapterModel.CompletedStatus)
+            .OrderByDescending(x => x.UpdatedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(MaxOpenTodosForMatching)
+            .Select(x => new OpenTodoSummary(
+                x.Id,
+                x.Title,
+                x.Owner,
+                x.DueDate,
+                x.Status,
+                x.Meeting != null ? x.Meeting.Title : null))
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>
     /// 組出送進模型的使用者訊息。抽成 internal static 純函式以便單元測試（本專案既有慣例）。
     ///
@@ -159,8 +212,12 @@ public class TodoExtractionService
     /// 讓模型自己算「下週五」比讓它留白更容易錯，而解析端也刻意只收絕對日期。
     /// </para>
     /// </summary>
-    internal static string BuildUserPrompt(string draftContent, DateTime? meetingDate)
+    internal static string BuildUserPrompt(
+        string draftContent,
+        DateTime? meetingDate,
+        IReadOnlyList<OpenTodoSummary>? openTodos = null)
     {
+        var hasOpenTodos = openTodos is { Count: > 0 };
         var builder = new StringBuilder();
 
         builder.AppendLine("請從以下會議紀錄中擷取待辦事項。");
@@ -180,6 +237,26 @@ public class TodoExtractionService
             ]
             """);
         builder.AppendLine();
+
+        if (hasOpenTodos)
+        {
+            // 1.0.44：讓模型判斷「這條是不是既有的那件事」，畫面才能預設更新既有、不重複新增。
+            builder.AppendLine("每個元素另外加一個欄位 \"matchedTodoId\"：");
+            builder.AppendLine(
+                "若這條待辦和下方「本專案目前未完成的待辦」其中一筆是**同一件事**（即使措辭不同、或期限與負責人改了），" +
+                "填那一筆的 id（數字）；是新的事情就給 null；**不確定就給 null，不要硬配**。" +
+                "同一筆既有待辦最多只對應一條。對應到既有待辦時，owner 與 dueDate 請填**這場會議講的最新值**，這場會議沒提到就給 null。");
+            builder.AppendLine();
+            builder.AppendLine("本專案目前未完成的待辦：");
+            foreach (var todo in openTodos!)
+            {
+                builder.AppendLine(
+                    $"- id={todo.Id}｜{todo.Title}｜負責人：{(string.IsNullOrWhiteSpace(todo.Owner) ? "未指定" : todo.Owner)}" +
+                    $"｜期限：{todo.DueDate?.ToString("yyyy-MM-dd") ?? "未設定"}｜狀態：{todo.Status}");
+            }
+
+            builder.AppendLine();
+        }
 
         if (meetingDate.HasValue)
         {

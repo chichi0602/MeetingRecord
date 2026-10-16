@@ -15,6 +15,7 @@ public sealed partial class LayoutMountTests
 {
     [Theory]
     [InlineData("<BackgroundJobProgressPanel", "右下角的上傳／轉錄／會議紀錄生成進度面板")]
+    [InlineData("<NotificationBell", "右上角的站內通知鈴鐺（1.0.44）")]
     [InlineData("<FormModalHelper", "全站對話框外框樣式")]
     [InlineData("id=\"blazor-error-ui\"", "Blazor 未處理錯誤時的提示列")]
     public void MainLayout_ShouldMount(string marker, string purpose)

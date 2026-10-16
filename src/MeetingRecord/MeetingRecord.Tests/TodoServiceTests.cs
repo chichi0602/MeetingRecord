@@ -564,6 +564,9 @@ public sealed class TodoServiceTests
             return new TodoServiceFixture(connection, context);
         }
 
+        /// <summary>1.0.44：記下鈴鐺被叫醒的收件人。</summary>
+        public RecordingNotificationNotifier Notifier { get; } = new();
+
         public TodoService CreateService()
         {
             return new TodoService(
@@ -571,7 +574,8 @@ public sealed class TodoServiceTests
                 mapper,
                 loggerFactory.CreateLogger<TodoService>(),
                 TestProjectAccess.Admin(Context),
-                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")));
+                TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")),
+                TestTodoChanges.CreateRecorder(Context, TestProjectAccess.Admin(Context), TestAuditActor.Fixed(1, "tester"), Notifier));
         }
 
         public async Task<Project> AddProjectAsync(string title)

@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.22
+- 文件版本：1.23
 - 文件狀態：維護中
-- 現行系統版本：1.0.42
+- 現行系統版本：1.0.44
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/10/16
 
@@ -16,7 +16,7 @@
 | 儀表板 | [儀表板](儀表板-prd.md) | `/dashboard` | `Pages/Dashboards/DashboardPage.razor`、`DashboardService`、`DashboardMetrics` | 已實作（0.4.54；0.4.97 起全員可看、全公司彙總、不放明細） | 0.4.118 |
 | 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Components/Auths/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作（0.4.113 起首次登入強制改密碼） | 0.4.118 |
 | 專案項目 | [專案項目](專案項目-prd.md) | `/projects` | `Pages/Projects/ProjectPage.razor`、`ProjectService`、`ProjectController`、`ProjectTeamWriter` | 已實作 | 0.4.118 |
-| 待辦事項 | [待辦事項](待辦事項-prd.md) | `/todos` | `Pages/Todos/TodoPage.razor`、`TodoService`、`TodoController` | 已實作 | 0.4.118 |
+| 待辦事項 | [待辦事項](待辦事項-prd.md) | `/todos`（1.0.44 起 `/todos?todoId=N` 深連結） | `Pages/Todos/TodoPage.razor`、`TodoService`、`TodoController`、`TodoChangeRecorder`、`UserNotificationService`、`NotificationBell` | 已實作（1.0.44 起異動紀錄、「期限已變更」膠囊、右上角站內通知鈴） | 1.0.44 |
 | AI 問答（含 AI 抽出待辦） | [AI 問答](AI問答-prd.md) | 無獨立路由：`/projects` 工具列與歷史會議紀錄列、`/meetings` 列（`AiChatModal`） | `AiChatModal`、`AiChatService`、`AiChatStore`（`AiChatPath`）、`ChatContextBuilder`、`AttachmentTextExtractor`、`AiChatDocumentExporter`、`TodoExtractionService`／`TodoExtractionModal` | 已實作（0.4.51；0.4.60 起對話存檔案系統） | 0.4.118 |
 | 使用說明 | [使用說明](使用說明-prd.md) | `/help` | `Pages/Helps/HelpPage.razor`、`HelpView`、`HelpManual`（內嵌 `docs/guides/系統使用說明.md` 為資源）、`MarkdownRenderer` | 已實作（0.4.78；1.0.42 起 6 分類＋頁內搜尋） | 1.0.42 |
 | 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Pages/Admins/MyUserPage.razor`、`MyUserService` | 已實作 | 0.4.118 |

@@ -1,0 +1,54 @@
+@* 右上角的站內通知（1.0.44）。目前只有「待辦的期限／負責人／狀態被改了」這一種。 *@
+@if (UserId > 0)
+{
+    <div class="notification-bell @(isOpen ? "notification-bell-open" : string.Empty)">
+        <button type="button"
+                class="notification-bell-trigger"
+                aria-label="@(unreadCount > 0 ? $"通知，{unreadCount} 則未讀" : "通知")"
+                aria-expanded="@isOpen"
+                aria-haspopup="dialog"
+                @onclick="ToggleAsync">
+            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="notifications" />
+            @if (unreadCount > 0)
+            {
+                <span class="notification-bell-badge">@(unreadCount > 99 ? "99+" : unreadCount.ToString())</span>
+            }
+        </button>
+
+        @if (isOpen)
+        {
+            @* 點外面的透明遮罩關閉下拉，不必另外掛全域點擊事件。 *@
+            <div class="notification-bell-backdrop" @onclick="Close"></div>
+            <div class="notification-bell-panel" role="dialog" aria-label="通知">
+                <div class="notification-bell-head">
+                    <span class="notification-bell-title">通知</span>
+                    @if (unreadCount > 0)
+                    {
+                        <button type="button" class="notification-bell-link" @onclick="MarkAllReadAsync">全部標為已讀</button>
+                    }
+                </div>
+
+                @if (items.Count == 0)
+                {
+                    <div class="notification-bell-empty">目前沒有通知。專案裡的待辦被改了期限、負責人或狀態時，會出現在這裡。</div>
+                }
+                else
+                {
+                    <ul class="notification-bell-list">
+                        @foreach (var item in items)
+                        {
+                            <li>
+                                <button type="button"
+                                        class="notification-bell-item @(item.ReadAt is null ? "notification-bell-item-unread" : string.Empty)"
+                                        @onclick="@(() => OpenAsync(item))">
+                                    <span class="notification-bell-message">@item.Message</span>
+                                    <span class="notification-bell-time">@DescribeTime(item.CreatedAt)</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    </div>
+}

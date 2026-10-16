@@ -58,6 +58,40 @@
                         </div>
 
                         <div class="todo-extract-fields">
+                            @* 1.0.44：AI 判斷這條就是既有的那筆待辦——預設更新既有（只改期限與負責人），不另外新增。 *@
+                            @if (candidate.Matched is { } matched)
+                            {
+                                <div class="todo-extract-match">
+                                    <span class="todo-extract-match-label">對應既有</span>
+                                    <span class="todo-extract-match-title" title="@matched.Title">@matched.Title</span>
+                                    @if (!string.IsNullOrWhiteSpace(matched.MeetingTitle))
+                                    {
+                                        <span class="todo-extract-match-source">（來自〈@matched.MeetingTitle〉）</span>
+                                    }
+                                    <Select TItem="string"
+                                            TItemValue="bool"
+                                            @bind-Value="candidate.UpdateExisting"
+                                            Style="width: 120px;">
+                                        <SelectOption TItem="string" TItemValue="bool" Value="true">更新既有</SelectOption>
+                                        <SelectOption TItem="string" TItemValue="bool" Value="false">另外新增</SelectOption>
+                                    </Select>
+                                </div>
+                                @if (candidate.UpdateExisting)
+                                {
+                                    <div class="todo-extract-changes">
+                                        @if (candidate.Changes.Count == 0)
+                                        {
+                                            <span class="todo-extract-dup">與既有相同，不會有任何變更</span>
+                                        }
+                                        @foreach (var change in candidate.Changes)
+                                        {
+                                            <span class="todo-extract-change">@change</span>
+                                        }
+                                        <span class="todo-extract-hint">只會更新期限與負責人；標題、優先度、狀態維持原樣。</span>
+                                    </div>
+                                }
+                            }
+
                             @if (candidate.AlreadyAdded)
                             {
                                 @* 這不是警告也不是錯誤，所以用中性灰而不是警示色：
@@ -65,10 +99,13 @@
                                 <span class="todo-extract-dup">已加入過</span>
                             }
 
-                            <Input @bind-Value="candidate.Title"
-                                   BindOnInput="true"
-                                   Placeholder="待辦標題（必填）"
-                                   MaxLength="200" />
+                            @if (!candidate.IsUpdating)
+                            {
+                                <Input @bind-Value="candidate.Title"
+                                       BindOnInput="true"
+                                       Placeholder="待辦標題（必填）"
+                                       MaxLength="200" />
+                            }
 
                             @if (!string.IsNullOrWhiteSpace(candidate.Description))
                             {
@@ -90,16 +127,19 @@
                                             AllowClear="true"
                                             Style="width: 150px;" />
 
-                                <span class="todo-extract-label">優先度</span>
-                                <Select TItem="string"
-                                        TItemValue="string"
-                                        @bind-Value="candidate.Priority"
-                                        Style="width: 90px;">
-                                    @foreach (var priority in PriorityOptions)
-                                    {
-                                        <SelectOption Value="@priority">@priority</SelectOption>
-                                    }
-                                </Select>
+                                @if (!candidate.IsUpdating)
+                                {
+                                    <span class="todo-extract-label">優先度</span>
+                                    <Select TItem="string"
+                                            TItemValue="string"
+                                            @bind-Value="candidate.Priority"
+                                            Style="width: 90px;">
+                                        @foreach (var priority in PriorityOptions)
+                                        {
+                                            <SelectOption Value="@priority">@priority</SelectOption>
+                                        }
+                                    </Select>
+                                }
                             </div>
                         </div>
                     </div>
@@ -119,7 +159,7 @@
                             Disabled="@(SelectedCount == 0 || isSaving)"
                             OnClick="OnConfirmAsync">
                         <span class="btn-icon-label">
-                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>加入 @SelectedCount 條待辦</span>
+                            <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>@ConfirmText</span>
                         </span>
                     </Button>
                 </div>

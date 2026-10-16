@@ -23,6 +23,7 @@ public class TodoService
     private readonly BackendDBContext context;
     private readonly ProjectAccessService projectAccess;
     private readonly IAuditLogService auditLogService;
+    private readonly TodoChangeRecorder changeRecorder;
 
     public IMapper Mapper { get; }
     public ILogger<TodoService> Logger { get; }
@@ -32,11 +33,13 @@ public class TodoService
         IMapper mapper,
         ILogger<TodoService> logger,
         ProjectAccessService projectAccess,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        TodoChangeRecorder changeRecorder)
     {
         this.context = context;
         this.projectAccess = projectAccess;
         this.auditLogService = auditLogService;
+        this.changeRecorder = changeRecorder;
         Mapper = mapper;
         Logger = logger;
     }
@@ -170,6 +173,7 @@ public class TodoService
         List<Todo> records = await dataSource.ToListAsync();
         (await projectAccess.GetAsync()).HideInvisibleSourceMeetings(records);
         result.Result = Mapper.Map<List<TodoAdapterModel>>(records);
+        await FillRecentDueDateChangesAsync(result.Result.ToList());
         Logger.LogDebug("Loaded todos successfully. Count={Count}", result.Count);
         return result;
     }
@@ -273,8 +277,12 @@ public class TodoService
 
             CleanTrackingHelper.Clean<Todo>(context);
             context.Entry(itemData).State = EntityState.Modified;
+
+            // 1.0.44：異動紀錄與通知和待辦同一次存檔；item 是存檔前的舊值。
+            var recipients = await changeRecorder.StageAsync(item, itemData, AuditVia.Web);
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
+            changeRecorder.Publish(recipients);
 
             var moved = item.ProjectId != itemData.ProjectId ? $"; movedFrom={item.ProjectId}" : string.Empty;
             await AuditAsync(AuditActions.TodoUpdate, itemData.Id, $"title={itemData.Title}; projectId={itemData.ProjectId}{moved}; via={AuditVia.Web}");
@@ -289,6 +297,141 @@ public class TodoService
             return VerifyRecordResultFactory.Build(false, "修改待辦事項失敗。", ex);
         }
     }
+
+    /// <summary>
+    /// 從會議紀錄抽出待辦時「更新既有待辦」（1.0.44）：後來的會議又講到同一件事、期限或負責人改了。
+    ///
+    /// <para>
+    /// <b>只改期限與負責人</b>，而且只有新值有填、與舊值不同才改；標題、描述、優先度、狀態、來源會議都保留——
+    /// 那些是既有待辦的身分，AI 這次的措辭不同不代表要改掉。期限沒講（null）時不會把既有期限清掉。
+    /// 異動紀錄記下是從哪一場會議抽出的，並通知專案成員。
+    /// </para>
+    /// </summary>
+    public async Task<VerifyRecordResult> ApplyExtractedUpdateAsync(
+        int todoId,
+        DateTime? dueDate,
+        string? owner,
+        int meetingId,
+        string? meetingTitle)
+    {
+        Logger.LogInformation("Updating todo from extraction. TodoId={TodoId}, MeetingId={MeetingId}", todoId, meetingId);
+
+        try
+        {
+            CleanTrackingHelper.Clean<Todo>(context);
+            Todo? item = await context.Todo.FirstOrDefaultAsync(x => x.Id == todoId);
+            if (item == null || !(await projectAccess.GetAsync()).CanViewProject(item.ProjectId))
+            {
+                CleanTrackingHelper.Clean<Todo>(context);
+                return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項，可能已經被刪除。");
+            }
+
+            var before = CloneForChange(item);
+
+            if (dueDate is { } newDue && item.DueDate?.Date != newDue.Date)
+            {
+                item.DueDate = newDue.Date;
+            }
+
+            var newOwner = string.IsNullOrWhiteSpace(owner) ? null : owner.Trim();
+            if (newOwner is not null && !string.Equals(item.Owner?.Trim(), newOwner, StringComparison.Ordinal))
+            {
+                item.Owner = newOwner;
+            }
+
+            if (TodoChangeRecorder.Diff(before, item).Count == 0)
+            {
+                CleanTrackingHelper.Clean<Todo>(context);
+                return VerifyRecordResultFactory.Build(true);
+            }
+
+            item.UpdatedAt = DateTime.Now;
+
+            var recipients = await changeRecorder.StageAsync(before, item, AuditVia.AiExtract, meetingId, meetingTitle);
+            await context.SaveChangesAsync();
+            CleanTrackingHelper.Clean<Todo>(context);
+            changeRecorder.Publish(recipients);
+
+            await AuditAsync(AuditActions.TodoUpdate, item.Id, $"title={item.Title}; projectId={item.ProjectId}; sourceMeetingId={meetingId}; via={AuditVia.AiExtract}");
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            context.ChangeTracker.Clear();
+            Logger.LogError(ex, "Failed to update todo from extraction. TodoId={TodoId}", todoId);
+            return VerifyRecordResultFactory.Build(false, "更新既有待辦失敗。", ex);
+        }
+    }
+
+    /// <summary>異動紀錄（1.0.44），新到舊。看不到的待辦回空清單。</summary>
+    public async Task<List<TodoChange>> GetChangesAsync(int todoId)
+    {
+        var projectId = await (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
+            .Where(x => x.Id == todoId)
+            .Select(x => (int?)x.ProjectId)
+            .FirstOrDefaultAsync();
+
+        if (projectId is null)
+        {
+            return [];
+        }
+
+        return await context.TodoChange
+            .AsNoTracking()
+            .Where(x => x.TodoId == todoId)
+            .OrderByDescending(x => x.ChangedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>「期限已變更」標示的期間：最近這幾天內改過期限才標。</summary>
+    public const int DueDateChangedBadgeDays = 7;
+
+    /// <summary>
+    /// 幫清單上的待辦補上「最近 7 天內改過期限」的資訊（1.0.44）：一次查詢涵蓋整頁，不逐筆查。
+    /// </summary>
+    private async Task FillRecentDueDateChangesAsync(IReadOnlyCollection<TodoAdapterModel> todos)
+    {
+        if (todos.Count == 0)
+        {
+            return;
+        }
+
+        var ids = todos.Select(x => x.Id).ToList();
+        var since = DateTime.Now.AddDays(-DueDateChangedBadgeDays);
+        var changes = await context.TodoChange
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.TodoId) && x.Field == TodoChangeFields.DueDate && x.ChangedAt >= since)
+            .OrderByDescending(x => x.ChangedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync();
+
+        var latest = changes.GroupBy(x => x.TodoId).ToDictionary(g => g.Key, g => g.First());
+        foreach (var todo in todos)
+        {
+            if (latest.TryGetValue(todo.Id, out var change))
+            {
+                todo.DueDateChangedAt = change.ChangedAt;
+                todo.DueDateChangeText =
+                    $"原 {TodoChangeRecorder.DisplayValue(TodoChangeFields.DueDate, change.OldValue)}，"
+                    + $"{change.ChangedByName ?? "有人"} 於 {change.ChangedAt:MM/dd HH:mm} 改為 {TodoChangeRecorder.DisplayValue(TodoChangeFields.DueDate, change.NewValue)}"
+                    + $"（{TodoChangeFields.DescribeVia(change.Via, change.SourceMeetingTitle)}）";
+            }
+        }
+    }
+
+    /// <summary>異動比對用的快照：只複製會被比對的欄位。</summary>
+    private static Todo CloneForChange(Todo item) => new()
+    {
+        Id = item.Id,
+        ProjectId = item.ProjectId,
+        Title = item.Title,
+        DueDate = item.DueDate,
+        Owner = item.Owner,
+        Status = item.Status,
+        Priority = item.Priority,
+    };
 
     /// <summary>
     /// 切換完成狀態（清單上的勾選框）。完成與否只寫 Status 一個欄位。
@@ -314,14 +457,19 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項。");
             }
 
+            // 1.0.44：改之前先留一份舊值給異動紀錄（item 是追蹤中的實體，下一行就會被改掉）。
+            var before = CloneForChange(item);
+
             // 取消完成時退回「進行中」而非「待辦」——已經動過的事情退回未開始並不合理。
             item.Status = isCompleted
                 ? TodoAdapterModel.CompletedStatus
                 : TodoAdapterModel.StatusOptions[1];
             item.UpdatedAt = DateTime.Now;
 
+            var recipients = await changeRecorder.StageAsync(before, item, AuditVia.Web);
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
+            changeRecorder.Publish(recipients);
 
             await AuditAsync(isCompleted ? AuditActions.TodoComplete : AuditActions.TodoReopen, id, $"title={item.Title}; status={item.Status}");
             return VerifyRecordResultFactory.Build(true);
@@ -520,7 +668,9 @@ public class TodoService
         // 面板算 5 筆、點下去只出現 4 筆。
         records = records.Where(x => OwnerKey(x.Owner) == owner).ToList();
 
-        return Mapper.Map<List<TodoAdapterModel>>(records);
+        var models = Mapper.Map<List<TodoAdapterModel>>(records);
+        await FillRecentDueDateChangesAsync(models);
+        return models;
     }
 
     private static string OwnerKey(string? owner)

@@ -1,10 +1,10 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.10
+- 文件版本：1.11
 - 文件狀態：已實作
-- 現行系統版本：1.0.34
+- 現行系統版本：1.0.44
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/10/16
 
 > **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
@@ -13,7 +13,7 @@
 提供「待辦事項（Todo）」的建立、查詢、修改、刪除與完成狀態管理。待辦一定隸屬於一個專案項目，並可回溯到產生它的來源會議紀錄。
 
 - 範圍：清單查詢（關鍵字搜尋、專案／狀態過濾、排序、分頁）、單筆維護（含表單驗證）、清單上直接勾選完成、右側各負責人工作量面板、動作級授權。**0.4.66～0.4.98 沒有列級可見範圍控管**（分類與團隊欄位已徹底移除）；0.4.99 起跟著專案的可見範圍（見上）。
-- 非範圍：看板版面與拖拉排序、子任務與相依關係、工時統計、提醒通知。
+- 非範圍：看板版面與拖拉排序、子任務與相依關係、工時統計、到期提醒（排程式的「快到期了」提醒）、Email／推播通知。**異動紀錄與站內通知已於 1.0.44 實作**，見「異動紀錄與站內通知（1.0.44）」。
 - **AI 從會議紀錄抽出待辦已於 0.4.61 實作**（入口在專案項目頁的「歷史會議紀錄」，不在本頁）。抽出來的候選一律經確認視窗由人勾選與修改才寫入，`MeetingId` 填來源會議，清單的「來源」欄因此會顯示會議標題而不是「— 手動新增」。規則見 [專案項目 PRD](專案項目-prd.md)。
 
 ## 二、使用者與入口
@@ -101,6 +101,26 @@
 清單的「待辦事項」欄改為**只顯示標題的單行省略**（`title` 屬性帶完整標題），描述副標移除。描述非空時右邊多一顆資訊 icon（`CrudActionButton`，`Icon="info"`），點開唯讀對話框（`Footer="null"`）看完整描述。
 
 兩個實作細節：對話框**放在元件根層而不是 `<Column>` 裡**（放欄位內會讓每一列都渲染一個視窗）；描述來自 `TextArea`、換行有意義，所以用 `<pre>` 搭配 `white-space: pre-wrap` 保留。另外 `text-overflow: ellipsis` 對純 inline `<span>` 無效，所以標題外面包了一層 flex 容器並讓文字成為 `min-width: 0` 的 flex item。
+
+### 異動紀錄與站內通知（1.0.44）
+
+起因：兩場會議各抽出同一件事、期限不同時，以前一定變兩筆（0.4.76 刻意只比對同一場會議、AI 每次措辭又不同）；有人改了期限，同專案的人也沒有任何管道知道（只進管理者才看得到的稽核紀錄，`Owner` 又是自由文字、連不到帳號）。AI 對應既有待辦見 [專案項目 PRD](專案項目-prd.md)。
+
+- **「期限已變更」膠囊**：截止日在最近 7 天內被改過（`TodoService.DueDateChangedBadgeDays`），截止日旁邊多一顆膠囊；游標移上去看「原 2026/10/20，王小明 於 10/16 14:30 改為 2026/10/31（從〈週會〉抽出）」。清單與負責人面板一次批次查好（`TodoAdapterModel.DueDateChangedAt`／`DueDateChangeText`／`HasRecentDueDateChange`）。
+- **「異動紀錄」按鈕**（history icon）：看得到這筆待辦的人都能按，不需要修改權限。操作欄 80→112px、`ScrollX` 870→902px。唯讀視窗列出時間、誰改的、來源（手動修改／API／從〈會議〉抽出）、欄位、舊值（刪除線）→ 新值。`TodoService.GetChangesAsync(todoId)` 套專案可見範圍，看不到的一律回空。
+- **深連結 `/todos?todoId=N`**：專案過濾切到那筆的專案並直接開它的異動紀錄；不存在或看不到時顯示「找不到這筆待辦，可能已經被刪除或你沒有權限看。」。在 `OnParametersSet` 處理，已經在 `/todos` 時點另一則通知也會生效。
+- **右上角通知鈴**：見 [系統功能總覽](../architecture/系統功能總覽.md)；點一則通知會標為已讀並跳到上面的深連結。
+
+| 議題 | 結論 |
+| --- | --- |
+| 記哪些欄位 | 期限、負責人、狀態、標題、優先度五欄（常數 `TodoChangeFields`），一欄一筆 `TodoChange`，舊值／新值存顯示字串（日期 `yyyy/MM/dd`），操作者姓名與來源會議標題存快照 |
+| 哪些會通知 | **只有期限、負責人、狀態**。標題、優先度只記錄不通知——多半是錯字或措辭修正，通知只會變成雜訊 |
+| 通知誰 | `ProjectAccessService.GetProjectMemberIdsAsync`：專案主責＋協作團隊的成員、只算啟用中的帳號、**排除操作者本人**。不是團隊成員的管理者**不通知**（會被全公司的異動淹沒）。待辦搬到別的專案時，兩個專案的成員都通知 |
+| 新增、刪除 | 不記錄也不通知；刪除待辦會連同異動紀錄一起刪掉（Cascade） |
+| 寫入路徑 | `TodoService.UpdateAsync`、`SetCompletedAsync`（勾選完成）、`TodoRepository.UpdateAsync`（Web API）、`ApplyExtractedUpdateAsync`（AI 抽出更新）全部經 `TodoChangeRecorder`：`StageAsync` 與待辦同一次 `SaveChanges` 寫入（一起成功、一起失敗），存檔成功後 `Publish` 叫醒各人的通知鈴 |
+| 通知文字 | 「王小明 把『完成報表』的期限改為 2026/10/31、負責人改為 林大華（來源：從〈10/16 週會〉抽出）」，來源後綴只有 AI 抽出更新才有 |
+| 通知保留 | `LogRetentionSettings:NotificationDays`（預設 90 天，0＝不清），每日清一次，不寫稽核；歷史留在 `TodoChange` |
+
 ## 四、設計決策
 
 | 議題 | 結論 |
@@ -109,7 +129,7 @@
 | 取消完成後的狀態 | 退回「進行中」而非「待辦」。已經動過的事情退回未開始並不合理 |
 | 專案關聯 | `ProjectId` **必填**，`OnDelete(Cascade)`。沒有專案的待辦只會變成沒人管的垃圾資料 |
 | 會議紀錄關聯 | `MeetingId` **可空**，`OnDelete(SetNull)`。會議紀錄被刪除時待辦保留，只是失去來源 |
-| 團隊權控 | **0.4.66 起完全沒有**。`Categories`／`Teams` 兩欄已隨 migration `RemoveTodoCategoriesTeams` 從資料庫移除，所有待辦對所有使用者可見。與現況一致：待辦必定隸屬於專案，而專案自 0.4.39 起也已退出團隊控管；AI 抽出的待辦從來不填團隊，等於一直是公開的 |
+| 團隊權控 | **0.4.99 起跟著專案走**：只看得到、改得到自己所屬團隊（專案的主責＋協作團隊）底下的待辦，管理者不受限，一律經 `ProjectAccessService`。（0.4.66～0.4.98 期間待辦本身沒有團隊欄位、所有人可見；`Categories`／`Teams` 兩欄已隨 migration `RemoveTodoCategoriesTeams` 移除。）1.0.44 起異動通知的收件人也是同一群人 |
 | 專案完成度 | **不連動**。`Project.CompletionPercentage` 維持手動填寫——待辦數量與專案進度未必成正比，自動換算反而變成假資訊 |
 | 來源會議紀錄的保護 | `MeetingId` 不開放從畫面或 API 覆寫，`TodoService.UpdateAsync` 與 `TodoRepository.UpdateAsync` 都一律沿用資料庫既有值；**換專案時清成 null**（0.4.115，來源會議屬於原專案） |
 | 看不到的來源會議 | 讀取時（畫面清單、單筆、API）來源會議看不到就不帶標題（`ProjectAccess.HideInvisibleSourceMeetings`，0.4.115）。會議改歸屬到別的團隊的專案後，留在原專案的待辦以前會帶出它的標題 |
@@ -134,7 +154,8 @@
 ### 稽核（1.0.34）
 
 - `TodoService`（網頁）與 `TodoRepository`（API）：`Todo.Create`／`Update`／`Delete`，勾選完成與取消完成寫 `Todo.Complete`／`Todo.Reopen`。摘要帶 `title`、`projectId`、`via`；搬到別的專案時加 `movedFrom`。
-- AI 抽出待辦批次加入時每筆各記一筆 `Todo.Create`，摘要 `via=AiExtract`。
+- AI 抽出待辦批次加入時每筆各記一筆 `Todo.Create`，摘要 `via=AiExtract`；更新既有待辦（1.0.44）記 `Todo.Update`，摘要 `via=AiExtract; sourceMeetingId=…`。
+- 稽核只有管理者看得到；給一般使用者看的歷史是待辦自己的異動紀錄（`TodoChange`，1.0.44）。
 - 看不到的待辦被嘗試修改、勾選、刪除，或要建在看不到的專案底下時，寫 `Permission.Denied`（`reason=DataScope`）。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、相關程式與文件
@@ -142,6 +163,10 @@
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Todo.cs`（`Todo`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoService.cs`（`TodoService`：`AddAsync`、`UpdateAsync`、`SetCompletedAsync`、`DeleteAsync`、`BeforeAddCheckAsync`、`BeforeUpdateCheckAsync`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoViewView.razor`、`TodoViewView.razor.cs`
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoChangeRecorder.cs`（`StageAsync`、`Publish`，1.0.44）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Notifications/UserNotificationService.cs`、`UserNotificationNotifier.cs`；`MeetingRecord.Web/BackgroundServices/NotificationRetentionBackgroundService.cs`（1.0.44）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
+- 測試：`TodoChangeAndNotificationTests`（15 條，1.0.44）、`TodoServiceTests`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

@@ -1,4 +1,5 @@
 @using MeetingRecord.Share.Helpers
+@using MeetingRecord.Business.Services.DataAccess
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -90,7 +91,7 @@ else
             <Table @ref="table"
                    TItem="TodoAdapterModel"
                    Class="todo-view-table"
-                   ScrollX="870px"
+                   ScrollX="902px"
                    RemoteDataSource="true"
                    DataSource="@todoAdapterModels"
                    OnChange="OnTableChange"
@@ -146,6 +147,13 @@ else
                         {
                             <span class="todo-view-overdue todo-view-due-overdue">逾期 @context.OverdueDays 天</span>
                         }
+                        @* 1.0.44：7 天內改過期限就標出來，滑鼠移上去看原本是哪天、誰改的、從哪裡改的。 *@
+                        @if (context.HasRecentDueDateChange)
+                        {
+                            <HoverTip Title="@context.DueDateChangeText">
+                                <span class="todo-view-pill todo-view-due-changed">期限已變更</span>
+                            </HoverTip>
+                        }
                     </span>
                 </Column>
                 <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable ShowSorterTooltip="false" Width="78">
@@ -154,8 +162,13 @@ else
                 <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable ShowSorterTooltip="false" Width="76">
                     <span class="todo-view-pill @StatusCssClass(context.Status)">@context.Status</span>
                 </Column>
-                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="80">
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="112">
                     <Space>
+                        @* 1.0.44：誰在什麼時候把什麼改了——看得到這筆待辦就看得到，不需要修改權限。 *@
+                        <SpaceItem>
+                            <CrudActionButton Title="異動紀錄" Icon="history"
+                                              OnClick="@(async () => await OpenChangesAsync(context.Id, context.Title))" />
+                        </SpaceItem>
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))
                         {
                             <SpaceItem>
@@ -398,4 +411,42 @@ else
        Footer="null"
        OnCancel="OnDetailCancel">
     <pre class="todo-view-detail-content">@detailContent</pre>
+</Modal>
+
+@* 1.0.44：異動紀錄。比照上面的唯讀檢視放在根層，不要每一列各渲染一個。 *@
+<Modal Title="@changesTitle"
+       Class="form-modal-standard"
+       @bind-Visible="@changesVisible"
+       Keyboard="true"
+       Footer="null"
+       OnCancel="OnChangesCancel">
+    @if (changesLoading)
+    {
+        <div class="todo-view-changes-empty"><Spin /> 載入中…</div>
+    }
+    else if (changes.Count == 0)
+    {
+        <div class="todo-view-changes-empty">這筆待辦建立之後還沒有被修改過。</div>
+    }
+    else
+    {
+        <ul class="todo-view-changes">
+            @foreach (var change in changes)
+            {
+                <li class="todo-view-change">
+                    <div class="todo-view-change-head">
+                        <span class="todo-view-change-time">@change.ChangedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                        <span class="todo-view-change-who">@(change.ChangedByName ?? "有人")</span>
+                        <span class="todo-view-change-via">@TodoChangeFields.DescribeVia(change.Via, change.SourceMeetingTitle)</span>
+                    </div>
+                    <div class="todo-view-change-body">
+                        <span class="todo-view-change-field">@TodoChangeFields.Describe(change.Field)</span>
+                        <span class="todo-view-change-old">@TodoChangeRecorder.DisplayValue(change.Field, change.OldValue)</span>
+                        <span class="todo-view-change-arrow">→</span>
+                        <span class="todo-view-change-new">@TodoChangeRecorder.DisplayValue(change.Field, change.NewValue)</span>
+                    </div>
+                </li>
+            }
+        </ul>
+    }
 </Modal>

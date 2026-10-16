@@ -172,3 +172,55 @@
     align-items: center;
     gap: 8px;
 }
+
+/* ===== 1.0.44：對應既有待辦（更新既有／另外新增） ===== */
+
+.todo-extract-match {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--oat-50);
+}
+
+.todo-extract-match-label {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--oat-ink);
+    color: #fff;
+    font-size: 0.72rem;
+    line-height: 1.7;
+}
+
+.todo-extract-match-title {
+    max-width: 320px;
+    overflow: hidden;
+    color: var(--oat-ink);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.todo-extract-match-source {
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+}
+
+.todo-extract-changes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.todo-extract-change {
+    padding: 1px 8px;
+    border: 1px solid var(--oat-warn);
+    border-radius: 999px;
+    background: var(--oat-warn-bg);
+    color: var(--oat-ink);
+    font-size: 0.78rem;
+    line-height: 1.7;
+}

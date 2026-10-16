@@ -658,7 +658,8 @@ public sealed class ProjectAccessTests
                 TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")));
 
         public TodoService CreateTodoService(int userId, bool isAdmin = false)
-            => new(Context, mapper, loggerFactory.CreateLogger<TodoService>(), Access(userId, isAdmin), TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")));
+            => new(Context, mapper, loggerFactory.CreateLogger<TodoService>(), Access(userId, isAdmin), TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")),
+                TestTodoChanges.CreateRecorder(Context, Access(userId, isAdmin), TestAuditActor.Fixed(userId, $"user{userId}")));
 
         public TeamService CreateTeamService(int userId = 0, bool isAdmin = false)
             => new(Context, mapper, loggerFactory.CreateLogger<TeamService>(), Access(userId, isAdmin), TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(userId, $"user{userId}")));

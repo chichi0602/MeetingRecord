@@ -11,7 +11,19 @@ public sealed record ExtractedTodo(
     string? Description,
     string? Owner,
     DateTime? DueDate,
-    string Priority);
+    string Priority,
+    int? MatchedTodoId = null);
+
+/// <summary>
+/// 送給模型比對的既有待辦（1.0.44），也是確認視窗「對應既有：…」那一行的資料來源。
+/// </summary>
+public sealed record OpenTodoSummary(
+    int Id,
+    string Title,
+    string? Owner,
+    DateTime? DueDate,
+    string Status,
+    string? MeetingTitle);
 
 /// <summary>
 /// 把 LLM 回傳的文字解析成待辦候選清單。
@@ -60,14 +72,19 @@ public static class TodoExtractionParser
         [property: JsonPropertyName("description")] string? Description,
         [property: JsonPropertyName("owner")] string? Owner,
         [property: JsonPropertyName("dueDate")] string? DueDate,
-        [property: JsonPropertyName("priority")] string? Priority);
+        [property: JsonPropertyName("priority")] string? Priority,
+        [property: JsonPropertyName("matchedTodoId")] JsonElement? MatchedTodoId = null);
 
     /// <summary>
     /// 解析模型輸出。**任何解析不出來的情況都回空清單，不拋例外**——
     /// 「這份會議紀錄看不出待辦」與「模型今天回了奇怪的東西」對使用者來說
     /// 是同一件事：畫面上顯示提示，而不是一個紅色錯誤。
     /// </summary>
-    public static IReadOnlyList<ExtractedTodo> Parse(string? raw)
+    /// <param name="validTodoIds">
+    /// 1.0.44：送給模型比對的既有待辦 Id。<c>matchedTodoId</c> 只接受這裡面的值（模型可能幻想出不存在的 Id），
+    /// 而且同一筆既有待辦只能對應一個候選（後面重複的當成新增）。傳 null 時一律不對應。
+    /// </param>
+    public static IReadOnlyList<ExtractedTodo> Parse(string? raw, IReadOnlySet<int>? validTodoIds = null)
     {
         var json = ExtractJsonArray(raw);
         if (json is null)
@@ -91,6 +108,7 @@ public static class TodoExtractionParser
         }
 
         var results = new List<ExtractedTodo>(items.Length);
+        var matched = new HashSet<int>();
 
         foreach (var item in items)
         {
@@ -106,7 +124,8 @@ public static class TodoExtractionParser
                 Truncate(NullIfBlank(item?.Description), DescriptionMaxLength),
                 Truncate(NullIfBlank(item?.Owner), OwnerMaxLength),
                 ParseDueDate(item?.DueDate),
-                NormalizePriority(item?.Priority)));
+                NormalizePriority(item?.Priority),
+                ResolveMatch(item?.MatchedTodoId, validTodoIds, matched)));
         }
 
         return results;
@@ -131,6 +150,34 @@ public static class TodoExtractionParser
         return start >= 0 && end > start
             ? raw[start..(end + 1)]
             : null;
+    }
+
+    /// <summary>
+    /// 1.0.44：模型說「這條就是既有的那筆」。數字或數字字串都收（模型兩種都會給）；
+    /// 不在送出去的清單裡、或那筆已經被前面的候選認領過，一律當成新增。
+    /// </summary>
+    private static int? ResolveMatch(JsonElement? value, IReadOnlySet<int>? validTodoIds, HashSet<int> matched)
+    {
+        if (validTodoIds is null || value is not { } element)
+        {
+            return null;
+        }
+
+        int id;
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var number))
+        {
+            id = number;
+        }
+        else if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        {
+            id = parsed;
+        }
+        else
+        {
+            return null;
+        }
+
+        return validTodoIds.Contains(id) && matched.Add(id) ? id : null;
     }
 
     /// <summary>

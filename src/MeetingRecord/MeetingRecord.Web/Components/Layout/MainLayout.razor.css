@@ -93,6 +93,7 @@ main {
 .top-row-status {
     display: flex;
     align-items: center;
+    gap: 0.6rem;
     justify-content: flex-end;
     margin-left: auto;
 }

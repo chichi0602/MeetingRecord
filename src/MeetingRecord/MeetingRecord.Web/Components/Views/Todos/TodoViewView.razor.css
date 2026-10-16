@@ -455,3 +455,73 @@ button.todo-view-pill:focus-visible {
 .todo-view-due > span {
     white-space: nowrap;
 }
+
+/* ===== 1.0.44：期限已變更、異動紀錄 ===== */
+
+.todo-view-due-changed {
+    border: 1px solid var(--oat-warn);
+    background: var(--oat-warn-bg);
+    color: var(--oat-ink);
+    white-space: nowrap;
+    cursor: help;
+}
+
+.todo-view-changes-empty {
+    padding: 24px 8px;
+    color: var(--oat-ink-mid);
+    text-align: center;
+}
+
+.todo-view-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.todo-view-change {
+    padding: 8px 12px;
+    border: 1px solid var(--oat-200);
+    border-radius: 8px;
+    background: var(--oat-surface);
+}
+
+.todo-view-change-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 4px;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+}
+
+.todo-view-change-who {
+    color: var(--oat-ink);
+    font-weight: 600;
+}
+
+.todo-view-change-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.todo-view-change-field {
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--oat-100);
+    font-size: 0.8rem;
+}
+
+.todo-view-change-old {
+    color: var(--oat-ink-mid);
+    text-decoration: line-through;
+}
+
+.todo-view-change-new {
+    color: var(--oat-ink);
+    font-weight: 600;
+}

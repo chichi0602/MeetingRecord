@@ -305,7 +305,8 @@ public sealed class BusinessAuditEventsTests : IAsyncDisposable
             Audit(userId, account));
 
     private TodoService CreateTodoService(bool isAdmin = true, int userId = ActorId)
-        => new(context, mapper, NullLogger<TodoService>.Instance, Access(isAdmin, userId), Audit(userId));
+        => new(context, mapper, NullLogger<TodoService>.Instance, Access(isAdmin, userId), Audit(userId),
+            TestTodoChanges.CreateRecorder(context, Access(isAdmin, userId), TestAuditActor.Fixed(userId, ActorAccount)));
 
     private TeamService CreateTeamService()
         => new(context, mapper, NullLogger<TeamService>.Instance, Access(true, ActorId), Audit());

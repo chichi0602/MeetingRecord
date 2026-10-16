@@ -3,4 +3,10 @@
 
 <PageTitle>待辦事項</PageTitle>
 
-<TodoViewView />
+<TodoViewView TodoId="@TodoId" />
+
+@code {
+    /// <summary>從右上角鈴鐺的通知點進來時帶的待辦（<c>/todos?todoId=N</c>，1.0.44）。</summary>
+    [SupplyParameterFromQuery(Name = "todoId")]
+    public int? TodoId { get; set; }
+}

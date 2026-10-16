@@ -16,11 +16,11 @@ else
             <Button Type="ButtonType.Default" Disabled="@(isLoading || isTestingAi)" Loading="@isLoading" OnClick="RefreshAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新檢查</span></span>
             </Button>
-            <Tooltip Title="@("實際呼叫一次文字生成與語音轉錄，確認 Azure 上的部署存在、金鑰可用（會產生極少費用）")">
+            <HoverTip Title="@("實際呼叫一次文字生成與語音轉錄，確認 Azure 上的部署存在、金鑰可用（會產生極少費用）")">
                 <Button Type="ButtonType.Default" Disabled="@(isLoading || isTestingAi)" Loading="@isTestingAi" OnClick="OnTestAiConnectionAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="network_check" /><span>測試 AI 連線</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
         </div>
         <div class="health-toolbar-right">
             @if (report is not null)

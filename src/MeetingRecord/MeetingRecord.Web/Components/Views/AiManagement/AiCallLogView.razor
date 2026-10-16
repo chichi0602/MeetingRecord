@@ -59,11 +59,11 @@ else
             <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnRefreshAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
             </Button>
-            <Tooltip Title="@("匯出目前查詢結果（CSV，不含送出內容與回應）")">
+            <HoverTip Title="@("匯出目前查詢結果（CSV，不含送出內容與回應）")">
                 <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnExportAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
         </div>
     </div>
 
@@ -97,7 +97,7 @@ else
                ScrollX="1000">
             <ColumnDefinitions>
                 <Column TData="DateTime" DataIndex="@nameof(AiCallLogAdapterModel.OccurredAt)"
-                        Title="時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                        Title="時間" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">
                     <span class="call-log-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
                 </Column>
                 <Column TData="string" Title="功能" Width="130">@context.FeatureText</Column>
@@ -108,20 +108,20 @@ else
                     }
                     else
                     {
-                        <Tooltip Title="@context.ErrorMessage">
+                        <HoverTip Title="@context.ErrorMessage">
                             <span class="@GetOutcomeClass(context)">@context.OutcomeText</span>
-                        </Tooltip>
+                        </HoverTip>
                     }
                 </Column>
                 <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.UserName ?? "（系統）")</Column>
                 <Column TData="string" Title="關聯說明" Ellipsis>@(context.RelatedInfo ?? context.TargetText)</Column>
                 <Column TData="string" Title="模型" Width="140" Ellipsis>@context.Model</Column>
                 <Column TData="long" DataIndex="@nameof(AiCallLogAdapterModel.ElapsedMilliseconds)"
-                        Title="耗時" Width="90" Sortable Align="ColumnAlign.Right">
+                        Title="耗時" Width="90" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     <span class="call-log-number">@context.ElapsedText</span>
                 </Column>
                 <Column TData="int" DataIndex="@nameof(AiCallLogAdapterModel.RequestCharacters)"
-                        Title="送出／回應字元" Width="140" Sortable Align="ColumnAlign.Right">
+                        Title="送出／回應字元" Width="140" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     <span class="call-log-number">@context.RequestCharacters.ToString("N0")／@context.ResponseCharacters.ToString("N0")</span>
                 </Column>
                 <ActionColumn Title="操作" Width="100" Fixed="ColumnFixPlacement.Right">

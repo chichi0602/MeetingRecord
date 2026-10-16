@@ -42,21 +42,21 @@
 
                 <span class="markdown-editor-findbar-count">@MatchCountText</span>
 
-                <Tooltip Title="@("上一個（Shift+Enter）")">
+                <HoverTip Title="@("上一個（Shift+Enter）")">
                     <Button Size="ButtonSize.Small"
                             Disabled="@(matches.Count == 0)"
                             OnClick="OnFindPreviousAsync">
                         <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="keyboard_arrow_up" />
                     </Button>
-                </Tooltip>
+                </HoverTip>
 
-                <Tooltip Title="@("下一個（Enter）")">
+                <HoverTip Title="@("下一個（Enter）")">
                     <Button Size="ButtonSize.Small"
                             Disabled="@(matches.Count == 0)"
                             OnClick="OnFindNextAsync">
                         <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="keyboard_arrow_down" />
                     </Button>
-                </Tooltip>
+                </HoverTip>
 
                 <Input @bind-Value="@replaceTerm"
                        BindOnInput="true"

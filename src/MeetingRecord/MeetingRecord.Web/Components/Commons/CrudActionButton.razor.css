@@ -2,7 +2,7 @@
    所以是 28px 方形而不是依內容撐開的膠囊。
 
    所有選擇器都從 .crud-action-button-host 用 ::deep 選進去：
-   Tooltip 與 Button 都是子元件，scope 屬性不會傳進去，直接寫
+   HoverTip 與 Button 都是子元件，scope 屬性不會傳進去，直接寫
    `.crud-action-button {}` 會被編成 `.crud-action-button[b-xxx]` 而選不到。 */
 .crud-action-button-host {
     display: inline-flex;

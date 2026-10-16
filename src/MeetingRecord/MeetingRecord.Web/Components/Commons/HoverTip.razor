@@ -1,0 +1,16 @@
+@* 滑鼠移上去時的提示（1.0.38），取代 AntDesign 的 Tooltip 元件。
+
+   ⚠️ 不要再用 AntDesign 的 Tooltip 元件：它的顯示／隱藏靠 mouseenter/mouseleave 經 Blazor 連線來回，
+   連到遠端主機有延遲時，快速掃過幾顆按鈕「離開」事件就會漏掉，提示框一個個卡在畫面上。
+   這裡只輸出 data-hover-tip 屬性，顯示、定位、消失全由 wwwroot/js/hover-tip.js 在瀏覽器端處理，不經伺服器。
+
+   Title 空白時不輸出屬性，就不會跳出空泡泡（錯誤訊息欄位常是 null）。 *@
+<span class="hover-tip-host" data-hover-tip="@(string.IsNullOrWhiteSpace(Title) ? null : Title)">@ChildContent</span>
+
+@code {
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

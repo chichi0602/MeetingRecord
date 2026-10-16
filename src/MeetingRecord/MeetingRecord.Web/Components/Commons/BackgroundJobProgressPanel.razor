@@ -38,11 +38,11 @@
                             }
                             else if (job.IsFailed)
                             {
-                                <Tooltip Title="@job.ErrorMessage">
+                                <HoverTip Title="@job.ErrorMessage">
                                     <span class="job-progress-panel-failed" aria-label="失敗">
                                         <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="error" />
                                     </span>
-                                </Tooltip>
+                                </HoverTip>
                             }
                             else
                             {

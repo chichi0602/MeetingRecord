@@ -13,11 +13,11 @@ else
 {
     <div class="db-usage-toolbar">
         <div class="db-usage-toolbar-left">
-            <Tooltip Title="重新整理">
+            <HoverTip Title="重新整理">
                 <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="ReloadAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
         </div>
         <div class="db-usage-toolbar-right">
             @if (report is not null)
@@ -81,13 +81,13 @@ else
                 @* 排序綁在原始數值（DataIndex）上、顯示才格式化，
                    否則「資料量估算」會按字串排序，1.5 MB 會排在 900 KB 之下。 *@
                 <Column TData="string" DataIndex="@nameof(TableUsage.TableName)"
-                        Title="資料表" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                        Title="資料表" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="long?" DataIndex="@nameof(TableUsage.RowCount)"
-                        Title="紀錄筆數" Sortable Align="ColumnAlign.Right">
+                        Title="紀錄筆數" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     <span class="db-usage-number">@(context.RowCount?.ToString("N0") ?? "—")</span>
                 </Column>
                 <Column TData="long?" DataIndex="@nameof(TableUsage.EstimatedBytes)"
-                        Title="資料量估算" Sortable Align="ColumnAlign.Right">
+                        Title="資料量估算" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     @if (context.EstimatedBytes is null)
                     {
                         <span class="db-usage-muted" title="@context.Note">—</span>
@@ -98,7 +98,7 @@ else
                     }
                 </Column>
                 <Column TData="int" DataIndex="@nameof(TableUsage.IndexCount)"
-                        Title="索引數" Sortable Align="ColumnAlign.Right" />
+                        Title="索引數" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right" />
             </Table>
             <div class="db-usage-footnote">
                 「資料量估算」不是磁碟占用量：它是各欄位內容的位元組加總，<b>不含索引、頁面碎片與閒置頁</b>，與實際磁碟占用會有差距。
@@ -156,11 +156,11 @@ else
                     }
                 </Column>
                 <Column TData="long" DataIndex="@nameof(DirectoryUsage.Bytes)"
-                        Title="大小" Sortable Align="ColumnAlign.Right">
+                        Title="大小" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     <span class="db-usage-number">@FileSizeFormatter.Describe(context.Bytes)</span>
                 </Column>
                 <Column TData="int" DataIndex="@nameof(DirectoryUsage.FileCount)"
-                        Title="檔案數" Sortable Align="ColumnAlign.Right">
+                        Title="檔案數" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     <span class="db-usage-number">@context.FileCount.ToString("N0")</span>
                 </Column>
             </Table>

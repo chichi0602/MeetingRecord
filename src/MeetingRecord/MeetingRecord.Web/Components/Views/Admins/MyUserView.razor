@@ -10,34 +10,34 @@ else
     <div>
         <div class="my-user-toolbar">
             <div class="my-user-toolbar-left">
-                <Tooltip Title="新增">
+                <HoverTip Title="新增">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async()=>await OnAddAsync(true))">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                     </Button>
-                </Tooltip>
-                <Tooltip Title="重新整理">
+                </HoverTip>
+                <HoverTip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
             <div class="my-user-toolbar-right">
                 <Input class="my-user-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    <Tooltip Title="清空搜尋">
+                    <HoverTip Title="清空搜尋">
                         <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="搜尋">
+                <HoverTip Title="搜尋">
                     <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
         </div>
         @* 批次調整團隊（0.4.101）：勾選多人後一次加入或移出，不必逐一進帳號設定。 *@
@@ -77,19 +77,19 @@ else
                    RowKey="x => x.Id"
                    @bind-SelectedRows="selectedUsers">
                 <Selection />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Account)" Title="帳號" Sortable DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Name)" Title="名稱" Sortable DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Email)" Title="Email" Sortable />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleText)" Title="角色" Sortable />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Account)" Title="帳號" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Email)" Title="Email" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleText)" Title="角色" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.TeamNamesText)" Title="團隊" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable>
+                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable ShowSorterTooltip="false">
                     <StatusToggleTag Enabled="@context.Status"
                                      Name="@context.Account"
                                      CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_使用者管理, PermissionActions.Edit)"
                                      OnToggle="@(async () => await OnToggleStatusAsync(context))" />
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.CreateAt)" Title="建立時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.UpdateAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
                         <SpaceItem>

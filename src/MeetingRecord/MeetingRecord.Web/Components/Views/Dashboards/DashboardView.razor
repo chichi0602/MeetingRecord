@@ -1,14 +1,14 @@
 <div class="dashboard">
     <div class="dashboard-toolbar">
         <h2 class="dashboard-heading">營運概況</h2>
-        <Tooltip Title="重新整理">
+        <HoverTip Title="重新整理">
             <Button Type="ButtonType.Default" Loading="@isLoading" OnClick="@(async () => await ReloadAsync())">
                 <span class="dashboard-refresh">
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" />
                     <span>重新整理</span>
                 </span>
             </Button>
-        </Tooltip>
+        </HoverTip>
     </div>
 
     @if (summary is null)

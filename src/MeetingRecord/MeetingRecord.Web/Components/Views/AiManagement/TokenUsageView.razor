@@ -163,16 +163,16 @@ else
             <Button Type="ButtonType.Default" Disabled="@busy" OnClick="OnRefreshAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
             </Button>
-            <Tooltip Title="@("匯出目前查詢結果的每一筆（CSV）")">
+            <HoverTip Title="@("匯出目前查詢結果的每一筆（CSV）")">
                 <Button Type="ButtonType.Default" Disabled="@(busy || report is not { CallCount: > 0 })" OnClick="OnExportCsvAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出 CSV</span></span>
                 </Button>
-            </Tooltip>
-            <Tooltip Title="@("合計、每日、依使用者／功能／模型與明細（前 200 筆）")">
+            </HoverTip>
+            <HoverTip Title="@("合計、每日、依使用者／功能／模型與明細（前 200 筆）")">
                 <Button Type="ButtonType.Default" Disabled="@(busy || report is not { CallCount: > 0 })" Loading="@isExporting" OnClick="OnExportPdfAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="picture_as_pdf" /><span>匯出 PDF</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
         </div>
     </div>
 
@@ -259,7 +259,7 @@ else
                            ScrollX="1000">
                         <ColumnDefinitions>
                             <Column TData="DateTime" DataIndex="@nameof(AiUsageRow.OccurredAt)"
-                                    Title="時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                                    Title="時間" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">
                                 <span class="token-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
                             </Column>
                             <Column TData="string" Title="功能" Width="130">@context.FeatureText</Column>
@@ -270,9 +270,9 @@ else
                                 }
                                 else
                                 {
-                                    <Tooltip Title="@context.ErrorMessage">
+                                    <HoverTip Title="@context.ErrorMessage">
                                         <span class="@OutcomeClass(context.Outcome)">@context.OutcomeText</span>
-                                    </Tooltip>
+                                    </HoverTip>
                                 }
                             </Column>
                             <Column TData="string" Title="使用者" Width="110" Ellipsis>@(context.UserName ?? "（系統）")</Column>

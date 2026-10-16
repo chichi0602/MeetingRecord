@@ -13,22 +13,22 @@ else
             <div class="prompt-template-view-toolbar-left">
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Create))
                 {
-                    <Tooltip Title="新增">
+                    <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
                                 OnClick="@(async () => await OnAddAsync())">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
 
                     @* 提示詞是「AI 轉會議紀錄」的必要輸入，空清單等於核心功能不能用，
                        所以給新使用者一顆一次建好整組範本的鈕。已存在同名者會略過，可重複按。 *@
-                    <Tooltip Title="一次建立全部內建範本，已存在的會略過">
+                    <HoverTip Title="一次建立全部內建範本，已存在的會略過">
                         <Button Type="ButtonType.Default"
                                 Loading="@isSeedingPresets"
                                 OnClick="@(async () => await OnAddAllPresetsAsync())">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>建立內建範本</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
 
                     @* 刻意做成「選單＋按鈕」兩步式：選單一改就直接寫入資料的話，
                        誤觸就多一筆而且沒有取消機會（AllowClear 也會把 null 送進 handler）。 *@
@@ -41,36 +41,36 @@ else
                             <SelectOption TItemValue="string" TItem="string" Value="@preset.Name">@preset.Name</SelectOption>
                         }
                     </Select>
-                    <Tooltip Title="只新增選取的那一個內建範本">
+                    <HoverTip Title="只新增選取的那一個內建範本">
                         <Button Type="ButtonType.Default"
                                 Disabled="@(string.IsNullOrWhiteSpace(selectedPresetName))"
                                 OnClick="@(async () => await OnAddSelectedPresetAsync())">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增此範本</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="重新整理">
+                <HoverTip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
             <div class="prompt-template-view-toolbar-right">
                 <Input class="prompt-template-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    <Tooltip Title="清空搜尋">
+                    <HoverTip Title="清空搜尋">
                         <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="搜尋">
+                <HoverTip Title="搜尋">
                     <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
         </div>
         <div class="prompt-template-view-table-wrap">
@@ -83,10 +83,10 @@ else
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
-                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Name)" Title="名稱" Sortable />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.ContentPreview)" Title="內容預覽" />
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Description)" Title="描述" />
-                <Column TData="bool" DataIndex="@nameof(PromptTemplateAdapterModel.IsEnabled)" Title="啟用狀態" Sortable>
+                <Column TData="bool" DataIndex="@nameof(PromptTemplateAdapterModel.IsEnabled)" Title="啟用狀態" Sortable ShowSorterTooltip="false">
                     @* 有 Edit 權限才做成可點的按鈕；沒權限就退回純文字，不要用 disabled 按鈕
                        ——disabled 的按鈕不可 focus，掛在上面的 aria-label 狀態說明就讀不到了。
                        可見文字講「狀態」、aria-label 與 title 講「動作」：把「啟用」直接當按鈕的
@@ -108,7 +108,7 @@ else
                         </span>
                     }
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(PromptTemplateAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
+                <Column TData="DateTime" DataIndex="@nameof(PromptTemplateAdapterModel.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))

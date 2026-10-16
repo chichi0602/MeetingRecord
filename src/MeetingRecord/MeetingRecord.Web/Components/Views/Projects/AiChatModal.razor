@@ -14,13 +14,13 @@
     <aside class="ai-chat-sessions">
         <div class="ai-chat-sessions-head">
             <span class="ai-chat-sessions-title">對話紀錄</span>
-            <Tooltip Title="@NewConversationTooltip">
+            <HoverTip Title="@NewConversationTooltip">
                 <Button Type="ButtonType.Default" Size="ButtonSize.Small"
                         Disabled="@(IsBusy || CurrentConversation is { MessageCount: 0 })"
                         OnClick="OnNewConversationAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>開新對話</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
         </div>
 
         <div class="ai-chat-sessions-list">
@@ -290,7 +290,7 @@
             @* 迴紋針：label 包住隱藏的 InputFile，點 label 就開檔案挑選對話框。
                貼上與拖放（chat-attach.js）也是把檔案塞進這同一個 input，三條路共用 OnAttachmentsSelectedAsync。
                @key 只在讀完檔案之後才換（理由見 FileDropZone：太早換會讓 IBrowserFile 讀不到）。 *@
-            <Tooltip Title="@($"附加圖片或檔案（最多 {AiChatAttachmentPolicy.MaxAttachmentsPerQuestion} 個）")">
+            <HoverTip Title="@($"附加圖片或檔案（最多 {AiChatAttachmentPolicy.MaxAttachmentsPerQuestion} 個）")">
                 <label class="ai-chat-attach @(IsBusy ? "ai-chat-attach-disabled" : string.Empty)">
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="attach_file" />
                     <InputFile @key="attachInputKey"
@@ -300,7 +300,7 @@
                                disabled="@IsBusy"
                                class="ai-chat-attach-input" />
                 </label>
-            </Tooltip>
+            </HoverTip>
 
             <Button Type="ButtonType.Primary"
                     Loading="@isAsking"

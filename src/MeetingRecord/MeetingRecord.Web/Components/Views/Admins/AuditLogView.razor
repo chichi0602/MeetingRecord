@@ -48,11 +48,11 @@ else
             <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnRefreshAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
             </Button>
-            <Tooltip Title="@("匯出目前查詢結果（CSV）")">
+            <HoverTip Title="@("匯出目前查詢結果（CSV）")">
                 <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnExportAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
             <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnPurgeAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>清除 @PurgeDays 天前</span></span>
             </Button>
@@ -81,16 +81,16 @@ else
                ScrollX="1100">
             <ColumnDefinitions>
                 <Column TData="DateTime" DataIndex="@nameof(AuditLogAdapterModel.OccurredAt)"
-                        Title="發生時間" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                        Title="發生時間" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">
                     <span class="audit-log-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
                 </Column>
                 <Column TData="bool" Title="結果" Width="80">
                     <span class="@GetResultClass(context)">@context.SuccessText</span>
                 </Column>
                 <Column TData="string" Title="動作" Width="190">
-                    <Tooltip Title="@context.Action">
+                    <HoverTip Title="@context.Action">
                         <span class="@GetActionClass(context)">@context.ActionDisplayName</span>
-                    </Tooltip>
+                    </HoverTip>
                 </Column>
                 <Column TData="string" Title="操作者" Width="160" Ellipsis>@context.ActorDisplay</Column>
                 <Column TData="string" Title="來源 IP" Width="130">

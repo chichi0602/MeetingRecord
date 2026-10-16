@@ -30,9 +30,9 @@
         <Column TData="int" Title="未計入" Width="80" Align="ColumnAlign.Right">
             @if (context.NotCountedCount > 0)
             {
-                <Tooltip Title="@("沒有單價或沒有匯率，金額未計入")">
+                <HoverTip Title="@("沒有單價或沒有匯率，金額未計入")">
                     <span class="group-number group-warn">@context.NotCountedCount.ToString("N0")</span>
-                </Tooltip>
+                </HoverTip>
             }
             else
             {

@@ -489,3 +489,45 @@ body .ant-spin-dot-item {
     z-index: 900;
     margin: 0;
 }
+
+/* ============================================================
+   滑鼠移上去時的提示（1.0.38，HoverTip＋js/hover-tip.js），取代 AntDesign <Tooltip>。
+
+   放全域：泡泡由 JS 掛在 body 下，任何元件的 scoped CSS 都選不到它。
+   外觀比照原本 AntDesign 的提示（深底白字、圓角、小三角省略）。
+   ============================================================ */
+.hover-tip-host {
+    display: inline-flex;
+}
+
+/* 停用的按鈕本身不發滑鼠事件，要讓外層宿主接到，停用時也看得到「為什麼不能按」的提示。 */
+.hover-tip-host > button[disabled],
+.hover-tip-host .ant-btn[disabled] {
+    pointer-events: none;
+}
+
+.hover-tip-bubble {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1070;
+    max-width: 320px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: normal;
+    word-wrap: break-word;
+    box-shadow: 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.hover-tip-bubble-visible {
+    visibility: visible;
+    opacity: 1;
+}

@@ -18,20 +18,20 @@ else
             <div class="todo-view-toolbar-left">
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
                 {
-                    <Tooltip Title="新增">
+                    <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
                                 Disabled="@(availableProjects.Count == 0)"
                                 OnClick="@(async () => await OnAddAsync())">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="重新整理">
+                <HoverTip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
             <div class="todo-view-toolbar-right">
                 <Select TItem="ProjectAdapterModel"
@@ -57,20 +57,20 @@ else
                 @* 寬度用 Style 而不是 class：class 傳給 AntDesign 元件時不會帶 scoped CSS 的 scope 屬性，
                    .todo-view-search-input 那種寫法會被編成 [b-xxx] 而永遠選不到（原本的 220px 從來沒生效）。 *@
                 <Input @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="搜尋關鍵字" Style="width: 160px;" />
-                <Tooltip Title="搜尋">
+                <HoverTip Title="搜尋">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnSearchAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    <Tooltip Title="清空搜尋">
+                    <HoverTip Title="清空搜尋">
                         <Button Type="ButtonType.Default"
                                 OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
             </div>
         </div>
@@ -102,7 +102,7 @@ else
                               Disabled="@(!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))"
                               CheckedChanged="@(EventCallback.Factory.Create<bool>(this, value => OnCompletedChangedAsync(context, value)))" />
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Title)" Title="待辦事項" Sortable>
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Title)" Title="待辦事項" Sortable ShowSorterTooltip="false">
                     @* 只顯示大綱（單行省略），完整內容靠右邊那顆 icon 開唯讀視窗。
                        ellipsis 要生效，文字必須是有寬度約束的 flex 子項——純 inline span 上的
                        text-overflow 不會有任何作用，所以外面這層 flex 容器是必要的。 *@
@@ -119,7 +119,7 @@ else
                 @* 專案名與會議標題都可能很長，一律單行省略、游標移上去看完整名稱（0.4.92）。
                    欄寬收窄之前它們就已經會溢出——溢出的文字會壓到隔壁欄，看起來像「平台— 手動新增」
                    黏成一串，只是 0.4.91 之前多半被橫向捲動蓋掉了。 *@
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable Width="120">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable ShowSorterTooltip="false" Width="120">
                     <span class="todo-view-ellipsis" title="@context.ProjectTitle">@context.ProjectTitle</span>
                 </Column>
                 <Column TData="string" Title="來源會議紀錄" Width="104">
@@ -135,10 +135,10 @@ else
                         </span>
                     }
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable Width="80">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable ShowSorterTooltip="false" Width="80">
                     @(string.IsNullOrWhiteSpace(context.Owner) ? "未指定" : context.Owner)
                 </Column>
-                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable Width="160">
+                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable ShowSorterTooltip="false" Width="160">
                     @* 日期與逾期天數各自 nowrap：整塊「逾期 N 天」最差只會掉到第二行，不會斷在「逾期 1」「天」中間。 *@
                     <span class="todo-view-due">
                         <span class="@(context.IsOverdue ? "todo-view-overdue" : string.Empty)">@context.DueDateOnlyText</span>
@@ -148,10 +148,10 @@ else
                         }
                     </span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable Width="78">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable ShowSorterTooltip="false" Width="78">
                     <span class="todo-view-pill @PriorityCssClass(context.Priority)">@context.Priority</span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable Width="76">
+                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable ShowSorterTooltip="false" Width="76">
                     <span class="todo-view-pill @StatusCssClass(context.Status)">@context.Status</span>
                 </Column>
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="80">

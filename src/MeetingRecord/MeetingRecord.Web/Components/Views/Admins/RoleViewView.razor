@@ -10,42 +10,42 @@ else
     <div>
         <div class="role-view-toolbar">
             <div class="role-view-toolbar-left">
-                <Tooltip Title="新增">
+                <HoverTip Title="新增">
                     <Button Type="ButtonType.Default"
                     OnClick="@(async()=>await OnAddAsync(true))">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
                 @* 上線時系統是空的：一次建好四個預設角色（0.4.108，RolePresets）。已存在同名者會略過，可重複按。 *@
-                <Tooltip Title="一次建立管理者、一般使用者、檢視者、主管四個角色，已存在的會略過">
+                <HoverTip Title="一次建立管理者、一般使用者、檢視者、主管四個角色，已存在的會略過">
                     <Button Type="ButtonType.Default"
                             Loading="@isSeedingPresets"
                             OnClick="@(async () => await OnAddPresetsAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="playlist_add" /><span>建立預設角色</span></span>
                     </Button>
-                </Tooltip>
-                <Tooltip Title="重新整理">
+                </HoverTip>
+                <HoverTip Title="重新整理">
                     <Button Type="ButtonType.Default"
                     OnClick="@(async () => await OnRefreshAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
             <div class="role-view-toolbar-right">
                 <Input class="role-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    <Tooltip Title="清空搜尋">
+                    <HoverTip Title="清空搜尋">
                         <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="搜尋">
+                <HoverTip Title="搜尋">
                     <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
         </div>
         <div class="role-view-table-wrap">
@@ -58,9 +58,9 @@ else
             @bind-PageIndex="_pageIndex"
             @bind-PageSize="_pageSize"
             @bind-Total=_total>
-                <Column TData="string" DataIndex="@nameof(RoleViewAdapterModel.Name)" Title="名稱" Sortable DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.CreateAt)" Title="建立時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.UpdateAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(RoleViewAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
                         <SpaceItem>

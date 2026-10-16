@@ -29,11 +29,11 @@ else
                 }
             </Select>
 
-            <Tooltip Title="@("最多取幾筆（最新的那幾筆）")">
+            <HoverTip Title="@("最多取幾筆（最新的那幾筆）")">
                 <AntDesign.InputNumber TValue="int" @bind-Value="takeCount"
                                        Min="1" Max="@LogQueryRequest.MaxTake" Step="100"
                                        Style="width: 110px;" />
-            </Tooltip>
+            </HoverTip>
         </div>
 
         <div class="log-view-toolbar-right">
@@ -46,23 +46,23 @@ else
             <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnCollapseAll">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="unfold_less" /><span>全部收合</span></span>
             </Button>
-            <Tooltip Title="@("複製本次查詢結果（原始 nlog 格式）")">
+            <HoverTip Title="@("複製本次查詢結果（原始 nlog 格式）")">
                 <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnCopyAllAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製</span></span>
                 </Button>
-            </Tooltip>
-            <Tooltip Title="@("匯出本次查詢結果（原始 nlog 格式的 .log 檔）")">
+            </HoverTip>
+            <HoverTip Title="@("匯出本次查詢結果（原始 nlog 格式的 .log 檔）")">
                 <Button Type="ButtonType.Default" Disabled="@(entriesAscending.Count == 0)" OnClick="OnExportAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
                 </Button>
-            </Tooltip>
-            <Tooltip Title="@AiButtonTitle">
+            </HoverTip>
+            <HoverTip Title="@AiButtonTitle">
                 <Button Type="ButtonType.Default"
                         Disabled="@(entriesAscending.Count == 0 || isAiRunning || !aiAvailable)"
                         OnClick="OnAiAnalyzeAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="insights" /><span>AI 分析</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
         </div>
     </div>
 

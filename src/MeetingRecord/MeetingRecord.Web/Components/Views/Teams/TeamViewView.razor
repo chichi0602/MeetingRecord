@@ -12,35 +12,35 @@ else
                 @* 新增、修改、刪除依角色的動作權限顯示（0.4.109）。 *@
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Create))
                 {
-                    <Tooltip Title="新增">
+                    <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
                                 OnClick="@(async () => await OnAddAsync())">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="重新整理">
+                <HoverTip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
             <div class="team-view-toolbar-right">
                 <Input class="team-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    <Tooltip Title="清空搜尋">
+                    <HoverTip Title="清空搜尋">
                         <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="搜尋">
+                <HoverTip Title="搜尋">
                     <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
         </div>
         <div class="team-view-table-wrap">
@@ -53,17 +53,17 @@ else
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
-                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Name)" Title="名稱" Sortable />
-                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Code)" Title="代號" Sortable />
+                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Code)" Title="代號" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Description)" Title="描述" />
                 <Column TData="int" DataIndex="@nameof(TeamAdapterModel.MemberCount)" Title="成員數" />
-                <Column TData="bool" DataIndex="@nameof(TeamAdapterModel.IsEnabled)" Title="啟用狀態" Sortable>
+                <Column TData="bool" DataIndex="@nameof(TeamAdapterModel.IsEnabled)" Title="啟用狀態" Sortable ShowSorterTooltip="false">
                     <StatusToggleTag Enabled="@context.IsEnabled"
                                      Name="@context.Name"
                                      CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit)"
                                      OnToggle="@(async () => await OnToggleEnabledAsync(context))" />
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(TeamAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
+                <Column TData="DateTime" DataIndex="@nameof(TeamAdapterModel.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit))

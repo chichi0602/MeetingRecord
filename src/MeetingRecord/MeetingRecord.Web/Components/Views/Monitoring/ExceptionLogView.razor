@@ -40,16 +40,16 @@ else
             <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="ReloadAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
             </Button>
-            <Tooltip Title="@("複製目前查詢結果（含完整堆疊）")">
+            <HoverTip Title="@("複製目前查詢結果（含完整堆疊）")">
                 <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnCopyAllAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製</span></span>
                 </Button>
-            </Tooltip>
-            <Tooltip Title="@("匯出目前查詢結果（CSV）")">
+            </HoverTip>
+            <HoverTip Title="@("匯出目前查詢結果（CSV）")">
                 <Button Type="ButtonType.Default" Disabled="@(isLoading || _total == 0)" OnClick="OnExportAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="file_download" /><span>匯出</span></span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
             <Button Type="ButtonType.Default" Disabled="@isLoading" OnClick="OnPurgeAsync">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" /><span>清除 @PurgeDays 天未再發生</span></span>
             </Button>
@@ -81,17 +81,17 @@ else
             <ColumnDefinitions>
                 @* 欄位刻意精簡：只留「何時、幾次、什麼錯、在哪一頁、誰」，其餘收進「查看」明細窗。 *@
                 <Column TData="DateTime" DataIndex="@nameof(ExceptionLogAdapterModel.LastOccurredAt)"
-                        Title="最後發生" Width="165" Sortable DefaultSortOrder="SortDirection.Descending">
+                        Title="最後發生" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">
                     <span class="exception-log-time">@context.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
                 </Column>
                 <Column TData="long" DataIndex="@nameof(ExceptionLogAdapterModel.OccurrenceCount)"
-                        Title="次數" Width="90" Sortable Align="ColumnAlign.Right">
+                        Title="次數" Width="90" Sortable ShowSorterTooltip="false" Align="ColumnAlign.Right">
                     <span class="@GetCountClass(context.OccurrenceCount)">@context.OccurrenceCount.ToString("N0")</span>
                 </Column>
                 <Column TData="string" Title="類型" Width="170" Ellipsis>
-                    <Tooltip Title="@context.ExceptionType">
+                    <HoverTip Title="@context.ExceptionType">
                         <span>@context.ShortExceptionType</span>
-                    </Tooltip>
+                    </HoverTip>
                 </Column>
                 <Column TData="string" Title="訊息" Ellipsis>@context.Message</Column>
                 <Column TData="string" Title="頁面" Width="160" Ellipsis>@(context.Page ?? "—")</Column>
@@ -126,13 +126,13 @@ else
                 <Button Type="ButtonType.Default" Disabled="@isStackTraceLoading" OnClick="OnCopyDetailAsync">
                     <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" /><span>複製</span></span>
                 </Button>
-                <Tooltip Title="@AiButtonTitle">
+                <HoverTip Title="@AiButtonTitle">
                     <Button Type="ButtonType.Default"
                             Disabled="@(isStackTraceLoading || isAiRunning || !aiAvailable)"
                             OnClick="OnAiAnalyzeAsync">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="insights" /><span>AI 分析</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
 
             <dl class="exception-log-detail-list">

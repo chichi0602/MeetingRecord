@@ -16,19 +16,19 @@ else
             <div class="meeting-view-toolbar-left">
                 @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Create))
                 {
-                    <Tooltip Title="新增">
+                    <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
                                 OnClick="@(async () => await OnAddAsync())">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="重新整理">
+                <HoverTip Title="重新整理">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnRefreshAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="refresh" /><span>重新整理</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
             <div class="meeting-view-toolbar-right">
                 @* 分類＝「什麼資料」（0.4.102 放回來）；只用來篩選，不影響誰看得到。團隊不放回會議頁：可見性跟著專案走。 *@
@@ -43,17 +43,17 @@ else
                 <Input class="meeting-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
-                    <Tooltip Title="清空搜尋">
+                    <HoverTip Title="清空搜尋">
                         <Button Type="ButtonType.Default" OnClick="@(async () => { searchText = string.Empty; _pageIndex = 1; await ReloadAsync(); })">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="close" /><span>清空搜尋</span></span>
                         </Button>
-                    </Tooltip>
+                    </HoverTip>
                 }
-                <Tooltip Title="搜尋">
+                <HoverTip Title="搜尋">
                     <Button Type="ButtonType.Default" OnClick="@(async () => await OnSearchAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             </div>
         </div>
         <div class="meeting-view-table-wrap">
@@ -67,14 +67,14 @@ else
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
                 @* 所屬專案併在標題底下當第二行，不另開一欄——操作欄最多會有 11 顆圖示，能省一欄是一欄。 *@
-                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable>
+                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable ShowSorterTooltip="false">
                     <div class="meeting-title-cell">
                         <span class="meeting-title-name">@context.Title</span>
                         <span class="@(context.IsUnassigned ? "meeting-title-project meeting-title-project-unassigned" : "meeting-title-project")"
                               title="@context.ProjectTitleText">@context.ProjectTitleText</span>
                     </div>
                 </Column>
-                <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable />
+                <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.CategoriesText)" Title="分類" />
                 <Column TData="string" Title="影音檔">
                     @if (context.HasMedia)
@@ -89,7 +89,7 @@ else
                         <span class="meeting-media-empty">尚未上傳</span>
                     }
                 </Column>
-                <Column TData="TranscriptionStatus" DataIndex="@nameof(MeetingAdapterModel.TranscriptionStatus)" Title="轉錄狀態" Sortable>
+                <Column TData="TranscriptionStatus" DataIndex="@nameof(MeetingAdapterModel.TranscriptionStatus)" Title="轉錄狀態" Sortable ShowSorterTooltip="false">
                     @{
                         var progress = GetLiveProgress(context.Id);
                     }
@@ -104,15 +104,15 @@ else
                     }
                     @if (progress is not null)
                     {
-                        <Tooltip Title="@DescribeProgressPhase(progress)">
+                        <HoverTip Title="@DescribeProgressPhase(progress)">
                             <span class="meeting-status-percent">@progress.Percent%</span>
-                        </Tooltip>
+                        </HoverTip>
                     }
                     @if (context.TranscriptionStatus == TranscriptionStatus.Failed && !string.IsNullOrWhiteSpace(context.TranscriptionError))
                     {
-                        <Tooltip Title="@context.TranscriptionError">
+                        <HoverTip Title="@context.TranscriptionError">
                             <span class="meeting-status-error-hint">⚠</span>
-                        </Tooltip>
+                        </HoverTip>
                     }
                 </Column>
                 @* Sortable="false"：服務層的排序白名單沒有 DraftStatus，掛上去只會得到一顆按了沒反應的箭頭。 *@
@@ -127,12 +127,12 @@ else
                     }
                     @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
                     {
-                        <Tooltip Title="@context.DraftError">
+                        <HoverTip Title="@context.DraftError">
                             <span class="meeting-status-error-hint">⚠</span>
-                        </Tooltip>
+                        </HoverTip>
                     }
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable DefaultSortOrder="SortDirection.Descending" />
+                <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     @* 上傳在背景跑（1.0.27），只鎖住正在上傳的那一筆，其他紀錄照常操作。
                        看通知器而不是本頁狀態：別的頁籤正在上傳的同一筆也會一起鎖住。

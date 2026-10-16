@@ -27,36 +27,36 @@ else
 
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Create))
             {
-                <Tooltip Title="新增專案">
+                <HoverTip Title="新增專案">
                     <Button Type="ButtonType.Default"
                             OnClick="@(async () => await OnAddAsync(true))">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增專案</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             }
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
             {
-                <Tooltip Title="編輯專案">
+                <HoverTip Title="編輯專案">
                     <Button Type="ButtonType.Default"
                             Disabled="@(SelectedProject is null)"
                             OnClick="@(async () => await OnEditSelectedAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="edit" /><span>編輯專案</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             }
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
             {
-                <Tooltip Title="刪除專案">
+                <HoverTip Title="刪除專案">
                     <Button Type="ButtonType.Default" Class="project-view-icon-button-danger"
                             Disabled="@(SelectedProject is null)"
                             OnClick="@(async () => await OnDeleteSelectedAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete" /><span>刪除專案</span></span>
                     </Button>
-                </Tooltip>
+                </HoverTip>
             }
             @* 刻意放在工具列而不是下方的 AI 生成區塊——那一整塊需要 Edit 權限，
                而問答是唯讀操作，有頁面權限就該能用。 *@
-            <Tooltip Title="就整個專案的會議紀錄與附件提問">
+            <HoverTip Title="就整個專案的會議紀錄與附件提問">
                 <Button Type="ButtonType.Default"
                         Disabled="@(SelectedProject is null)"
                         OnClick="OpenProjectChat">
@@ -65,7 +65,7 @@ else
                         <span class="project-view-cta-text">AI 問答</span>
                     </span>
                 </Button>
-            </Tooltip>
+            </HoverTip>
           </div>
 
           @* 篩選只縮小上面的專案下拉，不影響誰看得到。MaxTagCount=1：多選時收成「+N」，寬度固定不撐開。 *@
@@ -294,17 +294,17 @@ else
                         }
                         @if (draftProgress is not null)
                         {
-                            <Tooltip Title="@DescribeDraftPhase(draftProgress)">
+                            <HoverTip Title="@DescribeDraftPhase(draftProgress)">
                                 <span class="project-view-status-percent">@draftProgress.Percent%</span>
-                            </Tooltip>
+                            </HoverTip>
                         }
                         @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
                         {
-                            <Tooltip Title="@context.DraftError">
+                            <HoverTip Title="@context.DraftError">
                                 <span class="project-view-error-hint">
                                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error_outline" />
                                 </span>
-                            </Tooltip>
+                            </HoverTip>
                         }
                     </Column>
                     <Column TData="DateTime?" Title="產生時間">

@@ -196,6 +196,12 @@ public class TodoController : ControllerBase
             logger.LogInformation("Todo updated successfully. TodoId={TodoId}, Title={Title}", id, todoDto.Title);
             return Ok(ApiResult.SuccessResult("更新待辦事項成功"));
         }
+        catch (InvalidOperationException ex)
+        {
+            // TodoRepository.UpdateAsync 擋下不合法的子項目設定（1.0.45），屬於請求錯誤而不是伺服器錯誤。
+            logger.LogWarning("Todo update request rejected. TodoId={TodoId}, Reason={Reason}", id, ex.Message);
+            return BadRequest(ApiResult.ValidationError(ex.Message));
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update todo. TodoId={TodoId}", id);

@@ -114,7 +114,10 @@ public class TodoExtractionService
             null,
             cancellationToken);
 
-        var results = TodoExtractionParser.Parse(generated.Content, openTodos.Select(x => x.Id).ToHashSet());
+        var results = TodoExtractionParser.Parse(
+            generated.Content,
+            openTodos.Select(x => x.Id).ToHashSet(),
+            openTodos.Where(x => !x.IsSubtask).Select(x => x.Id).ToHashSet());
 
         logger.LogInformation(
             "Todo extraction completed. MeetingId={MeetingId}, DraftLength={DraftLength}, ExtractedCount={ExtractedCount}",
@@ -200,7 +203,8 @@ public class TodoExtractionService
                 x.Owner,
                 x.DueDate,
                 x.Status,
-                x.Meeting != null ? x.Meeting.Title : null))
+                x.Meeting != null ? x.Meeting.Title : null,
+                x.ParentTodoId != null))
             .ToListAsync(cancellationToken);
     }
 
@@ -247,12 +251,18 @@ public class TodoExtractionService
                 "填那一筆的 id（數字）；是新的事情就給 null；**不確定就給 null，不要硬配**。" +
                 "同一筆既有待辦最多只對應一條。對應到既有待辦時，owner 與 dueDate 請填**這場會議講的最新值**，這場會議沒提到就給 null。");
             builder.AppendLine();
+            builder.AppendLine("再加一個欄位 \"parentTodoId\"：");
+            builder.AppendLine(
+                "若這條待辦是下方某一筆既有待辦的**一部分或子步驟**（例如「畫統計圖」屬於「完成報表」），填那一筆的 id；" +
+                "只能填標示為「主項目」的那些（子項目底下不能再掛）。與 matchedTodoId 擇一：是同一件事就填 matchedTodoId、不要填 parentTodoId。" +
+                "**不確定就給 null**。");
+            builder.AppendLine();
             builder.AppendLine("本專案目前未完成的待辦：");
             foreach (var todo in openTodos!)
             {
                 builder.AppendLine(
                     $"- id={todo.Id}｜{todo.Title}｜負責人：{(string.IsNullOrWhiteSpace(todo.Owner) ? "未指定" : todo.Owner)}" +
-                    $"｜期限：{todo.DueDate?.ToString("yyyy-MM-dd") ?? "未設定"}｜狀態：{todo.Status}");
+                    $"｜期限：{todo.DueDate?.ToString("yyyy-MM-dd") ?? "未設定"}｜狀態：{todo.Status}｜{(todo.IsSubtask ? "子項目" : "主項目")}");
             }
 
             builder.AppendLine();

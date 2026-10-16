@@ -191,6 +191,15 @@ public partial class BackendDBContext : DbContext
             entity.HasIndex(x => x.LastOccurredAt);
         });
 
+        modelBuilder.Entity<Todo>(entity =>
+        {
+            // 子項目（1.0.45）：刪主待辦連子項目一起刪；全站預設 Restrict，這裡要明寫。
+            entity.HasOne(x => x.Parent)
+                .WithMany(x => x.Children)
+                .HasForeignKey(x => x.ParentTodoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<TodoChange>(entity =>
         {
             // 異動紀錄視窗（某筆待辦、新到舊）與清單的「期限已變更」子查詢（最近一筆 DueDate 異動）。

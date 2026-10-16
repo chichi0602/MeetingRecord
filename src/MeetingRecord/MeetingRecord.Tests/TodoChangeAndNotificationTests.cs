@@ -295,6 +295,170 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
         Assert.False(await context.UserNotification.AnyAsync());
     }
 
+    // ───────── 子項目（1.0.45） ─────────
+
+    [Fact]
+    public async Task AddSubtask_ShouldRecordOnParentWithoutNotifying()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+
+        var result = await CreateService(userA).AddAsync(NewModel("畫統計圖", project1, parent.Id));
+
+        Assert.True(result.Success, result.Message);
+        var child = await context.Todo.AsNoTracking().SingleAsync(x => x.Title == "畫統計圖");
+        Assert.Equal(parent.Id, child.ParentTodoId);
+
+        var change = await context.TodoChange.AsNoTracking().SingleAsync();
+        Assert.Equal(parent.Id, change.TodoId);
+        Assert.Equal(TodoChangeFields.Subtask, change.Field);
+        Assert.Equal("畫統計圖", change.NewValue);
+        Assert.False(await context.UserNotification.AnyAsync());
+    }
+
+    [Fact]
+    public async Task AddSubtask_UnderSubtask_ShouldBeRejected()
+    {
+        // 只分一層。
+        var parent = await AddTodoAsync("完成報表", project1);
+        var child = await AddTodoAsync("畫統計圖", project1, parentId: parent.Id);
+
+        var result = await CreateService(userA).AddAsync(NewModel("調整配色", project1, child.Id));
+
+        Assert.False(result.Success);
+        Assert.Contains("只分一層", result.Message);
+    }
+
+    [Fact]
+    public async Task AddSubtask_InAnotherProject_ShouldBeRejected()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+
+        var result = await CreateService(userA, isAdmin: true).AddAsync(NewModel("畫統計圖", project2, parent.Id));
+
+        Assert.False(result.Success);
+        Assert.Contains("同一個專案", result.Message);
+    }
+
+    [Fact]
+    public async Task Update_ParentWithChildren_CannotBecomeSubtask_AndCannotParentItself()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        await AddTodoAsync("畫統計圖", project1, parentId: parent.Id);
+        var other = await AddTodoAsync("訂會議室", project1);
+        var service = CreateService(userA);
+
+        var model = await service.GetAsync(parent.Id);
+        model.ParentTodoId = other.Id;
+        Assert.Contains("已經有子項目", (await service.UpdateAsync(model)).Message);
+
+        var self = await service.GetAsync(other.Id);
+        self.ParentTodoId = other.Id;
+        Assert.Contains("自己", (await service.UpdateAsync(self)).Message);
+    }
+
+    [Fact]
+    public async Task Update_MoveParentToAnotherProject_ShouldMoveChildren()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        await AddTodoAsync("畫統計圖", project1, parentId: parent.Id);
+        var service = CreateService(userA, isAdmin: true);
+        var model = await service.GetAsync(parent.Id);
+        model.ProjectId = project2;
+
+        Assert.True((await service.UpdateAsync(model)).Success);
+
+        Assert.Equal(project2, (await context.Todo.AsNoTracking().SingleAsync(x => x.Title == "畫統計圖")).ProjectId);
+    }
+
+    [Fact]
+    public async Task DeleteParent_ShouldCascadeChildren()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        var child = await AddTodoAsync("畫統計圖", project1, parentId: parent.Id, dueDate: new DateTime(2026, 10, 20));
+        await CreateService(userA).ApplyExtractedUpdateAsync(child.Id, new DateTime(2026, 10, 31), null, 1, "週會");
+
+        Assert.True((await CreateService(userA).DeleteAsync(parent.Id)).Success);
+
+        Assert.False(await context.Todo.AnyAsync());
+        Assert.False(await context.TodoChange.AnyAsync());
+    }
+
+    [Fact]
+    public async Task DeleteChild_ShouldRecordRemovalOnParent()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        var child = await AddTodoAsync("畫統計圖", project1, parentId: parent.Id);
+
+        Assert.True((await CreateService(userA).DeleteAsync(child.Id)).Success);
+
+        var change = await context.TodoChange.AsNoTracking().SingleAsync();
+        Assert.Equal(parent.Id, change.TodoId);
+        Assert.Equal("畫統計圖", change.OldValue);
+        Assert.Null(change.NewValue);
+    }
+
+    [Fact]
+    public async Task List_ShouldPageTopLevelOnly_WithChildrenAndProgress()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        await AddTodoAsync("整理資料", project1, parentId: parent.Id, status: TodoAdapterModel.CompletedStatus);
+        await AddTodoAsync("畫統計圖", project1, parentId: parent.Id);
+        await AddTodoAsync("訂會議室", project1);
+
+        var list = (await CreateService(userA).GetAsync(new DataRequest { CurrentPage = 1, PageSize = 50 })).Result.ToList();
+
+        Assert.Equal(["完成報表", "訂會議室"], list.Select(x => x.Title).Order());
+        var top = list.Single(x => x.Title == "完成報表");
+        Assert.Equal(2, top.Children!.Count);
+        Assert.All(top.Children, x => Assert.Equal("完成報表", x.ParentTitle));
+        Assert.Equal((2, 1), (top.ChildrenTotal, top.ChildrenCompleted));
+        Assert.Null(list.Single(x => x.Title == "訂會議室").Children);
+    }
+
+    [Fact]
+    public async Task List_SearchMatchingChild_ShouldListItsParent_WithFullProgress()
+    {
+        // 「負責人是我的子項目」用搜尋要找得到；子項目照篩選顯示，但完成數看全部。
+        var parent = await AddTodoAsync("完成報表", project1);
+        await AddTodoAsync("整理資料", project1, owner: "林大華", parentId: parent.Id);
+        await AddTodoAsync("畫統計圖", project1, owner: "王小明", parentId: parent.Id);
+
+        var list = (await CreateService(userA).GetAsync(new DataRequest { CurrentPage = 1, PageSize = 50, Search = "林大華" })).Result.ToList();
+
+        var top = Assert.Single(list);
+        Assert.Equal("完成報表", top.Title);
+        Assert.Equal(["整理資料"], top.Children!.Select(x => x.Title));
+        Assert.Equal(2, top.ChildrenTotal);
+    }
+
+    [Fact]
+    public async Task SubtaskDueDateChange_ShouldNotifyLikeAnyTodo()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        var child = await AddTodoAsync("畫統計圖", project1, parentId: parent.Id, dueDate: new DateTime(2026, 10, 20));
+
+        await CreateService(userA).ApplyExtractedUpdateAsync(child.Id, new DateTime(2026, 10, 25), null, 1, "週會");
+
+        Assert.True(await context.UserNotification.AnyAsync(x => x.UserId == userB && x.TodoId == child.Id));
+    }
+
+    [Fact]
+    public async Task ApiRepository_AddSubtaskAcrossProjects_ShouldThrowValidationError()
+    {
+        var parent = await AddTodoAsync("完成報表", project1);
+        var access = TestProjectAccess.Admin(context, userA);
+        var actor = TestAuditActor.Fixed(userA, "a");
+        var repository = new TodoRepository(context, access, TestAuditLogs.CreateService(context, actor), TestTodoChanges.CreateRecorder(context, access, actor, notifier));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.AddAsync(
+            new Todo { Title = "畫統計圖", ProjectId = project2, ParentTodoId = parent.Id, Status = "待辦", Priority = "中" }));
+
+        Assert.Contains("同一個專案", error.Message);
+    }
+
+    private static TodoAdapterModel NewModel(string title, int projectId, int? parentId = null)
+        => new() { Title = title, ProjectId = projectId, ParentTodoId = parentId, Status = "待辦", Priority = "中" };
+
     // ───────── 純函式 ─────────
 
     [Fact]
@@ -320,9 +484,9 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
             TestTodoChanges.CreateRecorder(context, access, actor, notifier));
     }
 
-    private async Task<Todo> AddTodoAsync(string title, int projectId, string? owner = null, DateTime? dueDate = null)
+    private async Task<Todo> AddTodoAsync(string title, int projectId, string? owner = null, DateTime? dueDate = null, int? parentId = null, string status = "待辦")
     {
-        var todo = new Todo { Title = title, ProjectId = projectId, Owner = owner, DueDate = dueDate, Status = "待辦", Priority = "中" };
+        var todo = new Todo { Title = title, ProjectId = projectId, Owner = owner, DueDate = dueDate, Status = status, Priority = "中", ParentTodoId = parentId };
         context.Todo.Add(todo);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();

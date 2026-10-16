@@ -618,10 +618,56 @@ public partial class TodoViewView : IAsyncDisposable
 
         isNewRecordMode = true;
         modalTitle = "新增待辦事項";
+        await LoadParentCandidatesAsync();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;
         logger.LogInformation("Opened create modal for todo.");
     }
+
+    #region 子項目（1.0.45）
+
+    /// <summary>編輯視窗「屬於（主待辦）」的選項：同專案、本身不是子項目、未完成、不是自己。</summary>
+    private List<TodoAdapterModel> parentCandidates = [];
+
+    private async Task LoadParentCandidatesAsync()
+    {
+        parentCandidates = CurrentRecord.ProjectId > 0
+            ? await todoService.GetParentCandidatesAsync(CurrentRecord.ProjectId, CurrentRecord.Id > 0 ? CurrentRecord.Id : null)
+            : [];
+    }
+
+    /// <summary>換專案時主待辦一定不適用了（子項目必須與主待辦同專案），清掉並重載選項。</summary>
+    private async Task OnFormProjectChangedAsync()
+    {
+        if (CurrentRecord.ParentTodoId is not null && parentCandidates.All(x => x.ProjectId != CurrentRecord.ProjectId))
+        {
+            CurrentRecord.ParentTodoId = null;
+        }
+
+        await LoadParentCandidatesAsync();
+    }
+
+    /// <summary>主待辦列的「新增子項目」：預填同專案與主待辦，其他欄位照一般新增。</summary>
+    private async Task OnAddSubtaskAsync(TodoAdapterModel parent)
+    {
+        availableProjects = await projectService.GetSelectableAsync();
+        CurrentRecord = new TodoAdapterModel
+        {
+            Status = StatusOptions[0],
+            Priority = PriorityOptions[1],
+            ProjectId = parent.ProjectId,
+            ParentTodoId = parent.Id,
+        };
+
+        isNewRecordMode = true;
+        modalTitle = $"新增子項目 — {parent.Title}";
+        await LoadParentCandidatesAsync();
+        formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
+        modalVisible = true;
+        logger.LogInformation("Opened create modal for subtask. ParentTodoId={ParentTodoId}", parent.Id);
+    }
+
+    #endregion
 
     private async Task OnEditAsync(TodoAdapterModel todoAdapterModel)
     {
@@ -629,6 +675,7 @@ public partial class TodoViewView : IAsyncDisposable
         isNewRecordMode = false;
         modalTitle = "修改待辦事項";
         CurrentRecord = todoAdapterModel.Clone();
+        await LoadParentCandidatesAsync();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;
         logger.LogInformation("Opened edit modal for todo. TodoId={TodoId}", todoAdapterModel.Id);
@@ -648,7 +695,10 @@ public partial class TodoViewView : IAsyncDisposable
         var ok = await modalService.ConfirmAsync(new ConfirmOptions
         {
             Title = "確認刪除",
-            Content = "確定要刪除這筆待辦事項嗎？此操作無法復原。",
+            // 1.0.45：主待辦連子項目一起刪，要先講清楚。
+            Content = todoAdapterModel.ChildrenTotal > 0
+                ? $"確定要刪除這筆待辦事項嗎？它底下的 {todoAdapterModel.ChildrenTotal} 個子項目也會一起刪除。此操作無法復原。"
+                : "確定要刪除這筆待辦事項嗎？此操作無法復原。",
             OkText = "刪除",
             CancelText = "取消",
             OkButtonProps = new ButtonProps { Danger = true },

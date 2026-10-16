@@ -309,6 +309,51 @@ public sealed class TodoExtractionParserTests
     }
 
     [Fact]
+    public void BuildUserPrompt_WithOpenTodos_ShouldAskForParentTodoIdAndMarkSubtasks()
+    {
+        var prompt = TodoExtractionService.BuildUserPrompt(
+            "內容",
+            null,
+            [
+                new OpenTodoSummary(12, "完成報表", null, null, "待辦", null),
+                new OpenTodoSummary(13, "畫統計圖", null, null, "待辦", null, IsSubtask: true),
+            ]);
+
+        Assert.Contains("parentTodoId", prompt);
+        Assert.Contains("id=12｜完成報表", prompt);
+        Assert.Contains("｜主項目", prompt);
+        Assert.Contains("｜子項目", prompt);
+    }
+
+    [Fact]
+    public void Parse_ParentTodoId_ShouldOnlyAcceptTopLevelIds_AndAllowSharedParent()
+    {
+        // 子項目可以好幾條掛在同一筆底下；不能掛在子項目底下（不在 validParentIds 裡）。
+        const string json = """
+            [
+              {"title":"整理資料","priority":"中","parentTodoId":12},
+              {"title":"畫統計圖","priority":"中","parentTodoId":"12"},
+              {"title":"調整配色","priority":"中","parentTodoId":13}
+            ]
+            """;
+
+        var results = TodoExtractionParser.Parse(json, new HashSet<int> { 12, 13 }, new HashSet<int> { 12 });
+
+        Assert.Equal([12, 12, null], results.Select(x => x.ParentTodoId));
+    }
+
+    [Fact]
+    public void Parse_MatchedAndParentBoth_ShouldPreferMatched()
+    {
+        const string json = """[{"title":"完成報表","priority":"中","matchedTodoId":12,"parentTodoId":12}]""";
+
+        var result = Assert.Single(TodoExtractionParser.Parse(json, new HashSet<int> { 12 }, new HashSet<int> { 12 }));
+
+        Assert.Equal(12, result.MatchedTodoId);
+        Assert.Null(result.ParentTodoId);
+    }
+
+    [Fact]
     public void Parse_WithoutValidIds_ShouldNeverMatch()
         => Assert.All(
             TodoExtractionParser.Parse("""[{"title":"A","priority":"中","matchedTodoId":12}]"""),

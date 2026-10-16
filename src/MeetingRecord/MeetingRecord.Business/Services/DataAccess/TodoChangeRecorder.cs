@@ -114,6 +114,37 @@ public class TodoChangeRecorder
     }
 
     /// <summary>
+    /// 主待辦底下新增／移除了子項目（1.0.45）：記在主待辦的異動紀錄，<b>不通知</b>——
+    /// 子項目本身之後的期限、負責人、狀態變更才通知，掛上去這個動作只是整理結構。
+    /// 只加進 DbContext、不存檔。
+    /// </summary>
+    public async Task StageSubtaskAsync(
+        int parentTodoId,
+        int projectId,
+        string childTitle,
+        bool added,
+        string via,
+        int? sourceMeetingId = null,
+        string? sourceMeetingTitle = null)
+    {
+        var (actorId, actorAccount) = actorProvider.GetActor();
+        context.TodoChange.Add(new TodoChange
+        {
+            TodoId = parentTodoId,
+            ProjectId = projectId,
+            Field = TodoChangeFields.Subtask,
+            OldValue = added ? null : childTitle,
+            NewValue = added ? childTitle : null,
+            ChangedByUserId = actorId,
+            ChangedByName = await ResolveActorNameAsync(actorId, actorAccount),
+            ChangedAt = DateTime.Now,
+            Via = via,
+            SourceMeetingId = sourceMeetingId,
+            SourceMeetingTitle = sourceMeetingTitle,
+        });
+    }
+
+    /// <summary>
     /// 存檔成功之後呼叫：放掉剛寫進去的異動與通知的追蹤（DbContext 是整條 Blazor 連線共用的，
     /// 留著會越積越多），再讓收件人的鈴鐺即時更新。
     /// </summary>

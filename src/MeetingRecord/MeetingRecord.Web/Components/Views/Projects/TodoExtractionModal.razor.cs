@@ -87,6 +87,17 @@ public partial class TodoExtractionModal : ComponentBase
         public bool IsUpdating => Matched is not null && UpdateExisting;
 
         /// <summary>
+        /// AI 判斷這條是某筆既有待辦的一部分（1.0.45）。例如換提示詞重新產生會議紀錄後再抽一次，
+        /// 新的提示詞把「完成報表」拆成「整理資料／畫統計圖」——預設掛成它的子項目，清單才不會散成好幾筆。
+        /// </summary>
+        public OpenTodoSummary? Parent { get; init; }
+
+        /// <summary>有主待辦時：true＝加為子項目（預設），false＝另外新增成獨立待辦。</summary>
+        public bool AsSubtask { get; set; }
+
+        public bool IsAddingSubtask => Parent is not null && AsSubtask && !IsUpdating;
+
+        /// <summary>
         /// 更新既有時會改的地方（只看期限與負責人；沒填的不會清掉既有值，所以不算變更）。
         /// 依畫面上目前的值即時算，使用者改了期限或負責人，差異跟著變。
         /// </summary>
@@ -142,12 +153,16 @@ public partial class TodoExtractionModal : ComponentBase
 
     private int SelectedAddCount => SelectedCount - SelectedUpdateCount;
 
+    private int SelectedSubtaskCount => candidates.Count(x => x.Selected && x.IsAddingSubtask);
+
     /// <summary>按鈕文字講清楚這次會新增幾條、更新幾條（1.0.44）。</summary>
+    private string SubtaskSuffix => SelectedSubtaskCount > 0 ? $"（含 {SelectedSubtaskCount} 條子項目）" : string.Empty;
+
     private string ConfirmText => (SelectedAddCount, SelectedUpdateCount) switch
     {
-        (_, 0) => $"加入 {SelectedAddCount} 條待辦",
+        (_, 0) => $"加入 {SelectedAddCount} 條待辦{SubtaskSuffix}",
         (0, _) => $"更新 {SelectedUpdateCount} 條待辦",
-        _ => $"加入 {SelectedAddCount} 條、更新 {SelectedUpdateCount} 條",
+        _ => $"加入 {SelectedAddCount} 條{SubtaskSuffix}、更新 {SelectedUpdateCount} 條",
     };
 
     private bool AllSelected => candidates.Count > 0 && candidates.All(x => x.Selected);
@@ -190,6 +205,7 @@ public partial class TodoExtractionModal : ComponentBase
             foreach (var item in extracted)
             {
                 var matched = item.MatchedTodoId is { } id && openById.TryGetValue(id, out var summary) ? summary : null;
+                var parent = item.ParentTodoId is { } pid && openById.TryGetValue(pid, out var parentSummary) ? parentSummary : null;
 
                 // 預設不勾選重複項，但仍然列出來——使用者要再追蹤同一件事就自己勾回去。
                 var alreadyAdded = matched is null && existingTitles.Contains(item.Title.Trim());
@@ -204,6 +220,8 @@ public partial class TodoExtractionModal : ComponentBase
                     Priority = item.Priority,
                     Matched = matched,
                     UpdateExisting = matched is not null,
+                    Parent = parent,
+                    AsSubtask = parent is not null,
                 };
 
                 // 對應到既有、但期限負責人都沒變：這次會議只是又提到它，預設不勾（勾了也只是什麼都不改）。
@@ -325,6 +343,12 @@ public partial class TodoExtractionModal : ComponentBase
                         candidate.Priority),
                     ProjectId,
                     MeetingId);
+
+                // 1.0.45：加為子項目——掛到 AI 判斷的那筆主待辦底下（服務層會再檢查只分一層、同專案）。
+                if (candidate.IsAddingSubtask)
+                {
+                    model.ParentTodoId = candidate.Parent!.Id;
+                }
 
                 var check = await TodoService.BeforeAddCheckAsync(model);
                 if (!check.Success)

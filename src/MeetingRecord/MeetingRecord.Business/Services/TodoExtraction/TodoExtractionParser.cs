@@ -12,7 +12,8 @@ public sealed record ExtractedTodo(
     string? Owner,
     DateTime? DueDate,
     string Priority,
-    int? MatchedTodoId = null);
+    int? MatchedTodoId = null,
+    int? ParentTodoId = null);
 
 /// <summary>
 /// 送給模型比對的既有待辦（1.0.44），也是確認視窗「對應既有：…」那一行的資料來源。
@@ -23,7 +24,8 @@ public sealed record OpenTodoSummary(
     string? Owner,
     DateTime? DueDate,
     string Status,
-    string? MeetingTitle);
+    string? MeetingTitle,
+    bool IsSubtask = false);
 
 /// <summary>
 /// 把 LLM 回傳的文字解析成待辦候選清單。
@@ -73,7 +75,8 @@ public static class TodoExtractionParser
         [property: JsonPropertyName("owner")] string? Owner,
         [property: JsonPropertyName("dueDate")] string? DueDate,
         [property: JsonPropertyName("priority")] string? Priority,
-        [property: JsonPropertyName("matchedTodoId")] JsonElement? MatchedTodoId = null);
+        [property: JsonPropertyName("matchedTodoId")] JsonElement? MatchedTodoId = null,
+        [property: JsonPropertyName("parentTodoId")] JsonElement? ParentTodoId = null);
 
     /// <summary>
     /// 解析模型輸出。**任何解析不出來的情況都回空清單，不拋例外**——
@@ -84,7 +87,14 @@ public static class TodoExtractionParser
     /// 1.0.44：送給模型比對的既有待辦 Id。<c>matchedTodoId</c> 只接受這裡面的值（模型可能幻想出不存在的 Id），
     /// 而且同一筆既有待辦只能對應一個候選（後面重複的當成新增）。傳 null 時一律不對應。
     /// </param>
-    public static IReadOnlyList<ExtractedTodo> Parse(string? raw, IReadOnlySet<int>? validTodoIds = null)
+    /// <param name="validParentIds">
+    /// 1.0.45：可以當主待辦的 Id（送出的既有待辦中「不是子項目」的那些）。<c>parentTodoId</c> 只接受這裡面的值；
+    /// 多條可以掛在同一筆底下；同一條同時給了 matchedTodoId 時以「同一件事」為準。傳 null 時一律不掛。
+    /// </param>
+    public static IReadOnlyList<ExtractedTodo> Parse(
+        string? raw,
+        IReadOnlySet<int>? validTodoIds = null,
+        IReadOnlySet<int>? validParentIds = null)
     {
         var json = ExtractJsonArray(raw);
         if (json is null)
@@ -119,13 +129,20 @@ public static class TodoExtractionParser
                 continue;
             }
 
+            var matchedId = ResolveMatch(item?.MatchedTodoId, validTodoIds, matched);
+            var parentId = matchedId is null && validParentIds is not null && ParseId(item?.ParentTodoId) is { } candidate
+                && validParentIds.Contains(candidate)
+                    ? candidate
+                    : (int?)null;
+
             results.Add(new ExtractedTodo(
                 title,
                 Truncate(NullIfBlank(item?.Description), DescriptionMaxLength),
                 Truncate(NullIfBlank(item?.Owner), OwnerMaxLength),
                 ParseDueDate(item?.DueDate),
                 NormalizePriority(item?.Priority),
-                ResolveMatch(item?.MatchedTodoId, validTodoIds, matched)));
+                matchedId,
+                parentId));
         }
 
         return results;
@@ -157,27 +174,27 @@ public static class TodoExtractionParser
     /// 不在送出去的清單裡、或那筆已經被前面的候選認領過，一律當成新增。
     /// </summary>
     private static int? ResolveMatch(JsonElement? value, IReadOnlySet<int>? validTodoIds, HashSet<int> matched)
+        => validTodoIds is not null && ParseId(value) is { } id && validTodoIds.Contains(id) && matched.Add(id)
+            ? id
+            : null;
+
+    /// <summary>模型給的待辦 Id：數字或數字字串都收，其他（null、文字）一律當沒給。</summary>
+    private static int? ParseId(JsonElement? value)
     {
-        if (validTodoIds is null || value is not { } element)
+        if (value is not { } element)
         {
             return null;
         }
 
-        int id;
         if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var number))
         {
-            id = number;
-        }
-        else if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
-        {
-            id = parsed;
-        }
-        else
-        {
-            return null;
+            return number;
         }
 
-        return validTodoIds.Contains(id) && matched.Add(id) ? id : null;
+        return element.ValueKind == JsonValueKind.String
+            && int.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null;
     }
 
     /// <summary>

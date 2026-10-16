@@ -781,6 +781,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<string>("Owner")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("ParentTodoId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -802,6 +805,8 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MeetingId");
+
+                    b.HasIndex("ParentTodoId");
 
                     b.HasIndex("ProjectId");
 
@@ -1038,6 +1043,11 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .HasForeignKey("MeetingId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Todo", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentTodoId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("MeetingRecord.AccessDatas.Models.Project", "Project")
                         .WithMany("Todos")
                         .HasForeignKey("ProjectId")
@@ -1045,6 +1055,8 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .IsRequired();
 
                     b.Navigation("Meeting");
+
+                    b.Navigation("Parent");
 
                     b.Navigation("Project");
                 });
@@ -1123,6 +1135,11 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Navigation("Teams");
 
                     b.Navigation("Todos");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Todo", b =>
+                {
+                    b.Navigation("Children");
                 });
 #pragma warning restore 612, 618
         }

@@ -153,8 +153,20 @@ public class TodoRepository
             }
         }
 
+        // 子項目（1.0.45）：與畫面同一份規則；違規丟 InvalidOperationException，控制器回 400。
+        if (await TodoHierarchyRules.ValidateAsync(context, null, todo.ProjectId, todo.ParentTodoId) is { } hierarchyError)
+        {
+            throw new InvalidOperationException(hierarchyError);
+        }
+
         await context.Todo.AddAsync(todo);
+        if (todo.ParentTodoId is { } parentId)
+        {
+            await changeRecorder.StageSubtaskAsync(parentId, todo.ProjectId, todo.Title, added: true, AuditVia.Api);
+        }
+
         await context.SaveChangesAsync();
+        changeRecorder.Publish([]);
 
         await AuditAsync(AuditActions.TodoCreate, todo.Id, $"title={todo.Title}; projectId={todo.ProjectId}; via={AuditVia.Api}");
         return todo;
@@ -176,6 +188,13 @@ public class TodoRepository
             return false;
         }
 
+        // 子項目（1.0.45）：與畫面同一份規則；違規丟 InvalidOperationException，控制器回 400。
+        if (await TodoHierarchyRules.ValidateAsync(context, existing.Id, todo.ProjectId, todo.ParentTodoId) is { } hierarchyError)
+        {
+            throw new InvalidOperationException(hierarchyError);
+        }
+
+        var previousParentId = existing.ParentTodoId;
         var previousProjectId = existing.ProjectId;
 
         // 1.0.44：SetValues 會蓋掉 existing，先留一份舊值給異動紀錄（API 改的也要讓專案成員知道）。
@@ -197,8 +216,27 @@ public class TodoRepository
 
         context.Entry(existing).CurrentValues.SetValues(todo);
         var recipients = await changeRecorder.StageAsync(before, existing, AuditVia.Api);
+        if (previousParentId != existing.ParentTodoId)
+        {
+            if (previousParentId is { } oldParent)
+            {
+                await changeRecorder.StageSubtaskAsync(oldParent, previousProjectId, existing.Title, added: false, AuditVia.Api);
+            }
+
+            if (existing.ParentTodoId is { } newParent)
+            {
+                await changeRecorder.StageSubtaskAsync(newParent, existing.ProjectId, existing.Title, added: true, AuditVia.Api);
+            }
+        }
+
         await context.SaveChangesAsync();
         changeRecorder.Publish(recipients);
+
+        // 主待辦搬到別的專案時，子項目跟著搬。
+        if (previousProjectId != existing.ProjectId)
+        {
+            await TodoHierarchyRules.MoveChildrenAsync(context, existing.Id, existing.ProjectId);
+        }
 
         var moved = previousProjectId != todo.ProjectId ? $"; movedFrom={previousProjectId}" : string.Empty;
         await AuditAsync(AuditActions.TodoUpdate, todo.Id, $"title={todo.Title}; projectId={todo.ProjectId}{moved}; via={AuditVia.Api}");

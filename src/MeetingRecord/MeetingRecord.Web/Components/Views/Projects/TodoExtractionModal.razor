@@ -92,6 +92,26 @@
                                 }
                             }
 
+                            @* 1.0.45：AI 判斷這條是某筆既有待辦的一部分——預設掛成它的子項目，不另外散成獨立一筆。 *@
+                            @if (candidate.Parent is { } parent && candidate.Matched is null)
+                            {
+                                <div class="todo-extract-match">
+                                    <span class="todo-extract-match-label">屬於</span>
+                                    <span class="todo-extract-match-title" title="@parent.Title">@parent.Title</span>
+                                    @if (!string.IsNullOrWhiteSpace(parent.MeetingTitle))
+                                    {
+                                        <span class="todo-extract-match-source">（來自〈@parent.MeetingTitle〉）</span>
+                                    }
+                                    <Select TItem="string"
+                                            TItemValue="bool"
+                                            @bind-Value="candidate.AsSubtask"
+                                            Style="width: 130px;">
+                                        <SelectOption TItem="string" TItemValue="bool" Value="true">加為子項目</SelectOption>
+                                        <SelectOption TItem="string" TItemValue="bool" Value="false">另外新增</SelectOption>
+                                    </Select>
+                                </div>
+                            }
+
                             @if (candidate.AlreadyAdded)
                             {
                                 @* 這不是警告也不是錯誤，所以用中性灰而不是警示色：

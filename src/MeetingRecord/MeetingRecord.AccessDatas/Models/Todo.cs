@@ -34,6 +34,16 @@ public class Todo
 
     public Meeting? Meeting { get; set; }
 
+    /// <summary>
+    /// 主待辦（1.0.45）。有值＝這筆是子項目。<b>只分一層</b>：主待辦本身不能再有主待辦，
+    /// 子項目與主待辦必須在同一個專案（規則在 <c>TodoHierarchyRules</c>）。刪主待辦時子項目一起刪。
+    /// </summary>
+    public int? ParentTodoId { get; set; }
+
+    public Todo? Parent { get; set; }
+
+    public ICollection<Todo> Children { get; set; } = new List<Todo>();
+
     #endregion
 
     /// <summary>負責人</summary>

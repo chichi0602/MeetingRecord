@@ -41,13 +41,20 @@ window.meetingRecordTodoAutoFit = (function () {
         // 量的是「表格區塊（含分頁器）底部離畫面底還剩多少」，不是「可用高度 ÷ 列高」。
         // 後者要先知道列高，而列高不是固定的（見 TodoAutoFit 的說明），估出來的值
         // 一定偏保守，再被無條件捨去吃掉一列——實跑量到表格底永遠離畫面底 76～177px。
-        const leftover = bottomLimit - (wrap.getBoundingClientRect().bottom + window.scrollY);
+        // 1.0.45：展開的子項目列不算進版面——每頁筆數只看主層。否則一展開表格變高，
+        // 就被判成「多出捲軸」而縮掉一列主待辦，收合又補回來，來回跳。
+        let expandedChildHeight = 0;
+        for (const child of root.querySelectorAll('.todo-view-table-wrap .ant-table-tbody tr.ant-table-row:not(.ant-table-row-level-0)')) {
+            expandedChildHeight += child.getBoundingClientRect().height;
+        }
+
+        const leftover = bottomLimit - (wrap.getBoundingClientRect().bottom + window.scrollY) + expandedChildHeight;
 
         // 最高與最矮各回報一個：補列用最高的估（保守，不會補到超出），
         // 縮列用最矮的估（積極，寧可多縮一列也不要留著捲軸）。
         let tallestRow = 0;
         let shortestRow = Number.POSITIVE_INFINITY;
-        const rows = root.querySelectorAll('.todo-view-table-wrap .ant-table-tbody tr.ant-table-row');
+        const rows = root.querySelectorAll('.todo-view-table-wrap .ant-table-tbody tr.ant-table-row.ant-table-row-level-0');
         for (const row of rows) {
             const height = row.getBoundingClientRect().height;
             tallestRow = Math.max(tallestRow, height);

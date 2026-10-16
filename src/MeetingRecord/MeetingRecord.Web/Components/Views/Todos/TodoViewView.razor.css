@@ -525,3 +525,22 @@ button.todo-view-pill:focus-visible {
     color: var(--oat-ink);
     font-weight: 600;
 }
+
+/* ===== 1.0.45：子項目 ===== */
+
+.todo-view-subtask-progress {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    border: 1px solid var(--oat-300);
+    background: var(--oat-50);
+    color: var(--oat-ink-mid);
+    white-space: nowrap;
+}
+
+.todo-view-owner-item-parent {
+    display: block;
+    overflow: hidden;
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

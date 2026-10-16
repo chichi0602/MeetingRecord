@@ -97,20 +97,30 @@ public class AutoMapping : Profile
         #region Todo
         CreateMap<Todo, TodoAdapterModel>()
             .ForMember(d => d.ProjectTitle, o => o.MapFrom(s => s.Project != null ? s.Project.Title : null))
-            .ForMember(d => d.MeetingTitle, o => o.MapFrom(s => s.Meeting != null ? s.Meeting.Title : null));
+            .ForMember(d => d.MeetingTitle, o => o.MapFrom(s => s.Meeting != null ? s.Meeting.Title : null))
+            // 子項目（1.0.45）：清單由 TodoService 自己組（只分頁主層、套篩選），不讓 AutoMapper 順手帶出整串。
+            .ForMember(d => d.ParentTitle, o => o.MapFrom(s => s.Parent != null ? s.Parent.Title : null))
+            .ForMember(d => d.Children, o => o.Ignore());
         CreateMap<TodoAdapterModel, Todo>()
             .ForMember(d => d.Project, o => o.Ignore())
-            .ForMember(d => d.Meeting, o => o.Ignore());
+            .ForMember(d => d.Meeting, o => o.Ignore())
+            // ⚠️ 導覽屬性一律不對應回去：存檔時 EF 會把帶回來的子項目當成新資料整串寫入。
+            .ForMember(d => d.Parent, o => o.Ignore())
+            .ForMember(d => d.Children, o => o.Ignore());
         CreateMap<Todo, TodoDto>()
             .ForMember(d => d.ProjectTitle, o => o.MapFrom(s => s.Project != null ? s.Project.Title : null))
             .ForMember(d => d.MeetingTitle, o => o.MapFrom(s => s.Meeting != null ? s.Meeting.Title : null));
         CreateMap<TodoDto, Todo>()
             .ForMember(d => d.Project, o => o.Ignore())
-            .ForMember(d => d.Meeting, o => o.Ignore());
+            .ForMember(d => d.Meeting, o => o.Ignore())
+            .ForMember(d => d.Parent, o => o.Ignore())
+            .ForMember(d => d.Children, o => o.Ignore());
         CreateMap<Todo, TodoCreateUpdateDto>();
         CreateMap<TodoCreateUpdateDto, Todo>()
             .ForMember(d => d.Project, o => o.Ignore())
-            .ForMember(d => d.Meeting, o => o.Ignore());
+            .ForMember(d => d.Meeting, o => o.Ignore())
+            .ForMember(d => d.Parent, o => o.Ignore())
+            .ForMember(d => d.Children, o => o.Ignore());
         #endregion
 
         #region Meeting

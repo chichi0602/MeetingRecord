@@ -48,6 +48,12 @@ public class TodoCreateUpdateDto
     public int? MeetingId { get; set; }
 
     /// <summary>
+    /// 主待辦代碼（1.0.45）。有值＝子項目；只分一層，且必須與主待辦同一個專案。
+    /// </summary>
+    [JsonPropertyName("parentTodoId")]
+    public int? ParentTodoId { get; set; }
+
+    /// <summary>
     /// 負責人
     /// </summary>
     [StringLength(50, ErrorMessage = "負責人長度不可超過 50 字元")]

@@ -91,10 +91,12 @@ else
             <Table @ref="table"
                    TItem="TodoAdapterModel"
                    Class="todo-view-table"
-                   ScrollX="902px"
+                   ScrollX="934px"
                    RemoteDataSource="true"
                    DataSource="@todoAdapterModels"
                    OnChange="OnTableChange"
+                   TreeChildren="@(item => item.Children)"
+                   RowKey="@(item => item.Id.ToString())"
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
@@ -110,6 +112,11 @@ else
                     <div class="todo-view-title-cell">
                         <span class="todo-view-title @(context.IsCompleted ? "todo-view-title-done" : string.Empty)"
                               title="@context.Title">@context.Title</span>
+                        @* 1.0.45：主待辦顯示子項目完成數；子項目列由 TreeChildren 縮排在主待辦底下。 *@
+                        @if (context.ChildrenTotal > 0)
+                        {
+                            <span class="todo-view-pill todo-view-subtask-progress @(context.ChildrenCompleted == context.ChildrenTotal ? "todo-view-status-completed" : string.Empty)">子項目 @context.ChildrenCompleted/@context.ChildrenTotal</span>
+                        }
                         @if (!string.IsNullOrWhiteSpace(context.Description))
                         {
                             <CrudActionButton Title="檢視完整內容" Icon="info"
@@ -162,13 +169,21 @@ else
                 <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable ShowSorterTooltip="false" Width="76">
                     <span class="todo-view-pill @StatusCssClass(context.Status)">@context.Status</span>
                 </Column>
-                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="112">
+                <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="144">
                     <Space>
                         @* 1.0.44：誰在什麼時候把什麼改了——看得到這筆待辦就看得到，不需要修改權限。 *@
                         <SpaceItem>
                             <CrudActionButton Title="異動紀錄" Icon="history"
                                               OnClick="@(async () => await OpenChangesAsync(context.Id, context.Title))" />
                         </SpaceItem>
+                        @* 1.0.45：只分一層，所以只有主層（不是子項目）的待辦才有這顆。 *@
+                        @if (!context.IsSubtask && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="新增子項目" Icon="playlist_add"
+                                                  OnClick="@(async () => await OnAddSubtaskAsync(context))" />
+                            </SpaceItem>
+                        }
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))
                         {
                             <SpaceItem>
@@ -302,6 +317,10 @@ else
                             <li class="todo-view-owner-item" @key="item.Id">
                                 <span class="todo-view-owner-item-title @(item.IsCompleted ? "todo-view-title-done" : string.Empty)"
                                       title="@item.Title">@item.Title</span>
+                                @if (!string.IsNullOrWhiteSpace(item.ParentTitle))
+                                {
+                                    <span class="todo-view-muted todo-view-owner-item-parent" title="@item.ParentTitle">屬於：@item.ParentTitle</span>
+                                }
                                 <span class="todo-view-owner-item-meta">
                                     <span class="todo-view-pill @StatusCssClass(item.Status)">@item.Status</span>
                                     <span class="@(item.IsOverdue ? "todo-view-overdue" : "todo-view-muted")">@item.DueDateText</span>
@@ -341,6 +360,7 @@ else
                             <Select TItem="int"
                                     TItemValue="int"
                                     @bind-Value="CurrentRecord.ProjectId"
+                                    @bind-Value:after="OnFormProjectChangedAsync"
                                     Placeholder="請選擇專案"
                                     EnableSearch
                                     Style="width: 100%;">
@@ -352,6 +372,31 @@ else
                                 </SelectOptions>
                             </Select>
                             <ValidationMessage For="() => CurrentRecord.ProjectId" />
+                        </FormItem>
+
+                        @* 1.0.45：子項目。只分一層：已經有子項目的待辦不能再當別人的子項目。 *@
+                        <FormItem Label="屬於（主待辦）">
+                            @if (CurrentRecord.ChildrenTotal > 0)
+                            {
+                                <div class="todo-view-readonly">這筆底下已有 @CurrentRecord.ChildrenTotal 個子項目，不能再當別人的子項目。</div>
+                            }
+                            else
+                            {
+                                <Select TItem="int?"
+                                        TItemValue="int?"
+                                        @bind-Value="CurrentRecord.ParentTodoId"
+                                        Placeholder="不屬於任何待辦（獨立一筆）"
+                                        AllowClear
+                                        EnableSearch
+                                        Style="width: 100%;">
+                                    <SelectOptions>
+                                        @foreach (var parent in parentCandidates)
+                                        {
+                                            <SelectOption TItem="int?" TItemValue="int?" Value="@((int?)parent.Id)" Label="@parent.Title" />
+                                        }
+                                    </SelectOptions>
+                                </Select>
+                            }
                         </FormItem>
 
                         <FormItem Label="負責人">

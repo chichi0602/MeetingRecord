@@ -1,8 +1,8 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.11
+- 文件版本：1.12
 - 文件狀態：已實作
-- 現行系統版本：1.0.44
+- 現行系統版本：1.0.45
 - 首次實作版本：0.4.32
 - 最後核對日期：2026/10/16
 
@@ -13,7 +13,7 @@
 提供「待辦事項（Todo）」的建立、查詢、修改、刪除與完成狀態管理。待辦一定隸屬於一個專案項目，並可回溯到產生它的來源會議紀錄。
 
 - 範圍：清單查詢（關鍵字搜尋、專案／狀態過濾、排序、分頁）、單筆維護（含表單驗證）、清單上直接勾選完成、右側各負責人工作量面板、動作級授權。**0.4.66～0.4.98 沒有列級可見範圍控管**（分類與團隊欄位已徹底移除）；0.4.99 起跟著專案的可見範圍（見上）。
-- 非範圍：看板版面與拖拉排序、子任務與相依關係、工時統計、到期提醒（排程式的「快到期了」提醒）、Email／推播通知。**異動紀錄與站內通知已於 1.0.44 實作**，見「異動紀錄與站內通知（1.0.44）」。
+- 非範圍：看板版面與拖拉排序、相依關係、多層子任務、工時統計、到期提醒（排程式的「快到期了」提醒）、Email／推播通知。**異動紀錄與站內通知已於 1.0.44 實作**，見「異動紀錄與站內通知（1.0.44）」；**一層子項目已於 1.0.45 實作**，見「子項目（1.0.45）」。
 - **AI 從會議紀錄抽出待辦已於 0.4.61 實作**（入口在專案項目頁的「歷史會議紀錄」，不在本頁）。抽出來的候選一律經確認視窗由人勾選與修改才寫入，`MeetingId` 填來源會議，清單的「來源」欄因此會顯示會議標題而不是「— 手動新增」。規則見 [專案項目 PRD](專案項目-prd.md)。
 
 ## 二、使用者與入口
@@ -50,7 +50,7 @@
 - 逾期的截止日以紅色粗體顯示並附「逾期 N 天」；已完成的標題加刪除線。
 - 沒有任何可存取的專案時，清單上方顯示提示並停用「新增」——待辦必須隸屬專案。
 - 預設排序：有截止日的優先、越早到期越前面，未指定截止日者墊底。
-- 編輯表單欄位：待辦標題（必填）、描述、所屬專案（必填）、來源會議紀錄（唯讀，僅在有值時顯示）、負責人、截止日、優先度（必填）、狀態（必填）。（分類與團隊已於 0.4.66 移除）
+- 編輯表單欄位：待辦標題（必填）、描述、所屬專案（必填）、屬於（主待辦，可空，1.0.45）、來源會議紀錄（唯讀，僅在有值時顯示）、負責人、截止日、優先度（必填）、狀態（必填）。（分類與團隊已於 0.4.66 移除）
 
 
 ### 右側各負責人工作量面板（0.4.66，0.4.67 加收合）
@@ -121,6 +121,25 @@
 | 通知文字 | 「王小明 把『完成報表』的期限改為 2026/10/31、負責人改為 林大華（來源：從〈10/16 週會〉抽出）」，來源後綴只有 AI 抽出更新才有 |
 | 通知保留 | `LogRetentionSettings:NotificationDays`（預設 90 天，0＝不清），每日清一次，不寫稽核；歷史留在 `TodoChange` |
 
+### 子項目（1.0.45）
+
+起因：同一份會議紀錄用提示詞 A 產生後抽出「完成報表」，再換提示詞 B 重新產生（**一場會議只有一份草稿，重新產生會覆蓋**）又抽一次，B 拆成「整理資料／畫統計圖／寫結論」。1.0.44 的「AI 對應既有待辦」一筆既有待辦只能被一條候選對上，其餘變成互不相干的新待辦，清單散成 4 列。解法是讓細項掛在主待辦底下。
+
+- **資料**：`Todo.ParentTodoId`（`int?`，自我參照，`OnDelete(Cascade)`），導覽 `Parent`／`Children`。子項目是**完整的待辦**：自己的負責人、截止日、狀態、異動紀錄與通知。
+- **規則**（`TodoHierarchyRules`，網頁 `TodoService` 與 API `TodoRepository` 共用）：**只有一層**（子項目底下不能再掛子項目；已有子項目的待辦不能變成別人的子項目）；不能當自己的主待辦；子項目必須和主待辦**同一個專案**。主待辦搬到別的專案時子項目一起搬（`MoveChildrenAsync`，同 0.4.115 規則清掉它們的來源會議）。違反規則網頁顯示訊息、API 回 400。
+- **狀態各自獨立**：子項目全部完成**不會**自動把主待辦設為已完成。
+- **清單 `/todos`**：只分頁**主項目**（沒有主待辦的待辦），子項目用 AntDesign Table 的 `TreeChildren` 掛在底下（預設收合、點箭頭展開，`RowKey=Id`）。標題旁膠囊「子項目 1/3」（全部完成時變綠）。子項目列一樣可以勾完成、修改、刪除、看異動紀錄。
+- **過濾與搜尋**：主待辦本身**或任一子項目**符合就列出主待辦；展開時顯示的子項目跟著過濾，但 n/m **一律以全部子項目計**。
+- **新增子項目**：主項目列的操作欄多一顆「新增子項目」（`playlist_add`，需待辦新增權限），開新增視窗並帶入專案與主待辦，標題「新增子項目 — 〈主待辦〉」。操作欄 112→144px、`ScrollX` 902→934px。
+- **編輯視窗「屬於（主待辦）」**：可空下拉，選項＝同專案、本身不是子項目、未完成、不是自己（`TodoService.GetParentCandidatesAsync`）；換專案會清掉不合法的主待辦並重載選項；這筆底下已有子項目時改顯示「這筆底下已有 N 個子項目，不能再當別人的子項目。」。
+- **負責人面板**維持平鋪，子項目下面多一行「屬於：〈主待辦〉」。
+- **刪除**：刪主待辦會連同子項目（及它們的異動紀錄）一起刪除，確認視窗會寫「它底下的 N 個子項目也會一起刪除」；稽核 `Todo.Delete` 摘要多 `children=N`。
+- **異動紀錄**：新欄位 `TodoChangeFields.Subtask`「子項目」，記在**主待辦**上：新增子項目（新值＝標題）、移除／刪除或改掛別處（舊值＝標題）。**只記錄不通知**。子項目自己的期限／負責人／狀態異動照 1.0.44 規則通知。
+- **每頁筆數自動調整**（`todo-auto-fit.js`）只量第 0 層的列，展開子項目不會讓每頁筆數跳動。
+- **AI 抽出**可直接把候選「加為子項目」，見 [專案項目 PRD](專案項目-prd.md)。
+- **API**：`TodoCreateUpdateDto`（`TodoDto` 繼承）多 `parentTodoId`。⚠️ PUT 是整筆取代，沒帶 `parentTodoId` 會把子項目脫離主待辦。
+- **AutoMapper**：映射回實體時忽略 `Parent`／`Children`（否則 EF 會把掛著的子項目當新資料插入）；`Todo`→AdapterModel 也忽略 `Children`（清單自己填）。
+
 ## 四、設計決策
 
 | 議題 | 結論 |
@@ -166,7 +185,8 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoChangeRecorder.cs`（`StageAsync`、`Publish`，1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Notifications/UserNotificationService.cs`、`UserNotificationNotifier.cs`；`MeetingRecord.Web/BackgroundServices/NotificationRetentionBackgroundService.cs`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
-- 測試：`TodoChangeAndNotificationTests`（15 條，1.0.44）、`TodoServiceTests`
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoHierarchyRules.cs`（`ValidateAsync`、`MoveChildrenAsync`，1.0.45）
+- 測試：`TodoChangeAndNotificationTests`（26 條：1.0.44 的 15 條＋1.0.45 子項目 11 條）、`TodoServiceTests`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

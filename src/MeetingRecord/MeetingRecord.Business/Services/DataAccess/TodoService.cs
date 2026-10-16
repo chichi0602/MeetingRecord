@@ -58,7 +58,8 @@ public class TodoService
             dataRequest.Take);
 
         DataRequestResult<TodoAdapterModel> result = new();
-        IQueryable<Todo> dataSource = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
+        var access = await projectAccess.GetAsync();
+        IQueryable<Todo> dataSource = access.Filter(context.Todo.AsNoTracking())
             .Include(x => x.Project)
             .Include(x => x.Meeting);
 
@@ -83,6 +84,15 @@ public class TodoService
         {
             dataSource = dataSource.Where(x => x.Status == dataRequest.StatusFilter);
         }
+
+        // 1.0.45 子項目：只分頁主層，子項目跟著主待辦出現。篩選命中子項目時也要列出它的主待辦，
+        // 否則「負責人是我的子項目」用搜尋找不到。matching 是套完篩選的全部待辦（主層與子項目都有）。
+        var matching = dataSource;
+        dataSource = access.Filter(context.Todo.AsNoTracking())
+            .Include(x => x.Project)
+            .Include(x => x.Meeting)
+            .Where(t => t.ParentTodoId == null
+                && (matching.Any(m => m.Id == t.Id) || matching.Any(m => m.ParentTodoId == t.Id)));
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
         {
@@ -171,9 +181,11 @@ public class TodoService
             .Take(dataRequest.PageSize);
 
         List<Todo> records = await dataSource.ToListAsync();
-        (await projectAccess.GetAsync()).HideInvisibleSourceMeetings(records);
-        result.Result = Mapper.Map<List<TodoAdapterModel>>(records);
-        await FillRecentDueDateChangesAsync(result.Result.ToList());
+        access.HideInvisibleSourceMeetings(records);
+        var models = Mapper.Map<List<TodoAdapterModel>>(records);
+        await FillChildrenAsync(models, matching, access);
+        await FillRecentDueDateChangesAsync(models.Concat(models.SelectMany(x => x.Children ?? [])).ToList());
+        result.Result = models;
         Logger.LogDebug("Loaded todos successfully. Count={Count}", result.Count);
         return result;
     }
@@ -186,6 +198,7 @@ public class TodoService
             .AsNoTracking()
             .Include(x => x.Project)
             .Include(x => x.Meeting)
+            .Include(x => x.Parent)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         var access = await projectAccess.GetAsync();
@@ -218,6 +231,13 @@ public class TodoService
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
         }
 
+        // 子項目（1.0.45）：只分一層、與主待辦同專案。
+        var hierarchyError = await TodoHierarchyRules.ValidateAsync(context, null, paraObject.ProjectId, paraObject.ParentTodoId);
+        if (hierarchyError is not null)
+        {
+            return VerifyRecordResultFactory.Build(false, hierarchyError);
+        }
+
         try
         {
             CleanTrackingHelper.Clean<Todo>(context);
@@ -226,8 +246,21 @@ public class TodoService
             itemParameter.UpdatedAt = DateTime.Now;
 
             await context.Todo.AddAsync(itemParameter);
+
+            // 掛到主待辦底下：主待辦的異動紀錄記「新增子項目」（不通知），與新增同一次存檔。
+            if (itemParameter.ParentTodoId is { } parentId)
+            {
+                var sourceTitle = via == AuditVia.AiExtract && itemParameter.MeetingId is { } meetingId
+                    ? await context.Meeting.AsNoTracking().Where(x => x.Id == meetingId).Select(x => x.Title).FirstOrDefaultAsync()
+                    : null;
+                await changeRecorder.StageSubtaskAsync(
+                    parentId, itemParameter.ProjectId, itemParameter.Title, added: true, via,
+                    via == AuditVia.AiExtract ? itemParameter.MeetingId : null, sourceTitle);
+            }
+
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
+            changeRecorder.Publish([]);
 
             await AuditAsync(AuditActions.TodoCreate, itemParameter.Id, $"title={itemParameter.Title}; projectId={itemParameter.ProjectId}; via={via}");
             Logger.LogInformation("Todo created successfully. TodoId={TodoId}, Title={TodoTitle}", itemParameter.Id, itemParameter.Title);
@@ -268,6 +301,13 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的待辦事項。");
             }
 
+            // 子項目（1.0.45）：只分一層、與主待辦同專案、不能掛自己、已有子項目的不能再當子項目。
+            var hierarchyError = await TodoHierarchyRules.ValidateAsync(context, item.Id, paraObject.ProjectId, paraObject.ParentTodoId);
+            if (hierarchyError is not null)
+            {
+                return VerifyRecordResultFactory.Build(false, hierarchyError);
+            }
+
             Todo itemData = Mapper.Map<Todo>(paraObject);
             itemData.CreatedAt = item.CreatedAt;
             itemData.UpdatedAt = DateTime.Now;
@@ -280,9 +320,30 @@ public class TodoService
 
             // 1.0.44：異動紀錄與通知和待辦同一次存檔；item 是存檔前的舊值。
             var recipients = await changeRecorder.StageAsync(item, itemData, AuditVia.Web);
+
+            // 1.0.45：換了主待辦，新舊主待辦的異動紀錄各記一筆。
+            if (item.ParentTodoId != itemData.ParentTodoId)
+            {
+                if (item.ParentTodoId is { } oldParent)
+                {
+                    await changeRecorder.StageSubtaskAsync(oldParent, item.ProjectId, itemData.Title, added: false, AuditVia.Web);
+                }
+
+                if (itemData.ParentTodoId is { } newParent)
+                {
+                    await changeRecorder.StageSubtaskAsync(newParent, itemData.ProjectId, itemData.Title, added: true, AuditVia.Web);
+                }
+            }
+
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
             changeRecorder.Publish(recipients);
+
+            // 主待辦搬到別的專案時，子項目跟著搬（子項目必須和主待辦同專案）。
+            if (item.ProjectId != itemData.ProjectId)
+            {
+                await TodoHierarchyRules.MoveChildrenAsync(context, itemData.Id, itemData.ProjectId);
+            }
 
             var moved = item.ProjectId != itemData.ProjectId ? $"; movedFrom={item.ProjectId}" : string.Empty;
             await AuditAsync(AuditActions.TodoUpdate, itemData.Id, $"title={itemData.Title}; projectId={itemData.ProjectId}{moved}; via={AuditVia.Web}");
@@ -421,6 +482,71 @@ public class TodoService
         }
     }
 
+    /// <summary>
+    /// 幫這一頁的主待辦帶出子項目（1.0.45）。子項目照篩選結果顯示（<paramref name="matching"/>）；
+    /// 「子項目 1/3」的總數與完成數則看全部子項目，不受篩選影響——否則篩「進行中」時會顯示 0/0 這種誤導的數字。
+    /// </summary>
+    private async Task FillChildrenAsync(List<TodoAdapterModel> parents, IQueryable<Todo> matching, ProjectAccess access)
+    {
+        if (parents.Count == 0)
+        {
+            return;
+        }
+
+        var ids = parents.Select(x => x.Id).ToList();
+        var children = await matching
+            .Where(x => x.ParentTodoId != null && ids.Contains(x.ParentTodoId.Value))
+            .OrderBy(x => x.DueDate == null)
+            .ThenBy(x => x.DueDate)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+        access.HideInvisibleSourceMeetings(children);
+
+        var counts = await context.Todo.AsNoTracking()
+            .Where(x => x.ParentTodoId != null && ids.Contains(x.ParentTodoId.Value))
+            .GroupBy(x => x.ParentTodoId!.Value)
+            .Select(g => new { ParentId = g.Key, Total = g.Count(), Completed = g.Count(x => x.Status == TodoAdapterModel.CompletedStatus) })
+            .ToDictionaryAsync(x => x.ParentId);
+
+        var childModels = Mapper.Map<List<TodoAdapterModel>>(children).ToLookup(x => x.ParentTodoId!.Value);
+        foreach (var parent in parents)
+        {
+            var mine = childModels[parent.Id].ToList();
+            foreach (var child in mine)
+            {
+                child.ParentTitle = parent.Title;
+            }
+
+            // 沒有子項目時給 null：AntDesign 的 TreeChildren 看到空集合也會畫出展開鈕。
+            parent.Children = mine.Count > 0 ? mine : null;
+            if (counts.TryGetValue(parent.Id, out var count))
+            {
+                parent.ChildrenTotal = count.Total;
+                parent.ChildrenCompleted = count.Completed;
+            }
+        }
+    }
+
+    /// <summary>可選的主待辦（1.0.45）：同專案、本身不是子項目、未完成、不是自己。編輯視窗的「屬於」下拉用。</summary>
+    public async Task<List<TodoAdapterModel>> GetParentCandidatesAsync(int projectId, int? excludeId = null)
+    {
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewProject(projectId))
+        {
+            return [];
+        }
+
+        var items = await context.Todo.AsNoTracking()
+            .Where(x => x.ProjectId == projectId
+                && x.ParentTodoId == null
+                && x.Status != TodoAdapterModel.CompletedStatus
+                && (excludeId == null || x.Id != excludeId))
+            .OrderBy(x => x.Title)
+            .ToListAsync();
+
+        return Mapper.Map<List<TodoAdapterModel>>(items);
+    }
+
     /// <summary>異動比對用的快照：只複製會被比對的欄位。</summary>
     private static Todo CloneForChange(Todo item) => new()
     {
@@ -505,12 +631,22 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的待辦事項。");
             }
 
+            // 子項目（1.0.45）：刪主待辦時資料庫 Cascade 一起刪掉子項目；刪子項目時在主待辦記「移除子項目」。
+            var childCount = await context.Todo.AsNoTracking().CountAsync(x => x.ParentTodoId == id);
+
             CleanTrackingHelper.Clean<Todo>(context);
             context.Entry(item).State = EntityState.Deleted;
+            if (item.ParentTodoId is { } parentId)
+            {
+                await changeRecorder.StageSubtaskAsync(parentId, item.ProjectId, item.Title, added: false, AuditVia.Web);
+            }
+
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
+            changeRecorder.Publish([]);
 
-            await AuditAsync(AuditActions.TodoDelete, id, $"title={item.Title}; projectId={item.ProjectId}; via={AuditVia.Web}");
+            var children = childCount > 0 ? $"; children={childCount}" : string.Empty;
+            await AuditAsync(AuditActions.TodoDelete, id, $"title={item.Title}; projectId={item.ProjectId}{children}; via={AuditVia.Web}");
             Logger.LogInformation("Todo deleted successfully. TodoId={TodoId}, Title={TodoTitle}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -651,7 +787,7 @@ public class TodoService
             return [];
         }
 
-        IQueryable<Todo> query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking()).Include(x => x.Project);
+        IQueryable<Todo> query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking()).Include(x => x.Project).Include(x => x.Parent);
         if (projectFilter is > 0)
         {
             query = query.Where(x => x.ProjectId == projectFilter);

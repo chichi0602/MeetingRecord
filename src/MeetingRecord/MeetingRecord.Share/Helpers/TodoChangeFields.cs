@@ -11,6 +11,9 @@ public static class TodoChangeFields
     public const string Title = "Title";
     public const string Priority = "Priority";
 
+    /// <summary>主待辦底下新增或移除子項目（1.0.45）。只記在主待辦的異動紀錄，不通知。</summary>
+    public const string Subtask = "Subtask";
+
     /// <summary>
     /// 會發通知的欄位：期限、負責人、狀態。標題、優先度只記異動不通知——
     /// 那兩項常常是順手修字，每改一次就通知全專案會變成噪音。
@@ -27,6 +30,7 @@ public static class TodoChangeFields
         Status => "狀態",
         Title => "標題",
         Priority => "優先度",
+        Subtask => "子項目",
         _ => field,
     };
 

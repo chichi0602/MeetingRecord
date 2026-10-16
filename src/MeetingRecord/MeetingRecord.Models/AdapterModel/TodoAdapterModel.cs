@@ -49,6 +49,25 @@ public class TodoAdapterModel : ICloneable
 
     public bool HasRecentDueDateChange => DueDateChangedAt is not null;
 
+    /// <summary>主待辦（1.0.45）。有值＝這筆是子項目；只分一層。</summary>
+    public int? ParentTodoId { get; set; }
+
+    /// <summary>主待辦標題（顯示用）。</summary>
+    public string? ParentTitle { get; set; }
+
+    /// <summary>
+    /// 子項目（清單上展開用）。只有清單查詢會填；沒有子項目時為 null——
+    /// AntDesign 表格的 TreeChildren 看到空集合也會畫出展開鈕。
+    /// </summary>
+    public List<TodoAdapterModel>? Children { get; set; }
+
+    /// <summary>子項目總數與完成數（不受篩選影響，主待辦顯示「子項目 1/3」用）。</summary>
+    public int ChildrenTotal { get; set; }
+
+    public int ChildrenCompleted { get; set; }
+
+    public bool IsSubtask => ParentTodoId is not null;
+
     [Required(ErrorMessage = "優先度 不可為空白")]
     public string Priority { get; set; } = PriorityOptions[1];
 

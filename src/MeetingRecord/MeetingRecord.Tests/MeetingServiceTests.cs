@@ -574,6 +574,65 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task ReadTranscriptAsync_ShouldReturnContent()
+    {
+        // 1.0.40：逐字稿重新開放唯讀（看、複製、下載），給使用者拿去外部 AI 問答。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("有逐字稿的會議");
+        existing.TranscriptRelativePath = fixture.WriteTranscriptFile("2026/10/transcript.txt", "第一行\n第二行");
+        existing.TranscriptionStatus = TranscriptionStatus.Completed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var content = await fixture.CreateService().ReadTranscriptAsync(existing.Id);
+
+        Assert.Equal("第一行\n第二行", content);
+    }
+
+    [Fact]
+    public async Task ReadTranscriptAsync_ShouldConvertLegacySimplifiedTranscript()
+    {
+        // 1.0.41 以前存下來的逐字稿是簡體（轉錄服務直接輸出），讀出來要是繁體，不必重新轉錄。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("舊的簡體逐字稿");
+        existing.TranscriptRelativePath = fixture.WriteTranscriptFile("2026/10/legacy.txt", "他说现在没有办法");
+        existing.TranscriptionStatus = TranscriptionStatus.Completed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var content = await fixture.CreateService().ReadTranscriptAsync(existing.Id);
+
+        Assert.Equal("他說現在沒有辦法", content);
+    }
+
+    [Fact]
+    public async Task ReadTranscriptAsync_ShouldReturnNull_WhenNoTranscript()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("還沒轉錄的會議");
+
+        Assert.Null(await fixture.CreateService().ReadTranscriptAsync(existing.Id));
+    }
+
+    [Fact]
+    public async Task ReadTranscriptAsync_NonMember_ShouldTreatOtherProjectMeetingAsMissing()
+    {
+        // 看不到的會議當成不存在：逐字稿是原文，守門要和清單一樣嚴。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var tracked = await fixture.Context.Meeting.FirstAsync(x => x.Id == ids["B專案會議"]);
+        tracked.TranscriptRelativePath = fixture.WriteTranscriptFile("2026/10/secret.txt", "別的專案的逐字稿");
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var content = await fixture.CreateService(isAdmin: false, userA).ReadTranscriptAsync(tracked.Id);
+
+        Assert.Null(content);
+    }
+
+    [Fact]
     public async Task SaveMediaAsync_NonMember_ShouldDenyMeetingOfOtherProject()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();

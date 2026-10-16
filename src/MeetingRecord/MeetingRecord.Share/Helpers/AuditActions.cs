@@ -102,6 +102,8 @@ public static class AuditActions
     public const string MeetingDraftRequest = "Meeting.DraftRequest";
     public const string MeetingDraftUpdate = "Meeting.DraftUpdate";
     public const string MeetingExportPdf = "Meeting.ExportPdf";
+    public const string MeetingTranscriptDownload = "Meeting.TranscriptDownload";
+    public const string MeetingTranscriptCopy = "Meeting.TranscriptCopy";
     #endregion
 
     #region 待辦（1.0.34）
@@ -230,6 +232,8 @@ public static class AuditActions
         [MeetingDraftRequest] = "產生會議紀錄",
         [MeetingDraftUpdate] = "編修會議紀錄",
         [MeetingExportPdf] = "匯出會議紀錄 PDF",
+        [MeetingTranscriptDownload] = "下載逐字稿",
+        [MeetingTranscriptCopy] = "複製逐字稿",
 
         [TodoCreate] = "新增待辦",
         [TodoUpdate] = "修改待辦",

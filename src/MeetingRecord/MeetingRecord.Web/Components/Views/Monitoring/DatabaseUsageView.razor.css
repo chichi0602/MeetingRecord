@@ -106,7 +106,7 @@
 }
 
 .db-usage-path {
-    font-family: Consolas, Menlo, monospace;
+    font-family: var(--app-font-mono);
     font-size: 0.8rem;
     overflow-wrap: anywhere;
 }

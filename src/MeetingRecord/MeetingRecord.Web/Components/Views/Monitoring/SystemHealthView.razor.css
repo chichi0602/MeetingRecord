@@ -309,7 +309,7 @@
     border-radius: 8px;
     background: var(--oat-50);
     color: var(--oat-ink);
-    font-family: Consolas, Menlo, monospace;
+    font-family: var(--app-font-mono);
     font-size: 12px;
     line-height: 1.5;
     white-space: pre-wrap;

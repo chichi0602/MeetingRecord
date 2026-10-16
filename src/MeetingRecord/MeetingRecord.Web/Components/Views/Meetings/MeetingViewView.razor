@@ -151,11 +151,13 @@ else
                     else
                     {
                     <Space>
-                        @if (context.HasDraft)
+                        @* 1.0.40 起只有這一顆：檢視、編修、逐字稿（看／複製／下載）都在視窗裡。
+                           以前「檢視」「編修」兩顆並排、圖示又像，使用者覺得操作欄太雜。 *@
+                        @if (context.HasDraft || context.HasTranscript)
                         {
                             <SpaceItem>
-                                <CrudActionButton Title="檢視會議紀錄" Icon="visibility"
-                                                  OnClick="@(async () => await OnViewDraftAsync(context))" />
+                                <CrudActionButton Title="會議紀錄與逐字稿" Icon="article"
+                                                  OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
                             </SpaceItem>
                         }
                         @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
@@ -165,19 +167,6 @@ else
                                 <SpaceItem>
                                     <CrudActionButton Title="AI 轉會議紀錄" Icon="auto_awesome"
                                                       OnClick="@(async () => await OnOpenDraftRequestAsync(context))" />
-                                </SpaceItem>
-                            }
-                            @* ⚠️ 只有**未歸屬專案**的會議能在這裡編修（0.4.82）。
-                               已歸屬的會議，編修與匯出都集中在專案項目頁——那裡才有專案脈絡
-                               （常用名詞、與會人員），而且 PDF 表頭要帶專案名稱。
-                               已歸屬的使用者在這裡按「檢視」會看到視窗底部的指路說明，
-                               不會以為功能不見了。 *@
-                            @if (context.HasDraft && context.IsUnassigned)
-                            {
-                                @* 用 edit_note 而不是 edit，免得跟底下那顆「修改」撞圖示。 *@
-                                <SpaceItem>
-                                    <CrudActionButton Title="編修會議紀錄" Icon="edit_note"
-                                                      OnClick="@(async () => await OnEditDraftAsync(context))" />
                                 </SpaceItem>
                             }
                         }
@@ -437,7 +426,8 @@ else
     </Modal>
 
     @* 檢視與編修 0.4.82 起共用同一個視窗，差別只在 CanEdit。
-       編修模式是左改右看＋常駐搜尋取代列；唯讀模式只剩右邊的預覽。 *@
+       編修模式是左改右看＋常駐搜尋取代列；唯讀模式只剩右邊的預覽。
+       1.0.40 起先開唯讀，按「編修」才切過去（取消、存好都回到檢視）；有逐字稿時唯讀畫面多一個逐字稿頁籤。 *@
     <MarkdownEditorModal @bind-Visible="@draftModalVisible"
                          Title="@draftModalTitle"
                          Content="@draftContent"
@@ -446,6 +436,13 @@ else
                          IsExporting="@(exportingMeetingId is not null)"
                          IsSaving="@isSavingDraft"
                          Notice="@draftNotice"
+                         CanSwitchToEdit="@draftCanSwitchToEdit"
+                         OnRequestEdit="OnRequestDraftEdit"
+                         OnCancelEdit="OnCancelDraftEdit"
+                         Transcript="@draftTranscript"
+                         CanCopyTranscript="@draftCanCopyTranscript"
+                         OnCopyTranscript="OnCopyTranscriptAsync"
+                         OnDownloadTranscript="OnDownloadTranscriptAsync"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
 

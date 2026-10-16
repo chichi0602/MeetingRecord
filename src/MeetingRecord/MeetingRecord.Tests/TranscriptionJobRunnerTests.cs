@@ -103,6 +103,21 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
         Assert.Equal(2, provider.CallCount);
     }
 
+    [Fact]
+    public async Task Run_ShouldSaveTranscriptInTraditionalChinese()
+    {
+        // 1.0.41：轉錄服務輸出簡體，存檔前就要轉成繁體（直接讀檔案本身，不經會再轉一次的 ReadTranscriptAsync）。
+        provider.Text = "他说现在没有办法";
+        var meetingId = await AddMeetingAsync();
+
+        await CreateRunner().RunAsync(meetingId, CancellationToken.None);
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        var saved = await File.ReadAllTextAsync(Path.Combine(rootPath, "transcript", meeting.TranscriptRelativePath!));
+        Assert.Contains("他說現在沒有辦法", saved);
+        Assert.DoesNotContain("说", saved);
+    }
+
     private TranscriptionJobRunner CreateRunner()
     {
         var systemSettings = new SystemSettings();
@@ -163,10 +178,13 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
 
         public string ModelName => "gpt-transcribe";
 
+        /// <summary>指定時每段都回這段文字；沒指定時回「第 n 段」。</summary>
+        public string? Text { get; set; }
+
         public Task<string> TranscribeAsync(Stream audio, string fileName, CancellationToken cancellationToken)
         {
             CallCount++;
-            return Task.FromResult($"第 {CallCount} 段");
+            return Task.FromResult(Text ?? $"第 {CallCount} 段");
         }
     }
 }

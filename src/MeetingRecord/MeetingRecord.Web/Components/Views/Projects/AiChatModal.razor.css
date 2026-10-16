@@ -303,7 +303,7 @@
     background: var(--oat-200);
     /* Bootstrap 的預設 code 是粉紅色（--bs-code-color），在這個配色裡很突兀。 */
     color: inherit;
-    font-family: Consolas, "Courier New", monospace;
+    font-family: var(--app-font-mono);
     font-size: 0.85em;
 }
 

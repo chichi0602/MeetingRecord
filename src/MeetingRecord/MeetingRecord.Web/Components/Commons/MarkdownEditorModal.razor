@@ -2,6 +2,8 @@
 
 @* 左邊改、右邊看的 Markdown 編修視窗，附常駐的搜尋／取代列。
    唯讀（CanEdit = false）時只剩右邊的預覽，佔滿整寬。
+   1.0.40 起操作欄只留一顆「會議紀錄」：唯讀時可按「編修」切進來、取消回到檢視；
+   有逐字稿時唯讀畫面多「會議紀錄｜逐字稿」頁籤，逐字稿可複製、下載。
 
    ⚠️ Keyboard／MaskClosable 都跟著 CanEdit 走：編修時一律關掉 Esc 與點遮罩關閉，
    一整篇打到一半的會議紀錄，按錯一次鍵就沒了。要離開只能按下面的「取消」，
@@ -24,6 +26,30 @@
        Footer="null"
        OnCancel="OnCancelAsync">
 
+    @* 1.0.40：檢視時有逐字稿就出現頁籤（會議紀錄｜逐字稿）。編修模式不顯示，畫面與以前相同。 *@
+    @if (ShowTabs)
+    {
+        <div class="markdown-editor-tabs" role="tablist">
+            <button type="button" role="tab"
+                    class="markdown-editor-tab @(IsTranscriptTabActive ? string.Empty : "markdown-editor-tab-active")"
+                    aria-selected="@(!IsTranscriptTabActive)"
+                    @onclick="@(() => SelectTab(DraftTab))">會議紀錄</button>
+            <button type="button" role="tab"
+                    class="markdown-editor-tab @(IsTranscriptTabActive ? "markdown-editor-tab-active" : string.Empty)"
+                    aria-selected="@IsTranscriptTabActive"
+                    @onclick="@(() => SelectTab(TranscriptTab))">逐字稿</button>
+        </div>
+    }
+
+    @if (IsTranscriptTabActive)
+    {
+        @* 純文字、保留換行、可以選取複製。不走 Markdown：逐字稿不是 Markdown，硬轉會把行首的 - 或 # 誤當格式。 *@
+        <div class="markdown-editor markdown-editor-readonly">
+            <div class="markdown-editor-pane markdown-editor-transcript">@Transcript</div>
+        </div>
+    }
+    else
+    {
     <div class="markdown-editor @(CanEdit ? "markdown-editor-split" : "markdown-editor-readonly")">
 
         @if (CanEdit)
@@ -90,12 +116,20 @@
         }
 
         <div class="markdown-editor-pane markdown-editor-preview" @ref="previewElement">
-            @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。 *@
-            <div class="markdown-content">@((MarkupString)previewHtml)</div>
+            @if (!CanEdit && string.IsNullOrWhiteSpace(editingText))
+            {
+                <p class="markdown-editor-empty">尚未產生會議紀錄。</p>
+            }
+            else
+            {
+                @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。 *@
+                <div class="markdown-content">@((MarkupString)previewHtml)</div>
+            }
         </div>
     </div>
+    }
 
-    @if (!string.IsNullOrWhiteSpace(Notice))
+    @if (!IsTranscriptTabActive && !string.IsNullOrWhiteSpace(Notice))
     {
         <p class="markdown-editor-notice">
             <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="info" />
@@ -104,12 +138,36 @@
     }
 
     <div class="markdown-editor-actions">
-        @if (CanExport)
+        @if (IsTranscriptTabActive && CanCopyTranscript)
+        {
+            <Button OnClick="OnCopyTranscriptAsync">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="content_copy" />
+                    <span>複製全文</span>
+                </span>
+            </Button>
+            <Button OnClick="OnDownloadTranscriptAsync">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" />
+                    <span>下載 .txt</span>
+                </span>
+            </Button>
+        }
+        @if (!IsTranscriptTabActive && CanExport && !string.IsNullOrWhiteSpace(editingText))
         {
             <Button Loading="@IsExporting" Disabled="@IsExporting" OnClick="OnExportAsync">
                 <span class="btn-icon-label">
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" />
                     <span>下載 PDF</span>
+                </span>
+            </Button>
+        }
+        @if (!CanEdit && !IsTranscriptTabActive && CanSwitchToEdit && !string.IsNullOrWhiteSpace(editingText))
+        {
+            <Button OnClick="OnRequestEditAsync">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="edit" />
+                    <span>編修</span>
                 </span>
             </Button>
         }

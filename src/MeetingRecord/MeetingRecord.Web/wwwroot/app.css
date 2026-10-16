@@ -56,8 +56,28 @@
                                       比側邊欄低的話會被蓋掉左半邊。原本的 3 < 4 就是這個關係。 */
 }
 
-html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+/* ============================================================
+   全站字型（1.0.41）：中文一律微軟正黑體，英數用 Segoe UI。只用這兩個變數，不要在元件裡寫死字型。
+
+   以前 body 是 'Helvetica Neue', Helvetica, Arial——**沒有任何中文字型**，AntDesign 的字型清單也沒有。
+   瀏覽器只好逐字挑：繁體字落到微軟正黑體，簡體獨有字（说、现）落到微軟雅黑，同一段字大小粗細不一（使用者回報）。
+   Mac 沒有正黑體，落到蘋方-繁；都沒有才用 Noto Sans TC。用系統內建字型、不下載網路字型（使用者決定）。
+   ============================================================ */
+html:root {
+    --app-font-family: "Segoe UI", "Microsoft JhengHei", "微軟正黑體", "PingFang TC", "Noto Sans TC", sans-serif;
+    /* 等寬區（日誌、JSON、程式碼）：英數等寬，中文同樣落到正黑體，不另外混一套。 */
+    --app-font-mono: Consolas, "Microsoft JhengHei", "微軟正黑體", "PingFang TC", monospace;
+
+    /* AntDesign 有一處用這個變數；它的 css 在 app.css 之後載入，所以用 html:root 提高權重蓋過去。 */
+    --ant-font-family: var(--app-font-family);
+}
+
+/* ⚠️ AntDesign 另有 6 處把字型清單寫死在元件選擇器上，而且晚於 app.css 載入，同權重會贏。
+   html body 開頭把權重拉高蓋過去；專案自己的等寬區用 scoped class（權重更高），不受影響。 */
+html, body,
+html body [class^="ant-"],
+html body [class*=" ant-"] {
+    font-family: var(--app-font-family);
 }
 
 a, .btn-link {
@@ -393,7 +413,7 @@ body .ant-spin-dot-item {
     background: var(--oat-200);
     /* Bootstrap 的預設 code 是粉紅色（--bs-code-color），在這個配色裡很突兀。 */
     color: inherit;
-    font-family: Consolas, "Courier New", monospace;
+    font-family: var(--app-font-mono);
     font-size: 0.85em;
 }
 

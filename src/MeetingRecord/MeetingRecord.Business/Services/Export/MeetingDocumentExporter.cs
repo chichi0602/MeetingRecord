@@ -95,6 +95,22 @@ public static class MeetingDocumentExporter
         return $"會議紀錄_{title}_{stamp}.pdf";
     }
 
+    /// <summary>逐字稿下載的檔名（1.0.40），規則比照 <see cref="BuildFileName"/>，日期取轉錄完成時間。</summary>
+    public static string BuildTranscriptFileName(MeetingAdapterModel meeting)
+    {
+        ArgumentNullException.ThrowIfNull(meeting);
+
+        var title = ExportFileNameBuilder.SafeTitle(meeting.Title, MaxTitleLengthInFileName);
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = UnspecifiedText;
+        }
+
+        var stamp = (meeting.TranscriptionCompletedAt ?? meeting.UpdatedAt).ToString("yyyyMMdd");
+
+        return $"逐字稿_{title}_{stamp}.txt";
+    }
+
     private static string FormatDate(DateTime? value)
         => value?.ToString("yyyy/MM/dd") ?? UnspecifiedText;
 

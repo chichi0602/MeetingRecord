@@ -106,6 +106,48 @@ public partial class MarkdownEditorModal : IDisposable
     /// </summary>
     [Parameter] public string? Notice { get; set; }
 
+    /// <summary>
+    /// 唯讀時是否顯示「編修」鈕（1.0.40）。操作欄只留一顆「會議紀錄」，編修從視窗裡進。
+    /// 按下呼叫 <see cref="OnRequestEdit"/>，由父層把 <see cref="CanEdit"/> 設成 true——狀態仍歸父層管。
+    /// </summary>
+    [Parameter] public bool CanSwitchToEdit { get; set; }
+
+    [Parameter] public EventCallback OnRequestEdit { get; set; }
+
+    /// <summary>
+    /// 編修中按「取消」（沒改過或確認放棄後）要回到檢視而不是關窗（1.0.40）。有綁才這樣做，
+    /// 由父層把 <see cref="CanEdit"/> 設回 false；沒綁的話維持原本的關窗行為。
+    /// </summary>
+    [Parameter] public EventCallback OnCancelEdit { get; set; }
+
+    /// <summary>
+    /// 逐字稿全文（1.0.40）。有值才出現「會議紀錄｜逐字稿」頁籤；只在唯讀時顯示。
+    /// 0.4.82 移除過，使用者要拿去外部 AI 問答而加回來，只看不改。
+    /// </summary>
+    [Parameter] public string? Transcript { get; set; }
+
+    /// <summary>逐字稿頁籤的「複製全文」「下載 .txt」（要有匯出權限）。動作與稽核交給父層做。</summary>
+    [Parameter] public bool CanCopyTranscript { get; set; }
+
+    [Parameter] public EventCallback OnCopyTranscript { get; set; }
+
+    [Parameter] public EventCallback OnDownloadTranscript { get; set; }
+
+    private const string DraftTab = "draft";
+
+    private const string TranscriptTab = "transcript";
+
+    private string activeTab = DraftTab;
+
+    private bool HasTranscript => !string.IsNullOrWhiteSpace(Transcript);
+
+    /// <summary>頁籤只在唯讀、而且有逐字稿時出現；編修模式的畫面與以前完全相同。</summary>
+    private bool ShowTabs => !CanEdit && HasTranscript;
+
+    private bool IsTranscriptTabActive => ShowTabs && activeTab == TranscriptTab;
+
+    private bool wasCanEdit;
+
     private ElementReference sourceElement;
 
     private ElementReference previewElement;
@@ -136,13 +178,11 @@ public partial class MarkdownEditorModal : IDisposable
     private CancellationTokenSource? previewCts;
 
     /// <summary>
-    /// 編修時用最大的一級（左右分欄需要寬度），唯讀時只有一欄文章，880 就夠了——
-    /// 一行太長反而難讀。
+    /// 一律用最大的一級，而且高度吃滿（1.0.40，使用者要「跟 AI 問答一樣寬」）。
+    /// 以前唯讀用 880px，理由是一行太長難讀；但檢視與編修現在在同一個視窗裡切換，
+    /// 尺寸跟著跳反而突兀，表格多的會議紀錄在 880 裡也擠。全高規則在 FormModalHelper 的 .markdown-editor-modal。
     /// </summary>
-    private string ModalClass =>
-        CanEdit
-            ? $"{MarkdownEditorBaseClass} meeting-view-modal"
-            : $"{MarkdownEditorBaseClass} form-modal-standard";
+    private const string ModalClass = $"{MarkdownEditorBaseClass} meeting-view-modal";
 
     /// <summary>
     /// 「第 n / 共 m 筆」。
@@ -237,21 +277,51 @@ public partial class MarkdownEditorModal : IDisposable
     protected override void OnParametersSet()
     {
         // ⚠️ 只在 false → true 的那一次吃進來。見 Content 的說明。
-        if (Visible && !wasVisible)
+        // 1.0.40 起檢視與編修在同一個視窗裡切換：CanEdit 一變（進編修、取消、存好回檢視）也重新吃一次，
+        // 進編修時以當下內容為基準，回檢視時顯示存好的內容（父層會把 Content 換成新版）或丟掉沒存的修改。
+        var opened = Visible && !wasVisible;
+        var modeChanged = Visible && wasVisible && CanEdit != wasCanEdit;
+
+        if (opened || modeChanged)
         {
-            ApplyText(TextSearchHelper.NormalizeNewLines(Content), recomputeMatches: false);
-            originalText = editingText;
+            LoadContent();
+        }
 
-            searchTerm = string.Empty;
-            replaceTerm = string.Empty;
-            matches = [];
-            currentIndex = -1;
+        if (opened)
+        {
+            // 還沒產生會議紀錄、只有逐字稿時，直接停在逐字稿。
+            activeTab = string.IsNullOrWhiteSpace(Content) && HasTranscript ? TranscriptTab : DraftTab;
+        }
 
-            RenderPreviewNow();
+        if (modeChanged && CanEdit)
+        {
+            activeTab = DraftTab;
         }
 
         wasVisible = Visible;
+        wasCanEdit = CanEdit;
     }
+
+    private void LoadContent()
+    {
+        ApplyText(TextSearchHelper.NormalizeNewLines(Content), recomputeMatches: false);
+        originalText = editingText;
+
+        searchTerm = string.Empty;
+        replaceTerm = string.Empty;
+        matches = [];
+        currentIndex = -1;
+
+        RenderPreviewNow();
+    }
+
+    private void SelectTab(string tab) => activeTab = tab;
+
+    private Task OnRequestEditAsync() => OnRequestEdit.InvokeAsync();
+
+    private Task OnCopyTranscriptAsync() => OnCopyTranscript.InvokeAsync();
+
+    private Task OnDownloadTranscriptAsync() => OnDownloadTranscript.InvokeAsync();
 
     /// <summary>
     /// <b><see cref="editingText"/> 唯一的寫入點。</b>
@@ -442,6 +512,13 @@ public partial class MarkdownEditorModal : IDisposable
             {
                 return;
             }
+        }
+
+        // 從檢視切進來的編修，取消就回到檢視（1.0.40）。
+        if (CanEdit && OnCancelEdit.HasDelegate)
+        {
+            await OnCancelEdit.InvokeAsync();
+            return;
         }
 
         await CloseAsync();

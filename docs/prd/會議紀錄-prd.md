@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.11
+- 文件版本：2.13
 - 文件狀態：已實作
-- 現行系統版本：1.0.37
+- 現行系統版本：1.0.41
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/10/16
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -25,11 +25,11 @@
 **影音檔與逐字稿一律存放於檔案系統，不入資料庫**；資料表只保存相對路徑等中繼資料。存放根目錄與 AI 供應商（provider／endpoint／key／model）皆由 `appsettings.json` 決定。
 
 非範圍（本版刻意不做）：
-- 本頁**自 0.4.73 起也包含**「套用提示詞 → LLM 產生會議紀錄」：每列有「AI 轉會議紀錄」，對話框裡的「所屬專案」是**選填**，不必先建立專案。專案頁 `/projects` 的入口同時保留（見 [專案項目 PRD](專案項目-prd.md)），兩者共用同一支服務；流程全貌見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)，提示詞範本維護見 [會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)。0.4.73 起本頁涵蓋整條動線：上傳、轉錄，以及產生／檢視／編修／匯出會議紀錄、AI 問答與歸屬到專案。**0.4.82 起逐字稿的預覽與編修整個移除**（檔案仍在，只是人看不到），且編修與匯出改依「有沒有歸屬專案」分流，見下方「操作按鈕」。
+- 本頁**自 0.4.73 起也包含**「套用提示詞 → LLM 產生會議紀錄」：每列有「AI 轉會議紀錄」，對話框裡的「所屬專案」是**選填**，不必先建立專案。專案頁 `/projects` 的入口同時保留（見 [專案項目 PRD](專案項目-prd.md)），兩者共用同一支服務；流程全貌見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)，提示詞範本維護見 [會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)。0.4.73 起本頁涵蓋整條動線：上傳、轉錄，以及產生／檢視／編修／匯出會議紀錄、AI 問答與歸屬到專案。**0.4.82 起逐字稿的預覽與編修整個移除**（檔案仍在，只是人看不到），且編修與匯出改依「有沒有歸屬專案」分流，見下方「操作按鈕」。**1.0.40 起恢復逐字稿的唯讀檢視、複製與下載 .txt**（編修仍不提供）。
 - 不做即時（會議進行中）轉錄與逐字稿串流。
 - 不做說話者聲紋辨識與身分綁定。
-- **不做逐字稿的預覽與編修**（0.4.55 曾提供，0.4.82 移除）。逐字稿檔案仍是生成會議紀錄與 AI 問答的輸入，只是不再有「人直接讀／改逐字稿」的介面。
-- 不做影音檔／逐字稿的下載端點與線上播放。
+- **不做逐字稿的編修**（0.4.55 曾提供，0.4.82 移除）。逐字稿檔案仍是生成會議紀錄與 AI 問答的輸入。0.4.82～1.0.39 連唯讀預覽都沒有；**1.0.40 起「會議紀錄與逐字稿」視窗有唯讀的「逐字稿」頁籤**，可複製全文、下載 .txt（使用者要拿去外部 AI 工具用），但仍不能改。
+- 不做影音檔／逐字稿的 HTTP 下載端點與線上播放（1.0.40 的下載 .txt 是 Blazor 頁面經服務層讀檔後交給瀏覽器存檔，不是對外網址）。
 - 不做一筆會議掛多個影音檔（一對一，替換即覆寫）。
 - Web API 只開放中繼資料 CRUD，不開放上傳、轉錄與逐字稿讀取。
 
@@ -74,10 +74,12 @@
 - 操作按鈕：
   - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
   - **AI 轉會議紀錄（0.4.73，`edit`）**：開對話框選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員。按確定會再跳一次費用確認
-  - **檢視會議紀錄（所有會議都有）**：唯讀，左右分欄的編修器只顯示右邊的預覽。已歸屬專案時視窗底部會有一行指路說明，講清楚編修與下載要去專案項目頁——沒有這行，使用者只會覺得按鈕莫名其妙消失了
-  - **編修會議紀錄（`edit`，0.4.82 起僅「未歸屬專案」時出現）**：左改右看 ＋ 常駐搜尋／取代列，元件是共用的 `Components/Commons/MarkdownEditorModal`
-  - **匯出 PDF（`export`）**：0.4.82 起**不放在清單列上**。未歸屬的在編修視窗裡按（表頭「專案」欄顯示「未指定」）；已歸屬的到專案項目頁按，那裡的 PDF 表頭才帶得到專案名稱
-  - **AI 問答（0.4.73）**：`HasDraft || HasTranscript` 時出現——⚠️ **不要簡化成只看 `HasDraft`**，「已轉錄完成但還沒生成會議紀錄」的會議會因此失去入口，而那正是「先問問看逐字稿講了什麼再決定要不要花錢生成」最有用的時機。0.4.82 移除逐字稿預覽後，這是使用者接觸逐字稿內容的唯一路徑。0.4.95 起提問可以附加圖片與檔案（規則與專案層級相同，見 [專案項目 PRD](專案項目-prd.md)）
+  - **會議紀錄與逐字稿（1.0.40，圖示 `article`，`HasDraft || HasTranscript` 時出現）**：取代原本的「檢視會議紀錄」與「編修會議紀錄」兩顆鈕（使用者反映操作欄太擠、兩顆長得像）。一律先以唯讀開啟共用的 `Components/Commons/MarkdownEditorModal`：
+    - 有逐字稿時上方有「會議紀錄｜逐字稿」頁籤；還沒有會議紀錄就直接停在逐字稿頁籤（會議紀錄頁籤顯示「尚未產生會議紀錄。」）。逐字稿以純文字顯示（保留換行，不當 Markdown 渲染），附「複製全文」與「下載 .txt」（UTF-8 含 BOM，記事本開啟不亂碼；檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`，日期取 `TranscriptionCompletedAt ?? UpdatedAt`，見 `MeetingDocumentExporter.BuildTranscriptFileName`）。看逐字稿只要看得到這筆會議；複製與下載要 `會議紀錄:export`。逐字稿**仍不能改**。
+    - 視窗底部的「編修」只在**未歸屬專案、有 `會議紀錄:edit`、且已有會議紀錄**時出現，按下去在同一個視窗切到左改右看 ＋ 常駐搜尋／取代列；「取消」（改過會先確認）與儲存成功都回到唯讀檢視，不關窗。
+    - 已歸屬專案時視窗底部會有一行指路說明，講清楚編修與下載要去專案項目頁——沒有這行，使用者只會覺得按鈕莫名其妙消失了
+  - **匯出 PDF（`export`）**：0.4.82 起**不放在清單列上**。未歸屬的在「會議紀錄與逐字稿」視窗裡按「下載 PDF」（表頭「專案」欄顯示「未指定」）；已歸屬的到專案項目頁按，那裡的 PDF 表頭才帶得到專案名稱
+  - **AI 問答（0.4.73）**：`HasDraft || HasTranscript` 時出現——⚠️ **不要簡化成只看 `HasDraft`**，「已轉錄完成但還沒生成會議紀錄」的會議會因此失去入口，而那正是「先問問看逐字稿講了什麼再決定要不要花錢生成」最有用的時機。0.4.82～1.0.39 這是使用者接觸逐字稿內容的唯一路徑（1.0.40 起另有唯讀的逐字稿頁籤）。0.4.95 起提問可以附加圖片與檔案（規則與專案層級相同，見 [專案項目 PRD](專案項目-prd.md)）
   - **抽出待辦：0.4.83 起本頁沒有這顆鈕**（0.4.73～0.4.82 曾有）。待辦在資料表層級就必須有專案，而這一頁有一半的會議是未歸屬的，按了只能跳訊息叫使用者先去歸屬——那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案項目頁的清單裡，入口集中在那裡。
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - 修改（`edit`）、刪除（`delete`）
@@ -85,7 +87,7 @@
 - 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。
 - **背景工作進行中不能刪、不能換檔**（0.4.115）：轉錄或會議紀錄生成在排隊或執行中時，`DeleteAsync` 與 `SaveMediaAsync` 一律拒絕，提示等它完成或從進度面板取消。原因：工作不會因此停下，跑完會把舊錄音的逐字稿寫到已換新檔的會議上，或寫出沒有資料列可掛、永遠留在磁碟上的逐字稿。轉錄存不進資料庫時刪掉剛寫出的逐字稿，上傳存不進資料庫時刪掉剛落地的影音檔。
 - 進度面板的「取消」要有 `會議紀錄:edit`（0.4.115）。只看得到那筆會議的人仍看得到進度，但沒有取消鈕。
-- **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。
+- **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。1.0.40 起同一個視窗先唯讀、按「編修」才切到編修模式；視窗一律 `markdown-editor-modal meeting-view-modal`（寬 96vw、內容固定高 96vh），檢視與編修切換時大小不跳動。
   版面是左邊 `<textarea>`、右邊 Markdown 即時預覽，上方一列常駐的搜尋／取代（搜尋、上一個／下一個、取代、全部取代，顯示「第 n / 共 m 筆」）。
   - 搜尋取代的邏輯全在 `Business/Helpers/TextSearchHelper`（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
   - ⚠️ **只反白當前那一筆**。`<textarea>` 裡唯一能做的反白就是 selection；要同時標記全部 m 筆得做逐像素對齊的 overlay，中文字型 fallback 一有差異就整段錯位。用「第 n / 共 m 筆」補足資訊。
@@ -125,6 +127,15 @@
 
 年／月取自**主表的 `CreatedAt`**，與專案附件一致（見 [檔案上傳機制](../features/檔案上傳機制.md)）。逐字稿以 **UTF-8 含 BOM** 寫入，避免使用者用記事本開啟時出現亂碼。實體檔案的建立與刪除集中在 `MeetingFileStore`。
 
+### 逐字稿一律繁體（1.0.41）
+
+Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用者要求系統裡不要出現簡體字。逐字稿因此一律經 `Business/Helpers/ChineseTextConverter.ToTraditional`（OpenCCNET 1.1.0 的 `HansToTW(text, false)`）轉成繁體：
+
+- **只轉字形（台灣字形，如「里面」→「裡面」），不轉用詞**（使用者決定）。逐字稿要忠於講者說的話：「软件」轉成「軟件」而不是「軟體」，「文件」也不會被換成「檔案」。
+- **寫入時轉**：`TranscriptionJobRunner` 在 `MeetingFileStore.SaveTranscriptAsync` 之前轉，新產生的逐字稿檔存的就是繁體。
+- **讀取時也轉**：`MeetingFileStore.ReadTranscriptAsync` 在 `TranscriptionNoiseFilter.Strip` 之後轉，所以 1.0.40 以前存下來的簡體檔**不必重新轉錄**，一律顯示繁體。逐字稿頁籤、複製全文、下載 .txt、生成會議紀錄與 AI 問答讀到的都是這個版本（磁碟上的舊檔不會被改寫）。
+- **刻意不轉 LLM 的輸出**（會議紀錄草稿、AI 問答、待辦）：提示詞本來就要求繁體（台灣用語），輸入的逐字稿也已是繁體，對已是繁體的長文再轉一次只會增加誤換的機會。
+
 ### 允收政策
 
 `MeetingMediaPolicy`（前端與服務層共用同一份判斷）：
@@ -142,7 +153,7 @@
    `-vn -ac 1 -ar 16000 -c:a libmp3lame -b:a 32k -f segment -segment_time 900 -segment_format mp3`
    輸出到系統暫存目錄，轉錄結束即整個目錄刪除。
 5. 經 `AiCallGateway.TranscribeAsync`（1.0.29 起；記用量帳本與 AI 對話紀錄，關聯說明「會議 #N〈標題〉語音轉錄 i/n」，同一個音檔共用 ThreadKey；對話紀錄只記檔名、時長、分段與轉出的文字，不存音訊）由 `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.37）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
-6. 各段文字以空行接合寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。1.0.29 起同時寫入 `Meeting.MediaDurationSeconds`（各段時長加總，儀表板「會議時數」讀這一欄）；重新上傳影音時清空。
+6. 各段文字以空行接合、轉成繁體（1.0.41，見上方「逐字稿一律繁體」）後寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。1.0.29 起同時寫入 `Meeting.MediaDurationSeconds`（各段時長加總，儀表板「會議時數」讀這一欄）；重新上傳影音時清空。
 
 > **為什麼一律切段**：Azure OpenAI 的音訊轉錄有單檔 25MB 上限，而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，不必為「檔案夠小就不切」多維護一個分支；15 分鐘 @32kbps 約 3.6MB，遠低於上限，同時順帶解決長會議的時長問題。
 
@@ -166,8 +177,8 @@
   - **未歸屬專案**：只有上傳者（`Meeting.CreatedByUserId`）看得到；上傳者為 null（0.4.80 以前、啟動回填也推不回來的舊會議）時只有管理者看得到。
   - **管理者**（`MyUser.IsAdmin`）看全部。
   - 看不到的當成不存在：UI 找不到、API 回 404。
-  - 套用範圍：`MeetingService` 的清單、單筆、修改、刪除、上傳影音檔、重新轉錄、歸屬到專案、產生會議紀錄（目標專案也要看得到），API 的 `MeetingRepository`，以及讀逐字稿原文的 **AI 問答**（`AiChatService.EnsureAccessAsync`，見 [AI 問答 PRD](AI問答-prd.md)）。分類只是標籤，不影響可見性。
-- 逐字稿內容為高敏感資料：0.4.82 起沒有逐字稿預覽，讀逐字稿原文的唯一路徑是 AI 問答（Blazor 服務層、Cookie 驗證，經上述專案權控守門）；**沒有任何可直接下載檔案的 HTTP 端點**。
+  - 套用範圍：`MeetingService` 的清單、單筆、修改、刪除、上傳影音檔、重新轉錄、歸屬到專案、產生會議紀錄（目標專案也要看得到）、讀逐字稿（`ReadTranscriptAsync`，1.0.40），API 的 `MeetingRepository`，以及讀逐字稿原文的 **AI 問答**（`AiChatService.EnsureAccessAsync`，見 [AI 問答 PRD](AI問答-prd.md)）。分類只是標籤，不影響可見性。
+- 逐字稿內容為高敏感資料：0.4.82～1.0.39 沒有逐字稿預覽，讀逐字稿原文的唯一路徑是 AI 問答。1.0.40 起多了唯讀的逐字稿頁籤，經 `MeetingService.ReadTranscriptAsync(meetingId)` 讀取——與清單同樣經 `ProjectAccessService` 過濾，看不到的會議回 null（當成不存在），內容是 `MeetingFileStore.ReadTranscriptAsync` 濾過雜訊的版本；複製與下載另要匯出權限，成功後寫稽核。兩條路徑都在 Blazor 服務層、Cookie 驗證、經上述專案權控守門；**沒有任何可直接下載檔案的 HTTP 端點**。
 - 歷史（已失效，僅供對照）：
   - ~~0.4.98 以前以 `Meeting.Teams` 做團隊列級權控（`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`，無團隊＝公開）~~；0.4.35 從表單移除團隊欄位後，~~0.4.35～0.4.98 新建的會議一律公開~~，0.4.82 移除逐字稿預覽後 AI 問答一度沒有列級守門。0.4.99 改為專案權控解決，**0.4.103 `Meeting.Teams` 與上述兩個方法已刪除**。
 - 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
@@ -176,7 +187,7 @@
 ### 稽核（1.0.34）
 
 - `MeetingService`（網頁）與 `MeetingRepository`（API）：`Meeting.Create`／`Update`／`Delete`（摘要帶 `via`；API 刪除經 `MeetingService.DeleteAsync(id, via)`）。
-- 流程動作：`Meeting.MediaUpload`（檔名與大小；使用者取消不記）、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`（`projectId`）、`Meeting.DraftRequest`（專案、提示詞名稱、與會者人數）、`Meeting.DraftUpdate`（**只記字數**，不記會議紀錄內容）、`Meeting.ExportPdf`（會議頁與專案頁的匯出）。
+- 流程動作：`Meeting.MediaUpload`（檔名與大小；使用者取消不記）、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`（`projectId`）、`Meeting.DraftRequest`（專案、提示詞名稱、與會者人數）、`Meeting.DraftUpdate`（**只記字數**，不記會議紀錄內容）、`Meeting.ExportPdf`（會議頁與專案頁的匯出）、`Meeting.TranscriptDownload`「下載逐字稿」與 `Meeting.TranscriptCopy`「複製逐字稿」（1.0.40，頁面在成功後寫入，detail 帶 `page=Meeting`／`Project`）。
 - 看不到的會議被嘗試修改、刪除、上傳、重新轉錄、歸屬、移出、產生或編修草稿時寫 `Permission.Denied`（`reason=DataScope; op=…`）；歸屬或產生草稿時指定了看不到的專案，目標是那個專案。用量上限擋下由 `AiCallGateway` 另記 `Ai.QuotaBlocked`。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
@@ -260,6 +271,8 @@
 - `RequeueTranscriptionAsync_*`：重設狀態並入列；沒有影音檔或處理中時拒絕。
 - `TextSearchHelperTests`（0.4.82，30 筆）：搜尋取代的純函式。重點在**不重疊掃描**（寫成 `at + 1` 會多算一筆）、**`OrdinalIgnoreCase` 保證比對到的片段長度等於搜尋字串長度**（換成 culture-sensitive 比對，索引就會歪）、**換行正規化**（`<textarea>` 的 value 一律是 LF，含 CRLF 的文字索引會愈往後偏愈多，只有長文件的後半段才看得出來）、以及**取代字串含搜尋字串時不連鎖**（把「a」換成「aa」）。以突變測試確認三條規則都會變紅。
 - `ModalSizeClassTests`（0.4.82）：掃描所有 `.razor` 的 `<Modal>`，每個都要剛好一個尺寸 class，且不可以同時留下已失效的 `Width`（尺寸 class 的 `width` 是 author-important，贏過 `Width` 產生的 inline style）。
+- `ReadTranscriptAsync_*`（1.0.40，3 筆）：回傳逐字稿內容、沒有逐字稿回 null、看不到的會議（非成員）回 null。1.0.41 加 `ReadTranscriptAsync_ShouldConvertLegacySimplifiedTranscript`：舊的簡體逐字稿讀出來是繁體。
+- 簡轉繁另有 `ChineseTextConverterTests`（1.0.41，用真的 OpenCC 字典跑，順便驗證字典有複製到輸出目錄）：簡體字轉換、台灣字形（里面→裡面）、不轉用詞（软件→軟件）、繁體與中英混合原樣、空白原樣；`TranscriptionJobRunnerTests.Run_ShouldSaveTranscriptInTraditionalChinese` 直接讀存下來的原始檔，確認寫入的就是繁體。
 - `GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_Member_ShouldSeeOwnProjectsAndOwnUnassignedMeetings`、`GetAsync_UserWithoutProjects_ShouldSeeNothingOfOthers`、`GetById_NonMember_ShouldDenyMeetingOfOtherProject`、`GetAsync_WithKeyword_ShouldMatchMediaFileName`：可見性（專案權控）與查詢條件。舊的團隊標籤可見性與 `TeamFilter` 測試已於 0.4.99／0.4.103 移除。
 
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TranscriptionRequestTests.cs`（只測純函式，**不打真實 API、不跑真實 ffmpeg**）：
@@ -286,7 +299,9 @@
 2. 登入 → 側邊欄出現「會議管理 > 會議紀錄」→ 進 `/meetings`。
 3. 新增會議並上傳 mp3：進度列 0%→100%，狀態依序為「待處理」→「處理中」→「已完成」。
 4. 開「AI 問答」提問，確認回答引用的逐字稿片段中文正常無亂碼。
-   ⚠️ 0.4.82 移除逐字稿預覽後，這是唯一還會碰到逐字稿檔案編碼的驗收點——`MeetingFileStore` 的讀寫編碼一旦有人動了，別處只會表現成「AI 寫出來的內容怪怪的」。
+   1.0.40 起另開「會議紀錄與逐字稿」的逐字稿頁籤，確認中文正常，再下載 .txt 用記事本開啟確認不亂碼。
+   1.0.41 起逐字稿頁籤與下載的 .txt 都應是繁體；開一筆 1.0.40 以前轉錄的會議，確認不重新轉錄也顯示繁體。
+   ⚠️ 0.4.82～1.0.39 這是唯一還會碰到逐字稿檔案編碼的驗收點——`MeetingFileStore` 的讀寫編碼一旦有人動了，別處只會表現成「AI 寫出來的內容怪怪的」。
 5. 上傳 mp4（含影像軌）與 wma，確認 FFmpeg 抽音軌成功、同樣產出逐字稿。
 6. 故意填錯 `ApiKey` → 狀態「失敗」並可看到錯誤訊息 → 按「重新轉錄」可重跑。
 7. 轉錄進行中重啟應用程式 → 該筆自動變成「失敗」（不卡在「處理中」）。
@@ -299,8 +314,8 @@
 
 - 套用提示詞範本 → 呼叫 LLM 產生會議紀錄草稿（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。
 - ~~**把團隊守門補進 `AiChatService`**（0.4.82 起它是逐字稿原文的唯一出口，且無列級權控）~~——0.4.99 已由專案權控完成。
-- 逐字稿的預覽與編修（0.4.55 曾有，0.4.82 移除）。若要復原，連同版本歷程一起想清楚——先前是就地覆寫，不留舊內容。
-- 影音檔／逐字稿的下載端點與線上播放。
+- 逐字稿的編修（0.4.55 曾有，0.4.82 移除；1.0.40 只恢復唯讀檢視、複製與下載 .txt）。若要復原編修，連同版本歷程一起想清楚——先前是就地覆寫，不留舊內容。
+- 影音檔／逐字稿的 HTTP 下載端點與線上播放。
 - 清單轉錄狀態的自動輪詢或即時推播。
 - 逐字稿保留期限與自動清理政策。
 - 轉錄成本上限、每日配額與失敗重試計費控管。
@@ -311,8 +326,9 @@
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor.cs`（`MeetingViewView`：`OnInitializedAsync` 頁面權限、上傳進度、會議紀錄編修入口）
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs`（`MeetingController` 各端點的 `[HasPermission]` 動作鍵）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MeetingService.cs`（`MeetingService`：CRUD、專案權控、`SaveMediaAsync` 上傳、`RequeueTranscriptionAsync` 重新轉錄、`AttachToProjectAsync`／`DetachFromProjectAsync`、`RequestDraftAsync`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MeetingFileStore.cs`（`MeetingFileStore`：實體檔案存取與上傳進度回報）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MeetingService.cs`（`MeetingService`：CRUD、專案權控、`SaveMediaAsync` 上傳、`RequeueTranscriptionAsync` 重新轉錄、`AttachToProjectAsync`／`DetachFromProjectAsync`、`RequestDraftAsync`、`ReadTranscriptAsync` 讀逐字稿）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Other/MeetingFileStore.cs`（`MeetingFileStore`：實體檔案存取與上傳進度回報；`ReadTranscriptAsync` 讀取時簡轉繁）
+- `src/MeetingRecord/MeetingRecord.Business/Helpers/ChineseTextConverter.cs`（`ChineseTextConverter`：逐字稿簡轉繁，只轉字形，1.0.41）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（`ProjectAccess.CanViewMeeting`、`ProjectAccess.Filter(IQueryable<Meeting>)`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs`（`ITranscriptionProvider`，換廠商的擴充點）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/AzureOpenAiTranscriptionProvider.cs`（`AzureOpenAiTranscriptionProvider`）

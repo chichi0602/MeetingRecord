@@ -34,6 +34,11 @@ public partial class ProjectViewView : IDisposable
     /// <summary>PDF 的 MIME，讓瀏覽器認得下載下來的是什麼。</summary>
     private const string PdfContentType = "application/pdf";
 
+    private const string TranscriptContentType = "text/plain;charset=utf-8";
+
+    [Inject]
+    private ClipboardInterop clipboardInterop { get; set; } = default!;
+
     /// <summary>正在匯出的會議 Id；用來顯示 loading 並擋重複點擊。</summary>
     private int? exportingMeetingId;
 
@@ -135,6 +140,9 @@ public partial class ProjectViewView : IDisposable
     private MeetingAdapterModel? draftMeeting;
     private string draftModalTitle = "會議紀錄";
     private string? draftContent;
+    private bool draftCanSwitchToEdit;
+    private string? draftTranscript;
+    private bool draftCanCopyTranscript;
     private int draftMeetingId;
 
     /// <summary>目前選取專案的附件。由 <see cref="ReloadProjectContextAsync"/> 載入。</summary>
@@ -541,36 +549,94 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private Task OnViewDraftAsync(MeetingAdapterModel meeting)
-    {
-        OpenDraftModal(meeting, canEdit: false, title: $"會議紀錄 - {meeting.Title}");
-        return Task.CompletedTask;
-    }
-
-    private Task OnEditDraftAsync(MeetingAdapterModel meeting)
-    {
-        OpenDraftModal(meeting, canEdit: true, title: $"編修會議紀錄 - {meeting.Title}");
-        return Task.CompletedTask;
-    }
-
     /// <summary>
-    /// 這一頁的會議一律已歸屬本專案，所以檢視與編修都給得起，PDF 也帶得到專案名稱。
+    /// 開啟「會議紀錄」視窗（1.0.40 起操作欄只有這一顆，檢視與編修合併）：先唯讀，有權限時按「編修」切過去；
+    /// 有逐字稿時多一個逐字稿頁籤（看、複製、下載）。
+    /// 這一頁的會議一律已歸屬本專案，所以編修給得起，PDF 也帶得到專案名稱。
     /// 列上那顆「匯出 PDF」刻意保留（使用者明確要求外層可以直接點），視窗裡再放一顆。
     /// </summary>
-    private void OpenDraftModal(MeetingAdapterModel meeting, bool canEdit, string title)
+    private async Task OnOpenDraftModalAsync(MeetingAdapterModel meeting)
     {
         draftMeeting = meeting;
         draftMeetingId = meeting.Id;
-        draftModalTitle = title;
+        draftModalTitle = $"會議紀錄 - {meeting.Title}";
         draftContent = meeting.DraftContent;
-        draftCanEdit = canEdit;
+        draftCanEdit = false;
+
+        draftCanSwitchToEdit = meeting.HasDraft
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit);
 
         // 這是專案頁：匯出權限看專案項目，與同一列的匯出鈕一致（0.4.109 前誤用會議紀錄的鍵）。
-        draftCanExport = meeting.HasDraft
-            && AuthenticationStateHelper.CheckAccessAction(
-                MagicObjectHelper.角色_專案項目, PermissionActions.Export);
+        var canExport = AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export);
+        draftCanExport = meeting.HasDraft && canExport;
+
+        draftTranscript = meeting.HasTranscript ? await meetingService.ReadTranscriptAsync(meeting.Id) : null;
+        draftCanCopyTranscript = canExport;
 
         draftModalVisible = true;
+    }
+
+    private void OnRequestDraftEdit()
+    {
+        draftCanEdit = true;
+        draftModalTitle = $"編修會議紀錄 - {draftMeeting?.Title}";
+    }
+
+    private void OnCancelDraftEdit()
+    {
+        draftCanEdit = false;
+        draftModalTitle = $"會議紀錄 - {draftMeeting?.Title}";
+    }
+
+    /// <summary>逐字稿「複製全文」：給使用者貼到外部 AI 問答（1.0.40 加回逐字稿的原因）。</summary>
+    private async Task OnCopyTranscriptAsync()
+    {
+        if (draftMeeting is null || string.IsNullOrEmpty(draftTranscript))
+        {
+            return;
+        }
+
+        if (!await clipboardInterop.CopyTextAsync(draftTranscript))
+        {
+            NotifyError("瀏覽器不允許自動複製，請在逐字稿上按 Ctrl+A 全選後再按 Ctrl+C。");
+            return;
+        }
+
+        await AuditLogService.WriteForCurrentUserAsync(
+            AuditActions.MeetingTranscriptCopy, targetType: "Meeting", targetId: draftMeeting.Id.ToString(),
+            detail: $"chars={draftTranscript.Length}; page=Project");
+
+        _ = messageService.SuccessAsync("已複製逐字稿。");
+    }
+
+    /// <summary>逐字稿「下載 .txt」：UTF-8 含 BOM，Windows 記事本直接開也不亂碼。</summary>
+    private async Task OnDownloadTranscriptAsync()
+    {
+        if (draftMeeting is null || string.IsNullOrEmpty(draftTranscript))
+        {
+            return;
+        }
+
+        try
+        {
+            var fileName = MeetingDocumentExporter.BuildTranscriptFileName(draftMeeting);
+            var bytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
+                .GetPreamble()
+                .Concat(System.Text.Encoding.UTF8.GetBytes(draftTranscript))
+                .ToArray();
+
+            await fileDownloadInterop.SaveBytesAsync(fileName, bytes, TranscriptContentType);
+            await AuditLogService.WriteForCurrentUserAsync(
+                AuditActions.MeetingTranscriptDownload, targetType: "Meeting", targetId: draftMeeting.Id.ToString(),
+                detail: $"file={fileName}; bytes={bytes.Length}; page=Project");
+
+            NotifySuccess($"已下載「{fileName}」。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to download meeting transcript. MeetingId={MeetingId}", draftMeeting.Id);
+            NotifyError($"下載逐字稿失敗：{ex.Message}");
+        }
     }
 
     /// <summary>把會議紀錄匯出成 Markdown 檔並直接推給瀏覽器下載（檔案不落地）。</summary>
@@ -632,8 +698,14 @@ public partial class ProjectViewView : IDisposable
                 return;
             }
 
+            // 1.0.40：存好回到檢視（視窗不關），顯示存好的內容。
+            draftContent = content;
+            if (draftMeeting is not null)
+            {
+                draftMeeting.DraftContent = content;
+            }
+            OnCancelDraftEdit();
             NotifySuccess("會議紀錄已儲存。");
-            draftModalVisible = false;
             await ReloadProjectContextAsync();
         }
         finally

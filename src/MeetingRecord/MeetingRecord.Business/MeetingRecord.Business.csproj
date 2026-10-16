@@ -28,6 +28,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="OpenCCNET" Version="1.1.0" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 

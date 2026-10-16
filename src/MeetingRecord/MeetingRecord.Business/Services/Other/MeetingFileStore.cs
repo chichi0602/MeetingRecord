@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 
@@ -147,7 +148,9 @@ public class MeetingFileStore
         }
 
         var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
-        return TranscriptionNoiseFilter.Strip(content);
+
+        // 1.0.41 以前存下來的逐字稿是簡體，讀出來一律轉成台灣字形：檢視、複製、下載、生成、AI 問答都經這裡。
+        return ChineseTextConverter.ToTraditional(TranscriptionNoiseFilter.Strip(content));
     }
 
     /// <summary>刪除影音檔實體檔案。失敗只記 Warning，不阻斷主流程。</summary>

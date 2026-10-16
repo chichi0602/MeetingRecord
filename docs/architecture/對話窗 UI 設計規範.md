@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：1.0.32
+- 現行系統版本：1.0.40
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/10/16
 
 ## 摘要
 
@@ -78,8 +78,8 @@
 | `.form-modal-standard` | `width: 880px; margin: 0 auto` | 5～8 個欄位、清單型 |
 | `.form-modal-large` | `width: 90vw; max-width: 90vw; margin: 0 auto` | 權限矩陣、多份清單 |
 | `.meeting-view-modal` | `width: 96vw; max-width: 96vw; top: 2vh`；`.meeting-view-modal .ant-modal-content { max-height: 96vh }` | 影音上傳、左右分欄編輯器、AI 問答 |
-| `.ai-chat-modal`（疊加用） | `.ai-chat-modal .ant-modal-content { height: 96vh }` | 只有 AI 問答，見第十一節 |
-| `.markdown-editor-modal`（疊加用） | `.ant-modal-body` 改成 flex column、`gap: 12px`、`overflow: hidden` | 會議紀錄編修視窗，見第十一節 |
+| `.ai-chat-modal`（疊加用） | `.ai-chat-modal .ant-modal-content { height: 96vh }` | AI 問答，見第十一節 |
+| `.markdown-editor-modal`（疊加用） | `.ant-modal-body` 改成 flex column、`gap: 12px`、`overflow: hidden`；1.0.40 起 `.ant-modal-content { height: 96vh }` | 會議紀錄與逐字稿視窗，見第十一節 |
 
 ### 4.1 各對話窗使用的尺寸（現況）
 
@@ -96,17 +96,16 @@
 | 待辦維護、待辦詳情 | `Views/Todos/TodoViewView.razor` | `form-modal-standard` |
 | 專案附件 | `Views/Projects/ProjectViewView.razor` | `form-modal-standard` |
 | 抽出待辦 | `Views/Projects/TodoExtractionModal.razor` | `form-modal-standard` |
-| 會議紀錄**檢視**（唯讀） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal form-modal-standard` |
 | 用量明細（唯讀，1.0.31） | `Views/AiManagement/TokenUsageView.razor` | `form-modal-standard` |
 | 角色維護 | `Views/Admins/RoleViewView.razor` | `form-modal-large` |
 | 專案維護 | `Views/Projects/ProjectViewView.razor` | `form-modal-large` |
 | AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
 | 稽核明細（唯讀，1.0.32） | `Views/Admins/AuditLogView.razor` | `form-modal-large` |
 | 會議紀錄維護（含影音上傳） | `Views/Meetings/MeetingViewView.razor` | `meeting-view-modal` |
-| 會議紀錄**編修** | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
+| 會議紀錄與逐字稿（檢視＋編修） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
 | AI 問答 | `Views/Projects/AiChatModal.razor` | `meeting-view-modal ai-chat-modal` |
 
-`MarkdownEditorModal` 的 class 是在執行期由 `ModalClass` 屬性依 `CanEdit` 切換的：編修時左右分欄需要寬度；唯讀時只有一欄文章，880px 就夠了，一行太長反而難讀。
+`MarkdownEditorModal` 的 `ModalClass` 在 1.0.40 起是**常數**，檢視與編修都是 96vw ＋ 固定高 96vh（比照 AI 問答）。0.4.82～1.0.39 依 `CanEdit` 切換，唯讀時用 880px 的 `form-modal-standard`；1.0.40 改成同一個視窗內檢視↔編修切換，尺寸一跟著變就整個跳動，使用者也要求檢視「像 AI 問答一樣滿版」。razor 仍寫 `Class="@ModalClass"`，所以 `ModalSizeClassTests` 照樣跳過它。
 
 ### 4.2 三條規則
 
@@ -339,14 +338,16 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 ### 11.1 會議紀錄編修視窗：`Components/Commons/MarkdownEditorModal.razor`
 
-檢視與編修共用同一個視窗（0.4.82 起），差別只在 `CanEdit`。
+檢視與編修共用同一個視窗（0.4.82 起），差別只在 `CanEdit`。1.0.40 起入口只剩一顆「會議紀錄與逐字稿」：一律先唯讀開啟，按底部「編修」才在同一個視窗切到編修；編修的「取消」與儲存成功都回到唯讀，不關窗。
 
 | 項目 | 編修（`CanEdit = true`） | 唯讀 |
 |---|---|---|
-| 尺寸 | `markdown-editor-modal meeting-view-modal`（96vw） | `markdown-editor-modal form-modal-standard`（880px） |
-| 版面 | `.markdown-editor-split`：左邊原文、右邊預覽，上方常駐搜尋取代列 | `.markdown-editor-readonly`：只有預覽 |
+| 尺寸 | `markdown-editor-modal meeting-view-modal`（96vw × 96vh） | 同左（1.0.40 起；之前是 880px 的 `form-modal-standard`） |
+| 版面 | `.markdown-editor-split`：左邊原文、右邊預覽，上方常駐搜尋取代列 | `.markdown-editor-readonly`：只有預覽；有逐字稿時上方多「會議紀錄｜逐字稿」頁籤（1.0.40） |
 | Esc／點遮罩 | 都關閉 | 放行 |
-| 取消 | 有改動時跳 `ConfirmDiscardAsync` | 直接關 |
+| 取消 | 有改動時跳 `ConfirmDiscardAsync`，之後回到唯讀 | 「關閉」直接關 |
+
+- **逐字稿頁籤**（1.0.40）：純文字（`white-space: pre-wrap`），不走 Markdown——逐字稿不是 Markdown，行首的 `-`、`#` 會被誤當格式。按鈕列換成「複製全文」「下載 .txt」（呼叫端傳入是否有匯出權限）。沒有會議紀錄時直接停在逐字稿頁籤。編修模式不顯示頁籤。
 
 - `Footer="null"`，按鈕列自己畫（多了一顆「下載 PDF」），靠 `.markdown-editor-modal .ant-modal-body` 的 flex 規則把按鈕固定在底部，捲動交給左右兩欄各自負責。
 - 搜尋框：Enter 跳下一筆（`IsSubmit`）、Shift+Enter 跳上一筆（`IsReverseSubmit`），兩者都擋組字中的 Enter。**刻意不綁 Ctrl+F**，因為 `@onkeydown:preventDefault` 在編譯期就決定了，攔了會連右邊預覽的瀏覽器原生搜尋都吃掉。
@@ -354,7 +355,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 ### 11.2 AI 問答：`Components/Views/Projects/AiChatModal.razor`
 
-- class 是 `meeting-view-modal ai-chat-modal`，**全站唯一固定高度**（`height: 96vh`，0.4.94）。聊天視窗吃滿螢幕才正常；0.4.93 之前高度隨內容縮，剛開新對話時只有四百多 px 高。
+- class 是 `meeting-view-modal ai-chat-modal`，**固定高度**（`height: 96vh`，0.4.94；0.4.94～1.0.39 是全站唯一，1.0.40 起會議紀錄與逐字稿視窗比照）。聊天視窗吃滿螢幕才正常；0.4.93 之前高度隨內容縮，剛開新對話時只有四百多 px 高。
 - 版面 `.ai-chat-shell` 是 `grid-template-columns: 240px minmax(0, 1fr)`，左欄對話紀錄、右欄訊息；900px 以下退回單欄。
 - 行太長的問題由訊息氣泡的 `max-width: min(82%, 960px)` 處理，**不要再用縮小整個視窗來解**。
 - 單向 `Visible=`、`Keyboard="true"`、`MaskClosable="false"`、`Footer="null"`。

@@ -106,6 +106,11 @@ public partial class MeetingViewView : IDisposable
 
     private const string PdfContentType = "application/pdf";
 
+    private const string TranscriptContentType = "text/plain;charset=utf-8";
+
+    [Inject]
+    private ClipboardInterop clipboardInterop { get; set; } = default!;
+
     /// <summary>專案與提示詞清單只在開啟對話框時撈，不放進 ReloadAsync——那支會被兩個進度通知器頻繁呼叫。</summary>
     private List<ProjectAdapterModel> projects = [];
     private List<PromptTemplateAdapterModel> promptTemplates = [];
@@ -145,6 +150,9 @@ public partial class MeetingViewView : IDisposable
     private string draftModalTitle = "會議紀錄";
     private string? draftContent;
     private string? draftNotice;
+    private bool draftCanSwitchToEdit;
+    private string? draftTranscript;
+    private bool draftCanCopyTranscript;
     private bool isSavingDraft;
 
     /// <summary>目前視窗對應的會議。匯出 PDF 需要整個 model，不只是 Id。</summary>
@@ -1238,46 +1246,30 @@ public partial class MeetingViewView : IDisposable
     }
 
     /// <summary>
-    /// 唯讀檢視。所有會議都開得了。
+    /// 開啟「會議紀錄」視窗（1.0.40 起操作欄只有這一顆）：先唯讀檢視，可以切到逐字稿；
+    /// 有權限時按「編修」在同一個視窗裡切成左改右看。
     ///
     /// <para>
     /// 已歸屬專案的會議在這一頁**不能**編修也不能下載 PDF，所以視窗底部要講清楚去哪裡做——
     /// 沒有這行說明，使用者只會覺得按鈕莫名其妙消失了。
     /// </para>
     /// </summary>
-    private Task OnViewDraftAsync(MeetingAdapterModel meeting)
-    {
-        OpenDraftModal(
-            meeting,
-            canEdit: false,
-            title: $"會議紀錄 - {meeting.Title}",
-            notice: meeting.IsUnassigned
-                ? null
-                : $"這份會議紀錄已歸屬「{meeting.ProjectTitleText}」專案，編修與下載 PDF 請到「專案項目」頁。");
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>編修。只有未歸屬專案的會議走得到這裡（按鈕本身就已經擋掉了）。</summary>
-    private Task OnEditDraftAsync(MeetingAdapterModel meeting)
-    {
-        OpenDraftModal(
-            meeting,
-            canEdit: true,
-            title: $"編修會議紀錄 - {meeting.Title}",
-            notice: null);
-
-        return Task.CompletedTask;
-    }
-
-    private void OpenDraftModal(MeetingAdapterModel meeting, bool canEdit, string title, string? notice)
+    private async Task OnOpenDraftModalAsync(MeetingAdapterModel meeting)
     {
         draftMeeting = meeting;
         draftMeetingId = meeting.Id;
-        draftModalTitle = title;
+        draftModalTitle = $"會議紀錄 - {meeting.Title}";
         draftContent = meeting.DraftContent;
-        draftCanEdit = canEdit;
-        draftNotice = notice;
+        draftCanEdit = false;
+        draftNotice = meeting.HasDraft && !meeting.IsUnassigned
+            ? $"這份會議紀錄已歸屬「{meeting.ProjectTitleText}」專案，編修與下載 PDF 請到「專案項目」頁。"
+            : null;
+
+        // ⚠️ 只有**未歸屬專案**的會議能在這裡編修（0.4.82）：已歸屬的編修與匯出都集中在專案項目頁，
+        // 那裡才有專案脈絡（常用名詞、與會人員），PDF 表頭也要帶專案名稱。
+        draftCanSwitchToEdit = meeting.HasDraft
+            && meeting.IsUnassigned
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit);
 
         // PDF 只在未歸屬時從這一頁下載：已歸屬的要帶專案名稱進表頭，那是專案頁才有的脈絡。
         draftCanExport = meeting.IsUnassigned
@@ -1285,7 +1277,75 @@ public partial class MeetingViewView : IDisposable
             && AuthenticationStateHelper.CheckAccessAction(
                 MagicObjectHelper.角色_會議紀錄, PermissionActions.Export);
 
+        // 逐字稿不分歸屬都能看；複製、下載算匯出，要有匯出權限。
+        draftTranscript = meeting.HasTranscript ? await meetingService.ReadTranscriptAsync(meeting.Id) : null;
+        draftCanCopyTranscript = AuthenticationStateHelper.CheckAccessAction(
+            MagicObjectHelper.角色_會議紀錄, PermissionActions.Export);
+
         draftModalVisible = true;
+    }
+
+    private void OnRequestDraftEdit()
+    {
+        draftCanEdit = true;
+        draftModalTitle = $"編修會議紀錄 - {draftMeeting?.Title}";
+    }
+
+    private void OnCancelDraftEdit()
+    {
+        draftCanEdit = false;
+        draftModalTitle = $"會議紀錄 - {draftMeeting?.Title}";
+    }
+
+    /// <summary>逐字稿「複製全文」：給使用者貼到外部 AI 問答（1.0.40 加回逐字稿的原因）。</summary>
+    private async Task OnCopyTranscriptAsync()
+    {
+        if (draftMeeting is null || string.IsNullOrEmpty(draftTranscript))
+        {
+            return;
+        }
+
+        if (!await clipboardInterop.CopyTextAsync(draftTranscript))
+        {
+            NotifyError("瀏覽器不允許自動複製，請在逐字稿上按 Ctrl+A 全選後再按 Ctrl+C。");
+            return;
+        }
+
+        await AuditLogService.WriteForCurrentUserAsync(
+            AuditActions.MeetingTranscriptCopy, targetType: "Meeting", targetId: draftMeeting.Id.ToString(),
+            detail: $"chars={draftTranscript.Length}; page=Meeting");
+
+        _ = messageService.SuccessAsync("已複製逐字稿。");
+    }
+
+    /// <summary>逐字稿「下載 .txt」：UTF-8 含 BOM，Windows 記事本直接開也不亂碼。</summary>
+    private async Task OnDownloadTranscriptAsync()
+    {
+        if (draftMeeting is null || string.IsNullOrEmpty(draftTranscript))
+        {
+            return;
+        }
+
+        try
+        {
+            var fileName = MeetingDocumentExporter.BuildTranscriptFileName(draftMeeting);
+            var bytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
+                .GetPreamble()
+                .Concat(System.Text.Encoding.UTF8.GetBytes(draftTranscript))
+                .ToArray();
+
+            await fileDownloadInterop.SaveBytesAsync(fileName, bytes, TranscriptContentType);
+            await AuditLogService.WriteForCurrentUserAsync(
+                AuditActions.MeetingTranscriptDownload, targetType: "Meeting", targetId: draftMeeting.Id.ToString(),
+                detail: $"file={fileName}; bytes={bytes.Length}; page=Meeting");
+
+            NotifySuccess($"已下載「{fileName}」。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to download meeting transcript. MeetingId={MeetingId}", draftMeeting.Id);
+            NotifyError($"下載逐字稿失敗：{ex.Message}");
+        }
     }
 
     private async Task OnDraftSavedAsync(string content)
@@ -1301,7 +1361,13 @@ public partial class MeetingViewView : IDisposable
                 return;
             }
 
-            draftModalVisible = false;
+            // 1.0.40：存好回到檢視（視窗不關），顯示存好的內容。
+            draftContent = content;
+            if (draftMeeting is not null)
+            {
+                draftMeeting.DraftContent = content;
+            }
+            OnCancelDraftEdit();
             NotifySuccess("會議紀錄已儲存。");
             await ReloadAsync();
         }

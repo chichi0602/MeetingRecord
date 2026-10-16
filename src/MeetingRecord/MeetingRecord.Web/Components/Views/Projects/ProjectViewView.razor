@@ -312,18 +312,12 @@ else
                     </Column>
                     <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                         <Space>
-                            @if (context.HasDraft)
+                            @* 1.0.40 起檢視與編修合併成這一顆，逐字稿也在同一個視窗裡（操作欄要簡單）。 *@
+                            @if (context.HasDraft || context.HasTranscript)
                             {
                                 <SpaceItem>
-                                    <CrudActionButton Title="檢視會議紀錄" Icon="visibility"
-                                                      OnClick="@(() => OnViewDraftAsync(context))" />
-                                </SpaceItem>
-                            }
-                            @if (context.HasDraft && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
-                            {
-                                <SpaceItem>
-                                    <CrudActionButton Title="編修會議紀錄" Icon="edit"
-                                                      OnClick="@(() => OnEditDraftAsync(context))" />
+                                    <CrudActionButton Title="會議紀錄與逐字稿" Icon="article"
+                                                      OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
                                 </SpaceItem>
                             }
                             @if (context.HasDraft && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export))
@@ -619,6 +613,13 @@ else
                          CanExport="@draftCanExport"
                          IsExporting="@(exportingMeetingId is not null)"
                          IsSaving="@isSavingDraft"
+                         CanSwitchToEdit="@draftCanSwitchToEdit"
+                         OnRequestEdit="OnRequestDraftEdit"
+                         OnCancelEdit="OnCancelDraftEdit"
+                         Transcript="@draftTranscript"
+                         CanCopyTranscript="@draftCanCopyTranscript"
+                         OnCopyTranscript="OnCopyTranscriptAsync"
+                         OnDownloadTranscript="OnDownloadTranscriptAsync"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
 

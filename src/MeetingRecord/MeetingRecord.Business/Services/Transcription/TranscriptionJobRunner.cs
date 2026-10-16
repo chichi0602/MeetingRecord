@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
@@ -191,9 +192,10 @@ public class TranscriptionJobRunner
                 transcript.Append(segmentText.Trim());
             }
 
+            // 轉錄服務輸出的是簡體字（提示詞管不到），存檔前轉成台灣字形（1.0.41，使用者要求不要有簡體字）。
             var transcriptRelativePath = await fileStore.SaveTranscriptAsync(
                 meeting.CreatedAt,
-                transcript.ToString(),
+                ChineseTextConverter.ToTraditional(transcript.ToString()) ?? string.Empty,
                 cancellationToken);
 
             meeting.TranscriptRelativePath = transcriptRelativePath;

@@ -145,6 +145,12 @@
         height: 96vh !important;
     }
 
+    /* 會議紀錄視窗（1.0.40）：比照 AI 問答固定吃滿高度。檢視與編修在同一個視窗裡切換，
+       高度隨內容縮的話一切換就整個跳動；短篇會議紀錄也不會只剩一小條。 */
+    .markdown-editor-modal .ant-modal-content {
+        height: 96vh !important;
+    }
+
     /* 「標題與按鈕固定、只有內容區捲動」現在由上面的基準線負責，
        不必再為每一級各寫一次。
 

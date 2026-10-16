@@ -1108,6 +1108,28 @@ public class MeetingService
         return MapWithProjectTitle(items);
     }
 
+    /// <summary>
+    /// 讀出逐字稿全文，給「會議紀錄」視窗的逐字稿頁籤看、複製、下載（1.0.40）。
+    ///
+    /// <para>
+    /// 0.4.82 移除過「人看逐字稿」的路徑；1.0.40 因使用者要拿逐字稿去外部 AI 問答而加回來，只開放唯讀。
+    /// 守門與清單相同（看不到的會議當成不存在，回 null）；內容已過濾供應商指令外漏（見 <see cref="MeetingFileStore.ReadTranscriptAsync"/>）。
+    /// </para>
+    /// </summary>
+    public async Task<string?> ReadTranscriptAsync(int meetingId, CancellationToken cancellationToken = default)
+    {
+        IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking()
+            .Where(x => x.Id == meetingId);
+
+        dataSource = (await projectAccess.GetAsync()).Filter(dataSource);
+
+        var relativePath = await dataSource
+            .Select(x => x.TranscriptRelativePath)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return await fileStore.ReadTranscriptAsync(relativePath, cancellationToken);
+    }
+
     /// <summary>取得某專案底下的會議紀錄（歷史清單）。</summary>
     public async Task<List<MeetingAdapterModel>> GetByProjectAsync(int projectId, CancellationToken cancellationToken = default)
     {

@@ -91,7 +91,7 @@
     resize: none;
     border: none;
     border-radius: 10px;
-    font-family: Consolas, "Microsoft JhengHei", monospace;
+    font-family: var(--app-font-mono);
     font-size: 0.88rem;
     line-height: 1.7;
 }
@@ -130,4 +130,50 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+}
+
+/* 1.0.40：檢視時的「會議紀錄｜逐字稿」頁籤。不參與伸縮，永遠在內容上方。 */
+.markdown-editor-tabs {
+    flex-shrink: 0;
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--oat-200);
+}
+
+.markdown-editor-tab {
+    padding: 6px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
+    color: var(--oat-ink-mid);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+    .markdown-editor-tab:hover {
+        color: var(--oat-ink);
+    }
+
+.markdown-editor-tab-active {
+    border-bottom-color: var(--oat-ink);
+    color: var(--oat-ink);
+    font-weight: 600;
+}
+
+/* 逐字稿：純文字、保留換行、可選取。不走 Markdown。 */
+.markdown-editor-transcript {
+    flex: 1 1 auto;
+    padding: 12px 16px;
+    background: #ffffff;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.92rem;
+    line-height: 1.8;
+    user-select: text;
+}
+
+.markdown-editor-empty {
+    margin: 0;
+    color: var(--oat-ink-soft);
 }

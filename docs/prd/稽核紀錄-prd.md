@@ -1,10 +1,10 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
-- 現行系統版本：1.0.35
+- 現行系統版本：1.0.40
 - 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/10/16
 
 ## 一、目標與範圍
 
@@ -24,7 +24,7 @@
 - **範圍（1.0.34，第三批）**：
   - 專案、會議、待辦、團隊、分類、提示詞的新增／修改／刪除／啟停用，網頁與 API 兩條路都記並以 `via` 區分。
   - 檔案上傳／刪除／下載、PDF 匯出。
-  - 會議流程動作：上傳影音、重新轉錄、歸屬／移出專案、產生／編修會議紀錄；待辦完成與重開；團隊成員與分類適用團隊的異動。
+  - 會議流程動作：上傳影音、重新轉錄、歸屬／移出專案、產生／編修會議紀錄、下載／複製逐字稿（1.0.40）；待辦完成與重開；團隊成員與分類適用團隊的異動。
   - AI 問答的對話操作：新增、改名、清除、修改訊息、重新產生、匯出 PDF、下載附件。
   - 資料範圍擋下的寫入（想改看不到的專案、會議、待辦）。
 - **非範圍**：
@@ -122,7 +122,7 @@
 | 使用者與角色 | `User.Create`／`Update`／`Delete`／`Enable`／`Disable`／`TeamAdd`／`TeamRemove`／`GoogleLink`／`GoogleCreate`、`Role.Create`／`Update`／`Delete` |
 | 權限 | `Permission.Denied`（目標 `ApiEndpoint#{方法} {路徑}`、`Page#{路由}`，或 1.0.34 起資料範圍擋下的 `Project`／`Meeting`／`Todo#{編號}`，摘要 `reason=DataScope; op=…`） |
 | 專案（1.0.34） | `Project.Create`／`Update`／`Delete`、`Project.FileUpload`／`FileDelete`／`FileDownload`（一檔一筆） |
-| 會議（1.0.34） | `Meeting.Create`／`Update`／`Delete`、`Meeting.MediaUpload`、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`、`Meeting.DraftRequest`／`DraftUpdate`（只記字數）、`Meeting.ExportPdf` |
+| 會議（1.0.34） | `Meeting.Create`／`Update`／`Delete`、`Meeting.MediaUpload`、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`、`Meeting.DraftRequest`／`DraftUpdate`（只記字數）、`Meeting.ExportPdf`、`Meeting.TranscriptDownload`「下載逐字稿」／`TranscriptCopy`「複製逐字稿」（1.0.40，detail 帶 `page=Meeting`／`Project`） |
 | 待辦（1.0.34） | `Todo.Create`（AI 抽出時 `via=AiExtract`）／`Update`／`Delete`、`Todo.Complete`／`Reopen` |
 | 團隊、分類、提示詞（1.0.34） | `Team.*`、`Category.*`、`PromptTemplate.*`：Create／Update／Delete／Enable／Disable；`Team.MembersChange`、`Category.TeamsChange`（有增減才記）、`PromptTemplate.AddPresets` |
 | AI 問答（1.0.34） | `AiChat.Create`／`Rename`／`ClearHistory`／`MessageUpdate`／`Regenerate`／`ExportPdf`／`AttachmentDownload` |

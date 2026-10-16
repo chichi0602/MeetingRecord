@@ -84,7 +84,10 @@ public sealed class HelpManualTests
 
         Assert.DoesNotContain("文件版本", shown, StringComparison.Ordinal);
         Assert.DoesNotContain("最後核對日期", shown, StringComparison.Ordinal);
-        Assert.StartsWith("## ", shown, StringComparison.Ordinal);
+
+        // 1.0.42 起每章前一行是分類標記（HelpManual 會剝掉），正文從那之後的 ## 開始。
+        Assert.StartsWith("<!-- 說明分類：", shown, StringComparison.Ordinal);
+        Assert.StartsWith("## ", shown.Split('\n')[1], StringComparison.Ordinal);
     }
 
     [Fact]

@@ -145,6 +145,10 @@ public static class AuditActions
     public const string AiChatAttachmentDownload = "AiChat.AttachmentDownload";
     #endregion
 
+    #region 使用說明（1.0.43）
+    public const string HelpAiAsk = "Help.AiAsk";
+    #endregion
+
     #region 稽核紀錄本身
     public const string AuditExport = "Audit.Export";
     public const string AuditPurge = "Audit.Purge";
@@ -267,6 +271,8 @@ public static class AuditActions
         [AiChatRegenerate] = "重新產生 AI 回答",
         [AiChatExportPdf] = "匯出 AI 問答 PDF",
         [AiChatAttachmentDownload] = "下載 AI 問答附件",
+
+        [HelpAiAsk] = "使用說明 AI 提問",
 
         [AuditExport] = "匯出稽核紀錄",
         [AuditPurge] = "清除舊稽核紀錄",

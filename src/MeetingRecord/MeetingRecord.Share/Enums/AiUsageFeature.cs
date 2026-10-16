@@ -44,6 +44,9 @@ public enum AiUsageFeature
 
     /// <summary>AI 連線測試：語音轉錄（1.0.35）。送 1 秒靜音，以音訊時長計費。</summary>
     TranscriptionConnectionTest = 8,
+
+    /// <summary>使用說明 AI 助理（1.0.43）：讀使用說明回答操作問題。一次提問一次，每次都會送整份說明（一般使用者不含管理員章節）。</summary>
+    HelpAssistant = 9,
 }
 
 /// <summary>功能別的顯示文字與計費單位判斷（UI、日誌與計價共用）。</summary>
@@ -60,6 +63,7 @@ public static class AiUsageFeatureText
         AiUsageFeature.ExceptionAnalysis => "AI 例外分析",
         AiUsageFeature.ConnectionTest => "AI 連線測試",
         AiUsageFeature.TranscriptionConnectionTest => "AI 連線測試（轉錄）",
+        AiUsageFeature.HelpAssistant => "使用說明 AI 助理",
         _ => "未知",
     };
 

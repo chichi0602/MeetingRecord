@@ -8,16 +8,153 @@
 }
 else
 {
-    <div class="help-view">
-        @if (string.IsNullOrWhiteSpace(content))
+    @* 1.0.42：分類瀏覽＋搜尋（使用者回報「全部在同一頁很亂，找不到自己遇到的問題」）。
+       內容仍是同一份 docs/guides/系統使用說明.md，切分與搜尋在 HelpManual（可單元測試）；
+       / 快速搜尋、關鍵字高亮、跨分類錨點在 js/help-view.js。 *@
+    <div class="help-view" @ref="rootElement">
+        @if (manual is null)
         {
-            <div class="help-view-empty">使用說明載入中…</div>
+            <div class="help-view-empty">@(loadError ?? "使用說明載入中…")</div>
         }
         else
         {
-            @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。
-               與 AI 問答、會議紀錄草稿共用同一條渲染管線（含 URL 白名單消毒）。 *@
-            <div class="markdown-content">@((MarkupString)MarkdownRenderer.ToHtml(content))</div>
+            @* 1.0.43：問 AI 助理。AI 讀使用說明回答操作問題；對話只存在這一頁，重新整理就清空。
+               TextArea 的 DebounceMilliseconds 必須是 0，理由同 AiChatModal：按 Enter 時要讀到剛打完的字。 *@
+            <section class="help-view-assistant" aria-label="問 AI 助理">
+                <div class="help-view-assistant-head">
+                    <span class="help-view-assistant-title">
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
+                        <span>問 AI 助理</span>
+                    </span>
+                    @if (assistantTurns.Count > 0 && !isAsking)
+                    {
+                        <Button Size="ButtonSize.Small" OnClick="OnClearAssistant">
+                            <span class="btn-icon-label">
+                                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete_sweep" />
+                                <span>清除對話</span>
+                            </span>
+                        </Button>
+                    }
+                </div>
+
+                @if (assistantTurns.Count > 0)
+                {
+                    <div class="help-view-assistant-thread">
+                        @foreach (var turn in assistantTurns)
+                        {
+                            <div class="help-view-assistant-question">@turn.Question</div>
+                            <div class="help-view-assistant-answer">
+                                @if (turn.Error is not null)
+                                {
+                                    <span class="help-view-assistant-error">@turn.Error</span>
+                                }
+                                else if (turn.IsDone)
+                                {
+                                    <div class="markdown-content">@((MarkupString)turn.AnswerHtml)</div>
+                                }
+                                else if (string.IsNullOrEmpty(turn.Answer))
+                                {
+                                    <span class="help-view-assistant-thinking">正在讀使用說明…</span>
+                                }
+                                else
+                                {
+                                    @* 串流中先顯示純文字，完成後才渲染 Markdown：逐段重新渲染整份 HTML 太重。 *@
+                                    <div class="help-view-assistant-streaming">@turn.Answer</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="help-view-assistant-input">
+                    <div class="help-view-assistant-box">
+                        <TextArea @bind-Value="assistantQuestion"
+                              BindOnInput="true"
+                              DebounceMilliseconds="0"
+                              Rows="2"
+                              Disabled="@(!assistantAvailable || isAsking)"
+                              Placeholder="@(assistantAvailable ? "輸入操作上的問題，例如：怎麼把會議歸屬到專案？（Enter 送出、Shift+Enter 換行）" : assistantUnavailableReason)"
+                              OnkeyDown="OnAssistantKeyDownAsync" />
+                    </div>
+                    @if (isAsking)
+                    {
+                        <Button OnClick="OnStopAssistant">
+                            <span class="btn-icon-label">
+                                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="stop_circle" />
+                                <span>停止</span>
+                            </span>
+                        </Button>
+                    }
+                    else
+                    {
+                        <Button Type="ButtonType.Primary"
+                                Disabled="@(!assistantAvailable || string.IsNullOrWhiteSpace(assistantQuestion))"
+                                OnClick="OnAskAssistantAsync">
+                            <span class="btn-icon-label">
+                                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="send" />
+                                <span>發問</span>
+                            </span>
+                        </Button>
+                    }
+                </div>
+                <p class="help-view-assistant-note">每次提問會把使用說明送給 AI 並產生少量費用；回答僅供參考，以使用說明為準。</p>
+            </section>
+
+            <div class="help-view-toolbar">
+                <AntDesign.Input class="help-view-search"
+                       @bind-Value="SearchText"
+                       BindOnInput="true"
+                       DebounceMilliseconds="200"
+                       AllowClear="true"
+                       Placeholder="搜尋使用說明，例如：轉錄失敗、上限、權限（按 / 快速搜尋）">
+                    <Prefix>
+                        <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" />
+                    </Prefix>
+                </AntDesign.Input>
+                @if (IsSearching)
+                {
+                    <span class="help-view-count">共 @searchResults.Count 筆</span>
+                }
+            </div>
+
+            <div class="help-view-body">
+                <nav class="help-view-nav" aria-label="使用說明分類">
+                    @foreach (var category in manual.Categories)
+                    {
+                        <button type="button"
+                                class="help-view-nav-item @(!IsSearching && category.Name == selectedCategory ? "help-view-nav-item-active" : string.Empty)"
+                                @onclick="@(() => SelectCategoryAsync(category.Name))">
+                            @category.Name
+                        </button>
+                    }
+                </nav>
+
+                <section class="help-view-content">
+                    @if (IsSearching)
+                    {
+                        <div class="help-view-results">
+                            @if (searchResults.Count == 0)
+                            {
+                                <div class="help-view-empty">
+                                    找不到「@SearchText」。試試其他關鍵字，或看左邊的「常見問題」。
+                                </div>
+                            }
+                            @foreach (var topic in searchResults)
+                            {
+                                <article class="help-view-result">
+                                    <div class="help-view-result-crumb">@topic.Breadcrumb</div>
+                                    @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。 *@
+                                    <div class="markdown-content">@((MarkupString)topic.Html)</div>
+                                </article>
+                            }
+                        </div>
+                    }
+                    else if (SelectedCategory is { } category)
+                    {
+                        <div class="markdown-content">@((MarkupString)category.Html)</div>
+                    }
+                </section>
+            </div>
         }
     </div>
 }

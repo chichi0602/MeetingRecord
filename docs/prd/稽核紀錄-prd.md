@@ -1,8 +1,8 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
-- 現行系統版本：1.0.40
+- 現行系統版本：1.0.43
 - 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
 - 最後核對日期：2026/10/16
 
@@ -26,6 +26,7 @@
   - 檔案上傳／刪除／下載、PDF 匯出。
   - 會議流程動作：上傳影音、重新轉錄、歸屬／移出專案、產生／編修會議紀錄、下載／複製逐字稿（1.0.40）；待辦完成與重開；團隊成員與分類適用團隊的異動。
   - AI 問答的對話操作：新增、改名、清除、修改訊息、重新產生、匯出 PDF、下載附件。
+  - 使用說明頁「問 AI 助理」的每次提問（1.0.43，只記字數與結果，不記問題全文）。
   - 資料範圍擋下的寫入（想改看不到的專案、會議、待辦）。
 - **非範圍**：
   - 單筆刪除（刻意不提供，稽核紀錄是追究責任的證據）。
@@ -126,6 +127,7 @@
 | 待辦（1.0.34） | `Todo.Create`（AI 抽出時 `via=AiExtract`）／`Update`／`Delete`、`Todo.Complete`／`Reopen` |
 | 團隊、分類、提示詞（1.0.34） | `Team.*`、`Category.*`、`PromptTemplate.*`：Create／Update／Delete／Enable／Disable；`Team.MembersChange`、`Category.TeamsChange`（有增減才記）、`PromptTemplate.AddPresets` |
 | AI 問答（1.0.34） | `AiChat.Create`／`Rename`／`ClearHistory`／`MessageUpdate`／`Regenerate`／`ExportPdf`／`AttachmentDownload` |
+| 使用說明（1.0.43） | `Help.AiAsk`「使用說明 AI 提問」（目標 `Help`；detail `questionChars`、`includeAdmin`、`model`、`outcome=成功／停止／失敗：例外型別`；只有成功記為成功；問題全文在 AI 對話紀錄） |
 | AI 用量上限、AI 對話紀錄、Token 用量 | `Ai.QuotaBlocked`、`Ai.ConnectionTest`（1.0.35，系統健康監控的「測試 AI 連線」）、`AiCallLog.View`／`DownloadJson`／`ExportPdf`／`Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`、`AiUsage.Export`／`ExportPdf`／`Delete`／`Purge`／`ClearAll`／`AutoPurge` |
 | 監控與診斷 | `ExceptionLog.Export`／`Delete`／`Purge`／`ClearAll`／`AutoPurge`／`AiAnalyze`／`AiAnalyzeExportPdf`、`LogLevel.Apply`／`Restore`、`LogViewer.Export`／`AiAnalyze`／`AiAnalyzeExportPdf` |
 | 稽核紀錄本身 | `Audit.Export`、`Audit.Purge`、`Audit.ClearAll`、`Audit.AutoPurge` |
@@ -192,6 +194,7 @@
 - `Models/Systems/AuditLogQuery.cs`、`LogRetentionSettings.cs`、`Models/AdapterModel/AuditLogAdapterModel.cs`
 - `Web/Auth/ClientIpProvider.cs`、`Web/Components/ApplicationCircuitHandler.cs`、`Web/BackgroundServices/AuditLogRetentionBackgroundService.cs`
 - `Web/Components/Pages/Admins/AuditLogPage.razor`、`Views/Admins/AuditLogView.razor(.cs/.css)`
+- 1.0.43：`Web/Components/Views/Helps/HelpView.razor.cs`（`OnAskAssistantAsync` 寫 `Help.AiAsk`）
 - 1.0.34：`Business/Services/Other/IAuditActorProvider.cs`、`Web/Auth/AuditActorProvider.cs`；`ProjectService`、`MeetingService`、`TodoService`、`TeamService`、`CategoryService`、`PromptTemplateService`、`AiChatService` 與對應的 Repository；`MeetingViewView`、`ProjectViewView`、`AiChatModal`、`TodoExtractionModal`
 - 1.0.33：`Share/Helpers/AuditVia.cs`（`AuditVia`、`LogoutReasons`）、`MyUserServiceLogin`、`Login.razor.cs`、`Logout.razor.cs`、`AuthController`、`ExternalAuthController`、`ExternalLoginService`、`MyUserService`、`AuthenticationStateHelper`、`HasPermissionAttribute`、17 個頁面的拒絕分支
 - [認證授權與權限機制](../security/認證授權與權限機制.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §8.3、變更紀錄：[第一批](../changelog/2026-10-15-稽核紀錄查詢頁與基礎建設.md)、[第二批](../changelog/2026-10-15-稽核紀錄帳號安全事件與權限拒絕.md)、[第三批](../changelog/2026-10-15-稽核紀錄業務資料事件.md)

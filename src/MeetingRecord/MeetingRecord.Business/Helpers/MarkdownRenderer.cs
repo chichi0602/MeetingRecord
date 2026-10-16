@@ -43,7 +43,9 @@ public static class MarkdownRenderer
         .UseListExtras()
         .UseTaskLists()
         .UseFootnotes()
-        .UseAutoIdentifiers()
+        // GitHub 樣式（1.0.42）：預設的 AllowOnlyAscii 會把中文標題的 id 削成只剩英數（「出現已達 AI 用量上限時」→ ai），
+        // 使用說明裡照 GitHub 寫的 #錨點 從來都連不到。只影響標題的 id 屬性，不影響其他輸出。
+        .UseAutoIdentifiers(Markdig.Extensions.AutoIdentifiers.AutoIdentifierOptions.GitHub)
         .UseAutoLinks()
         .UseDefinitionLists()
         .UseAbbreviations()

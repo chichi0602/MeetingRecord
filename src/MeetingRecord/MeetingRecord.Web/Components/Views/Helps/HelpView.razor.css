@@ -22,3 +22,210 @@
     border: 1px dashed var(--oat-300);
     border-radius: 12px;
 }
+
+/* ===== 1.0.42：搜尋列＋左欄分類＋右欄內容 ===== */
+
+.help-view-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+    .help-view-toolbar ::deep .help-view-search {
+        flex: 1 1 auto;
+        max-width: 640px;
+    }
+
+.help-view-count {
+    flex: 0 0 auto;
+    color: var(--oat-ink-mid);
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.help-view-body {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+/* 左欄捲動時跟著留在畫面上，長分類讀到一半也能直接換類。 */
+.help-view-nav {
+    position: sticky;
+    top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.help-view-nav-item {
+    padding: 8px 12px;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--oat-ink-mid);
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .help-view-nav-item:hover {
+        background: var(--oat-50);
+        color: var(--oat-ink);
+    }
+
+.help-view-nav-item-active {
+    border-left-color: var(--oat-ink);
+    background: var(--oat-50);
+    color: var(--oat-ink);
+    font-weight: 600;
+}
+
+.help-view-content {
+    min-width: 0;
+}
+
+.help-view-results {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.help-view-result {
+    padding: 12px 16px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-surface);
+}
+
+.help-view-result-crumb {
+    margin-bottom: 6px;
+    color: var(--oat-ink-mid);
+    font-size: 0.82rem;
+}
+
+/* 高亮由 js/help-view.js 在文字節點包 <mark>，是 MarkupString 之外動態加的，要用 ::deep。 */
+.help-view ::deep mark.help-view-mark {
+    padding: 0 1px;
+    border-radius: 3px;
+    background: var(--oat-warn-bg);
+    color: inherit;
+    box-shadow: inset 0 -2px 0 var(--oat-warn);
+}
+
+/* 窄螢幕：分類變成上方一排可橫向捲動的膠囊。 */
+@media (max-width: 768px) {
+    .help-view-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .help-view-nav {
+        position: static;
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+
+    .help-view-nav-item {
+        flex: 0 0 auto;
+        border-left: none;
+        border: 1px solid var(--oat-200);
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .help-view-nav-item-active {
+        border-color: var(--oat-ink);
+    }
+}
+
+/* ===== 1.0.43：問 AI 助理 ===== */
+
+.help-view-assistant {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--oat-300);
+    border-radius: 12px;
+    background: var(--oat-50);
+}
+
+.help-view-assistant-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.help-view-assistant-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--oat-ink);
+    font-weight: 600;
+}
+
+/* 對話串太長時自己捲，不要把底下的分類與搜尋推到畫面外。 */
+.help-view-assistant-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 45vh;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.help-view-assistant-question {
+    align-self: flex-end;
+    max-width: 80%;
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: var(--oat-200);
+    color: var(--oat-ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.help-view-assistant-answer {
+    padding: 8px 12px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+    background: var(--oat-surface);
+}
+
+.help-view-assistant-streaming {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.help-view-assistant-thinking {
+    color: var(--oat-ink-mid);
+}
+
+.help-view-assistant-error {
+    color: var(--oat-err);
+}
+
+.help-view-assistant-input {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.help-view-assistant-box {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+    .help-view-assistant-box ::deep textarea {
+        width: 100%;
+    }
+
+.help-view-assistant-note {
+    margin: 6px 0 0;
+    color: var(--oat-ink-mid);
+    font-size: 0.8rem;
+}

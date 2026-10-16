@@ -171,6 +171,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
         services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();
         services.AddScoped<MeetingRecord.Web.Services.TodoAutoFitInterop>();
+        services.AddScoped<MeetingRecord.Web.Services.HelpViewInterop>();
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
@@ -236,6 +237,9 @@ public static class ServiceCollectionExtensions
 
         // 監控與診斷的 AI 分析（0.4.121：AI 日誌分析）：同一個 ITextGenerationProvider，成功／失敗／取消都記帳。
         services.AddScoped<DiagnosticAiService>();
+
+        // 使用說明 AI 助理（1.0.43）：讀使用說明回答操作問題，同樣經 AiCallGateway 記帳、受用量上限管制。
+        services.AddScoped<MeetingRecord.Business.Services.HelpAssistant.HelpAssistantService>();
 
         // 系統健康監控的「測試 AI 連線」（1.0.35，管理者手動按、會產生極少費用）。
         services.AddScoped<AiConnectionTestService>();

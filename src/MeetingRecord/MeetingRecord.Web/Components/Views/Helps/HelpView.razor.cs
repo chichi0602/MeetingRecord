@@ -2,7 +2,13 @@ using System.Reflection;
 using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Business.Services.HelpAssistant;
+using MeetingRecord.Web.Components.Commons;
+using MeetingRecord.Web.Services;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Share.Helpers;
 
@@ -23,7 +29,7 @@ namespace MeetingRecord.Web.Components.Views.Helps;
 /// 會變成「開發時看得到、上線後 404」。
 /// </para>
 /// </summary>
-public partial class HelpView : ComponentBase
+public partial class HelpView : ComponentBase, IAsyncDisposable
 {
     /// <summary>
     /// 內嵌資源的名稱。與 csproj 的 <c>LogicalName</c> 必須一致——
@@ -31,8 +37,273 @@ public partial class HelpView : ComponentBase
     /// </summary>
     private const string ResourceName = "MeetingRecord.Web.系統使用說明.md";
 
-    private string? content;
+    /// <summary>解析一次（每個連線一次），之後切分類、搜尋都不重新解析。</summary>
+    private HelpManual? manual;
+    private string? loadError;
     private string RoleMessage = string.Empty;
+
+    private string selectedCategory = HelpManual.CategoryNames[0];
+    private string searchText = string.Empty;
+    private IReadOnlyList<HelpTopic> searchResults = [];
+
+    private ElementReference rootElement;
+    private DotNetObjectReference<HelpView>? selfReference;
+    private bool isAttached;
+
+    /// <summary>重繪後要做的前端動作：高亮、捲到錨點、捲回頂端。</summary>
+    private bool pendingHighlight;
+    private string? pendingScrollId;
+    private bool pendingScrollTop;
+
+    [Inject]
+    public HelpViewInterop HelpViewInterop { get; set; } = default!;
+
+    [Inject]
+    public HelpAssistantService HelpAssistantService { get; set; } = default!;
+
+    [Inject]
+    public IAuditLogService AuditLogService { get; set; } = default!;
+
+    #region 問 AI 助理（1.0.43）
+
+    /// <summary>畫面上的一輪；答案串流中逐段累加，完成後渲染成 HTML。</summary>
+    private sealed class AssistantTurn(string question)
+    {
+        public string Question { get; } = question;
+
+        public string Answer { get; set; } = string.Empty;
+
+        public string AnswerHtml { get; set; } = string.Empty;
+
+        public string? Error { get; set; }
+
+        public bool IsDone { get; set; }
+    }
+
+    private readonly List<AssistantTurn> assistantTurns = [];
+    private string assistantQuestion = string.Empty;
+    private bool assistantAvailable;
+    private string assistantUnavailableReason = string.Empty;
+    private bool isAsking;
+    private CancellationTokenSource? askCts;
+    private bool disposed;
+
+    /// <summary>同一頁上的連續提問在 AI 對話紀錄裡串成一串。</summary>
+    private readonly string assistantThreadKey = $"help:{Guid.NewGuid():N}";
+
+    /// <summary>Enter 送出、Shift+Enter 換行；注音選字的 Enter 不送出（FormKeyboardHelper）。</summary>
+    private async Task OnAssistantKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await OnAskAssistantAsync();
+        }
+    }
+
+    private async Task OnAskAssistantAsync()
+    {
+        var question = assistantQuestion.Trim();
+        if (isAsking || manual is null || !assistantAvailable || string.IsNullOrEmpty(question))
+        {
+            return;
+        }
+
+        // 只帶已經成功回答的輪次當上下文：失敗或停止的那一輪沒有完整答案，送出去只會誤導。
+        var history = assistantTurns
+            .Where(x => x.IsDone && x.Error is null)
+            .Select(x => new HelpAssistantTurn(x.Question, x.Answer))
+            .ToList();
+
+        var turn = new AssistantTurn(question);
+        assistantTurns.Add(turn);
+        assistantQuestion = string.Empty;
+        isAsking = true;
+        askCts = new CancellationTokenSource();
+        var token = askCts.Token;
+        StateHasChanged();
+
+        var isAdmin = AuthenticationStateHelper.CheckIsAdmin();
+        string? model = null;
+        string outcome;
+
+        try
+        {
+            var answer = await HelpAssistantService.AskAsync(
+                manual.BuildAssistantContext(includeAdmin: isAdmin),
+                history,
+                question,
+                delta => _ = InvokeAsync(() =>
+                {
+                    turn.Answer += delta;
+                    StateHasChanged();
+                }),
+                token,
+                assistantThreadKey);
+
+            turn.Answer = answer.Content;
+            turn.AnswerHtml = MarkdownRenderer.ToHtml(answer.Content);
+            model = answer.ModelName;
+            outcome = "成功";
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // 使用者按「停止」：已經送出的照樣記帳（gateway 記成 Cancelled），畫面留下已收到的部分。
+            turn.AnswerHtml = MarkdownRenderer.ToHtml(turn.Answer + "\n\n（已停止）");
+            outcome = "停止";
+        }
+        catch (Exception ex)
+        {
+            if (ex is AiQuotaExceededException)
+            {
+                Logger.LogWarning("Help assistant blocked by AI quota.");
+            }
+            else
+            {
+                Logger.LogError(ex, "Help assistant failed.");
+            }
+
+            turn.Error = DescribeAssistantFailure(ex);
+            outcome = $"失敗：{ex.GetType().Name}";
+        }
+        finally
+        {
+            turn.IsDone = true;
+            isAsking = false;
+            askCts?.Dispose();
+            askCts = null;
+        }
+
+        // 問題全文已經在 AI 對話紀錄裡，稽核只記長度與結果。
+        await AuditLogService.WriteForCurrentUserAsync(
+            AuditActions.HelpAiAsk,
+            success: outcome == "成功",
+            targetType: "Help",
+            detail: $"questionChars={question.Length}; includeAdmin={isAdmin}; model={model ?? "-"}; outcome={outcome}");
+
+        if (!disposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void OnStopAssistant() => askCts?.Cancel();
+
+    private void OnClearAssistant() => assistantTurns.Clear();
+
+    private static string DescribeAssistantFailure(Exception ex)
+    {
+        if (ex is AiQuotaExceededException)
+        {
+            return ex.Message;
+        }
+
+        var message = ex.Message;
+        if (message.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("maximum context length", StringComparison.OrdinalIgnoreCase))
+        {
+            return "使用說明超過目前 AI 模型能讀的長度，請聯絡系統管理員。";
+        }
+
+        return $"AI 助理沒有回答成功：{message}";
+    }
+
+    #endregion
+
+    private bool IsSearching => !string.IsNullOrWhiteSpace(searchText);
+
+    private HelpCategory? SelectedCategory => manual?.Categories.FirstOrDefault(x => x.Name == selectedCategory);
+
+    private string SearchText
+    {
+        get => searchText;
+        set
+        {
+            searchText = value ?? string.Empty;
+            searchResults = manual?.Search(searchText) ?? [];
+            pendingHighlight = true;
+        }
+    }
+
+    private Task SelectCategoryAsync(string name)
+    {
+        selectedCategory = name;
+        searchText = string.Empty;
+        searchResults = [];
+        pendingScrollTop = true;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>在搜尋框按 Esc（js/help-view.js 呼叫）。</summary>
+    [JSInvokable]
+    public Task ClearSearchFromJs()
+        => InvokeAsync(() =>
+        {
+            SearchText = string.Empty;
+            StateHasChanged();
+        });
+
+    /// <summary>
+    /// 點了說明內容裡的 #錨點（js/help-view.js 呼叫）。目標可能在別的分類，先切過去、清掉搜尋，重繪後再捲。
+    /// </summary>
+    [JSInvokable]
+    public Task JumpToAnchorFromJs(string id)
+        => InvokeAsync(() =>
+        {
+            var category = manual?.FindCategoryOfAnchor(id);
+            if (category is not null)
+            {
+                selectedCategory = category;
+            }
+
+            searchText = string.Empty;
+            searchResults = [];
+            pendingScrollId = id;
+            StateHasChanged();
+        });
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (manual is null)
+        {
+            return;
+        }
+
+        if (!isAttached)
+        {
+            selfReference ??= DotNetObjectReference.Create(this);
+            await HelpViewInterop.AttachAsync(rootElement, selfReference);
+            isAttached = true;
+        }
+
+        if (pendingHighlight)
+        {
+            pendingHighlight = false;
+            await HelpViewInterop.HighlightAsync(rootElement, HelpManual.SplitTerms(searchText));
+        }
+
+        if (pendingScrollId is not null || pendingScrollTop)
+        {
+            var id = pendingScrollId;
+            pendingScrollId = null;
+            pendingScrollTop = false;
+            await HelpViewInterop.ScrollToAsync(rootElement, id);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // 離開頁面就停掉還在跑的回答，不要讓沒人看的答案繼續花錢。
+        disposed = true;
+        askCts?.Cancel();
+
+        if (isAttached)
+        {
+            await HelpViewInterop.DetachAsync(rootElement);
+        }
+
+        selfReference?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     [Inject]
     public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
@@ -62,7 +333,27 @@ public partial class HelpView : ComponentBase
             return;
         }
 
-        content = StripDocumentFrontMatter(ReadEmbeddedManual());
+        var markdown = ReadEmbeddedManual();
+        if (markdown is null)
+        {
+            loadError = "使用說明載入失敗，請聯絡系統管理員。";
+            return;
+        }
+
+        manual = HelpManual.Parse(StripDocumentFrontMatter(markdown));
+
+        assistantAvailable = HelpAssistantService.IsAvailable;
+        assistantUnavailableReason = assistantAvailable
+            ? string.Empty
+            : $"AI 助理目前無法使用：{HelpAssistantService.UnavailableReason}";
+
+        // 標記漏了或打錯不會壞畫面（歸到第一類），但會讓章節跑錯分類——留線索給維護者，測試也會擋。
+        if (manual.UnknownMarkers.Count > 0)
+        {
+            Logger.LogWarning(
+                "Help manual sections without a valid category marker: {Sections}",
+                string.Join("、", manual.UnknownMarkers));
+        }
     }
 
     /// <summary>
@@ -112,7 +403,7 @@ public partial class HelpView : ComponentBase
     /// <c>detectEncodingFromByteOrderMarks</c> 會幫我們吃掉它。
     /// </para>
     /// </summary>
-    private string ReadEmbeddedManual()
+    private string? ReadEmbeddedManual()
     {
         var assembly = Assembly.GetExecutingAssembly();
 
@@ -125,7 +416,7 @@ public partial class HelpView : ComponentBase
                 ResourceName,
                 string.Join("、", assembly.GetManifestResourceNames()));
 
-            return "使用說明載入失敗，請聯絡系統管理員。";
+            return null;
         }
 
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);

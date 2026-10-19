@@ -1,0 +1,41 @@
+@using MeetingRecord.Share.Enums
+@* 「使用中｜已完成｜全部」檢視切換（1.0.46），專案頁與待辦頁共用。已完成＝封存。
+   刻意不記憶上次的選擇（使用者決定）：每次開頁都回到「使用中」，不會有人忘了自己切到已完成、以為專案不見了。 *@
+<div class="project-scope-switch" role="radiogroup" aria-label="要顯示哪些專案">
+    @foreach (var (scope, label) in Options)
+    {
+        <button type="button"
+                role="radio"
+                aria-checked="@(Value == scope)"
+                class="project-scope-switch-item @(Value == scope ? "project-scope-switch-item-active" : string.Empty)"
+                @onclick="@(() => SelectAsync(scope))">
+            @label
+        </button>
+    }
+</div>
+
+@code {
+    private static readonly (ProjectScope Scope, string Label)[] Options =
+    [
+        (ProjectScope.Active, "使用中"),
+        (ProjectScope.Archived, "已完成"),
+        (ProjectScope.All, "全部"),
+    ];
+
+    [Parameter]
+    public ProjectScope Value { get; set; } = ProjectScope.Active;
+
+    [Parameter]
+    public EventCallback<ProjectScope> ValueChanged { get; set; }
+
+    private async Task SelectAsync(ProjectScope scope)
+    {
+        if (scope == Value)
+        {
+            return;
+        }
+
+        Value = scope;
+        await ValueChanged.InvokeAsync(scope);
+    }
+}

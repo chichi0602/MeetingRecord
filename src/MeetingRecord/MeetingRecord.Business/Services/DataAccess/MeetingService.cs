@@ -296,6 +296,12 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
             }
 
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
+
             Meeting itemData = Mapper.Map<Meeting>(paraObject);
             itemData.CreatedAt = item.CreatedAt;
             itemData.UpdatedAt = DateTime.Now;
@@ -376,6 +382,12 @@ public class MeetingService
                 Logger.LogWarning("Meeting deletion denied by project access. MeetingId={MeetingId}", id);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), id, "Delete");
                 return VerifyRecordResultFactory.Build(false, "沒有權限刪除這筆會議紀錄。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             // 背景工作還在跑就不能刪（0.4.115）：工作不會因此停下，跑完寫出的逐字稿檔
@@ -557,6 +569,12 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
             }
 
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
+
             // 背景工作還在跑就不能換檔（0.4.115，比照重新轉錄）：舊檔那趟轉錄不會停，
             // 跑完會把舊錄音的逐字稿和「已完成」寫到已經換成新檔的會議上；生成中的會議紀錄也正在讀舊逐字稿。
             if (IsJobActive(meeting))
@@ -720,6 +738,12 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄執行轉錄。");
             }
 
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
+
             if (string.IsNullOrWhiteSpace(meeting.MediaRelativePath))
             {
                 return VerifyRecordResultFactory.Build(false, "這筆會議紀錄尚未上傳影音檔。");
@@ -803,6 +827,12 @@ public class MeetingService
                 Logger.LogWarning("Attach denied by project access. MeetingId={MeetingId}", meetingId);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "AttachProject");
                 return VerifyRecordResultFactory.Build(false, "沒有權限變更這筆會議紀錄的歸屬。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, projectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             // 兩種「已歸屬」要分開講：前者重新整理就好，後者得先去那個專案移除。
@@ -909,6 +939,12 @@ public class MeetingService
                 Logger.LogWarning("Detach denied by project access. MeetingId={MeetingId}", meetingId);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DetachProject");
                 return VerifyRecordResultFactory.Build(false, "沒有權限移除這筆會議紀錄。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             if (meeting.ProjectId != projectId)
@@ -1024,6 +1060,12 @@ public class MeetingService
             }
 
             var effectiveProjectId = projectId ?? meeting.ProjectId;
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, effectiveProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
 
             // ⚠️ 這個 if 同樣不能省：x.Id == effectiveProjectId 在 null 時是 lifted comparison、
             // 恆為 false，查不到任何列就會讓「不指定專案」一律回「找不到指定的專案項目」。
@@ -1168,6 +1210,12 @@ public class MeetingService
                 Logger.LogWarning("Draft update denied by project access. MeetingId={MeetingId}", meetingId);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DraftUpdate");
                 return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             if (meeting.DraftStatus == DraftStatus.Processing)

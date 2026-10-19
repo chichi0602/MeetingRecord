@@ -97,6 +97,7 @@ public class AutoMapping : Profile
         #region Todo
         CreateMap<Todo, TodoAdapterModel>()
             .ForMember(d => d.ProjectTitle, o => o.MapFrom(s => s.Project != null ? s.Project.Title : null))
+            .ForMember(d => d.ProjectStatus, o => o.MapFrom(s => s.Project != null ? s.Project.Status : null))
             .ForMember(d => d.MeetingTitle, o => o.MapFrom(s => s.Meeting != null ? s.Meeting.Title : null))
             // 子項目（1.0.45）：清單由 TodoService 自己組（只分頁主層、套篩選），不讓 AutoMapper 順手帶出整串。
             .ForMember(d => d.ParentTitle, o => o.MapFrom(s => s.Parent != null ? s.Parent.Title : null))

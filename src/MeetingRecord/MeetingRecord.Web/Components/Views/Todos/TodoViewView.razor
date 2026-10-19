@@ -35,17 +35,24 @@ else
                 </HoverTip>
             </div>
             <div class="todo-view-toolbar-right">
-                <Select TItem="ProjectAdapterModel"
+                @* 1.0.46：已完成專案的待辦預設不列出。 *@
+                <ProjectScopeSwitch Value="@projectScope" ValueChanged="OnProjectScopeChangedAsync" />
+                @* 1.0.46：選項跟著檢視切換。改用 SelectOption 子元素：DataSource 每次重繪都給新清單的話，Select 會一直重算。 *@
+                <Select TItem="int"
                         TItemValue="int"
                         Value="@selectedProjectFilter"
                         ValueChanged="OnProjectFilterChanged"
-                        DataSource="@availableProjects"
-                        LabelName="@nameof(ProjectAdapterModel.Title)"
-                        ValueName="@nameof(ProjectAdapterModel.Id)"
                         Placeholder="專案過濾"
                         AllowClear
                         EnableSearch
-                        Style="width: 150px;" />
+                        Style="width: 150px;">
+                    <SelectOptions>
+                        @foreach (var project in ScopedProjects)
+                        {
+                            <SelectOption TItem="int" TItemValue="int" Value="@project.Id" Label="@project.Title" />
+                        }
+                    </SelectOptions>
+                </Select>
                 <Select TItem="string" TItemValue="string"
                         Value="@selectedStatusFilter"
                         ValueChanged="OnStatusFilterChanged"
@@ -102,7 +109,7 @@ else
                    @bind-Total="_total">
                 <Column TData="bool" Title="完成" Width="48">
                     <Checkbox Checked="@context.IsCompleted"
-                              Disabled="@(!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))"
+                              Disabled="@(!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit) || IsReadOnly(context))"
                               CheckedChanged="@(EventCallback.Factory.Create<bool>(this, value => OnCompletedChangedAsync(context, value)))" />
                 </Column>
                 <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Title)" Title="待辦事項" Sortable ShowSorterTooltip="false">
@@ -177,21 +184,21 @@ else
                                               OnClick="@(async () => await OpenChangesAsync(context.Id, context.Title))" />
                         </SpaceItem>
                         @* 1.0.45：只分一層，所以只有主層（不是子項目）的待辦才有這顆。 *@
-                        @if (!context.IsSubtask && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                        @if (!context.IsSubtask && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create) && !IsReadOnly(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="新增子項目" Icon="playlist_add"
                                                   OnClick="@(async () => await OnAddSubtaskAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit))
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit) && !IsReadOnly(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="修改" Icon="edit"
                                                   OnClick="@(async () => await OnEditAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Delete))
+                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Delete) && !IsReadOnly(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="刪除" Icon="delete" Danger
@@ -365,7 +372,7 @@ else
                                     EnableSearch
                                     Style="width: 100%;">
                                 <SelectOptions>
-                                    @foreach (var project in availableProjects)
+                                    @foreach (var project in FormProjects)
                                     {
                                         <SelectOption TItem="int" TItemValue="int" Value="@project.Id" Label="@project.Title" />
                                     }

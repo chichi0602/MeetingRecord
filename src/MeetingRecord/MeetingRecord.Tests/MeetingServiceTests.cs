@@ -985,6 +985,26 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task ArchivedProject_MemberCannotAttachOrEditDrafts_AdminCan()
+    {
+        // 1.0.46：已完成＝封存，一般使用者唯讀；管理者不受限。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var projectA = (await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == ids["A專案會議"])).ProjectId!.Value;
+        await fixture.Context.Project.Where(x => x.Id == projectA)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, MeetingRecord.Models.AdapterModel.ProjectAdapterModel.ArchivedStatus));
+        fixture.Context.ChangeTracker.Clear();
+        var member = fixture.CreateService(isAdmin: false, userA);
+
+        var attach = await member.AttachToProjectAsync(ids["A上傳未歸屬"], projectA);
+        var editDraft = await member.UpdateDraftAsync(ids["A專案會議"], "改內容");
+
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, attach.Message);
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, editDraft.Message);
+        Assert.True((await fixture.CreateService().UpdateDraftAsync(ids["A專案會議"], "管理者改內容")).Success);
+    }
+
+    [Fact]
     public async Task AttachToProjectAsync_ShouldSetProjectId_AndKeepDraftIntact()
     {
         // 這支的核心承諾：只補歸屬，不重跑、不花錢。

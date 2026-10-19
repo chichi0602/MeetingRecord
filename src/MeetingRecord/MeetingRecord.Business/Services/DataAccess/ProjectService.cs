@@ -265,6 +265,17 @@ public class ProjectService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的專案資料。");
             }
 
+            // 1.0.46：已完成（封存）的專案仍可以編輯——把狀態改回別的就是「重新開啟」；
+            // 但維持已完成的同時增刪附件不行（附件是專案內容，封存後唯讀）。管理者不受限。
+            var staysArchived = currentItem.Status == ProjectAdapterModel.ArchivedStatus
+                && paraObject.Status == ProjectAdapterModel.ArchivedStatus;
+            var touchesFiles = (uploadFiles?.Any() ?? false) || (removedFileIds?.Any() ?? false);
+            if (staysArchived && touchesFiles && !access.IsAdmin)
+            {
+                context.ChangeTracker.Clear();
+                return VerifyRecordResultFactory.Build(false, ProjectArchiveRules.ArchivedMessage);
+            }
+
             // 主責沒變時照原樣保留（就算不是自己的團隊，協作團隊的人也要能存檔）；改主責才檢查是不是自己的團隊。
             // ⚠️ 一定要在改欄位之前驗證（0.4.114）：currentItem 是被追蹤的，先改欄位再 return 的話，
             //    被拒絕的修改會留在共用的 DbContext 裡，下一次任何人 SaveChanges 就被寫進資料庫。
@@ -654,11 +665,20 @@ public class ProjectService
     /// 取得目前使用者可存取的全部專案（依標題排序），供專案項目頁的專案選擇器使用。
     /// 這個畫面以下拉選單取代分頁表格，因此不分頁；專案數量成長到數百筆時要重新檢討。
     /// </summary>
-    public async Task<List<ProjectAdapterModel>> GetSelectableAsync(CancellationToken cancellationToken = default)
+    /// <param name="includeArchived">
+    /// 1.0.46：預設不含已完成（封存）的專案——會議「歸屬到專案」「AI 轉會議紀錄」、待辦表單的專案選單都不該選到它們。
+    /// 專案頁與待辦頁的檢視切換要自己過濾，傳 true。
+    /// </param>
+    public async Task<List<ProjectAdapterModel>> GetSelectableAsync(CancellationToken cancellationToken = default, bool includeArchived = false)
     {
         var access = await projectAccess.GetAsync();
         IQueryable<Project> dataSource = access.Filter(context.Project.AsNoTracking())
             .Include(x => x.Teams).ThenInclude(x => x.Team);
+
+        if (!includeArchived)
+        {
+            dataSource = ProjectArchiveRules.ApplyScope(dataSource, MeetingRecord.Share.Enums.ProjectScope.Active);
+        }
 
         var items = await dataSource
             .OrderBy(x => x.Title)

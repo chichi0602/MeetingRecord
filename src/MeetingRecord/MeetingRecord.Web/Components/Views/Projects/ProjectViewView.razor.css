@@ -421,3 +421,18 @@
             background: var(--oat-300);
             color: var(--oat-ink);
         }
+
+/* 1.0.46：已完成（封存）的專案提示條。 */
+.project-view-archived {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--oat-300);
+    border-radius: 10px;
+    background: var(--oat-100);
+    color: var(--oat-ink);
+    font-size: 0.9rem;
+}

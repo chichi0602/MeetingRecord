@@ -1,10 +1,10 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.14
+- 文件版本：4.15
 - 文件狀態：已實作
-- 現行系統版本：1.0.45
+- 現行系統版本：1.0.46
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/10/19
 
 > **0.4.102：專案改由「主責團隊＋協作團隊」控管可見性，並加回「分類」**（取代 0.4.101 的「資料群組」與 0.4.99～0.4.100 的專案成員制）。團隊＝誰的資料（部門），分類＝什麼資料，角色＝能做什麼。
 > - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
@@ -45,6 +45,7 @@
   - **左側**：可搜尋的專案下拉（寬 200px；`ProjectService.GetSelectableAsync`，依標題排序、不分頁）＋ 新增／編輯／刪除／AI 問答。「重新整理」按鈕已移除。
   - **右側**：團隊、分類、狀態三個多選篩選（各寬 140px，`MaxTagCount=1` 收成「+N」不撐寬）。三者同時成立，同一篩選內符合任一即可；團隊比對主責或協作團隊。只在畫面端縮小下拉清單，不影響誰看得到。目前專案被篩掉時自動切到結果第一筆，結果為空時清掉選取並顯示空狀態提示。
   - 窄螢幕時左右兩組各自換行。
+  - **1.0.46 起篩選列最前面多一組「使用中｜已完成｜全部」**（`ProjectScopeSwitch`），見下方「已完成＝封存（1.0.46）」。專案下拉改用 `GetSelectableAsync(includeArchived: true)` 取全部再依檢視過濾；「狀態」篩選只列目前檢視範圍內的狀態。
 - 專案摘要列：負責人、**主責團隊、協作團隊、分類（0.4.102 起）**、期程、狀態、完成度、本專案的會議紀錄份數、**附件份數（0.4.43 起，可點開檢視與下載）**。
 - AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生。**0.4.65 起一律先跳費用確認對話框**（首次生成也跳，理由是會產生 API 費用），已有草稿時額外套紅色確認鈕並說明會覆蓋人工編修過的內容；按鈕在該筆已排入或生成中時停用（`CanGenerateDraft`），避免重複入列而重複計費。 **0.4.71 起提示詞下拉左邊多一個「與會人員」多選**，選項來自本專案的與會人員名冊（`Project.Participants`），用來勾選這場會議實際到場的人；名冊是空的時候欄位停用但不隱藏。勾選結果以快照存進 `Meeting.DraftAttendees`，連同專案的常用名詞一起餵給模型校正語音辨識聽錯的人名。與會人員是**選填**，不影響按鈕是否可按。
 - 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（**會議紀錄與逐字稿**、**匯出 PDF**、**抽出待辦**、AI 問答）。不分頁。**0.4.82 起逐字稿的預覽與編修整個移除**（0.4.55 曾提供）——檔案仍是生成與 AI 問答的輸入，只是不再有人直接讀／改的介面。 **1.0.40 起「檢視」與「編修」兩顆鈕合併成一顆「會議紀錄與逐字稿」**（圖示 `article`，`HasDraft || HasTranscript` 時出現；使用者反映操作欄太擠、兩顆長得像）：一律先唯讀開啟，有逐字稿時上方有「會議紀錄｜逐字稿」頁籤（沒有會議紀錄就直接停在逐字稿），逐字稿以純文字唯讀顯示，可「複製全文」「下載 .txt」（需 `專案項目:export`，UTF-8 含 BOM，檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`），逐字稿**仍不能改**；有 `專案項目:edit` 且已有會議紀錄時，視窗底部有「編修」切到左改右看，取消或儲存成功後回到唯讀檢視。讀逐字稿走 `MeetingService.ReadTranscriptAsync`（經專案權控）。STT 聽錯人名的補救改走「常用名詞名冊 ＋ 重新產生」或「直接改會議紀錄」，取捨見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.82 起「檢視／編修會議紀錄」共用 `Components/Commons/MarkdownEditorModal`**（左改右看 ＋ 常駐搜尋／取代列）；清單列上的「匯出 PDF」**保留**，視窗裡另有一顆「下載 PDF」（需 `專案項目:export`）。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。 **0.4.72 起操作欄多一顆「從專案移除」**（`link_off`，受 `delete` 權限管控）：清掉歸屬與 AI 草稿，但**影音檔與逐字稿保留**，那份逐字稿會回到可選清單，可以改指到正確的專案重跑——這是「生成錯專案」唯一的出口（先前只能整筆刪除，等於要重新上傳並重新付一次轉錄費用）。生成中（`Pending`／`Processing`）不准移除，否則背景工作結束時會把草稿寫回已經移除的紀錄。
@@ -67,6 +68,17 @@
   - 未做：同一次抽出**同時建立新的主待辦與它的子項目**（AI 只能掛到既有待辦）——先建好主待辦，再抽一次或手動新增子項目。子項目規則見 [待辦事項 PRD](待辦事項-prd.md)。
 - AI 問答（**0.4.51 起**）：工具列一顆「AI 問答」就整個專案提問，讀本專案**所有會議紀錄與附件**（PDF／docx／txt／md／csv；掃描檔與其他格式會列為「無法讀取」）；`歷史會議紀錄` 每列一顆就單一會議提問，讀該會議的**會議紀錄與逐字稿**。多輪對話、回答邊生成邊顯示，**對話歷史存在檔案系統**。視窗滿版（0.4.94 起 96vw × 96vh，訊息氣泡最寬 960px 以維持行寬好讀）。**0.4.95 起可以附加圖片與檔案**（迴紋針、Ctrl+V 貼上、拖放；圖片 png/jpg/gif/webp ≤ 10 MB、文件 pdf/docx/txt/md/csv ≤ 20 MB、一次最多 5 個）：文件擷取文字後排在參考資料最前面，圖片隨訊息送給模型；最近 6 輪提問的附件在追問時會一起再送。附件存在對話檔旁的 `<對話 Id>.files/`，刪對話時一併刪除。細節見 [changelog](../changelog/2026-09-22-AI問答附加圖片與檔案.md)（0.4.60 起，一段對話一個 `.jsonl`，根目錄 `SystemSettings.ExternalFileSystem.AiChatPath`）——對話文字不需要被查詢或索引，放資料庫只會讓它膨脹，原本的 `AiChatMessage` 資料表已移除。同專案／會議底下所有人共用同一段對話。兩顆按鈕**本身**不加額外動作權限（能進本頁就能開視窗、提問、開新對話、附加檔案、複製，與「會議紀錄與逐字稿」的唯讀檢視一致）；**視窗內**的動作則依本頁的動作權限控管（**0.4.109 起**）：重新命名對話、編輯訊息、重新產生答案需 `專案項目:edit`，刪除對話與「清空這段對話」需 `專案項目:delete`，下載整段／單則 PDF 需 `專案項目:export`——由 `ProjectViewView` 以 `AuthenticationStateHelper.CheckAccessAction` 算好後傳入 `AiChatModal` 的 `CanEdit`／`CanDelete`／`CanExport`，沒有權限就不顯示按鈕，改名／編輯／重新產生／刪除的處理函式開頭也會再檢查一次。同列的「抽出待辦」需 `待辦事項:create`（見上；守門在按鈕，`TodoExtractionModal` 本身不檢查動作權限）。完整規格見 [AI 問答 PRD](AI問答-prd.md)。**0.4.70 起**：AI 回答改以 Markdown 渲染（先前整塊原文直接顯示，畫面上滿是 `##` 與 `**`）；每則訊息可**複製**（Markdown 原文）與**修改**（需 `edit`）——「儲存」只更正文字不呼叫模型，使用者提問另有「重新產生答案」會重跑 AI 並覆蓋原答案（**會產生費用，跳二次確認**）；整段對話與單則訊息都可**下載 PDF**（沿用「匯出」動作權限）。刪除仍只做整段（「清空這段對話」，0.4.70 起補上二次確認，需 `delete`）。訊息以「第幾則」定位，對話檔格式不變。**0.4.79 起**：視窗左側多一欄**對話清單**，一個專案／會議底下可以有**多段對話**，可「開新對話」、切換、改名（需 `edit`）、刪除（需 `delete`）其中一段；標題預設取第一句提問（超過 20 字截斷），使用者可改名。清單與對話一樣是**所有人共用**，每一列標示是誰開的。舊的單檔對話會自動轉成第一段，使用者無感。匯出 PDF 匯出的是**目前這一段**，檔名帶上對話標題以免同一天匯出兩段撞名。
 
+### 已完成＝封存（1.0.46）
+
+使用者問「已完成專案要怎麼呈現（封存？），有沒有地方選要顯示哪類專案」。決定：**「已完成」就是封存**，不另加狀態；改回其他狀態就是重新開啟。細節見 [changelog](../changelog/2026-10-19-已完成專案封存與檢視切換.md)。
+
+- **檢視切換「使用中｜已完成｜全部」**：預設「使用中」（未開始／進行中／暫緩／等待），**不記憶**，每次開頁都回到使用中（避免有人忘了切過、以為專案不見了）。「全部」檢視時，已完成的專案在下拉裡標「（已完成）」（`ProjectAdapterModel.SelectorLabel`）。切換時目前專案不在範圍內就照原本的規則切到結果第一筆。
+- **封存＝唯讀**：選到已完成的專案，上方出現提示條「這個專案已完成（封存），目前是唯讀：可以檢視、下載 PDF、AI 問答，不能產生會議紀錄、抽出待辦或移除會議。」；隱藏「AI 轉會議紀錄」、「抽出待辦」、「從專案移除」，「會議紀錄與逐字稿」視窗不能切到編修。**管理者不受限**，提示條照樣顯示，文字改為「你是管理者，仍可修改。」
+- **重新開啟**：提示條上的「重新開啟」按鈕（需 `專案項目:edit`），確認後把狀態改成「進行中」，專案回到使用中清單與其他頁的專案選單。也可以直接在編輯表單把狀態改掉——專案本身的「編輯」**不擋**，改狀態就是重新開啟的方式。
+- **標為已完成要確認**：在表單把狀態從其他狀態改成「已完成」，存檔前先跳確認「確認把專案標為已完成（封存）」，說明會從使用中清單與其他頁選單消失、一般使用者只能檢視；存檔後自動切到「全部」，專案不會突然從畫面消失。
+- 不擋：檢視、下載 PDF、AI 問答、待辦異動紀錄。
+- 其他頁：會議頁的專案選單（歸屬到專案、AI 轉會議紀錄）與待辦表單的專案選單不列已完成專案（`GetSelectableAsync()` 預設排除，只有專案頁與待辦頁傳 `includeArchived: true`）；待辦頁另有同一組檢視切換，見 [待辦事項 PRD](待辦事項-prd.md)。
+
 ## 四、內部系統運作
 
 - 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectRepository`（與 UI 的 Service 為兩條路徑，皆回 `ApiResult`）。
@@ -85,6 +97,7 @@
 - UI 與 API 共用同一 RBAC 權威（`IPermissionChecker`）。
 - **角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**：動作（新增／修改／刪除／匯出）以 `[HasPermission("resource:action")]` 與 `CheckAccessAction` 控管。
 - **資料可見範圍由主責＋協作團隊決定**（0.4.102 起；0.4.39～0.4.98 沒有列級控管、0.4.99～0.4.100 為專案成員制、0.4.101 為資料群組）：使用者所屬團隊與專案的主責或協作團隊有交集才看得到，沒有公開專案；看不到的專案當成不存在（UI 找不到、API 404）。規則見 [開發慣例與限制速查 §4.0](../architecture/開發慣例與限制速查.md)。
+- **已完成＝封存（1.0.46）**：改專案內容的路徑（待辦、會議的產生／歸屬／移除／編修、專案附件上傳與刪除）一律經 `ProjectArchiveRules.CheckWritableAsync`，封存時一般使用者收到「這個專案已完成（封存），請先重新開啟再修改。」；管理者放行。畫面隱藏按鈕只是提示，服務層才是守門。
 
 ### 0.4.39：四個欄位與列級權限已徹底移除
 
@@ -127,13 +140,15 @@
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`、`RbacBackfillServiceTests.cs`：動作級授權鍵與 RBAC 回填涵蓋「專案項目」。
 - `ProjectAccessTests`（0.4.102 改寫）：主責＋協作可見規則（含王小明例：研發部＋管理部看得到 A、B、D，看不到 C）、沒有公開專案、主責／協作選擇規則（協作團隊的人沒改主責也能存檔）、分類篩選、刪除主責團隊被擋、`CategoryTeam` 同步、舊專案成員與 0.4.101 資料的主責轉換、批次與成員同步；`ApiIntegrationTests.ProjectApi_OtherTeamsProject_ShouldBeHidden_AndCreatorTeamBecomesPrimary`：API 看不到別團隊的專案、新增的專案以建立者的團隊為主責。
 - `TodoExtractionParserTests`（1.0.44 新增 5 條）：`matchedTodoId` 的解析（數字／字串、只收送出的 Id、重複認領）與提示詞帶入未完成待辦；1.0.45 新增 3 條：提示詞要求 `parentTodoId` 並標主項目／子項目、只收主項目 Id 且可共用主待辦、兩者都給時以對應既有為準；`TodoChangeAndNotificationTests`：抽出更新只改期限與負責人、空日期不清原值。
+- 已完成＝封存（1.0.46）：`TodoChangeAndNotificationTests` 新增封存專案的待辦一般成員不能改、管理者可以、不能搬進封存專案、重新開啟後可再改、`ApplyScope` 分出使用中與已完成；`MeetingServiceTests` 新增封存專案一般成員不能歸屬會議、不能編修會議紀錄，管理者可以。
 
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Projects/ProjectPage.razor`（`@page "/projects"`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor`（`<AiChatModal>` 的 `CanEdit`／`CanDelete`／`CanExport`、「抽出待辦」鈕的 `待辦事項:create` 守門）、`ProjectViewView.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/AiChatModal.razor.cs`（`CanEdit`／`CanDelete`／`CanExport` 參數）、`TodoExtractionModal.razor.cs`
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs`（`ProjectService`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs`（`ProjectService`；`GetSelectableAsync(includeArchived)`，1.0.46）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`、`Matches`，1.0.46）、`src/MeetingRecord/MeetingRecord.Share/Enums/ProjectScope.cs`、`src/MeetingRecord/MeetingRecord.Web/Components/Commons/ProjectScopeSwitch.razor`
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs`（`ProjectController`）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Project.cs`（`Project`）、`ProjectFile.cs`（`ProjectFile`）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_專案項目`）

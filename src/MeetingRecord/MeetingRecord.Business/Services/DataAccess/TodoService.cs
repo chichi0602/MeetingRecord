@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -79,6 +80,9 @@ public class TodoService
         {
             dataSource = dataSource.Where(x => x.ProjectId == dataRequest.ProjectFilter);
         }
+
+        // 1.0.46：「使用中｜已完成｜全部」檢視（看待辦所屬專案是不是已完成）。
+        dataSource = ProjectArchiveRules.ApplyScope(dataSource, dataRequest.ProjectScope);
 
         if (!string.IsNullOrWhiteSpace(dataRequest.StatusFilter))
         {
@@ -231,6 +235,12 @@ public class TodoService
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
         }
 
+        // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+        if (await ProjectArchiveRules.CheckWritableAsync(context, paraObject.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+        {
+            return VerifyRecordResultFactory.Build(false, archivedError);
+        }
+
         // 子項目（1.0.45）：只分一層、與主待辦同專案。
         var hierarchyError = await TodoHierarchyRules.ValidateAsync(context, null, paraObject.ProjectId, paraObject.ParentTodoId);
         if (hierarchyError is not null)
@@ -299,6 +309,12 @@ public class TodoService
                 Logger.LogWarning("Todo update denied by project access. TodoId={TodoId}", paraObject.Id);
                 await AuditDataScopeDeniedAsync(nameof(Todo), paraObject.Id, "Update");
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的待辦事項。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限；搬進封存專案也不行。
+            if ((await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, access) ?? await ProjectArchiveRules.CheckWritableAsync(context, paraObject.ProjectId, access)) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             // 子項目（1.0.45）：只分一層、與主待辦同專案、不能掛自己、已有子項目的不能再當子項目。
@@ -385,6 +401,13 @@ public class TodoService
             {
                 CleanTrackingHelper.Clean<Todo>(context);
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項，可能已經被刪除。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+            {
+                CleanTrackingHelper.Clean<Todo>(context);
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             var before = CloneForChange(item);
@@ -583,6 +606,13 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的待辦事項。");
             }
 
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+            {
+                CleanTrackingHelper.Clean<Todo>(context);
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
+
             // 1.0.44：改之前先留一份舊值給異動紀錄（item 是追蹤中的實體，下一行就會被改掉）。
             var before = CloneForChange(item);
 
@@ -629,6 +659,12 @@ public class TodoService
                 }
 
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的待辦事項。");
+            }
+
+            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+            if (await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
             // 子項目（1.0.45）：刪主待辦時資料庫 Cascade 一起刪掉子項目；刪子項目時在主待辦記「移除子項目」。
@@ -733,9 +769,11 @@ public class TodoService
     /// </summary>
     public async Task<IReadOnlyList<TodoOwnerSummary>> GetOwnerSummariesAsync(
         int? projectFilter,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ProjectScope scope = ProjectScope.All)
     {
-        IQueryable<Todo> query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking());
+        // 1.0.46：跟著「使用中｜已完成｜全部」檢視走，面板數字才和清單對得上。
+        IQueryable<Todo> query = ProjectArchiveRules.ApplyScope((await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking()), scope);
         if (projectFilter is > 0)
         {
             query = query.Where(x => x.ProjectId == projectFilter);
@@ -780,14 +818,15 @@ public class TodoService
     public async Task<IReadOnlyList<TodoAdapterModel>> GetByOwnerAsync(
         string owner,
         int? projectFilter,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ProjectScope scope = ProjectScope.All)
     {
         if (string.IsNullOrWhiteSpace(owner))
         {
             return [];
         }
 
-        IQueryable<Todo> query = (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking()).Include(x => x.Project).Include(x => x.Parent);
+        IQueryable<Todo> query = ProjectArchiveRules.ApplyScope((await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking()).Include(x => x.Project).Include(x => x.Parent), scope);
         if (projectFilter is > 0)
         {
             query = query.Where(x => x.ProjectId == projectFilter);

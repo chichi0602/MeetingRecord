@@ -38,4 +38,7 @@ public class DataRequest
 
     //     依「狀態」過濾（空字串表示不過濾），目前僅待辦事項使用
     public string? StatusFilter { get; set; }
+
+    //     依「使用中｜已完成｜全部」檢視過濾（1.0.46，看待辦所屬專案是不是已完成）；預設全部，目前僅待辦事項使用
+    public MeetingRecord.Share.Enums.ProjectScope ProjectScope { get; set; } = MeetingRecord.Share.Enums.ProjectScope.All;
 }

@@ -11,6 +11,7 @@ using MeetingRecord.Business.Services.Notifications;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Tests;
 
@@ -454,6 +455,112 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
             new Todo { Title = "畫統計圖", ProjectId = project2, ParentTodoId = parent.Id, Status = "待辦", Priority = "中" }));
 
         Assert.Contains("同一個專案", error.Message);
+    }
+
+    // ───────── 已完成＝封存（1.0.46） ─────────
+
+    [Fact]
+    public async Task ArchivedProject_MemberCannotChangeTodos_AdminCan()
+    {
+        var todo = await AddTodoAsync("完成報表", project1);
+        await SetProjectStatusAsync(project1, ProjectAdapterModel.ArchivedStatus);
+        var member = CreateService(userA);
+
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, (await member.AddAsync(NewModel("新的", project1))).Message);
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, (await member.SetCompletedAsync(todo.Id, true)).Message);
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, (await member.DeleteAsync(todo.Id)).Message);
+        var model = await member.GetAsync(todo.Id);
+        model.Owner = "王小明";
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, (await member.UpdateAsync(model)).Message);
+        Assert.False((await member.ApplyExtractedUpdateAsync(todo.Id, new DateTime(2026, 12, 1), null, 1, "週會")).Success);
+
+        // 管理者不受任何限制。
+        Assert.True((await CreateService(userA, isAdmin: true).SetCompletedAsync(todo.Id, true)).Success);
+    }
+
+    [Fact]
+    public async Task ArchivedProject_CannotMoveTodoIntoIt()
+    {
+        var todo = await AddTodoAsync("完成報表", project1);
+        await SetProjectStatusAsync(project2, ProjectAdapterModel.ArchivedStatus);
+
+        // 一般使用者要看得到兩個專案才搬得動：把 A 也加進專案二的團隊。
+        var otherTeam = await context.ProjectTeam.AsNoTracking().Where(x => x.ProjectId == project2).Select(x => x.TeamId).SingleAsync();
+        context.UserTeam.Add(new UserTeam { MyUserId = userA, TeamId = otherTeam });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var service = CreateService(userA);
+        var model = await service.GetAsync(todo.Id);
+        model.ProjectId = project2;
+
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, (await service.UpdateAsync(model)).Message);
+    }
+
+    [Fact]
+    public async Task ArchivedProject_Reopened_ShouldBeWritableAgain()
+    {
+        await SetProjectStatusAsync(project1, ProjectAdapterModel.ArchivedStatus);
+        Assert.False((await CreateService(userA).AddAsync(NewModel("新的", project1))).Success);
+
+        await SetProjectStatusAsync(project1, "進行中");
+
+        Assert.True((await CreateService(userA).AddAsync(NewModel("新的", project1))).Success);
+    }
+
+    [Fact]
+    public async Task ArchivedProject_ApiRepository_ShouldThrowValidationError()
+    {
+        await SetProjectStatusAsync(project1, ProjectAdapterModel.ArchivedStatus);
+        var access = TestProjectAccess.User(context, userA);
+        var actor = TestAuditActor.Fixed(userA, "a");
+        var repository = new TodoRepository(context, access, TestAuditLogs.CreateService(context, actor), TestTodoChanges.CreateRecorder(context, access, actor, notifier));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.AddAsync(
+            new Todo { Title = "新的", ProjectId = project1, Status = "待辦", Priority = "中" }));
+
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, error.Message);
+    }
+
+    [Theory]
+    [InlineData(ProjectScope.Active, new[] { "進行中專案的待辦" })]
+    [InlineData(ProjectScope.Archived, new[] { "封存專案的待辦" })]
+    [InlineData(ProjectScope.All, new[] { "封存專案的待辦", "進行中專案的待辦" })]
+    public async Task List_ProjectScope_ShouldFilterByProjectArchiveState(ProjectScope scope, string[] expected)
+    {
+        await AddTodoAsync("進行中專案的待辦", project1, owner: "王小明");
+        await AddTodoAsync("封存專案的待辦", project2, owner: "王小明");
+        await SetProjectStatusAsync(project2, ProjectAdapterModel.ArchivedStatus);
+        var admin = CreateService(userA, isAdmin: true);
+
+        var list = (await admin.GetAsync(new DataRequest { CurrentPage = 1, PageSize = 50, ProjectScope = scope })).Result;
+        var owners = await admin.GetOwnerSummariesAsync(null, scope: scope);
+        var byOwner = await admin.GetByOwnerAsync("王小明", null, scope: scope);
+
+        Assert.Equal(expected.Order(), list.Select(x => x.Title).Order());
+        Assert.Equal(expected.Length, owners.Single(x => x.Owner == "王小明").Total);
+        Assert.Equal(expected.Order(), byOwner.Select(x => x.Title).Order());
+    }
+
+    [Fact]
+    public void ProjectScope_ApplyScope_ShouldSplitArchivedAndActiveProjects()
+    {
+        var projects = new[]
+        {
+            new Project { Title = "A", Status = "進行中" },
+            new Project { Title = "B", Status = ProjectAdapterModel.ArchivedStatus },
+            new Project { Title = "C", Status = "暫緩" },
+        }.AsQueryable();
+
+        Assert.Equal(["A", "C"], ProjectArchiveRules.ApplyScope(projects, ProjectScope.Active).Select(x => x.Title));
+        Assert.Equal(["B"], ProjectArchiveRules.ApplyScope(projects, ProjectScope.Archived).Select(x => x.Title));
+        Assert.Equal(3, ProjectArchiveRules.ApplyScope(projects, ProjectScope.All).Count());
+    }
+
+    private async Task SetProjectStatusAsync(int projectId, string status)
+    {
+        await context.Project.Where(x => x.Id == projectId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, status));
+        context.ChangeTracker.Clear();
     }
 
     private static TodoAdapterModel NewModel(string title, int projectId, int? parentId = null)

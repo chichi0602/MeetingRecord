@@ -68,6 +68,11 @@ public class TodoAdapterModel : ICloneable
 
     public bool IsSubtask => ParentTodoId is not null;
 
+    /// <summary>所屬專案的狀態（1.0.46，顯示用）。專案已完成＝封存，待辦唯讀（管理者除外）。</summary>
+    public string? ProjectStatus { get; set; }
+
+    public bool IsProjectArchived => ProjectStatus == ProjectAdapterModel.ArchivedStatus;
+
     [Required(ErrorMessage = "優先度 不可為空白")]
     public string Priority { get; set; } = PriorityOptions[1];
 

@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.13
+- 文件版本：2.14
 - 文件狀態：已實作
-- 現行系統版本：1.0.41
+- 現行系統版本：1.0.46
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/10/19
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -82,6 +82,7 @@
   - **AI 問答（0.4.73）**：`HasDraft || HasTranscript` 時出現——⚠️ **不要簡化成只看 `HasDraft`**，「已轉錄完成但還沒生成會議紀錄」的會議會因此失去入口，而那正是「先問問看逐字稿講了什麼再決定要不要花錢生成」最有用的時機。0.4.82～1.0.39 這是使用者接觸逐字稿內容的唯一路徑（1.0.40 起另有唯讀的逐字稿頁籤）。0.4.95 起提問可以附加圖片與檔案（規則與專案層級相同，見 [專案項目 PRD](專案項目-prd.md)）
   - **抽出待辦：0.4.83 起本頁沒有這顆鈕**（0.4.73～0.4.82 曾有）。待辦在資料表層級就必須有專案，而這一頁有一半的會議是未歸屬的，按了只能跳訊息叫使用者先去歸屬——那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案項目頁的清單裡，入口集中在那裡。
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
+  - **專案選單不列已完成專案（1.0.46）**：「歸屬到專案」與「AI 轉會議紀錄」的專案下拉走 `ProjectService.GetSelectableAsync()`，預設排除狀態「已完成」（封存）的專案；已歸屬到已完成專案的會議，清單上照常顯示原本的專案名稱。規則見 [專案項目 PRD](專案項目-prd.md)。
   - 修改（`edit`）、刪除（`delete`）
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
 - 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。
@@ -178,6 +179,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
   - **管理者**（`MyUser.IsAdmin`）看全部。
   - 看不到的當成不存在：UI 找不到、API 回 404。
   - 套用範圍：`MeetingService` 的清單、單筆、修改、刪除、上傳影音檔、重新轉錄、歸屬到專案、產生會議紀錄（目標專案也要看得到）、讀逐字稿（`ReadTranscriptAsync`，1.0.40），API 的 `MeetingRepository`，以及讀逐字稿原文的 **AI 問答**（`AiChatService.EnsureAccessAsync`，見 [AI 問答 PRD](AI問答-prd.md)）。分類只是標籤，不影響可見性。
+- **已完成（封存）專案的會議唯讀（1.0.46）**：會議歸屬的專案狀態是「已完成」時，一般使用者的修改、刪除、上傳影音檔、重新轉錄、從專案移除、編修會議紀錄都會被擋，歸屬到已完成專案、產生會議紀錄時指定已完成專案也一樣；訊息「這個專案已完成（封存），請先重新開啟再修改。」。管理者放行。檢視、下載 PDF、AI 問答不受影響。服務層一律經 `ProjectArchiveRules.CheckWritableAsync`。
 - 逐字稿內容為高敏感資料：0.4.82～1.0.39 沒有逐字稿預覽，讀逐字稿原文的唯一路徑是 AI 問答。1.0.40 起多了唯讀的逐字稿頁籤，經 `MeetingService.ReadTranscriptAsync(meetingId)` 讀取——與清單同樣經 `ProjectAccessService` 過濾，看不到的會議回 null（當成不存在），內容是 `MeetingFileStore.ReadTranscriptAsync` 濾過雜訊的版本；複製與下載另要匯出權限，成功後寫稽核。兩條路徑都在 Blazor 服務層、Cookie 驗證、經上述專案權控守門；**沒有任何可直接下載檔案的 HTTP 端點**。
 - 歷史（已失效，僅供對照）：
   - ~~0.4.98 以前以 `Meeting.Teams` 做團隊列級權控（`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`，無團隊＝公開）~~；0.4.35 從表單移除團隊欄位後，~~0.4.35～0.4.98 新建的會議一律公開~~，0.4.82 移除逐字稿預覽後 AI 問答一度沒有列級守門。0.4.99 改為專案權控解決，**0.4.103 `Meeting.Teams` 與上述兩個方法已刪除**。
@@ -274,6 +276,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - `ReadTranscriptAsync_*`（1.0.40，3 筆）：回傳逐字稿內容、沒有逐字稿回 null、看不到的會議（非成員）回 null。1.0.41 加 `ReadTranscriptAsync_ShouldConvertLegacySimplifiedTranscript`：舊的簡體逐字稿讀出來是繁體。
 - 簡轉繁另有 `ChineseTextConverterTests`（1.0.41，用真的 OpenCC 字典跑，順便驗證字典有複製到輸出目錄）：簡體字轉換、台灣字形（里面→裡面）、不轉用詞（软件→軟件）、繁體與中英混合原樣、空白原樣；`TranscriptionJobRunnerTests.Run_ShouldSaveTranscriptInTraditionalChinese` 直接讀存下來的原始檔，確認寫入的就是繁體。
 - `GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_Member_ShouldSeeOwnProjectsAndOwnUnassignedMeetings`、`GetAsync_UserWithoutProjects_ShouldSeeNothingOfOthers`、`GetById_NonMember_ShouldDenyMeetingOfOtherProject`、`GetAsync_WithKeyword_ShouldMatchMediaFileName`：可見性（專案權控）與查詢條件。舊的團隊標籤可見性與 `TeamFilter` 測試已於 0.4.99／0.4.103 移除。
+- `ArchivedProject_MemberCannotAttachOrEditDrafts_AdminCan`（1.0.46）：已完成（封存）專案，一般成員不能把會議歸屬進去、不能編修會議紀錄，管理者可以。
 
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TranscriptionRequestTests.cs`（只測純函式，**不打真實 API、不跑真實 ffmpeg**）：
 

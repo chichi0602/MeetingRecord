@@ -153,6 +153,12 @@ public class TodoRepository
             }
         }
 
+        // 1.0.46：已完成（封存）的專案唯讀（管理者不受限），控制器回 400。
+        if (await ProjectArchiveRules.CheckWritableAsync(context, todo.ProjectId, access) is { } archivedError)
+        {
+            throw new InvalidOperationException(archivedError);
+        }
+
         // 子項目（1.0.45）：與畫面同一份規則；違規丟 InvalidOperationException，控制器回 400。
         if (await TodoHierarchyRules.ValidateAsync(context, null, todo.ProjectId, todo.ParentTodoId) is { } hierarchyError)
         {
@@ -186,6 +192,12 @@ public class TodoRepository
             // 對外仍當成不存在（404），稽核另外記下（1.0.34）。
             await AuditDeniedAsync(nameof(Todo), todo.Id, "Update");
             return false;
+        }
+
+        // 1.0.46：已完成（封存）的專案唯讀（管理者不受限）；搬進封存專案也不行。控制器回 400。
+        if ((await ProjectArchiveRules.CheckWritableAsync(context, existing.ProjectId, access) ?? await ProjectArchiveRules.CheckWritableAsync(context, todo.ProjectId, access)) is { } archivedError)
+        {
+            throw new InvalidOperationException(archivedError);
         }
 
         // 子項目（1.0.45）：與畫面同一份規則；違規丟 InvalidOperationException，控制器回 400。
@@ -255,6 +267,12 @@ public class TodoRepository
         {
             await AuditDeniedAsync(nameof(Todo), id, "Delete");
             return false;
+        }
+
+        // 1.0.46：已完成（封存）的專案唯讀（管理者不受限），控制器回 400。
+        if (await ProjectArchiveRules.CheckWritableAsync(context, todo.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
+        {
+            throw new InvalidOperationException(archivedError);
         }
 
         context.Todo.Remove(todo);

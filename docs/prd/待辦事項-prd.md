@@ -1,10 +1,10 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.12
+- 文件版本：1.13
 - 文件狀態：已實作
-- 現行系統版本：1.0.45
+- 現行系統版本：1.0.46
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/10/19
 
 > **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
@@ -27,7 +27,7 @@
 
 ## 三、畫面與欄位
 
-- 工具列（**0.4.67 改為一列排完；0.4.75 左右對調**）：左側新增、重新整理；右側專案過濾（150px）、狀態過濾（110px）、關鍵字輸入（160px）、搜尋、清空搜尋（僅在有關鍵字時出現）。欄寬刻意壓窄，讓整列在雙欄版面下仍塞得進一行。Icon 一律 Material Icons Outlined。（分類過濾與團隊過濾已於 0.4.66 移除）
+- 工具列（**0.4.67 改為一列排完；0.4.75 左右對調**）：左側新增、重新整理；右側專案過濾（150px）、狀態過濾（110px）、關鍵字輸入（160px）、搜尋、清空搜尋（僅在有關鍵字時出現）。欄寬刻意壓窄，讓整列在雙欄版面下仍塞得進一行。Icon 一律 Material Icons Outlined。（分類過濾與團隊過濾已於 0.4.66 移除）**1.0.46 起專案過濾前面多一組「使用中｜已完成｜全部」**，見「已完成專案的待辦（1.0.46）」。
 
   0.4.75 之前本頁是**全站唯一**把新增／重新整理擺在右邊的清單頁，與使用者、角色、分類、會議紀錄、提示詞範本、團隊六頁相反，已對調過來。⚠️ **「搜尋」與「清空搜尋」的前後順序刻意保持與其他頁不同**：清空鈕是條件顯示的，排在搜尋之前會讓「搜尋」在使用者打字時往右跳一格。見 [待辦工具列左右對齊](../changelog/2026-09-16-待辦工具列左右對齊.md)。
 - 清單欄位：完成勾選、待辦事項（**單行省略，旁邊有資訊 icon 開唯讀對話框看完整描述**）、所屬專案、來源會議紀錄、負責人、截止日、優先度、狀態、操作。表格設 `ScrollX="870px"`（0.4.92 從 1020 降下來），窄容器下橫向捲動而不是把欄位擠爛（全站唯一一頁這樣設，因為右側多了面板）。欄位左右留白從 AntDesign 預設的 16px 收到 8px，各欄寬依內容實測重訂；寬螢幕多出來的寬度**全部交給「待辦事項」欄**，「完成」「負責人」「操作」等窄欄維持固定寬。所屬專案與來源會議紀錄一律單行省略、游標移上去看完整名稱。⚠️ 0.4.91 之前 1401～1520px（雙欄時）表格被右側面板擠到塞不下 1020px 而變成可以橫向捲動，固定在右側的「操作」欄左緣因此出現一條陰影線，「狀態」欄被整個蓋在操作欄底下。現在雙欄從 1401px 起、單欄從約 1080px 起都塞得下；比那更窄的視窗刻意保留橫向捲動，那時那條線是正常的「往右還有內容」提示。（分類與團隊兩欄已於 0.4.66 移除）
@@ -140,6 +140,16 @@
 - **API**：`TodoCreateUpdateDto`（`TodoDto` 繼承）多 `parentTodoId`。⚠️ PUT 是整筆取代，沒帶 `parentTodoId` 會把子項目脫離主待辦。
 - **AutoMapper**：映射回實體時忽略 `Parent`／`Children`（否則 EF 會把掛著的子項目當新資料插入）；`Todo`→AdapterModel 也忽略 `Children`（清單自己填）。
 
+### 已完成專案的待辦（1.0.46）
+
+專案狀態「已完成」就是封存（規則見 [專案項目 PRD](專案項目-prd.md)），已完成專案的待辦預設不列、而且唯讀。細節見 [changelog](../changelog/2026-10-19-已完成專案封存與檢視切換.md)。
+
+- **檢視切換「使用中｜已完成｜全部」**（`ProjectScopeSwitch`，與專案頁共用）：預設「使用中」，**不記憶**，每次開頁都回到使用中。清單與右側負責人面板（筆數、完成度、小清單）都只算目前檢視範圍內專案的待辦——`DataRequest.ProjectScope`、`GetOwnerSummariesAsync`／`GetByOwnerAsync` 的 `scope` 參數，經 `ProjectArchiveRules.ApplyScope` 依待辦所屬專案的狀態過濾（預設 `All`，API 與其他呼叫端不受影響）。
+- **專案過濾**跟著檢視列出對應的專案；切換檢視時，原本選的專案不在範圍內就清掉。
+- **新增／編輯表單的專案選單**不列已完成專案（正在編輯的那筆本來就在已完成專案時例外，避免顯示空白）。
+- **唯讀**：已完成專案的待辦，勾完成停用，修改、刪除、新增子項目按鈕隱藏；異動紀錄照常可看。管理者不受限。服務層（`TodoService` 的新增、修改、勾完成、刪除、AI 抽出更新既有待辦）與 API（`TodoRepository`）都經 `ProjectArchiveRules.CheckWritableAsync` 擋下，訊息「這個專案已完成（封存），請先重新開啟再修改。」；修改時原專案與目標專案都檢查，**搬進或搬出已完成專案都不行**。API 的新增、修改、刪除回 **400**。
+- **深連結**：通知鈴或 `/todos?todoId=N` 點到已完成專案的待辦時，檢視自動切到「全部」，清單上才找得到它。
+
 ## 四、設計決策
 
 | 議題 | 結論 |
@@ -186,7 +196,8 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/Notifications/UserNotificationService.cs`、`UserNotificationNotifier.cs`；`MeetingRecord.Web/BackgroundServices/NotificationRetentionBackgroundService.cs`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoHierarchyRules.cs`（`ValidateAsync`、`MoveChildrenAsync`，1.0.45）
-- 測試：`TodoChangeAndNotificationTests`（26 條：1.0.44 的 15 條＋1.0.45 子項目 11 條）、`TodoServiceTests`
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web/Components/Commons/ProjectScopeSwitch.razor`（1.0.46）
+- 測試：`TodoChangeAndNotificationTests`（34 條：1.0.44 的 15 條＋1.0.45 子項目 11 條＋1.0.46 封存 8 條）、`TodoServiceTests`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

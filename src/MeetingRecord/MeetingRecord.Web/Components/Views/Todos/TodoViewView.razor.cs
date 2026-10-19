@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Services;
 using Microsoft.JSInterop;
@@ -170,7 +171,7 @@ public partial class TodoViewView : IAsyncDisposable
             return;
         }
 
-        availableProjects = await projectService.GetSelectableAsync();
+        availableProjects = await projectService.GetSelectableAsync(includeArchived: true);
 
         await ReloadAsync();
     }
@@ -273,6 +274,7 @@ public partial class TodoViewView : IAsyncDisposable
             PageSize = _pageSize,
             Take = 0,
             ProjectFilter = selectedProjectFilter > 0 ? selectedProjectFilter : null,
+            ProjectScope = projectScope,
             StatusFilter = string.IsNullOrWhiteSpace(selectedStatusFilter) ? null : selectedStatusFilter,
         });
 
@@ -303,6 +305,38 @@ public partial class TodoViewView : IAsyncDisposable
 
     #region 過濾與排序
 
+    #region 已完成＝封存（1.0.46）
+
+    /// <summary>「使用中｜已完成｜全部」，預設使用中：已完成專案的待辦預設不列出。每次開頁都回到使用中。</summary>
+    private ProjectScope projectScope = ProjectScope.Active;
+
+    /// <summary>專案篩選下拉：跟著檢視列出對應的專案。</summary>
+    private List<ProjectAdapterModel> ScopedProjects
+        => availableProjects.Where(p => ProjectArchiveRules.Matches(p.Status, projectScope)).ToList();
+
+    /// <summary>新增／編輯表單的專案選單：不列封存專案（正在編輯的那筆原本就在封存專案時例外，避免顯示空白）。</summary>
+    private List<ProjectAdapterModel> FormProjects
+        => availableProjects.Where(p => !p.IsArchived || p.Id == CurrentRecord.ProjectId).ToList();
+
+    /// <summary>封存專案的待辦唯讀；管理者不受限（全站慣例）。</summary>
+    private bool IsReadOnly(TodoAdapterModel todo) => todo.IsProjectArchived && !AuthenticationStateHelper.CheckIsAdmin();
+
+    private async Task OnProjectScopeChangedAsync(ProjectScope scope)
+    {
+        projectScope = scope;
+
+        // 篩選中的專案不在新的檢視範圍裡，就清掉篩選，不然清單會是空的而且看不出為什麼。
+        if (selectedProjectFilter > 0 && ScopedProjects.All(p => p.Id != selectedProjectFilter))
+        {
+            selectedProjectFilter = 0;
+        }
+
+        _pageIndex = 1;
+        await ReloadAsync();
+    }
+
+    #endregion
+
     private async Task OnProjectFilterChanged(int value)
     {
         selectedProjectFilter = value;
@@ -323,7 +357,7 @@ public partial class TodoViewView : IAsyncDisposable
     private async Task ReloadOwnerPanelAsync()
     {
         var projectFilter = selectedProjectFilter > 0 ? selectedProjectFilter : (int?)null;
-        ownerSummaries = await todoService.GetOwnerSummariesAsync(projectFilter);
+        ownerSummaries = await todoService.GetOwnerSummariesAsync(projectFilter, scope: projectScope);
 
         // 換專案後原本選中的人可能在新範圍裡沒有任何待辦，退回第一位而不是留一個空面板。
         if (ownerSummaries.All(x => x.Owner != selectedOwner))
@@ -333,7 +367,7 @@ public partial class TodoViewView : IAsyncDisposable
 
         ownerTodos = string.IsNullOrEmpty(selectedOwner)
             ? []
-            : await todoService.GetByOwnerAsync(selectedOwner, projectFilter);
+            : await todoService.GetByOwnerAsync(selectedOwner, projectFilter, scope: projectScope);
 
         ClampOwnerTodoFilter();
     }
@@ -389,7 +423,7 @@ public partial class TodoViewView : IAsyncDisposable
         var projectFilter = selectedProjectFilter > 0 ? selectedProjectFilter : (int?)null;
         ownerTodos = string.IsNullOrEmpty(selectedOwner)
             ? []
-            : await todoService.GetByOwnerAsync(selectedOwner, projectFilter);
+            : await todoService.GetByOwnerAsync(selectedOwner, projectFilter, scope: projectScope);
 
         // 換人刻意**不重設**篩選：典型用法是跨人巡同一個狀態（「還有誰有逾期」），
         // 每換一個人就要重點一次等於把功能做廢一半。對新的人沒意義的篩選由 clamp 收掉。
@@ -460,9 +494,16 @@ public partial class TodoViewView : IAsyncDisposable
         }
 
         // 切到它所屬的專案，清單上才找得到它；異動紀錄直接打開，通知點進來最想看的就是「改了什麼」。
-        if (selectedProjectFilter != todo.ProjectId)
+        // 1.0.46：封存專案的待辦在「使用中」看不到，切到全部。
+        var scopeMismatch = !ProjectArchiveRules.Matches(todo.ProjectStatus, projectScope);
+        if (selectedProjectFilter != todo.ProjectId || scopeMismatch)
         {
             selectedProjectFilter = todo.ProjectId;
+            if (scopeMismatch)
+            {
+                projectScope = ProjectScope.All;
+            }
+
             _pageIndex = 1;
             await ReloadAsync();
         }
@@ -574,7 +615,7 @@ public partial class TodoViewView : IAsyncDisposable
     private async Task OnRefreshAsync()
     {
         logger.LogInformation("Todo refresh triggered.");
-        availableProjects = await projectService.GetSelectableAsync();
+        availableProjects = await projectService.GetSelectableAsync(includeArchived: true);
         await ReloadAsync();
         NotifySuccess("已更新最新資料");
     }
@@ -605,15 +646,16 @@ public partial class TodoViewView : IAsyncDisposable
     {
         // 開表單前重載可選專案（0.4.115）：有人替你加了協作團隊後，清單已經看得到新專案的待辦，
         // 這裡沒更新的話，編輯那筆時「所屬專案」會是空白。
-        availableProjects = await projectService.GetSelectableAsync();
+        availableProjects = await projectService.GetSelectableAsync(includeArchived: true);
         CurrentRecord = new TodoAdapterModel
         {
             Status = StatusOptions[0],
             Priority = PriorityOptions[1],
-            // 已經套用專案過濾時，新增的待辦預設落在同一個專案，省一次選取。
-            ProjectId = selectedProjectFilter > 0
+            // 已經套用專案過濾時，新增的待辦預設落在同一個專案，省一次選取；
+            // 但不會落在已完成（封存）的專案（1.0.46）。
+            ProjectId = availableProjects.Any(p => p.Id == selectedProjectFilter && !p.IsArchived)
                 ? selectedProjectFilter
-                : availableProjects.FirstOrDefault()?.Id ?? 0,
+                : availableProjects.FirstOrDefault(p => !p.IsArchived)?.Id ?? 0,
         };
 
         isNewRecordMode = true;
@@ -650,7 +692,7 @@ public partial class TodoViewView : IAsyncDisposable
     /// <summary>主待辦列的「新增子項目」：預填同專案與主待辦，其他欄位照一般新增。</summary>
     private async Task OnAddSubtaskAsync(TodoAdapterModel parent)
     {
-        availableProjects = await projectService.GetSelectableAsync();
+        availableProjects = await projectService.GetSelectableAsync(includeArchived: true);
         CurrentRecord = new TodoAdapterModel
         {
             Status = StatusOptions[0],
@@ -671,7 +713,7 @@ public partial class TodoViewView : IAsyncDisposable
 
     private async Task OnEditAsync(TodoAdapterModel todoAdapterModel)
     {
-        availableProjects = await projectService.GetSelectableAsync();
+        availableProjects = await projectService.GetSelectableAsync(includeArchived: true);
         isNewRecordMode = false;
         modalTitle = "修改待辦事項";
         CurrentRecord = todoAdapterModel.Clone();

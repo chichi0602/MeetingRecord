@@ -227,6 +227,12 @@ public class TodoController : ControllerBase
             logger.LogInformation("Todo deleted successfully. TodoId={TodoId}", id);
             return Ok(ApiResult.SuccessResult("刪除待辦事項成功"));
         }
+        catch (InvalidOperationException ex)
+        {
+            // 1.0.46：已完成（封存）專案的待辦不能刪，屬於請求錯誤而不是伺服器錯誤。
+            logger.LogWarning("Todo delete request rejected. TodoId={TodoId}, Reason={Reason}", id, ex.Message);
+            return BadRequest(ApiResult.ValidationError(ex.Message));
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to delete todo. TodoId={TodoId}", id);

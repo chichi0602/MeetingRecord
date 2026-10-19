@@ -1,10 +1,10 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.7
+- 文件版本：1.8
 - 文件狀態：已實作
-- 現行系統版本：1.0.45
+- 現行系統版本：1.0.46
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/10/19
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
@@ -58,6 +58,7 @@
 - `POST` 一律由資料庫配號，不照抄用戶端的 `id`（0.4.115，待辦、專案同）。
 - 待辦的 `status` 必須是 待辦／進行中／已完成、`priority` 必須是 低／中／高，否則 **400**（0.4.115）。
 - 待辦的 `parentTodoId`（1.0.45，`TodoCreateUpdateDto`，`TodoDto` 繼承）：指定主待辦就成為子項目。與畫面共用 `TodoHierarchyRules`，違反時 `POST`／`PUT` 都回 **400** 並帶訊息：主待辦本身是子項目（只允許一層）、這筆已有子項目卻要掛到別人底下、指定自己、與主待辦不同專案。`PUT` 現在也把 `InvalidOperationException` 轉成 400。⚠️ `PUT` 是**整筆取代**：沒帶 `parentTodoId` 會把子項目脫離主待辦。主待辦換專案時子項目跟著搬；`DELETE` 主待辦會連同子項目一起刪。
+- 已完成（封存）專案的待辦（1.0.46）：非管理者對狀態「已完成」的專案 `POST`／`PUT`／`DELETE` 待辦都回 **400**「這個專案已完成（封存），請先重新開啟再修改。」；`PUT` 的原專案與目標專案都檢查（搬進、搬出都不行）。管理者不受限。與畫面共用 `ProjectArchiveRules.CheckWritableAsync`；`DELETE` 也會把 `InvalidOperationException` 轉成 400。要恢復修改，先把專案狀態改回其他狀態（`PUT api/Project/{id}` 不受此限）。
 
 ## 三、認證控制器 `AuthController`
 

@@ -19,7 +19,7 @@ else
                     Value="@selectedProjectId"
                     ValueChanged="OnProjectSelectedAsync"
                     DataSource="@FilteredProjects"
-                    LabelName="@nameof(ProjectAdapterModel.Title)"
+                    LabelName="@nameof(ProjectAdapterModel.SelectorLabel)"
                     ValueName="@nameof(ProjectAdapterModel.Id)"
                     Placeholder="請選擇專案"
                     EnableSearch
@@ -70,6 +70,8 @@ else
 
           @* 篩選只縮小上面的專案下拉，不影響誰看得到。MaxTagCount=1：多選時收成「+N」，寬度固定不撐開。 *@
           <div class="project-view-picker-right">
+            @* 1.0.46：已完成＝封存。預設只看使用中，每次開頁都回到使用中。 *@
+            <ProjectScopeSwitch Value="@projectScope" ValueChanged="OnProjectScopeChangedAsync" />
             <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
                     Values="teamFilters" OnSelectedItemsChanged="OnTeamFiltersChanged"
                     Placeholder="團隊" MaxTagCount="1"
@@ -95,7 +97,7 @@ else
                     Placeholder="狀態" MaxTagCount="1"
                     AllowClear
                     Style="width: 140px;">
-                @foreach (var s in StatusOptions)
+                @foreach (var s in ScopeStatusOptions)
                 {
                     <SelectOption TItemValue="string" TItem="string" Value="@s">@s</SelectOption>
                 }
@@ -111,6 +113,21 @@ else
         }
         else
         {
+            @if (SelectedProject.IsArchived)
+            {
+                @* 1.0.46：已完成＝封存，一般使用者唯讀（管理者不受限，但提示照樣顯示）。 *@
+                <div class="project-view-archived">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="inventory_2" />
+                    <span>這個專案已完成（封存）@(IsReadOnlyProject ? "，目前是唯讀：可以檢視、下載 PDF、AI 問答，不能產生會議紀錄、抽出待辦或移除會議。" : "。你是管理者，仍可修改。")</span>
+                    @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+                    {
+                        <Button Size="ButtonSize.Small" Loading="@isReopening" OnClick="OnReopenAsync">
+                            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="unarchive" /><span>重新開啟</span></span>
+                        </Button>
+                    }
+                </div>
+            }
+
             <div class="project-view-summary">
                 <div class="project-view-summary-item">
                     <span class="project-view-summary-key">負責人</span>
@@ -172,7 +189,7 @@ else
                 </div>
             </div>
 
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit) && !IsReadOnlyProject)
             {
                 <div class="project-view-ai-panel">
                     <div class="project-view-ai-head">
@@ -331,7 +348,8 @@ else
                             @* 這顆鈕真正做的事是「新增待辦」，所以權限鍵是待辦事項而不是專案項目。
                                HasDraft 與同列的「檢視會議紀錄」一致——沒有草稿就沒有東西可抽。 *@
                             @if (context.HasDraft
-                                 && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                                 && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create)
+                                 && !IsReadOnlyProject)
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="抽出待辦" Icon="playlist_add"
@@ -346,7 +364,7 @@ else
                             @* 生成錯專案的出口。刻意是「移除歸屬」而不是刪除：影音檔與逐字稿留著，
                                那份逐字稿會回到可選清單，指定到正確的專案重跑即可——不必重新上傳、
                                也不會再付一次轉錄費用。真正的整筆刪除仍然只在「會議紀錄」頁。 *@
-                            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
+                            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete) && !IsReadOnlyProject)
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="從專案移除" Icon="link_off" Danger="true"

@@ -1,0 +1,32 @@
+/* 分段切換（1.0.46）：高度與 AntDesign 預設尺寸的輸入框、按鈕一致（32px），放在工具列裡對得齊。 */
+.project-scope-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    padding: 2px;
+    border: 1px solid var(--oat-300);
+    border-radius: 8px;
+    background: var(--oat-50);
+}
+
+.project-scope-switch-item {
+    height: 26px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--oat-ink-mid);
+    font-size: 0.88rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+    .project-scope-switch-item:hover {
+        color: var(--oat-ink);
+    }
+
+.project-scope-switch-item-active {
+    background: var(--oat-surface);
+    box-shadow: 0 1px 3px rgba(67, 54, 44, 0.15);
+    color: var(--oat-ink);
+    font-weight: 600;
+}

@@ -216,9 +216,79 @@ public partial class ProjectViewView : IDisposable
     /// <summary>團隊篩選的選項：全部啟用中的團隊。</summary>
     private List<ProjectService.TeamOption> filterTeamOptions = [];
 
+    #region 已完成＝封存（1.0.46）
+
+    /// <summary>「使用中｜已完成｜全部」。每次開頁都是使用中（不記憶，使用者決定）。</summary>
+    private ProjectScope projectScope = ProjectScope.Active;
+
+    private bool isReopening;
+
+    /// <summary>封存且不是管理者：唯讀。管理者不受限（全站慣例），但提示條照樣顯示。</summary>
+    private bool IsReadOnlyProject => SelectedProject?.IsArchived == true && !AuthenticationStateHelper.CheckIsAdmin();
+
+    /// <summary>狀態細篩只列目前檢視範圍內的狀態（例如「使用中」就不列「已完成」）。</summary>
+    private IEnumerable<string> ScopeStatusOptions
+        => StatusOptions.Where(s => ProjectArchiveRules.Matches(s, projectScope));
+
+    private Task OnProjectScopeChangedAsync(ProjectScope scope)
+    {
+        projectScope = scope;
+        statusFilters = statusFilters.Where(s => ProjectArchiveRules.Matches(s, scope)).ToList();
+        return KeepSelectionInFilterAsync();
+    }
+
+    /// <summary>重新開啟：把狀態改回「進行中」。改狀態本來就是編輯專案的一部分，所以要專案的修改權限。</summary>
+    private async Task OnReopenAsync()
+    {
+        if (SelectedProject is not { IsArchived: true } project || isReopening)
+        {
+            return;
+        }
+
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "重新開啟專案",
+            Content = $"「{project.Title}」會改回「進行中」，重新出現在使用中清單與其他頁的專案選單，並恢復可以修改。確定要重新開啟嗎？",
+            OkText = "重新開啟",
+            CancelText = "取消",
+            MaskClosable = false,
+        });
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        isReopening = true;
+        try
+        {
+            var model = project.Clone();
+            model.Status = ProjectAdapterModel.StatusOptions[1];
+            model.UpdatedAt = DateTime.Now;
+
+            var result = await projectService.UpdateAsync(model);
+            if (!result.Success)
+            {
+                NotifyError(result.Message);
+                return;
+            }
+
+            NotifySuccess($"「{project.Title}」已重新開啟。");
+            projects = await projectService.GetSelectableAsync(includeArchived: true);
+            await KeepSelectionInFilterAsync();
+        }
+        finally
+        {
+            isReopening = false;
+        }
+    }
+
+    #endregion
+
     private IEnumerable<ProjectAdapterModel> FilteredProjects
         => projects.Where(p =>
-            (teamFilters.Count == 0
+            ProjectArchiveRules.Matches(p.Status, projectScope)
+            && (teamFilters.Count == 0
                 || (p.PrimaryTeamId is { } primary && teamFilters.Contains(primary))
                 || p.CollaboratorTeamIds.Any(teamFilters.Contains))
             && (categoryFilters.Count == 0
@@ -339,7 +409,7 @@ public partial class ProjectViewView : IDisposable
 
     public async Task ReloadAsync()
     {
-        projects = await projectService.GetSelectableAsync();
+        projects = await projectService.GetSelectableAsync(includeArchived: true);
 
         // 選取的專案被刪掉、已不可存取、或被目前的篩選排除時，退回篩選結果的第一筆（0.4.114 起看篩選結果，
         // 不然下拉框裡沒有那個值而顯示空白，摘要卻還是那個專案）。
@@ -564,7 +634,8 @@ public partial class ProjectViewView : IDisposable
         draftCanEdit = false;
 
         draftCanSwitchToEdit = meeting.HasDraft
-            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit);
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
+            && !IsReadOnlyProject;
 
         // 這是專案頁：匯出權限看專案項目，與同一列的匯出鈕一致（0.4.109 前誤用會議紀錄的鍵）。
         var canExport = AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export);
@@ -1148,6 +1219,31 @@ public partial class ProjectViewView : IDisposable
                     NotifyError(beforeUpdateCheckResult.Message);
                     modalVisible = true;
                     return;
+                }
+
+                // 1.0.46：改成「已完成」就是封存，先講清楚後果再存。
+                var archiving = CurrentRecord.IsArchived && projects.FirstOrDefault(x => x.Id == CurrentRecord.Id)?.IsArchived == false;
+                if (archiving)
+                {
+                    var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+                    {
+                        Title = "確認把專案標為已完成（封存）",
+                        Content = "標為已完成後，這個專案會從「使用中」清單與其他頁的專案選單消失；"
+                            + "一般使用者只能檢視、下載 PDF、AI 問答，不能再產生會議紀錄、抽出或修改待辦。"
+                            + "之後隨時可以按「重新開啟」恢復。確定要標為已完成嗎？",
+                        OkText = "標為已完成",
+                        CancelText = "取消",
+                        MaskClosable = false,
+                    });
+
+                    if (!confirmed)
+                    {
+                        modalVisible = true;
+                        return;
+                    }
+
+                    // 存完之後還要看得到它：切到「全部」，不然它從使用中消失，看起來像被刪掉。
+                    projectScope = ProjectScope.All;
                 }
 
                 CurrentRecord.UpdatedAt = DateTime.Now;

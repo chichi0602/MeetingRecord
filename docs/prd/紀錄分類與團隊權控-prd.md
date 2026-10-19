@@ -1,12 +1,12 @@
 ﻿# 紀錄分類與團隊權控 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.47
 - 首次實作版本：0.4.0
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/10/19
 
-> **0.4.99 起，本文件描述的「紀錄上的團隊標籤字串」權控不再影響任何資料的可見性。** 0.4.102 起的現行機制是**主責＋協作團隊**：團隊＝誰的資料（部門，`Team`／`UserTeam`），專案透過 `ProjectTeam` 關聯表掛恰好一個主責團隊（`IsPrimary`，必填）加 0～多個協作團隊（比對 Id，不是名稱字串）；使用者所屬團隊與主責或協作有交集才看得到，**沒有公開專案**；會議跟著專案走（未歸屬的只有上傳者看得到），提示詞範本對所有人開放；判斷一律經 `ProjectAccessService`。角色的預設團隊（`RoleView.DefaultTeamsJson`）已刪除，`EffectiveTeamResolver` 只回傳使用者直接所屬的團隊。`Meeting`／`PromptTemplate` 的 `Teams` 字串欄位 0.4.99 起不再作用，**0.4.103 已刪除**（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`（「沒標團隊＝公開」的舊規則）與 `DataRequest.TeamFilters` 也一併刪除。**本文件第二節以後凡提到紀錄上的 `Teams` 標籤、團隊過濾與這兩個方法的段落，都是 0.4.98 以前的歷史紀錄。**
+> **0.4.99 起，本文件描述的「紀錄上的團隊標籤字串」權控不再影響任何資料的可見性。** 0.4.102 起的現行機制是**主責＋協作團隊**：團隊＝誰的資料（部門，`Team`／`UserTeam`），專案透過 `ProjectTeam` 關聯表掛恰好一個主責團隊（`IsPrimary`，必填）加 0～多個協作團隊（比對 Id，不是名稱字串）；使用者所屬團隊與主責或協作有交集才看得到，**沒有公開專案**；會議跟著專案走（未歸屬的只有上傳者看得到），提示詞範本對所有人開放；判斷一律經 `ProjectAccessService`。1.0.47 起另有兩條「看得到不等於都能做」的規則：會議的刪除／從專案移除／換影音檔／重新轉錄只限上傳者，專案的團隊設定與刪除只限主責團隊成員；現行規則的整理表見 [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)。角色的預設團隊（`RoleView.DefaultTeamsJson`）已刪除，`EffectiveTeamResolver` 只回傳使用者直接所屬的團隊。`Meeting`／`PromptTemplate` 的 `Teams` 字串欄位 0.4.99 起不再作用，**0.4.103 已刪除**（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`（「沒標團隊＝公開」的舊規則）與 `DataRequest.TeamFilters` 也一併刪除。**本文件第二節以後凡提到紀錄上的 `Teams` 標籤、團隊過濾與這兩個方法的段落，都是 0.4.98 以前的歷史紀錄。**
 >
 > **分類＝什麼資料**：0.4.102 起專案（新欄位 `Project.Categories`）與會議（`Meeting.Categories`）又會寫入分類標籤，仍以本文件描述的 `TagStringHelper` 換行包夾字串存名稱、以「含任一即符合」過濾，**不影響可見性**。
 >

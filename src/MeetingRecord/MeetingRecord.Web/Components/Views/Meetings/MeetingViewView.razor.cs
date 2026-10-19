@@ -188,6 +188,25 @@ public partial class MeetingViewView : IDisposable
     [Inject]
     public IAuditLogService AuditLogService { get; set; } = default!;
 
+    [Inject]
+    private ProjectAccessService ProjectAccessService { get; set; } = default!;
+
+    /// <summary>目前使用者的存取範圍（1.0.47），只用來決定上傳者專屬按鈕要不要出現；服務層另外把關。</summary>
+    private ProjectAccess? access;
+
+    /// <summary>刪除、換影音檔、重新轉錄只限上傳者與管理者（1.0.47）。</summary>
+    private bool IsOwner(MeetingAdapterModel meeting) => access?.IsMeetingOwner(meeting.CreatedByUserId) == true;
+
+    /// <summary>
+    /// 上傳者可以刪自己上傳的會議，即使角色沒有刪除權限；要有會議紀錄的「編輯」權限（與 API 的 DELETE 端點一致）。
+    /// </summary>
+    private bool CanDelete(MeetingAdapterModel meeting)
+        => IsOwner(meeting)
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit);
+
+    /// <summary>新增時一定可以選檔；修改別人上傳的會議不能換檔。</summary>
+    private bool CanChangeMedia => isNewRecordMode || IsOwner(CurrentRecord);
+
     public MeetingViewView(
         ILogger<MeetingViewView> logger,
         MeetingService meetingService,
@@ -235,6 +254,7 @@ public partial class MeetingViewView : IDisposable
         progressNotifier.Changed += OnTranscriptionProgressChanged;
         draftProgressNotifier.Changed += OnDraftProgressChanged;
 
+        access = await ProjectAccessService.GetAsync();
         availableCategories = await CategoryService.GetAllEnabledNamesAsync();
         await ReloadAsync();
     }
@@ -466,10 +486,16 @@ public partial class MeetingViewView : IDisposable
     {
         logger.LogInformation("Delete meeting requested. MeetingId={MeetingId}, Title={Title}", meetingAdapterModel.Id, meetingAdapterModel.Title);
 
+        // 1.0.47：寫清楚會刪什麼、留下什麼——待辦是正在追蹤的工作，刪會議時保留。
+        var linkedTodos = await meetingService.CountLinkedTodosAsync(meetingAdapterModel.Id);
+        var todoNote = linkedTodos > 0
+            ? $"從這場會議抽出的 {linkedTodos} 筆待辦會保留在專案裡（不再連到這場會議）。"
+            : string.Empty;
+
         var ok = await modalService.ConfirmAsync(new ConfirmOptions()
         {
             Title = "確認刪除",
-            Content = "確定要刪除這筆會議紀錄嗎？影音檔與逐字稿會一併刪除，此操作無法復原。",
+            Content = $"確定要刪除這筆會議紀錄嗎？影音檔、逐字稿、會議紀錄與 AI 問答會一併刪除。{todoNote}此操作無法復原。",
             OkText = "刪除",
             CancelText = "取消",
             OkButtonProps = new ButtonProps { Danger = true },

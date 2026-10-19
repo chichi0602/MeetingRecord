@@ -48,7 +48,7 @@ else
             {
                 <HoverTip Title="刪除專案">
                     <Button Type="ButtonType.Default" Class="project-view-icon-button-danger"
-                            Disabled="@(SelectedProject is null)"
+                            Disabled="@(!CanDeleteSelectedProject)"
                             OnClick="@(async () => await OnDeleteSelectedAsync())">
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete" /><span>刪除專案</span></span>
                     </Button>
@@ -364,7 +364,7 @@ else
                             @* 生成錯專案的出口。刻意是「移除歸屬」而不是刪除：影音檔與逐字稿留著，
                                那份逐字稿會回到可選清單，指定到正確的專案重跑即可——不必重新上傳、
                                也不會再付一次轉錄費用。真正的整筆刪除仍然只在「會議紀錄」頁。 *@
-                            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete) && !IsReadOnlyProject)
+                            @if (CanDetach(context))
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="從專案移除" Icon="link_off" Danger="true"
@@ -414,6 +414,7 @@ else
                             <div @onkeydown:stopPropagation="true">
                                 <Select TItem="int?" TItemValue="int?"
                                         @bind-Value="CurrentRecord.PrimaryTeamId"
+                                        Disabled="@(!CanEditTeams)"
                                         Placeholder="請選擇主責團隊"
                                         AllowClear EnableSearch Style="width: 100%;">
                                     @foreach (var team in PrimaryTeamOptions)
@@ -447,6 +448,7 @@ else
                             <div @onkeydown:stopPropagation="true">
                             <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
                                     Values="CurrentRecord.CollaboratorTeamIds" OnSelectedItemsChanged="OnCollaboratorTeamsChanged"
+                                    Disabled="@(!CanEditTeams)"
                                     Placeholder="可加入其他共同參與的團隊"
                                     AllowClear EnableSearch Style="width: 100%;">
                                 @foreach (var team in collaboratorTeamOptions.Where(x => x.Id != CurrentRecord.PrimaryTeamId))
@@ -457,7 +459,13 @@ else
                             </div>
                         </FormItem>
 
-                        <div class="project-view-hint form-modal-full">主責與協作團隊的成員（與管理者）看得到這個專案與底下的會議紀錄、待辦。</div>
+                        <div class="project-view-hint form-modal-full">
+                            主責與協作團隊的成員（與管理者）看得到這個專案與底下的會議紀錄、待辦。
+                            @if (!CanEditTeams)
+                            {
+                                <span>只有主責團隊的成員可以變更團隊設定。</span>
+                            }
+                        </div>
 
                         <FormItem Label="分類" Class="form-modal-full">
                             <div @onkeydown:stopPropagation="true">

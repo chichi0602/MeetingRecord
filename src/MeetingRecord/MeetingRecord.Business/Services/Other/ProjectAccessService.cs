@@ -12,13 +12,29 @@ namespace MeetingRecord.Business.Services.Other;
 /// <param name="UserId">使用者 Id；解析不到時為 0，這時什麼專案都看不到。</param>
 /// <param name="TeamIds">使用者所屬的團隊（<c>UserTeam</c>）。角色不帶任何團隊。</param>
 /// <param name="ProjectIds">看得到的專案：主責或協作團隊與 <see cref="TeamIds"/> 有交集。沒有公開專案。管理者不用這份清單。</param>
+/// <param name="PrimaryProjectIds">自己的團隊是<b>主責</b>的專案（1.0.47）：只有這些專案能改團隊設定、能刪除。管理者不用這份清單。</param>
 public sealed record ProjectAccess(
     bool IsAdmin,
     int UserId,
     IReadOnlyList<int> TeamIds,
-    IReadOnlyList<int> ProjectIds)
+    IReadOnlyList<int> ProjectIds,
+    IReadOnlyList<int>? PrimaryProjectIds = null)
 {
+    public const string ProjectTeamManageMessage = "只有主責團隊的成員可以變更團隊設定。";
+
     public bool CanViewProject(int projectId) => IsAdmin || ProjectIds.Contains(projectId);
+
+    /// <summary>
+    /// 能不能管理這個專案（1.0.47）：改主責／協作團隊、刪除專案。只有主責團隊的成員與管理者；
+    /// 協作團隊的人可以一起做事（改內容），但不能把主責團隊換掉或刪掉整個專案。
+    /// </summary>
+    public bool CanManageProject(int projectId) => IsAdmin || (PrimaryProjectIds?.Contains(projectId) ?? false);
+
+    /// <summary>
+    /// 是不是這場會議的上傳者（1.0.47）。刪除、從專案移除、換影音檔、重新轉錄、改歸屬只限上傳者與管理者；
+    /// 同專案的其他人可以看、可以編修。上傳者為 null 的舊會議只有管理者。
+    /// </summary>
+    public bool IsMeetingOwner(int? createdByUserId) => IsAdmin || (UserId != 0 && createdByUserId == UserId);
 
     /// <summary>
     /// 會議看得到的條件：已歸屬看專案；**未歸屬 → 只有上傳者**。
@@ -37,13 +53,29 @@ public sealed record ProjectAccess(
     /// <item>非管理者的主責只能選<b>自己所屬</b>的團隊；但主責<b>沒變</b>時照原樣保留——
     /// 協作團隊的人也能改專案內容，不能因為主責不是他的團隊就存不了檔。</item>
     /// <item>協作團隊任何人都可以選任何團隊（拉別的部門進來協作）；主責不重複列在協作裡。</item>
+    /// <item>既有專案（傳了 <paramref name="projectId"/>）而自己不是主責團隊成員時，主責與協作團隊都不能變（1.0.47）。</item>
     /// </list>
     /// </summary>
-    public ProjectTeamResolution ResolveProjectTeams(int? existingPrimaryTeamId, int? selectedPrimaryTeamId, IEnumerable<int> selectedCollaboratorTeamIds)
+    public ProjectTeamResolution ResolveProjectTeams(
+        int? existingPrimaryTeamId,
+        int? selectedPrimaryTeamId,
+        IEnumerable<int> selectedCollaboratorTeamIds,
+        int? projectId = null,
+        IEnumerable<int>? existingCollaboratorTeamIds = null)
     {
         if (selectedPrimaryTeamId is not { } primary)
         {
             return ProjectTeamResolution.Fail("請選擇主責團隊。");
+        }
+
+        if (projectId is { } id && !CanManageProject(id))
+        {
+            var existing = (existingCollaboratorTeamIds ?? []).Where(x => x != existingPrimaryTeamId).ToHashSet();
+            var selected = selectedCollaboratorTeamIds.Where(x => x != primary).ToHashSet();
+            if (primary != existingPrimaryTeamId || !existing.SetEquals(selected))
+            {
+                return ProjectTeamResolution.Fail(ProjectTeamManageMessage);
+            }
         }
 
         if (!IsAdmin && primary != existingPrimaryTeamId && !TeamIds.Contains(primary))
@@ -171,7 +203,14 @@ public sealed class ProjectAccessService
             .Select(p => p.Id)
             .ToListAsync();
 
-        return new ProjectAccess(false, scope.UserId, teamIds, projectIds);
+        var primaryProjectIds = await context.ProjectTeam
+            .AsNoTracking()
+            .Where(pt => pt.IsPrimary && teamIds.Contains(pt.TeamId))
+            .Select(pt => pt.ProjectId)
+            .Distinct()
+            .ToListAsync();
+
+        return new ProjectAccess(false, scope.UserId, teamIds, projectIds, primaryProjectIds);
     }
 
     /// <summary>

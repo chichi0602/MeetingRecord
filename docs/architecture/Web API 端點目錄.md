@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：1.0.46
+- 現行系統版本：1.0.47
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/10/19
 
@@ -25,7 +25,7 @@
 | 搜尋分頁 | `POST {controller}/search` | View | `ApiResult<PagedResult<TDto>>` |
 | 新增 | `POST {controller}` | Create | `ApiResult<TDto>`（同名回 `Conflict`）|
 | 更新 | `PUT {controller}/{id}` | Edit | `ApiResult`（路由/資料 ID 不符回 `BadRequest`；查無回 `NotFound`）|
-| 刪除 | `DELETE {controller}/{id}` | Delete | `ApiResult`（查無回 `NotFound`）|
+| 刪除 | `DELETE {controller}/{id}` | Delete（**`Meeting` 例外是 Edit**，1.0.47，見下方）| `ApiResult`（查無回 `NotFound`）|
 
 各控制器對應的路由前綴與權限鍵：
 
@@ -43,6 +43,8 @@
 > - `POST api/Project` 沒給 `primaryTeamId` 時，用建立者所屬、Id 最小的團隊當主責；建立者不屬於任何團隊時回 **400**「請先加入團隊，或指定主責團隊。」
 > - `PUT api/Project/{id}` 的這三個欄位為 null 時保留原值。
 > - 團隊選擇不合法（非管理者把主責改成不是自己的團隊、主責團隊不存在）回 **400**；規則與畫面共用 `ProjectAccess.ResolveProjectTeams`＋`ProjectTeamWriter`。
+> - **1.0.47**：`PUT api/Project/{id}` 由**不是主責團隊成員**的人送出、而主責或協作團隊與原本不同時回 **400**「只有主責團隊的成員可以變更團隊設定。」（三個欄位給 null＝保留原值，不算變更）；其他欄位照常可改。
+> - **1.0.47**：`DELETE api/Project/{id}` 看不到回 **404**；不是主責團隊成員回 **400**「只有主責團隊的成員可以刪除專案。」；專案已完成（封存）回 **400**「這個專案已完成（封存），請先重新開啟再修改。」。以前服務層任何失敗都回 500，現在只有帶例外的失敗才是 500。管理者不受限。
 > - `DELETE api/Team/{id}`：非管理者刪除還是某個專案主責團隊的團隊時回 **409**，訊息列出那些專案；只當協作團隊的可以刪。管理者不受此限（0.4.104）：照刪，受影響的專案就沒有主責團隊，之後編輯專案時再補；下次啟動時 `TeamConversionService` 會替沒有主責的專案補上（取協作團隊中 Id 最小的，沒有就掛「待分配」）。
 >
 > **會議與提示詞範本的 `teams` 欄位已移除（0.4.103）**：`MeetingCreateUpdateDto`／`PromptTemplateCreateUpdateDto` 不再有 `teams`（舊的團隊標籤字串，0.4.99 起已不影響可見性），舊客戶端仍送這個欄位會被忽略、不會報錯。分類請用 `categories`。
@@ -55,6 +57,7 @@
 - **只開放中繼資料**。影音檔上傳、語音轉錄與逐字稿讀取刻意不開 API——那些操作牽涉實體檔案、背景佇列與長時間外部呼叫，只在 Blazor 服務層提供（見 [會議紀錄 PRD](../prd/會議紀錄-prd.md)）。
 - `PUT` 與 `MeetingRepository.UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位，API 用戶端無法覆寫背景轉錄寫入的狀態。
 - `DELETE` 走 `MeetingService.DeleteAsync`（0.4.115）：和畫面同一套，一併清影音檔、逐字稿與 AI 問答對話；轉錄或會議紀錄生成進行中回 **400**。以前由控制器自己清兩個實體檔，對話檔留在磁碟上。
+- **`DELETE api/Meeting/{id}` 1.0.47 起要求 `會議紀錄:edit`（以前是 `delete`）**：刪除只限上傳者與管理者，由 `MeetingService.DeleteAsync` 把關，上傳者的角色只要能編輯就能刪自己上傳的（與畫面一致）。不是上傳者回 **400** `ValidationError`「只有上傳者或管理者可以刪除這筆會議紀錄。」；看不到回 404；沒有 `edit` 回 403。只有 `delete` 沒有 `edit` 的自訂角色從此呼叫不了這支 API。刪除會保留從這場會議抽出的待辦（`MeetingId` 改成 null）。
 - `POST` 一律由資料庫配號，不照抄用戶端的 `id`（0.4.115，待辦、專案同）。
 - 待辦的 `status` 必須是 待辦／進行中／已完成、`priority` 必須是 低／中／高，否則 **400**（0.4.115）。
 - 待辦的 `parentTodoId`（1.0.45，`TodoCreateUpdateDto`，`TodoDto` 繼承）：指定主待辦就成為子項目。與畫面共用 `TodoHierarchyRules`，違反時 `POST`／`PUT` 都回 **400** 並帶訊息：主待辦本身是子項目（只允許一層）、這筆已有子項目卻要掛到別人底下、指定自己、與主待辦不同專案。`PUT` 現在也把 `InvalidOperationException` 轉成 400。⚠️ `PUT` 是**整筆取代**：沒帶 `parentTodoId` 會把子項目脫離主待辦。主待辦換專案時子項目跟著搬；`DELETE` 主待辦會連同子項目一起刪。

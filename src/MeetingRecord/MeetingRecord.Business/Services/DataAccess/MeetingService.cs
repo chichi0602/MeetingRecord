@@ -384,6 +384,12 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限刪除這筆會議紀錄。");
             }
 
+            // 1.0.47：同專案的人可以看、可以編修，但刪除只限上傳者與管理者。
+            if (!(await projectAccess.GetAsync()).IsMeetingOwner(item.CreatedByUserId))
+            {
+                return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("刪除這筆會議紀錄"));
+            }
+
             // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
             if (await ProjectArchiveRules.CheckWritableAsync(context, item.ProjectId, await projectAccess.GetAsync()) is { } archivedError)
             {
@@ -473,6 +479,25 @@ public class MeetingService
     private static bool IsJobActive(Meeting meeting)
         => meeting.TranscriptionStatus is TranscriptionStatus.Pending or TranscriptionStatus.Processing
            || meeting.DraftStatus is DraftStatus.Pending or DraftStatus.Processing;
+
+    /// <summary>上傳者專屬動作被擋下時的訊息（1.0.47）。</summary>
+    public static string OwnerOnlyMessage(string action) => $"只有上傳者或管理者可以{action}。";
+
+    /// <summary>
+    /// 從這場會議抽出、還連著它的待辦筆數（1.0.47，刪除確認框用）。刪會議時這些待辦會保留，只是不再連到會議。
+    /// 只算看得到的會議；看不到的回 0。
+    /// </summary>
+    public async Task<int> CountLinkedTodosAsync(int meetingId, CancellationToken cancellationToken = default)
+    {
+        var access = await projectAccess.GetAsync();
+        var meetings = access.Filter(context.Meeting.AsNoTracking().Where(x => x.Id == meetingId));
+        if (!await meetings.AnyAsync(cancellationToken))
+        {
+            return 0;
+        }
+
+        return await context.Todo.AsNoTracking().CountAsync(x => x.MeetingId == meetingId, cancellationToken);
+    }
 
     #region 前置檢查
 
@@ -567,6 +592,12 @@ public class MeetingService
                 Logger.LogWarning("Meeting media upload denied by project access. MeetingId={MeetingId}", meetingId);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "MediaUpload");
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
+            }
+
+            // 1.0.47：換影音檔只限上傳者與管理者（新增會議時上傳者就是自己）。
+            if (!access.IsMeetingOwner(meeting.CreatedByUserId))
+            {
+                return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("更換這筆會議紀錄的影音檔"));
             }
 
             // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
@@ -736,6 +767,12 @@ public class MeetingService
                 Logger.LogWarning("Transcription requeue denied by project access. MeetingId={MeetingId}", meetingId);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "Retranscribe");
                 return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄執行轉錄。");
+            }
+
+            // 1.0.47：重新轉錄會覆蓋逐字稿，只限上傳者與管理者。
+            if (!access.IsMeetingOwner(meeting.CreatedByUserId))
+            {
+                return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("重新轉錄這筆會議紀錄"));
             }
 
             // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
@@ -939,6 +976,12 @@ public class MeetingService
                 Logger.LogWarning("Detach denied by project access. MeetingId={MeetingId}", meetingId);
                 await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DetachProject");
                 return VerifyRecordResultFactory.Build(false, "沒有權限移除這筆會議紀錄。");
+            }
+
+            // 1.0.47：從專案移除後只剩上傳者看得到，所以只限上傳者與管理者。
+            if (!access.IsMeetingOwner(meeting.CreatedByUserId))
+            {
+                return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("把這筆會議紀錄從專案移除"));
             }
 
             // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。

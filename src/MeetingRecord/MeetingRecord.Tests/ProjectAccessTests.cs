@@ -183,8 +183,9 @@ public sealed class ProjectAccessTests
     }
 
     [Fact]
-    public async Task UpdateProject_CollaboratorTeamMember_KeepsPrimary_AndCanChangeCollaborators()
+    public async Task UpdateProject_CollaboratorTeamMember_CanEditContent_ButNotTeams()
     {
+        // 1.0.47：協作團隊的人可以改專案內容，但團隊設定只有主責團隊的成員能改。
         await using var fixture = await Fixture.CreateAsync();
         var bob = await fixture.AddUserAsync("bob");
         var sales = await fixture.AddTeamAsync("業務部");
@@ -194,15 +195,79 @@ public sealed class ProjectAccessTests
         var service = fixture.CreateProjectService(bob.Id);
 
         var model = await service.GetAsync(project.Id);
-        model.CollaboratorTeamIds = [rd.Id, admin.Id];
         model.Categories = ["Java"];
-        var result = await service.UpdateAsync(model);
+        Assert.True((await service.UpdateAsync(model)).Success);
+        Assert.Equal(["Java"], (await service.GetAsync(project.Id)).Categories);
 
-        Assert.True(result.Success);
+        var addCollaborator = await service.GetAsync(project.Id);
+        addCollaborator.CollaboratorTeamIds = [rd.Id, admin.Id];
+        var takeOverPrimary = await service.GetAsync(project.Id);
+        takeOverPrimary.PrimaryTeamId = rd.Id;
+        takeOverPrimary.CollaboratorTeamIds = [];
+
+        Assert.Equal(ProjectAccess.ProjectTeamManageMessage, (await service.UpdateAsync(addCollaborator)).Message);
+        Assert.Equal(ProjectAccess.ProjectTeamManageMessage, (await service.UpdateAsync(takeOverPrimary)).Message);
+
         var links = await fixture.Context.ProjectTeam.AsNoTracking().ToListAsync();
         Assert.Equal(sales.Id, links.Single(x => x.IsPrimary).TeamId);
-        Assert.Equal(new[] { admin.Id, rd.Id }.Order().ToList(), links.Where(x => !x.IsPrimary).Select(x => x.TeamId).Order().ToList());
-        Assert.Equal(["Java"], (await service.GetAsync(project.Id)).Categories);
+        Assert.Equal([rd.Id], links.Where(x => !x.IsPrimary).Select(x => x.TeamId).ToList());
+    }
+
+    [Fact]
+    public async Task UpdateProject_PrimaryTeamMember_CanChangeTeams()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id);
+        var rd = await fixture.AddTeamAsync("研發部");
+        var admin = await fixture.AddTeamAsync("管理部");
+        var project = await fixture.AddProjectAsync("共用專案", sales.Id, rd.Id);
+        var service = fixture.CreateProjectService(alice.Id);
+
+        var model = await service.GetAsync(project.Id);
+        model.CollaboratorTeamIds = [admin.Id];
+        Assert.True((await service.UpdateAsync(model)).Success);
+
+        var links = await fixture.Context.ProjectTeam.AsNoTracking().ToListAsync();
+        Assert.Equal([admin.Id], links.Where(x => !x.IsPrimary).Select(x => x.TeamId).ToList());
+    }
+
+    [Fact]
+    public async Task DeleteProject_OnlyPrimaryTeamMemberOrAdmin_AndNotWhenArchived()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id);
+        var rd = await fixture.AddTeamAsync("研發部", bob.Id);
+        var shared = await fixture.AddProjectAsync("共用專案", sales.Id, rd.Id);
+        var archived = await fixture.AddProjectAsync("已結案", sales.Id);
+        await fixture.Context.Project.Where(x => x.Id == archived.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ProjectAdapterModel.ArchivedStatus));
+
+        var byCollaborator = await fixture.CreateProjectService(bob.Id).DeleteAsync(shared.Id);
+        var archivedByPrimary = await fixture.CreateProjectService(alice.Id).DeleteAsync(archived.Id);
+
+        Assert.Equal(ProjectService.ProjectDeleteManageMessage, byCollaborator.Message);
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, archivedByPrimary.Message);
+        Assert.Equal(2, await fixture.Context.Project.CountAsync());
+
+        Assert.True((await fixture.CreateProjectService(alice.Id).DeleteAsync(shared.Id)).Success);
+        Assert.True((await fixture.CreateProjectService(0, isAdmin: true).DeleteAsync(archived.Id)).Success);
+        Assert.False(await fixture.Context.Project.AnyAsync());
+    }
+
+    [Fact]
+    public void ResolveProjectTeams_NotPrimaryMember_SameTeams_IsAllowed()
+    {
+        var access = new ProjectAccess(false, 7, [2], [5], []);
+
+        var unchanged = access.ResolveProjectTeams(1, 1, [2, 3], projectId: 5, existingCollaboratorTeamIds: [3, 2]);
+        var changed = access.ResolveProjectTeams(1, 1, [2], projectId: 5, existingCollaboratorTeamIds: [3, 2]);
+
+        Assert.Null(unchanged.Error);
+        Assert.Equal(ProjectAccess.ProjectTeamManageMessage, changed.Error);
+        Assert.Null(new ProjectAccess(false, 7, [1], [5], [5]).ResolveProjectTeams(1, 1, [], projectId: 5, existingCollaboratorTeamIds: [3]).Error);
     }
 
     [Fact]

@@ -18,6 +18,7 @@ namespace MeetingRecord.Business.Services.DataAccess;
 public class ProjectService
 {
     public const long MaxUploadFileSize = 1024L * 1024L * 1024L;
+    public const string ProjectDeleteManageMessage = "只有主責團隊的成員可以刪除專案。";
 
     private readonly BackendDBContext context;
     private readonly string projectFileRootPath;
@@ -280,7 +281,13 @@ public class ProjectService
             // ⚠️ 一定要在改欄位之前驗證（0.4.114）：currentItem 是被追蹤的，先改欄位再 return 的話，
             //    被拒絕的修改會留在共用的 DbContext 裡，下一次任何人 SaveChanges 就被寫進資料庫。
             var existingPrimary = currentItem.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
-            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(existingPrimary, paraObject.PrimaryTeamId, paraObject.CollaboratorTeamIds));
+            // 1.0.47：不是主責團隊的成員時，團隊設定不能變（協作團隊的人不能把主責團隊換掉）。
+            var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(
+                existingPrimary,
+                paraObject.PrimaryTeamId,
+                paraObject.CollaboratorTeamIds,
+                currentItem.Id,
+                currentItem.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId)));
             if (teams.Error is not null)
             {
                 context.ChangeTracker.Clear();
@@ -341,12 +348,25 @@ public class ProjectService
     {
         Logger.LogInformation("Deleting project. ProjectId={ProjectId}", id);
 
-        // 能不能刪由角色的刪除權限決定；這裡只擋看不到的專案。
-        if (!(await projectAccess.GetAsync()).CanViewProject(id))
+        // 角色要有刪除權限（畫面與 API 各自檢查）；這裡擋看不到的專案，
+        // 1.0.47 起再擋「不是主責團隊的成員」與「已完成（封存）」，管理者不受限。
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewProject(id))
         {
             Logger.LogWarning("Project deletion denied by data group. ProjectId={ProjectId}", id);
             await AuditDataScopeDeniedAsync(id, "Delete");
             return VerifyRecordResultFactory.Build(false, "找不到要刪除的專案資料。");
+        }
+
+        if (!access.CanManageProject(id))
+        {
+            Logger.LogWarning("Project deletion denied because user is not in primary team. ProjectId={ProjectId}", id);
+            return VerifyRecordResultFactory.Build(false, ProjectDeleteManageMessage);
+        }
+
+        if (await ProjectArchiveRules.CheckWritableAsync(context, id, access) is { } archivedError)
+        {
+            return VerifyRecordResultFactory.Build(false, archivedError);
         }
 
         try

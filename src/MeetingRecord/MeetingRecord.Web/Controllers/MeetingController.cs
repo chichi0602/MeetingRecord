@@ -163,8 +163,10 @@ public class MeetingController : ControllerBase
         }
     }
 
+    // 1.0.47：刪除只限上傳者與管理者（服務層把關），上傳者是一般使用者也能刪自己上傳的，
+    // 所以這裡只要求「編輯」，與畫面一致。
     [HttpDelete("{id}")]
-    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Delete)]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]
     public async Task<ActionResult<ApiResult>> Delete(int id)
     {
         try

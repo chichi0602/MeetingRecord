@@ -271,7 +271,9 @@ public class ProjectRepository
             var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(
                 existingPrimary,
                 primaryTeamId ?? existingPrimary,
-                collaboratorTeamIds ?? existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId)));
+                collaboratorTeamIds ?? existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId),
+                existingProject.Id,
+                existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId)));
             if (teams.Error is not null)
             {
                 return (true, teams.Error);

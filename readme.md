@@ -292,6 +292,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 ### 認證與安全（security）
 
+- [權限與資料可見範圍總覽](docs/security/權限與資料可見範圍總覽.md) — 角色／團隊／分類、權限矩陣（誰看得到、誰能改）、上傳者與主責團隊專屬動作、刪除會帶走什麼。
 - [權限授權現況評估與改善路線](docs/security/權限授權現況評估與改善路線.md) — 角色／團隊／分類分工後的權控現況評估與後續改善項目。
 - [認證授權與權限機制](docs/security/認證授權與權限機制.md) — Cookie scheme、Claims、`RoleView` JSON、`Menu.json` 權限樹、`ProjectAccessService` 資料權控。
 - [密碼種類與儲存機制](docs/security/密碼種類與儲存機制.md) — 密碼種類盤點、`MyUser.Password` 雜湊、首次登入強制改密碼、種子密碼與機密金鑰。

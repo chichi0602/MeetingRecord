@@ -1,8 +1,8 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.15
+- 文件版本：4.16
 - 文件狀態：已實作
-- 現行系統版本：1.0.46
+- 現行系統版本：1.0.47
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
 - 最後核對日期：2026/10/19
 
@@ -13,7 +13,7 @@
 > - 規則在 `ProjectAccess.ResolveProjectTeams`，驗證與寫入在 `ProjectTeamWriter`，UI（`ProjectService`）與 API（`ProjectRepository`）共用。錯誤訊息：「請選擇主責團隊。」「主責團隊只能選擇自己所屬的團隊。」「找不到選擇的主責團隊。」
 > - 表單「分類」多選（啟用中的分類，存 `Project.Categories`），不影響可見性；專案選擇列右側有分類篩選（0.4.106 起與團隊、狀態篩選並列），縮小下拉清單（`ProjectService.GetAsync` 的 `CategoryFilters`）。
 > - 摘要列顯示主責團隊、協作團隊、分類。
-> - 「負責人」是手打文字欄位、不涉及權限；編輯／刪除專案**只看角色的動作權限**（`edit`／`delete`）。附件下載、AI 問答、抽出待辦都跟著專案可見性。判斷一律經 `ProjectAccessService`。
+> - 「負責人」是手打文字欄位、不涉及權限；編輯專案內容**只看角色的動作權限**（`edit`）。**1.0.47 起改團隊設定與刪除專案另限主責團隊成員**（見下方「主責團隊管團隊設定與刪除（1.0.47）」）。附件下載、AI 問答、抽出待辦都跟著專案可見性。判斷一律經 `ProjectAccessService`。
 > - API：DTO 多選填的 `primaryTeamId`／`collaboratorTeamIds`／`categories`；新增沒給主責用建立者 Id 最小的團隊（沒有團隊回 400「請先加入團隊，或指定主責團隊。」），更新時 null 保留原值。
 >
 > 0.4.101 曾用「資料群組」（沒掛群組＝公開、新專案帶入建立者全部群組）；0.4.99 的「成員」連結、`ProjectMemberModal`、`ProjectMemberService` 與 `ProjectMember` 表都已移除。下文「專案不再有列級可見性控管」「檢查團隊權限」等段落描述的是 0.4.98 以前的狀態。
@@ -48,7 +48,7 @@
   - **1.0.46 起篩選列最前面多一組「使用中｜已完成｜全部」**（`ProjectScopeSwitch`），見下方「已完成＝封存（1.0.46）」。專案下拉改用 `GetSelectableAsync(includeArchived: true)` 取全部再依檢視過濾；「狀態」篩選只列目前檢視範圍內的狀態。
 - 專案摘要列：負責人、**主責團隊、協作團隊、分類（0.4.102 起）**、期程、狀態、完成度、本專案的會議紀錄份數、**附件份數（0.4.43 起，可點開檢視與下載）**。
 - AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生。**0.4.65 起一律先跳費用確認對話框**（首次生成也跳，理由是會產生 API 費用），已有草稿時額外套紅色確認鈕並說明會覆蓋人工編修過的內容；按鈕在該筆已排入或生成中時停用（`CanGenerateDraft`），避免重複入列而重複計費。 **0.4.71 起提示詞下拉左邊多一個「與會人員」多選**，選項來自本專案的與會人員名冊（`Project.Participants`），用來勾選這場會議實際到場的人；名冊是空的時候欄位停用但不隱藏。勾選結果以快照存進 `Meeting.DraftAttendees`，連同專案的常用名詞一起餵給模型校正語音辨識聽錯的人名。與會人員是**選填**，不影響按鈕是否可按。
-- 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（**會議紀錄與逐字稿**、**匯出 PDF**、**抽出待辦**、AI 問答）。不分頁。**0.4.82 起逐字稿的預覽與編修整個移除**（0.4.55 曾提供）——檔案仍是生成與 AI 問答的輸入，只是不再有人直接讀／改的介面。 **1.0.40 起「檢視」與「編修」兩顆鈕合併成一顆「會議紀錄與逐字稿」**（圖示 `article`，`HasDraft || HasTranscript` 時出現；使用者反映操作欄太擠、兩顆長得像）：一律先唯讀開啟，有逐字稿時上方有「會議紀錄｜逐字稿」頁籤（沒有會議紀錄就直接停在逐字稿），逐字稿以純文字唯讀顯示，可「複製全文」「下載 .txt」（需 `專案項目:export`，UTF-8 含 BOM，檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`），逐字稿**仍不能改**；有 `專案項目:edit` 且已有會議紀錄時，視窗底部有「編修」切到左改右看，取消或儲存成功後回到唯讀檢視。讀逐字稿走 `MeetingService.ReadTranscriptAsync`（經專案權控）。STT 聽錯人名的補救改走「常用名詞名冊 ＋ 重新產生」或「直接改會議紀錄」，取捨見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.82 起「檢視／編修會議紀錄」共用 `Components/Commons/MarkdownEditorModal`**（左改右看 ＋ 常駐搜尋／取代列）；清單列上的「匯出 PDF」**保留**，視窗裡另有一顆「下載 PDF」（需 `專案項目:export`）。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。 **0.4.72 起操作欄多一顆「從專案移除」**（`link_off`，受 `delete` 權限管控）：清掉歸屬與 AI 草稿，但**影音檔與逐字稿保留**，那份逐字稿會回到可選清單，可以改指到正確的專案重跑——這是「生成錯專案」唯一的出口（先前只能整筆刪除，等於要重新上傳並重新付一次轉錄費用）。生成中（`Pending`／`Processing`）不准移除，否則背景工作結束時會把草稿寫回已經移除的紀錄。
+- 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（**會議紀錄與逐字稿**、**匯出 PDF**、**抽出待辦**、AI 問答）。不分頁。**0.4.82 起逐字稿的預覽與編修整個移除**（0.4.55 曾提供）——檔案仍是生成與 AI 問答的輸入，只是不再有人直接讀／改的介面。 **1.0.40 起「檢視」與「編修」兩顆鈕合併成一顆「會議紀錄與逐字稿」**（圖示 `article`，`HasDraft || HasTranscript` 時出現；使用者反映操作欄太擠、兩顆長得像）：一律先唯讀開啟，有逐字稿時上方有「會議紀錄｜逐字稿」頁籤（沒有會議紀錄就直接停在逐字稿），逐字稿以純文字唯讀顯示，可「複製全文」「下載 .txt」（需 `專案項目:export`，UTF-8 含 BOM，檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`），逐字稿**仍不能改**；有 `專案項目:edit` 且已有會議紀錄時，視窗底部有「編修」切到左改右看，取消或儲存成功後回到唯讀檢視。讀逐字稿走 `MeetingService.ReadTranscriptAsync`（經專案權控）。STT 聽錯人名的補救改走「常用名詞名冊 ＋ 重新產生」或「直接改會議紀錄」，取捨見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.82 起「檢視／編修會議紀錄」共用 `Components/Commons/MarkdownEditorModal`**（左改右看 ＋ 常駐搜尋／取代列）；清單列上的「匯出 PDF」**保留**，視窗裡另有一顆「下載 PDF」（需 `專案項目:export`）。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。 **0.4.72 起操作欄多一顆「從專案移除」**（`link_off`，受 `delete` 權限管控；**1.0.47 起只對會議的上傳者與管理者顯示**，角色要 `edit` 或 `delete`）：清掉歸屬與 AI 草稿，但**影音檔與逐字稿保留**，那份逐字稿會回到可選清單，可以改指到正確的專案重跑——這是「生成錯專案」唯一的出口（先前只能整筆刪除，等於要重新上傳並重新付一次轉錄費用）。生成中（`Pending`／`Processing`）不准移除，否則背景工作結束時會把草稿寫回已經移除的紀錄。
 - **匯出 PDF**（0.4.40，取代 0.4.34 的 Markdown 匯出）：把表頭（專案、會議、日期、使用提示詞、產生時間）加上會議紀錄內文組成 HTML（Markdown 經 Markdig 轉換，支援表格），再以**系統既有的 Edge／Chrome 無頭列印**產生 PDF，經 JS interop 直接推給瀏覽器下載，**檔案不落地、不新增 HTTP 檔案輸出面**。內容不含逐字稿。檔名為 `會議紀錄_{標題}_{產生日}.pdf`。
   - 中文字型由瀏覽器處理（實測 Edge 會把微軟正黑體以子集嵌入，含 `Identity-H` 與 `ToUnicode`，文字可複製可搜尋），**專案不需放任何字型檔**。
   - 產生期間按鈕顯示「匯出中…」並停用，避免重複點擊啟動多個瀏覽器程序。
@@ -85,8 +85,8 @@
 - 讀取：清單 `GetAsync(DataRequest)` 使用 `AsNoTracking`；單筆 `GetAsync(int)` 以 `Include(x => x.Files)` 帶附件。
 - 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單。
 - AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。 **0.4.71 起多一個選填的 `attendees` 參數**（插在 `promptTemplateId` 之後、`CancellationToken` 之前），清洗後以快照寫入 `Meeting.DraftAttendees`，上限 50 人。刻意**不檢查勾選的人是否真的在名冊內**——UI 只提供名冊選項，加檢查只會製造「別人改了名冊就整筆退回」的假失敗。實際的提示詞組裝見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)。
-- 從專案移除：`MeetingService.DetachFromProjectAsync(meetingId, projectId)` 檢查團隊權限、歸屬是否相符（擋畫面過期）與是否正在生成，通過後清空 `ProjectId` 與整組 `Draft*` 欄位。**不動**影音檔、逐字稿、該會議的 AI 問答對話與已抽出的待辦（待辦有自己的 `ProjectId`）。
-- 刪除專案：`OnDelete(DeleteBehavior.SetNull)` —— 底下的會議紀錄不會被刪除，只解除歸屬；確認對話框會明白告知這件事。
+- 從專案移除：`MeetingService.DetachFromProjectAsync(meetingId, projectId)` 檢查團隊權限、**是否為上傳者或管理者（1.0.47，`ProjectAccess.IsMeetingOwner`）**、歸屬是否相符（擋畫面過期）與是否正在生成，通過後清空 `ProjectId` 與整組 `Draft*` 欄位。**不動**影音檔、逐字稿、該會議的 AI 問答對話與已抽出的待辦（待辦有自己的 `ProjectId`）。
+- 刪除專案：`OnDelete(DeleteBehavior.SetNull)` —— 底下的會議紀錄不會被刪除，只解除歸屬（之後只有上傳者看得到）；確認對話框會明白告知這件事。一起刪掉的是待辦（含子項目與異動紀錄）、附件（資料列與實體檔）、團隊連結、專案層級的 AI 問答對話與 AI 對話紀錄；通知、稽核、Token 用量帳本保留。完整對照見 [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md) 第五節。
 - 寫入前清追蹤：`AddAsync`／`UpdateAsync`／`DeleteAsync` 進入時皆呼叫 `CleanTrackingHelper.Clean<Project>(context)`（`ProjectService.AddAsync`、`UpdateAsync`、`DeleteAsync`）。
 - 附件 Adapter：UI 以 `ProjectUploadFileInput`（FileName/ContentType/FileSize/Content）傳入；Service 依主表 `CreatedAt` 年／月建立目錄，檔名以 GUID 產生，落地後寫入 `ProjectFile`；刪除主表時先刪實體檔再刪紀錄。
 - Migration：模型異動需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
@@ -98,6 +98,13 @@
 - **角色權限只決定「能做什麼功能」，不決定「能看到哪些資料」**：動作（新增／修改／刪除／匯出）以 `[HasPermission("resource:action")]` 與 `CheckAccessAction` 控管。
 - **資料可見範圍由主責＋協作團隊決定**（0.4.102 起；0.4.39～0.4.98 沒有列級控管、0.4.99～0.4.100 為專案成員制、0.4.101 為資料群組）：使用者所屬團隊與專案的主責或協作團隊有交集才看得到，沒有公開專案；看不到的專案當成不存在（UI 找不到、API 404）。規則見 [開發慣例與限制速查 §4.0](../architecture/開發慣例與限制速查.md)。
 - **已完成＝封存（1.0.46）**：改專案內容的路徑（待辦、會議的產生／歸屬／移除／編修、專案附件上傳與刪除）一律經 `ProjectArchiveRules.CheckWritableAsync`，封存時一般使用者收到「這個專案已完成（封存），請先重新開啟再修改。」；管理者放行。畫面隱藏按鈕只是提示，服務層才是守門。
+- **主責團隊管團隊設定與刪除（1.0.47）**：`ProjectAccess.CanManageProject`（主責團隊成員或管理者，依 `PrimaryProjectIds`）。
+  - 修改既有專案時，非主責團隊成員送出的主責或協作團隊與原本不同就擋下：「只有主責團隊的成員可以變更團隊設定。」（`ResolveProjectTeams` 傳入 `projectId`、原協作團隊；UI `ProjectService.UpdateAsync` 與 API `ProjectRepository.UpdateAsync` 共用，API 回 400）。協作團隊的人仍可改其他內容並存檔。畫面上兩個團隊欄位對非主責成員停用，提示句後面加「只有主責團隊的成員可以變更團隊設定。」。
+  - 刪除專案：`ProjectService.DeleteAsync` 依序擋看不到（「找不到要刪除的專案資料。」）、非主責團隊成員（「只有主責團隊的成員可以刪除專案。」）、已完成（封存）（「這個專案已完成（封存），請先重新開啟再修改。」）；API 看不到回 404，後兩種回 400 `ValidationError`（以前任何失敗都回 500），只有帶例外的失敗才是 500。工具列「刪除專案」按鈕只有主責團隊成員且非唯讀時可按。
+  - 新增專案規則不變：主責必須是建立者自己的團隊，協作可選任何團隊。
+  - 以前協作團隊的人可以把自己的團隊設成主責、把原主責踢出，等於搶走專案；這是 1.0.47 補上的缺口。
+- **「從專案移除」只限上傳者（1.0.47）**：按鈕只對會議的上傳者（與管理者）顯示，且要 `專案項目:edit` 或 `delete`、專案不是唯讀；服務層同樣擋下（「只有上傳者或管理者可以把這筆會議紀錄從專案移除。」）。原因是移除後會議變成未歸屬、只剩上傳者看得到。
+- 誰能做什麼的整理表見 [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)。
 
 ### 0.4.39：四個欄位與列級權限已徹底移除
 
@@ -141,6 +148,7 @@
 - `ProjectAccessTests`（0.4.102 改寫）：主責＋協作可見規則（含王小明例：研發部＋管理部看得到 A、B、D，看不到 C）、沒有公開專案、主責／協作選擇規則（協作團隊的人沒改主責也能存檔）、分類篩選、刪除主責團隊被擋、`CategoryTeam` 同步、舊專案成員與 0.4.101 資料的主責轉換、批次與成員同步；`ApiIntegrationTests.ProjectApi_OtherTeamsProject_ShouldBeHidden_AndCreatorTeamBecomesPrimary`：API 看不到別團隊的專案、新增的專案以建立者的團隊為主責。
 - `TodoExtractionParserTests`（1.0.44 新增 5 條）：`matchedTodoId` 的解析（數字／字串、只收送出的 Id、重複認領）與提示詞帶入未完成待辦；1.0.45 新增 3 條：提示詞要求 `parentTodoId` 並標主項目／子項目、只收主項目 Id 且可共用主待辦、兩者都給時以對應既有為準；`TodoChangeAndNotificationTests`：抽出更新只改期限與負責人、空日期不清原值。
 - 已完成＝封存（1.0.46）：`TodoChangeAndNotificationTests` 新增封存專案的待辦一般成員不能改、管理者可以、不能搬進封存專案、重新開啟後可再改、`ApplyScope` 分出使用中與已完成；`MeetingServiceTests` 新增封存專案一般成員不能歸屬會議、不能編修會議紀錄，管理者可以。
+- 主責團隊管團隊設定與刪除（1.0.47）：`ProjectAccessTests` 的 `UpdateProject_CollaboratorTeamMember_CanEditContent_ButNotTeams`（取代舊的 `...CanChangeCollaborators`）、`UpdateProject_PrimaryTeamMember_CanChangeTeams`、`DeleteProject_OnlyPrimaryTeamMemberOrAdmin_AndNotWhenArchived`、`ResolveProjectTeams_NotPrimaryMember_SameTeams_IsAllowed`；從專案移除只限上傳者見 `MeetingServiceTests.SameProjectMember_CanEditOthersMeeting_ButOnlyUploaderCanDeleteDetachReplaceOrRetranscribe`。
 
 ## 八、相關程式與文件
 

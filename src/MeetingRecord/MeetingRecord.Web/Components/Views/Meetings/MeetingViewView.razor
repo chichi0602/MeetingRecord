@@ -193,7 +193,7 @@ else
                                                       OnClick="@(async () => await OnOpenAttachAsync(context))" />
                                 </SpaceItem>
                             }
-                            @if (context.CanRetryTranscription)
+                            @if (context.CanRetryTranscription && IsOwner(context))
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="重新轉錄" Icon="autorenew"
@@ -206,7 +206,8 @@ else
                                                   OnClick="@(async () => await OnEditAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Delete))
+                        @* 1.0.47：刪除只限上傳者與管理者；上傳者是一般使用者（沒有刪除權限）也能刪自己上傳的。 *@
+                        @if (CanDelete(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="刪除" Icon="delete" Danger
@@ -270,13 +271,18 @@ else
                             <FileDropZone @ref="mediaDropZone"
                                           OnChange="OnMediaFileSelectedAsync"
                                           Accept="@MeetingMediaPolicy.AcceptAttribute"
-                                          Disabled="@(IsFormLocked || isUploading)"
+                                          Disabled="@(IsFormLocked || isUploading || !CanChangeMedia)"
                                           Title="把影音檔拖到這裡，或點擊選擇檔案（一次一個）">
                                 @* 「一次一個」要寫出來：單檔模式下一次拖入多個檔案，Chrome 會整個靜默拒絕——
                                    不觸發 change、不報錯，使用者只會覺得「拖進去沒反應」。 *@
                                 單檔上限 @MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)，支援格式：@MeetingMediaPolicy.AllowedExtensionsText。
                                 儲存後會自動排入背景轉錄，影片只會取用聲音軌。
                             </FileDropZone>
+
+                            @if (!CanChangeMedia)
+                            {
+                                <div class="meeting-view-upload-hint">只有上傳者或管理者可以更換影音檔；其他欄位可以照常修改。</div>
+                            }
 
                             @if (isUploading)
                             {

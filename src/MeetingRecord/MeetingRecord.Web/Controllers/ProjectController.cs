@@ -258,6 +258,13 @@ public class ProjectController : ControllerBase
             if (!result.Success)
             {
                 logger.LogWarning("Project delete request failed. ProjectId={ProjectId}, Reason={Reason}", id, result.Message);
+
+                // 1.0.47：不是主責團隊成員、已完成（封存）是規則擋下，回 400 並說明原因；其餘才是伺服器錯誤。
+                if (result.Exception is null)
+                {
+                    return BadRequest(ApiResult.ValidationError(result.Message));
+                }
+
                 return this.ApiServerError("刪除專案失敗", result.Exception);
             }
 

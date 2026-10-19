@@ -1005,6 +1005,67 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task SameProjectMember_CanEditOthersMeeting_ButOnlyUploaderCanDeleteDetachReplaceOrRetranscribe()
+    {
+        // 1.0.47：同專案的人可以看、可以編修；刪除、從專案移除、換影音檔、重新轉錄只限上傳者與管理者。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var projectA = (await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == ids["A專案會議"])).ProjectId!.Value;
+        var carol = await fixture.AddUserAsync("carol");
+        await fixture.AddMemberAsync(projectA, carol.Id);
+        var carols = await fixture.AddCompletedMeetingAsync("Carol 上傳的會議", projectId: projectA, draftStatus: DraftStatus.Completed, createdByUserId: carol.Id);
+        var alice = fixture.CreateService(isAdmin: false, userA);
+
+        Assert.Equal(MeetingService.OwnerOnlyMessage("刪除這筆會議紀錄"), (await alice.DeleteAsync(carols.Id)).Message);
+        Assert.Equal(MeetingService.OwnerOnlyMessage("把這筆會議紀錄從專案移除"), (await alice.DetachFromProjectAsync(carols.Id, projectA)).Message);
+        Assert.Equal(MeetingService.OwnerOnlyMessage("重新轉錄這筆會議紀錄"), (await alice.RequeueTranscriptionAsync(carols.Id)).Message);
+        Assert.Equal(MeetingService.OwnerOnlyMessage("更換這筆會議紀錄的影音檔"), (await alice.SaveMediaAsync(carols.Id, NewUpload("錄音.mp3", [1, 2, 3]))).Message);
+        Assert.Empty(fixture.Queue.Enqueued);
+
+        // 編修會議紀錄照常可以。
+        Assert.True((await alice.UpdateDraftAsync(carols.Id, "Alice 幫忙修的內容")).Success);
+
+        // 上傳者本人（一般使用者）可以刪自己上傳的。
+        Assert.True((await fixture.CreateService(isAdmin: false, carol.Id).DeleteAsync(carols.Id)).Success);
+        Assert.False(await fixture.Context.Meeting.AnyAsync(x => x.Id == carols.Id));
+    }
+
+    [Fact]
+    public async Task LegacyMeetingWithoutUploader_OnlyAdminCanDelete()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+
+        var byMember = await fixture.CreateService(isAdmin: false, userA).DeleteAsync(ids["A專案會議"]);
+        var byAdmin = await fixture.CreateService().DeleteAsync(ids["A專案會議"]);
+
+        Assert.Equal(MeetingService.OwnerOnlyMessage("刪除這筆會議紀錄"), byMember.Message);
+        Assert.True(byAdmin.Success);
+    }
+
+    [Fact]
+    public async Task DeleteMeeting_KeepsExtractedTodos_AndCountLinkedTodos()
+    {
+        // 刪會議時待辦保留，只是不再連到這場會議；刪除確認框用 CountLinkedTodosAsync 告訴使用者保留幾筆。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案");
+        var meeting = await fixture.AddMeetingAsync("會議", projectId: project.Id);
+        fixture.Context.Todo.AddRange(
+            new Todo { Title = "待辦一", ProjectId = project.Id, MeetingId = meeting.Id, Status = "待辦", Priority = "中" },
+            new Todo { Title = "待辦二", ProjectId = project.Id, MeetingId = meeting.Id, Status = "待辦", Priority = "中" });
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var service = fixture.CreateService();
+
+        Assert.Equal(2, await service.CountLinkedTodosAsync(meeting.Id));
+        Assert.True((await service.DeleteAsync(meeting.Id)).Success);
+
+        var todos = await fixture.Context.Todo.AsNoTracking().ToListAsync();
+        Assert.Equal(2, todos.Count);
+        Assert.All(todos, x => Assert.Null(x.MeetingId));
+    }
+
+    [Fact]
     public async Task AttachToProjectAsync_ShouldSetProjectId_AndKeepDraftIntact()
     {
         // 這支的核心承諾：只補歸屬，不重跑、不花錢。

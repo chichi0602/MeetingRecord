@@ -1,8 +1,8 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.14
+- 文件版本：2.15
 - 文件狀態：已實作
-- 現行系統版本：1.0.46
+- 現行系統版本：1.0.47
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/10/19
 
@@ -72,7 +72,7 @@
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
 - **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。**0.4.116 起**主資料存好、開始上傳前，先把 Modal 留住並重新整理清單：先前 AntDesign 在確定鈕按下後就把 Modal 關掉，進度列跟著看不見，清單也要等上傳完才出現新會議，使用者只看到「新增成功」與一片沒變的畫面。**1.0.25 起**存檔到上傳結束前整張表單鎖住：欄位、移除檔案、取消鈕、右上角關閉、Esc 都不能用，唯一能按的是「取消上傳」（先確認）。主資料在上傳之前就存了，先前上傳期間還能改欄位，改的內容不會再存，標題改了也會默默消失。取消後服務層刪掉已傳的部分，會議資料保留，進度面板標成「已取消上傳。」；取消只作用在寫檔，寫完檔後的存檔與入列不受影響，避免留下已存檔卻沒入列的會議。不提供暫停：檔案經 Blazor 連線傳送，伺服器超過 1 分鐘沒收到資料就會切斷整條連線。**1.0.27 起不再在視窗裡顯示進度**（使用者要求）：主資料存好就關窗、重新整理清單，上傳進度直接顯示在該列的「轉錄狀態」（徽章「上傳中」＋百分比，來自 `TranscriptionPhase.Uploading`），上傳完接著是轉錄進度。上傳在背景跑（存檔流程不等它結束），**只鎖正在上傳的那一筆**：該列操作欄只剩「取消上傳」（只在發起上傳的頁面出現；其他頁籤的同一列只顯示「上傳中」，判斷依據是共用通知器），其他紀錄、工具列、排序、換頁照常可用。同一頁一次只上傳一個：上傳期間開其他視窗時選檔區停用並說明，開視窗也不會清掉上傳狀態或重建選檔區（背景還在讀那個檔案），上傳結束才重建並自行重載清單。離開頁面不取消上傳。上傳與頁面其他操作共用同一個 DbContext，因 Microsoft.Data.Sqlite 的非同步方法實為同步完成、Blazor 又逐段執行，兩者不會真正交錯；改用真正非同步的資料庫時要重新檢查。上傳失敗或取消時會議資料保留，提示改按「修改」再選檔重傳。**1.0.37 起**：取消上傳時，若這筆是這次存檔才新增的會議，連資料列一起刪（`SaveMediaAsync(deleteMeetingOnCancel: true)`，沿用 `DeleteAsync` 的檔案與 AI 對話清理），面板那一筆直接移除，清單該列消失；修改既有會議（含換檔）時取消仍保留會議與舊檔。上傳失敗（非取消）一律保留。取消結果改看服務層回傳的訊息（`UploadCancelledMessage`／`UploadCancelledAndMeetingDeletedMessage`），從面板取消時發起上傳的頁面也會跳通知；按取消時檔案已寫完（確認框開著時傳完、或已過寫檔階段）會跳「來不及取消」，不再無聲無息或誤報「已排入轉錄」。對話框只是隱藏（AntDesign Modal 預設不 DestroyOnClose），裡面的 InputFile 還在，檔案串流才讀得到。
 - 操作按鈕：
-  - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
+  - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制，**1.0.47 起只對上傳者與管理者顯示**；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
   - **AI 轉會議紀錄（0.4.73，`edit`）**：開對話框選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員。按確定會再跳一次費用確認
   - **會議紀錄與逐字稿（1.0.40，圖示 `article`，`HasDraft || HasTranscript` 時出現）**：取代原本的「檢視會議紀錄」與「編修會議紀錄」兩顆鈕（使用者反映操作欄太擠、兩顆長得像）。一律先以唯讀開啟共用的 `Components/Commons/MarkdownEditorModal`：
     - 有逐字稿時上方有「會議紀錄｜逐字稿」頁籤；還沒有會議紀錄就直接停在逐字稿頁籤（會議紀錄頁籤顯示「尚未產生會議紀錄。」）。逐字稿以純文字顯示（保留換行，不當 Markdown 渲染），附「複製全文」與「下載 .txt」（UTF-8 含 BOM，記事本開啟不亂碼；檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`，日期取 `TranscriptionCompletedAt ?? UpdatedAt`，見 `MeetingDocumentExporter.BuildTranscriptFileName`）。看逐字稿只要看得到這筆會議；複製與下載要 `會議紀錄:export`。逐字稿**仍不能改**。
@@ -83,9 +83,10 @@
   - **抽出待辦：0.4.83 起本頁沒有這顆鈕**（0.4.73～0.4.82 曾有）。待辦在資料表層級就必須有專案，而這一頁有一半的會議是未歸屬的，按了只能跳訊息叫使用者先去歸屬——那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案項目頁的清單裡，入口集中在那裡。
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - **專案選單不列已完成專案（1.0.46）**：「歸屬到專案」與「AI 轉會議紀錄」的專案下拉走 `ProjectService.GetSelectableAsync()`，預設排除狀態「已完成」（封存）的專案；已歸屬到已完成專案的會議，清單上照常顯示原本的專案名稱。規則見 [專案項目 PRD](專案項目-prd.md)。
-  - 修改（`edit`）、刪除（`delete`）
+  - 修改（`edit`）、刪除（**1.0.47 起只對上傳者與管理者顯示**，角色要 `edit`；以前只看 `delete`）
+  - 修改視窗（1.0.47）：不是上傳者時影音檔拖放區停用，下方顯示「只有上傳者或管理者可以更換影音檔；其他欄位可以照常修改。」；新增時一律可選檔。
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
-- 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。
+- 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。**1.0.47 起確認文字**：「確定要刪除這筆會議紀錄嗎？影音檔、逐字稿、會議紀錄與 AI 問答會一併刪除。從這場會議抽出的 N 筆待辦會保留在專案裡（不再連到這場會議）。此操作無法復原。」——N 取自 `MeetingService.CountLinkedTodosAsync`，N 為 0 時不顯示待辦那句。
 - **背景工作進行中不能刪、不能換檔**（0.4.115）：轉錄或會議紀錄生成在排隊或執行中時，`DeleteAsync` 與 `SaveMediaAsync` 一律拒絕，提示等它完成或從進度面板取消。原因：工作不會因此停下，跑完會把舊錄音的逐字稿寫到已換新檔的會議上，或寫出沒有資料列可掛、永遠留在磁碟上的逐字稿。轉錄存不進資料庫時刪掉剛寫出的逐字稿，上傳存不進資料庫時刪掉剛落地的影音檔。
 - 進度面板的「取消」要有 `會議紀錄:edit`（0.4.115）。只看得到那筆會議的人仍看得到進度，但沒有取消鈕。
 - **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。1.0.40 起同一個視窗先唯讀、按「編修」才切到編修模式；視窗一律 `markdown-editor-modal meeting-view-modal`（寬 96vw、內容固定高 96vh），檢視與編修切換時大小不跳動。
@@ -172,6 +173,12 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - API 一律 `[Authorize(JwtBearer)]`；每個動作以 `[HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.*)]` 做動作級授權。
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`會議紀錄:view`、`會議紀錄:create`、`會議紀錄:edit`、`會議紀錄:delete`。裸鍵「會議紀錄」代表該頁全部動作（向後相容）。
 - **上傳影音檔與重新轉錄歸在 `edit`**，不新增動作類型。
+- **上傳者專屬動作（1.0.47）**：同專案看得到的人都能看、改欄位（標題、說明、分類）、編修會議紀錄、重新產生、AI 問答、下載；**刪除、從專案移除、換影音檔、重新轉錄只限上傳者（`Meeting.CreatedByUserId`）與管理者**。判斷一律用 `ProjectAccess.IsMeetingOwner`，在 `MeetingService` 的 `DeleteAsync`／`DetachFromProjectAsync`／`SaveMediaAsync`／`RequeueTranscriptionAsync` 擋下，訊息由 `MeetingService.OwnerOnlyMessage` 組成，例如「只有上傳者或管理者可以刪除這筆會議紀錄。」；上傳者為 null 的舊會議只有管理者。
+  - 上傳者本人只要有 `會議紀錄:edit` 就能刪自己上傳的（「一般使用者」角色沒有 `delete` 也能刪）；API `DELETE /api/Meeting/{id}` 因此改要求 `edit`，被上傳者規則擋下回 400 `ValidationError`。
+  - 「主管」角色有 `delete`，但從此**不能刪別人上傳的會議**。
+  - 歸屬到專案沒有另外加上傳者檢查：未歸屬的會議本來就只有上傳者（與管理者）看得到。
+  - 原因：刪除與換檔會讓原始資料消失；從專案移除後只剩上傳者看得到，等於把會議從同事手上拿走。
+- 刪除會帶走什麼：影音檔、逐字稿、會議紀錄草稿、會議的 AI 問答對話、會議的 AI 對話紀錄（`AiCallLog` 與內容檔）；**從這場會議抽出的待辦保留**（`Todo.MeetingId` 設為 null，待辦異動紀錄保有來源會議標題快照），通知、稽核、Token 用量帳本也保留。沒有軟刪除或資源回收桶。整理表見 [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路。
 - **資料可見範圍（現行規則，0.4.99 起；0.4.102 起為主責＋協作團隊）**：會議**跟著專案走**，一律經 `ProjectAccessService.GetAsync()` 取得的 `ProjectAccess` 判斷（記憶體版 `ProjectAccess.CanViewMeeting`、SQL 版 `ProjectAccess.Filter(IQueryable<Meeting>)`，兩者是同一條規則，要一起改）：
   - **已歸屬專案**：使用者所屬團隊（`UserTeam`）與該專案的主責或協作團隊有交集才看得到，沒有公開專案。
@@ -277,6 +284,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - 簡轉繁另有 `ChineseTextConverterTests`（1.0.41，用真的 OpenCC 字典跑，順便驗證字典有複製到輸出目錄）：簡體字轉換、台灣字形（里面→裡面）、不轉用詞（软件→軟件）、繁體與中英混合原樣、空白原樣；`TranscriptionJobRunnerTests.Run_ShouldSaveTranscriptInTraditionalChinese` 直接讀存下來的原始檔，確認寫入的就是繁體。
 - `GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_Member_ShouldSeeOwnProjectsAndOwnUnassignedMeetings`、`GetAsync_UserWithoutProjects_ShouldSeeNothingOfOthers`、`GetById_NonMember_ShouldDenyMeetingOfOtherProject`、`GetAsync_WithKeyword_ShouldMatchMediaFileName`：可見性（專案權控）與查詢條件。舊的團隊標籤可見性與 `TeamFilter` 測試已於 0.4.99／0.4.103 移除。
 - `ArchivedProject_MemberCannotAttachOrEditDrafts_AdminCan`（1.0.46）：已完成（封存）專案，一般成員不能把會議歸屬進去、不能編修會議紀錄，管理者可以。
+- 1.0.47：`SameProjectMember_CanEditOthersMeeting_ButOnlyUploaderCanDeleteDetachReplaceOrRetranscribe`（同專案成員可以改別人上傳的會議，但刪除、從專案移除、換影音檔、重新轉錄只限上傳者）、`LegacyMeetingWithoutUploader_OnlyAdminCanDelete`（沒有上傳者的舊會議只有管理者能刪）、`DeleteMeeting_KeepsExtractedTodos_AndCountLinkedTodos`（刪會議保留抽出的待辦、`CountLinkedTodosAsync` 筆數正確）。
 
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TranscriptionRequestTests.cs`（只測純函式，**不打真實 API、不跑真實 ffmpeg**）：
 

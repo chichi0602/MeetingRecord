@@ -226,6 +226,26 @@ public partial class ProjectViewView : IDisposable
     /// <summary>封存且不是管理者：唯讀。管理者不受限（全站慣例），但提示條照樣顯示。</summary>
     private bool IsReadOnlyProject => SelectedProject?.IsArchived == true && !AuthenticationStateHelper.CheckIsAdmin();
 
+    [Inject]
+    private ProjectAccessService ProjectAccessService { get; set; } = default!;
+
+    /// <summary>目前使用者的存取範圍（1.0.47），只用來決定按鈕與欄位；服務層另外把關。</summary>
+    private ProjectAccess? access;
+
+    /// <summary>刪除專案：主責團隊成員（與管理者），已完成的要先重新開啟（1.0.47）。</summary>
+    private bool CanDeleteSelectedProject
+        => SelectedProject is { } project && access?.CanManageProject(project.Id) == true && !IsReadOnlyProject;
+
+    /// <summary>專案表單的團隊欄位：新增時可選；修改時只有主責團隊成員（與管理者）能改（1.0.47）。</summary>
+    private bool CanEditTeams => isNewRecordMode || access?.CanManageProject(CurrentRecord.Id) == true;
+
+    /// <summary>從專案移除只限上傳者與管理者（1.0.47）；移除後只剩上傳者看得到。</summary>
+    private bool CanDetach(MeetingAdapterModel meeting)
+        => access?.IsMeetingOwner(meeting.CreatedByUserId) == true
+            && !IsReadOnlyProject
+            && (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
+                || AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete));
+
     /// <summary>狀態細篩只列目前檢視範圍內的狀態（例如「使用中」就不列「已完成」）。</summary>
     private IEnumerable<string> ScopeStatusOptions
         => StatusOptions.Where(s => ProjectArchiveRules.Matches(s, projectScope));
@@ -409,6 +429,8 @@ public partial class ProjectViewView : IDisposable
 
     public async Task ReloadAsync()
     {
+        // 每次重新載入都更新存取範圍（1.0.47）：剛建立的專案自己就是主責，要能馬上改團隊、刪除。
+        access = await ProjectAccessService.GetAsync();
         projects = await projectService.GetSelectableAsync(includeArchived: true);
 
         // 選取的專案被刪掉、已不可存取、或被目前的篩選排除時，退回篩選結果的第一筆（0.4.114 起看篩選結果，

@@ -19,7 +19,7 @@ namespace MeetingRecord.Business.Services.Dashboard;
 /// <para>
 /// **0.4.97 起一律是全公司的數字，刻意不套團隊過濾**——與會議、提示詞範本頁不同。
 /// 儀表板登入即可看、所有人看到同一份，所以只能放彙總數字與圖表，**不可加入任何明細清單**，
-/// 否則會把別的團隊看不到的會議內容露出來。
+/// 否則會把別的團隊看不到的會議內容露出來。1.0.47 起圖表上看不到的專案名稱也不露出（併成「其他專案」）。
 /// </para>
 ///
 /// <para>
@@ -33,19 +33,25 @@ public class DashboardService
 
     private const string UnassignedProjectLabel = "未歸屬";
 
+    /// <summary>看不到的專案在長條圖上的名稱（1.0.47）：數字照算，名稱不露出。</summary>
+    public const string HiddenProjectLabel = "其他專案";
+
     private readonly BackendDBContext context;
     private readonly AiChatStore chatStore;
+    private readonly ProjectAccessService projectAccess;
     private readonly string transcriptRootPath;
     private readonly ILogger<DashboardService> logger;
 
     public DashboardService(
         BackendDBContext context,
         AiChatStore chatStore,
+        ProjectAccessService projectAccess,
         IOptions<SystemSettings> systemSettings,
         ILogger<DashboardService> logger)
     {
         this.context = context;
         this.chatStore = chatStore;
+        this.projectAccess = projectAccess;
         // 根目錄一律取自 SystemSettings.ExternalFileSystem，比照 MeetingFileStore／AiChatStore。
         transcriptRootPath = systemSettings.Value.ExternalFileSystem.MeetingTranscriptPath;
         this.logger = logger;
@@ -115,7 +121,7 @@ public class DashboardService
             BuildProjectStatus(projects.Select(x => x.Status).ToList()),
             BuildTranscriptionStatus(meetingFacts),
             BuildDraftStatus(meetingFacts),
-            BuildMeetingsPerProject(meetingFacts),
+            BuildMeetingsPerProject(meetingFacts, await projectAccess.GetAsync()),
             BuildPromptTemplateUsage(meetingFacts),
             BuildOpenTodoPriority(todoFacts),
             BuildPerformance(meetingFacts),
@@ -307,9 +313,14 @@ public class DashboardService
 
     #region 長條圖
 
-    private static IReadOnlyList<ChartSlice> BuildMeetingsPerProject(IReadOnlyList<MeetingFact> meetings)
+    /// <summary>
+    /// 各專案會議數。數字是全公司的，但看不到的專案名稱不露出（1.0.47），一律併成「其他專案」；管理者看得到全部名稱。
+    /// </summary>
+    private static IReadOnlyList<ChartSlice> BuildMeetingsPerProject(IReadOnlyList<MeetingFact> meetings, ProjectAccess access)
         => [.. meetings
-            .GroupBy(x => x.ProjectTitle ?? UnassignedProjectLabel)
+            .GroupBy(x => x.ProjectId is not { } projectId
+                ? UnassignedProjectLabel
+                : access.CanViewProject(projectId) ? x.ProjectTitle ?? UnassignedProjectLabel : HiddenProjectLabel)
             .Select(group => new ChartSlice(
                 group.Key,
                 group.Count(),

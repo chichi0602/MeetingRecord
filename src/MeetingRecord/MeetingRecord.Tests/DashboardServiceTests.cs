@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 
@@ -65,6 +66,39 @@ public sealed class DashboardServiceTests
         var summary = await fixture.CreateService().GetSummaryAsync();
 
         Assert.Equal(1, summary.PromptTemplates.UnusedEnabledCount);
+    }
+
+    [Fact]
+    public async Task MeetingsPerProject_InvisibleProjectNames_ShouldBeMergedAsOtherProjects()
+    {
+        // 1.0.47：數字仍是全公司的，但一般使用者看不到別團隊的專案名稱；管理者看得到全部。
+        await using var fixture = await DashboardServiceFixture.CreateAsync();
+        var user = new MyUser { Account = "alice", Name = "alice", Password = "x", Status = true };
+        var team = new Team { Name = "研發部", IsEnabled = true };
+        fixture.Context.AddRange(user, team);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.UserTeam.Add(new UserTeam { MyUserId = user.Id, TeamId = team.Id });
+        var mine = new Project { Title = "我的專案", Status = "進行中" };
+        var secretA = new Project { Title = "業務機密專案", Status = "進行中" };
+        var secretB = new Project { Title = "人資機密專案", Status = "進行中" };
+        fixture.Context.Project.AddRange(mine, secretA, secretB);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ProjectTeam.Add(new ProjectTeam { ProjectId = mine.Id, TeamId = team.Id, IsPrimary = true });
+        fixture.Context.Meeting.AddRange(
+            new Meeting { Title = "1", ProjectId = mine.Id },
+            new Meeting { Title = "2", ProjectId = secretA.Id },
+            new Meeting { Title = "3", ProjectId = secretB.Id });
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var forUser = (await fixture.CreateService(TestProjectAccess.User(fixture.Context, user.Id)).GetSummaryAsync()).MeetingsPerProject;
+        var forAdmin = (await fixture.CreateService().GetSummaryAsync()).MeetingsPerProject;
+
+        Assert.Equal(1, forUser.Single(x => x.Label == "我的專案").Value);
+        Assert.Equal(2, forUser.Single(x => x.Label == DashboardService.HiddenProjectLabel).Value);
+        Assert.DoesNotContain(forUser, x => x.Label.Contains("機密"));
+        Assert.Equal(3, forAdmin.Sum(x => x.Value));
+        Assert.Contains(forAdmin, x => x.Label == "業務機密專案");
     }
 
     [Fact]
@@ -369,13 +403,14 @@ public sealed class DashboardServiceTests
             return new DashboardServiceFixture(connection, context, rootPath);
         }
 
-        public DashboardService CreateService()
+        public DashboardService CreateService(ProjectAccessService? access = null)
         {
             var chatStore = new AiChatStore(systemSettings, loggerFactory.CreateLogger<AiChatStore>());
 
             return new DashboardService(
                 Context,
                 chatStore,
+                access ?? TestProjectAccess.Admin(Context),
                 systemSettings,
                 loggerFactory.CreateLogger<DashboardService>());
         }

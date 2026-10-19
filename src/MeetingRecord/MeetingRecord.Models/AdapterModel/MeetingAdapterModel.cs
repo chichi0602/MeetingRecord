@@ -95,6 +95,9 @@ public class MeetingAdapterModel : ICloneable
     /// <summary>所屬專案名稱。跨物件欄位，由服務層另外填入（AutoMapper 的同名慣例對應不到）。</summary>
     public string? ProjectTitle { get; set; }
 
+    /// <summary>上傳者（1.0.47）：畫面用來決定刪除、換影音檔、重新轉錄、從專案移除的按鈕要不要出現。真正把關在服務層。</summary>
+    public int? CreatedByUserId { get; set; }
+
     /// <summary>尚未被任何專案取用</summary>
     public bool IsUnassigned => ProjectId is null;
 

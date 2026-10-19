@@ -138,6 +138,11 @@ public partial class ProjectViewView : IDisposable
 
     /// <summary>目前視窗對應的會議。匯出 PDF 需要整個 model，不只是 Id。</summary>
     private MeetingAdapterModel? draftMeeting;
+
+    private bool draftCanGenerate;
+
+    private ElementReference aiPanelElement;
+
     private string draftModalTitle = "會議紀錄";
     private string? draftContent;
     private bool draftCanSwitchToEdit;
@@ -666,7 +671,39 @@ public partial class ProjectViewView : IDisposable
         draftTranscript = meeting.HasTranscript ? await meetingService.ReadTranscriptAsync(meeting.Id) : null;
         draftCanCopyTranscript = canExport;
 
+        // 1.0.48：和上方 AI 區塊同一組條件（專案項目 edit、專案不是唯讀）；生成中、沒有逐字稿時不出現。
+        draftCanGenerate = meeting.CanGenerateDraft
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
+            && !IsReadOnlyProject;
+
         draftModalVisible = true;
+    }
+
+    /// <summary>
+    /// 視窗裡的「產生會議紀錄」／「重新產生」（1.0.48）：關掉視窗，把這份逐字稿帶進上方 AI 區塊並捲過去，
+    /// 選提示詞、與會人員後按「AI 轉會議紀錄」——沿用區塊原本的費用確認與排入佇列。
+    /// </summary>
+    private async Task OnGenerateFromDraftModalAsync()
+    {
+        if (draftMeeting is null)
+        {
+            return;
+        }
+
+        draftModalVisible = false;
+        selectedTranscriptId = draftMeeting.Id;
+        StateHasChanged();
+
+        try
+        {
+            await aiPanelElement.FocusAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // 區塊沒有渲染（例如沒有編輯權限）時 ElementReference 還沒綁上；條件已和按鈕一致，理論上不會發生。
+        }
+
+        _ = messageService.InfoAsync("已帶入逐字稿，請選擇提示詞後按「AI 轉會議紀錄」。");
     }
 
     private void OnRequestDraftEdit()

@@ -158,6 +158,8 @@ public partial class MeetingViewView : IDisposable
     /// <summary>目前視窗對應的會議。匯出 PDF 需要整個 model，不只是 Id。</summary>
     private MeetingAdapterModel? draftMeeting;
 
+    private bool draftCanGenerate;
+
     /// <summary>正在匯出 PDF 的會議 Id。PDF 由無頭瀏覽器列印，會啟動外部程序，要擋重複點擊。</summary>
     private int? exportingMeetingId;
 
@@ -1067,7 +1069,7 @@ public partial class MeetingViewView : IDisposable
 
     #region AI 會議紀錄
 
-    /// <summary>開啟「AI 轉會議紀錄」對話框。專案與提示詞清單在這裡才撈，確保是最新的。</summary>
+    /// <summary>開啟「產生會議紀錄」對話框（1.0.48 前叫「AI 轉會議紀錄」）。專案與提示詞清單在這裡才撈，確保是最新的。</summary>
     private async Task OnOpenDraftRequestAsync(MeetingAdapterModel meeting)
     {
         projects = await projectService.GetSelectableAsync();
@@ -1094,7 +1096,7 @@ public partial class MeetingViewView : IDisposable
         => draftRequestAttendees = values?.ToList() ?? [];
 
     /// <summary>
-    /// 「AI 轉會議紀錄」對話框的 Enter 送出。
+    /// 「產生會議紀錄」對話框的 Enter 送出。
     /// ⚠️ 走的是與按鈕完全相同的 <see cref="OnDraftRequestOkAsync"/>，所以那道費用二次確認
     /// 照樣會跳——Enter 只是取代滑鼠點「開始產生」，不會略過任何一關。
     /// </summary>
@@ -1308,7 +1310,26 @@ public partial class MeetingViewView : IDisposable
         draftCanCopyTranscript = AuthenticationStateHelper.CheckAccessAction(
             MagicObjectHelper.角色_會議紀錄, PermissionActions.Export);
 
+        // 1.0.48：產生／重新產生從這個視窗進（列上的「AI 轉會議紀錄」已拿掉）。生成中、沒有逐字稿時不出現。
+        draftCanGenerate = meeting.CanGenerateDraft
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit);
+
         draftModalVisible = true;
+    }
+
+    /// <summary>
+    /// 視窗裡的「產生會議紀錄」／「重新產生」（1.0.48）：先關掉這個視窗，再開原本的設定視窗
+    /// （提示詞、所屬專案、與會人員、費用確認都沿用）。進度在清單的「會議紀錄」欄看。
+    /// </summary>
+    private async Task OnGenerateFromDraftModalAsync()
+    {
+        if (draftMeeting is null)
+        {
+            return;
+        }
+
+        draftModalVisible = false;
+        await OnOpenDraftRequestAsync(draftMeeting);
     }
 
     private void OnRequestDraftEdit()

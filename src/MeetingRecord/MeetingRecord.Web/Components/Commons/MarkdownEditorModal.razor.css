@@ -177,3 +177,8 @@
     margin: 0;
     color: var(--oat-ink-soft);
 }
+
+/* 1.0.48：沒有會議紀錄時，「產生會議紀錄」放在空白提示正下方。 */
+.markdown-editor-generate {
+    margin-top: 12px;
+}

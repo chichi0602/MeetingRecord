@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：1.0.40
+- 現行系統版本：1.0.48
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/10/19
 
 ## 摘要
 
@@ -27,7 +27,7 @@
 | 類型 | 判準 | 尺寸／版型 | 本文件適用章節 |
 |---|---|---|---|
 | **表單對話窗** | 內含 `EditForm`／`AntDesign.Form`，使用者要輸入或修改記錄 | `form-modal-compact`／`-standard`／`-large`／`meeting-view-modal` 四擇一 | 二～七 |
-| 選取型對話窗 | 只有下拉選取、沒有自由輸入（AI 轉會議紀錄、歸屬到專案） | `form-modal-compact` | 二～四、六 |
+| 選取型對話窗 | 只有下拉選取、沒有自由輸入（產生會議紀錄、歸屬到專案） | `form-modal-compact` | 二～四、六 |
 | 唯讀明細窗 | 只是攤開來看（關於、專案附件、待辦詳情） | `Footer="null"`，掛尺寸 class | 二～四 |
 | **全螢幕工作窗** | 長時間停留的工作面板（會議紀錄編修、AI 問答） | `meeting-view-modal`（＋`ai-chat-modal`） | 十一 |
 | **二次確認框** | `ModalService.ConfirmAsync`，一句話、兩顆按鈕 | 吃基準線，不掛尺寸 class | 八 |
@@ -89,7 +89,7 @@
 | 關於 | `Layout/MainLayout.razor` | `form-modal-compact` |
 | 分類維護 | `Views/Categories/CategoryViewView.razor` | `form-modal-compact` |
 | 團隊維護 | `Views/Teams/TeamViewView.razor` | `form-modal-compact` |
-| AI 轉會議紀錄 | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
+| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
 | 歸屬到專案 | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
 | 使用者維護 | `Views/Admins/MyUserView.razor` | `form-modal-standard` |
 | 提示詞範本維護 | `Views/PromptTemplates/PromptTemplateViewView.razor` | `form-modal-standard` |
@@ -205,7 +205,7 @@
 
 - 專案附件（只有下載鈕）
 - 待辦詳情、關於（唯讀）
-- AI 轉會議紀錄、歸屬到專案（只有選取，而且取消是不花錢的方向）
+- 產生會議紀錄、歸屬到專案（只有選取，而且取消是不花錢的方向）
 
 ### 7.2 三個一定會踩到的坑
 
@@ -216,7 +216,7 @@
 ### 7.3 `Keyboard` 與 `MaskClosable`
 
 - 一般表單：`Keyboard="true"`，讓 Esc 走上面的確認流程。
-- 會議紀錄維護、AI 轉會議紀錄、歸屬到專案、抽出待辦、AI 問答：`MaskClosable="false"`，點到遮罩不會關閉。
+- 會議紀錄維護、產生會議紀錄、歸屬到專案、抽出待辦、AI 問答：`MaskClosable="false"`，點到遮罩不會關閉。
 - 會議紀錄編修視窗：`Keyboard` 與 `MaskClosable` 都是 `!CanEdit`。編修時 Esc 與點遮罩都關掉，因為一整篇打到一半的紀錄按錯一次鍵就沒了；唯讀時兩者放行。
 
 ---
@@ -273,7 +273,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 |---|---|---|---|
 | 上傳影音檔（存檔後自動轉錄） | `MeetingViewView.OnModalOKHandleAsync` | 確認上傳並開始轉錄（會產生費用） | 已有音檔時套（舊音檔與逐字稿會被刪除） |
 | 執行／重新轉錄 | `MeetingViewView` | 確認執行轉錄／確認重新轉錄（會產生費用） | 已有逐字稿時套 |
-| AI 轉會議紀錄 | `MeetingViewView`、`ProjectViewView` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
+| 產生會議紀錄（會議頁對話窗、專案頁「AI 轉會議紀錄」） | `MeetingViewView`、`ProjectViewView` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
 | 抽出待辦 | `ProjectViewView`（開窗**之前**的按鈕上） | 確認抽出待辦（會產生費用） | **永不**套（只產生候選） |
 | AI 問答：修改提問後重新產生答案 | `AiChatModal` | 確認重新產生答案（會產生費用） | 套（會覆蓋原本的回答） |
 | AI 問答：送出新問題 | `AiChatModal.OnAskAsync` | — | 刻意不確認，這是唯一沒有確認框的付費入口 |

@@ -119,6 +119,17 @@
             @if (!CanEdit && string.IsNullOrWhiteSpace(editingText))
             {
                 <p class="markdown-editor-empty">尚未產生會議紀錄。</p>
+                @if (CanGenerate)
+                {
+                    <div class="markdown-editor-generate">
+                        <Button Type="ButtonType.Primary" OnClick="OnGenerateAsync">
+                            <span class="btn-icon-label">
+                                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
+                                <span>產生會議紀錄</span>
+                            </span>
+                        </Button>
+                    </div>
+                }
             }
             else
             {
@@ -159,6 +170,15 @@
                 <span class="btn-icon-label">
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="download" />
                     <span>下載 PDF</span>
+                </span>
+            </Button>
+        }
+        @if (!CanEdit && !IsTranscriptTabActive && CanGenerate && !string.IsNullOrWhiteSpace(editingText))
+        {
+            <Button OnClick="OnGenerateAsync">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
+                    <span>重新產生</span>
                 </span>
             </Button>
         }

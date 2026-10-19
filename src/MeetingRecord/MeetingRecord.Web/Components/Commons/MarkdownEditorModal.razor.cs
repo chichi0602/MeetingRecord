@@ -115,6 +115,15 @@ public partial class MarkdownEditorModal : IDisposable
     [Parameter] public EventCallback OnRequestEdit { get; set; }
 
     /// <summary>
+    /// 唯讀時是否顯示「產生會議紀錄」／「重新產生」（1.0.48）。列上的「AI 轉會議紀錄」按鈕拿掉後，產生改從這裡進：
+    /// 沒有內容時按鈕在空白提示下方，有內容時在下方按鈕列。按下呼叫 <see cref="OnGenerate"/>，
+    /// 選提示詞、確認費用、排入佇列都由父層做（元件不相依 Business 服務）。
+    /// </summary>
+    [Parameter] public bool CanGenerate { get; set; }
+
+    [Parameter] public EventCallback OnGenerate { get; set; }
+
+    /// <summary>
     /// 編修中按「取消」（沒改過或確認放棄後）要回到檢視而不是關窗（1.0.40）。有綁才這樣做，
     /// 由父層把 <see cref="CanEdit"/> 設回 false；沒綁的話維持原本的關窗行為。
     /// </summary>
@@ -318,6 +327,8 @@ public partial class MarkdownEditorModal : IDisposable
     private void SelectTab(string tab) => activeTab = tab;
 
     private Task OnRequestEditAsync() => OnRequestEdit.InvokeAsync();
+
+    private Task OnGenerateAsync() => OnGenerate.InvokeAsync();
 
     private Task OnCopyTranscriptAsync() => OnCopyTranscript.InvokeAsync();
 

@@ -191,7 +191,8 @@ else
 
             @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit) && !IsReadOnlyProject)
             {
-                <div class="project-view-ai-panel">
+                @* tabindex＋@ref：會議紀錄視窗按「產生會議紀錄」時聚焦這裡，讓瀏覽器把區塊捲進畫面（1.0.48）。 *@
+                <div class="project-view-ai-panel" tabindex="-1" @ref="aiPanelElement">
                     <div class="project-view-ai-head">
                         <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="auto_awesome" />
                         <h3>用 AI 把逐字稿整理成會議紀錄</h3>
@@ -642,6 +643,8 @@ else
                          CanSwitchToEdit="@draftCanSwitchToEdit"
                          OnRequestEdit="OnRequestDraftEdit"
                          OnCancelEdit="OnCancelDraftEdit"
+                         CanGenerate="@draftCanGenerate"
+                         OnGenerate="OnGenerateFromDraftModalAsync"
                          Transcript="@draftTranscript"
                          CanCopyTranscript="@draftCanCopyTranscript"
                          OnCopyTranscript="OnCopyTranscriptAsync"

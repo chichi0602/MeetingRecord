@@ -133,7 +133,7 @@
     color: #bfbfbf;
 }
 
-/* 「AI 轉會議紀錄」與「歸屬到專案」對話框裡的唯讀來源欄位。 */
+/* 「產生會議紀錄」與「歸屬到專案」對話框裡的唯讀來源欄位。 */
 .meeting-draft-request-source {
     display: inline-block;
     padding-top: 4px;
@@ -148,7 +148,7 @@
     line-height: 1.6;
 }
 
-/* 「AI 轉會議紀錄」與「歸屬到專案」對話框的欄位堆疊。
+/* 「產生會議紀錄」與「歸屬到專案」對話框的欄位堆疊。
    刻意不用 AntDesign 的 Form/FormItem——那組元件需要一個 TModel，
    而這兩個對話框沒有對應的資料模型。 */
 .meeting-draft-request-form {

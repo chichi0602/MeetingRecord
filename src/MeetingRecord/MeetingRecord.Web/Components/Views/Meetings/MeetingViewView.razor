@@ -160,16 +160,7 @@ else
                                                   OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
-                        {
-                            @if (context.CanGenerateDraft)
-                            {
-                                <SpaceItem>
-                                    <CrudActionButton Title="AI 轉會議紀錄" Icon="auto_awesome"
-                                                      OnClick="@(async () => await OnOpenDraftRequestAsync(context))" />
-                                </SpaceItem>
-                            }
-                        }
+                        @* 「AI 轉會議紀錄」1.0.48 起不放在列上：產生與重新產生都從「會議紀錄與逐字稿」視窗裡按。 *@
                         @* 匯出 PDF 的按鈕 0.4.82 起不放在列上：未歸屬的在編修視窗裡按，
                            已歸屬的到專案項目頁按（那裡的 PDF 會帶專案名稱，這裡的不會）。 *@
                         @* 問答的脈絡來自會議紀錄與逐字稿，兩者都沒有時開了也只會得到空脈絡。 *@
@@ -316,7 +307,7 @@ else
         </div>
     </Modal>
 
-    <Modal Title="AI 轉會議紀錄"
+    <Modal Title="產生會議紀錄"
            Class="form-modal-compact"
            @bind-Visible="@draftRequestVisible"
            Keyboard="true"
@@ -445,6 +436,8 @@ else
                          CanSwitchToEdit="@draftCanSwitchToEdit"
                          OnRequestEdit="OnRequestDraftEdit"
                          OnCancelEdit="OnCancelDraftEdit"
+                         CanGenerate="@draftCanGenerate"
+                         OnGenerate="OnGenerateFromDraftModalAsync"
                          Transcript="@draftTranscript"
                          CanCopyTranscript="@draftCanCopyTranscript"
                          OnCopyTranscript="OnCopyTranscriptAsync"

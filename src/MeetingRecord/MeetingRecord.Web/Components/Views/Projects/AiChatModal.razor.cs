@@ -444,6 +444,21 @@ public partial class AiChatModal : ComponentBase
         await OnAskAsync();
     }
 
+    /// <summary>
+    /// 輸入框回寫（1.0.49）。送出中一律忽略：按 Enter 送出時瀏覽器仍會插入換行並送來 input 事件，
+    /// AntDesign TextArea 的 OnkeyDown 擋不掉；若照單全收，剛清空的輸入框會變回「舊問題＋換行」。
+    /// Blazor 事件依序處理，keydown 先把狀態設成送出中，那筆 input 就會在這裡被丟掉。
+    /// </summary>
+    private void OnQuestionChanged(string? value)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        question = value ?? string.Empty;
+    }
+
     private async Task OnAskAsync()
     {
         if (IsBusy || string.IsNullOrWhiteSpace(question))
@@ -514,7 +529,8 @@ public partial class AiChatModal : ComponentBase
             // 再清一次，不是多餘的：Enter 送出時，瀏覽器仍會執行 textarea 的預設行為
             // 插入一個換行，而 AntDesign 元件的 OnkeyDown 是 EventCallback，
             // 拿不到 preventDefault（那需要 @onkeydown:preventDefault，只能用在原生元素）。
-            // 那個換行會在上面清空之後才透過 input 事件寫回來，所以要在結束時再抹掉。
+            // 那個換行會在上面清空之後才透過 input 事件寫回來。1.0.49 起 OnQuestionChanged
+            // 在送出中直接丟掉這種回寫；這裡保留再清一次當保險。
             question = string.Empty;
 
             StateHasChanged();

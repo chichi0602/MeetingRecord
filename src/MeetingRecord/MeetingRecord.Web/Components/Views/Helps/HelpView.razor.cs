@@ -100,6 +100,20 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// 輸入框回寫（1.0.49）。發問中一律忽略：按 Enter 送出時瀏覽器仍會插入換行並送來 input 事件
+    /// （AntDesign TextArea 的 OnkeyDown 擋不掉），照單全收的話問完輸入框又會出現「舊問題＋換行」。
+    /// </summary>
+    private void OnAssistantQuestionChanged(string? value)
+    {
+        if (isAsking)
+        {
+            return;
+        }
+
+        assistantQuestion = value ?? string.Empty;
+    }
+
     private async Task OnAskAssistantAsync()
     {
         var question = assistantQuestion.Trim();
@@ -169,6 +183,9 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         {
             turn.IsDone = true;
             isAsking = false;
+
+            // 保險：問完（成功、失敗、停止）輸入框一律是空的。
+            assistantQuestion = string.Empty;
             askCts?.Dispose();
             askCts = null;
         }

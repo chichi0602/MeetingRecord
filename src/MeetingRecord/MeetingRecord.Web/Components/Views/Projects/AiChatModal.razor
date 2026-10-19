@@ -279,7 +279,8 @@
                打完字立刻按 Enter 時，debounce 計時器還沒觸發，OnAskAsync 讀到的
                question 會是舊值甚至空字串——送出的問題會被截斷，或整個不送出，
                然後計時器才把文字寫回輸入框。代價是逐鍵一次伺服器往返，但正確性優先。 *@
-            <TextArea @bind-Value="question"
+            <TextArea Value="@question"
+                      ValueChanged="@((string? value) => OnQuestionChanged(value))"
                       BindOnInput="true"
                       DebounceMilliseconds="0"
                       Placeholder="輸入問題後按 Enter 送出（Shift+Enter 換行）。可以直接貼上圖片，或把檔案拖進來"

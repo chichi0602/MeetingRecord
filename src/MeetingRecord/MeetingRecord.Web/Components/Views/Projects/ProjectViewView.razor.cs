@@ -386,6 +386,9 @@ public partial class ProjectViewView : IDisposable
 
         availableCategories = await CategoryService.GetAllEnabledNamesAsync();
         filterTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync();
+
+        // 1.0.51：預設選上次選的專案。已刪除、看不到或不在「使用中」的，ReloadAsync 會照舊退回第一筆。
+        selectedProjectId = await projectService.GetLastSelectedProjectIdAsync() ?? 0;
         await ReloadAsync();
     }
 
@@ -499,6 +502,9 @@ public partial class ProjectViewView : IDisposable
         selectedAttendees = [];
 
         logger.LogInformation("Project selection changed. ProjectId={ProjectId}", projectId);
+
+        // 1.0.51：記在帳號上，下次進頁面預設選它。只記使用者自己選的，不記「退回第一筆」。
+        await projectService.SaveLastSelectedProjectAsync(projectId);
         await ReloadProjectContextAsync();
         StateHasChanged();
     }
@@ -1345,6 +1351,7 @@ public partial class ProjectViewView : IDisposable
                 selectedTranscriptId = 0;
                 selectedAttendees = [];
                 await ReloadAsync();
+                await projectService.SaveLastSelectedProjectAsync(CurrentRecord.Id);
             }
             else
             {

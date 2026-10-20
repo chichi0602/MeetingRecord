@@ -682,6 +682,49 @@ public class ProjectService
     }
 
     /// <summary>
+    /// 專案項目頁上次選的專案（1.0.51，記在帳號上）。回傳的 Id 可能已經刪除、看不到或已完成——
+    /// 頁面拿它當預設值，不在目前清單裡就照舊退回第一筆，這裡不必先過濾。
+    /// </summary>
+    public async Task<int?> GetLastSelectedProjectIdAsync(CancellationToken cancellationToken = default)
+    {
+        var userId = (await projectAccess.GetAsync()).UserId;
+        if (userId == 0)
+        {
+            return null;
+        }
+
+        return await context.MyUser.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.LastProjectId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 記下使用者在專案項目頁選的專案（1.0.51）。看不到的專案不記。
+    /// 用 ExecuteUpdate 只改這一欄：不經變更追蹤（不會把共用 DbContext 裡別的變更一起存掉），
+    /// 也不動 <c>UpdateAt</c>（那是帳號資料的異動時間，這只是檢視偏好）。失敗只記 log，不影響畫面。
+    /// </summary>
+    public async Task SaveLastSelectedProjectAsync(int projectId, CancellationToken cancellationToken = default)
+    {
+        var access = await projectAccess.GetAsync();
+        if (access.UserId == 0 || projectId <= 0 || !access.CanViewProject(projectId))
+        {
+            return;
+        }
+
+        try
+        {
+            await context.MyUser
+                .Where(x => x.Id == access.UserId)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.LastProjectId, projectId), cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "Failed to remember last selected project. UserId={UserId}, ProjectId={ProjectId}", access.UserId, projectId);
+        }
+    }
+
+    /// <summary>
     /// 取得目前使用者可存取的全部專案（依標題排序），供專案項目頁的專案選擇器使用。
     /// 這個畫面以下拉選單取代分頁表格，因此不分頁；專案數量成長到數百筆時要重新檢討。
     /// </summary>

@@ -54,5 +54,12 @@ public class MyUser
     /// TOTP Base32 密鑰；未綁定時為 null。
     /// </summary>
     public string? TwoFactorSecret { get; set; }
+
+    /// <summary>
+    /// 專案項目頁上次選的專案（1.0.51），下次進頁面預設選它。刻意**不設外鍵**：專案刪掉留著舊 Id 沒關係，
+    /// 頁面讀到不存在、看不到或不在「使用中」的專案就退回第一筆。
+    /// </summary>
+    public int? LastProjectId { get; set; }
+
     public RoleView? RoleView { get; set; }
 }

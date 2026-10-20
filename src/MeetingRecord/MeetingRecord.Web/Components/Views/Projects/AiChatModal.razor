@@ -87,7 +87,8 @@
             </div>
         }
 
-        <div class="ai-chat-log">
+        @* @ref：chat-scroll.js 讓新的問答自動捲到最下方（1.0.50）。 *@
+        <div class="ai-chat-log" @ref="chatLog">
             @if (messages.Count == 0 && !isAsking)
             {
                 <div class="ai-chat-empty">

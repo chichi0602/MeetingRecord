@@ -39,7 +39,7 @@ else
 
                 @if (assistantTurns.Count > 0)
                 {
-                    <div class="help-view-assistant-thread">
+                    <div class="help-view-assistant-thread" @ref="assistantThread">
                         @foreach (var turn in assistantTurns)
                         {
                             <div class="help-view-assistant-question">@turn.Question</div>

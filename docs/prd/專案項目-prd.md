@@ -1,10 +1,10 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.17
+- 文件版本：4.18
 - 文件狀態：已實作
-- 現行系統版本：1.0.48
+- 現行系統版本：1.0.51
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
-- 最後核對日期：2026/10/19
+- 最後核對日期：2026/10/20
 
 > **0.4.102：專案改由「主責團隊＋協作團隊」控管可見性，並加回「分類」**（取代 0.4.101 的「資料群組」與 0.4.99～0.4.100 的專案成員制）。團隊＝誰的資料（部門），分類＝什麼資料，角色＝能做什麼。
 > - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
@@ -46,6 +46,7 @@
   - **右側**：團隊、分類、狀態三個多選篩選（各寬 140px，`MaxTagCount=1` 收成「+N」不撐寬）。三者同時成立，同一篩選內符合任一即可；團隊比對主責或協作團隊。只在畫面端縮小下拉清單，不影響誰看得到。目前專案被篩掉時自動切到結果第一筆，結果為空時清掉選取並顯示空狀態提示。
   - 窄螢幕時左右兩組各自換行。
   - **1.0.46 起篩選列最前面多一組「使用中｜已完成｜全部」**（`ProjectScopeSwitch`），見下方「已完成＝封存（1.0.46）」。專案下拉改用 `GetSelectableAsync(includeArchived: true)` 取全部再依檢視過濾；「狀態」篩選只列目前檢視範圍內的狀態。
+  - **1.0.51 起記住上次選的專案**：開頁時預設選上次選的專案，記在帳號上（`MyUser.LastProjectId`），換電腦、換瀏覽器也一樣。只記專案；團隊／分類／狀態篩選與「使用中｜已完成｜全部」照舊每次重設（仍是使用中）。上次的專案已完成、已刪除或已經看不到時，照原本的規則改選「使用中」的第一筆。在下拉選專案、新增專案後（畫面切到新專案）才會記下；自動改選第一筆不會記。讀寫在 `ProjectService.GetLastSelectedProjectIdAsync`／`SaveLastSelectedProjectAsync`：只寫這一欄（`ExecuteUpdate`），不動 `UpdateAt`、不記稽核（只是畫面偏好）；看不到的專案不記，寫入失敗只記 log。
 - 專案摘要列：負責人、**主責團隊、協作團隊、分類（0.4.102 起）**、期程、狀態、完成度、本專案的會議紀錄份數、**附件份數（0.4.43 起，可點開檢視與下載）**。
 - AI 區塊（需 `edit` 權限才顯示）：逐字稿下拉、提示詞下拉、「AI 轉會議紀錄」按鈕。逐字稿下拉列出**全部**轉錄完成的逐字稿，已被其他專案取用的呈現為不可選並標示「已屬：專案名」；屬於本專案的可重選以更換提示詞重新產生。**0.4.65 起一律先跳費用確認對話框**（首次生成也跳，理由是會產生 API 費用），已有草稿時額外套紅色確認鈕並說明會覆蓋人工編修過的內容；按鈕在該筆已排入或生成中時停用（`CanGenerateDraft`），避免重複入列而重複計費。 **0.4.71 起提示詞下拉左邊多一個「與會人員」多選**，選項來自本專案的與會人員名冊（`Project.Participants`），用來勾選這場會議實際到場的人；名冊是空的時候欄位停用但不隱藏。勾選結果以快照存進 `Meeting.DraftAttendees`，連同專案的常用名詞一起餵給模型校正語音辨識聽錯的人名。與會人員是**選填**，不影響按鈕是否可按。
 - 歷史會議紀錄清單：來源逐字稿、使用提示詞、生成狀態、產生時間、操作（**會議紀錄與逐字稿**、**匯出 PDF**、**抽出待辦**、AI 問答）。不分頁。**0.4.82 起逐字稿的預覽與編修整個移除**（0.4.55 曾提供）——檔案仍是生成與 AI 問答的輸入，只是不再有人直接讀／改的介面。 **1.0.40 起「檢視」與「編修」兩顆鈕合併成一顆「會議紀錄與逐字稿」**（圖示 `article`，`HasDraft || HasTranscript` 時出現；使用者反映操作欄太擠、兩顆長得像）：一律先唯讀開啟，有逐字稿時上方有「會議紀錄｜逐字稿」頁籤（沒有會議紀錄就直接停在逐字稿），逐字稿以純文字唯讀顯示，可「複製全文」「下載 .txt」（需 `專案項目:export`，UTF-8 含 BOM，檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`），逐字稿**仍不能改**；有 `專案項目:edit` 且已有會議紀錄時，視窗底部有「編修」切到左改右看，取消或儲存成功後回到唯讀檢視。**1.0.48 起**視窗裡另有「產生會議紀錄」（會議紀錄頁籤沒有內容時，在「尚未產生會議紀錄。」下方）與「重新產生」（已有內容時，在底部按鈕列）：條件是 `CanGenerateDraft`＋`專案項目:edit`＋專案不是唯讀（與 AI 區塊相同）；按下去關窗、把這份逐字稿帶進上方 AI 區塊的「選擇逐字稿」，聚焦並捲到區塊，提示「已帶入逐字稿，請選擇提示詞後按「AI 轉會議紀錄」。」——不直接送出，費用確認仍走區塊原本的流程。讀逐字稿走 `MeetingService.ReadTranscriptAsync`（經專案權控）。STT 聽錯人名的補救改走「常用名詞名冊 ＋ 重新產生」或「直接改會議紀錄」，取捨見 [會議紀錄 PRD](會議紀錄-prd.md)。 **0.4.82 起「檢視／編修會議紀錄」共用 `Components/Commons/MarkdownEditorModal`**（左改右看 ＋ 常駐搜尋／取代列）；清單列上的「匯出 PDF」**保留**，視窗裡另有一顆「下載 PDF」（需 `專案項目:export`）。 **0.4.70 起「檢視會議紀錄」的草稿改以 Markdown 渲染**（與匯出 PDF 共用同一條管線，見 [開發慣例與限制速查 §6.6](../architecture/開發慣例與限制速查.md)）。 **0.4.72 起操作欄多一顆「從專案移除」**（`link_off`，受 `delete` 權限管控；**1.0.47 起只對會議的上傳者與管理者顯示**，角色要 `edit` 或 `delete`）：清掉歸屬與 AI 草稿，但**影音檔與逐字稿保留**，那份逐字稿會回到可選清單，可以改指到正確的專案重跑——這是「生成錯專案」唯一的出口（先前只能整筆刪除，等於要重新上傳並重新付一次轉錄費用）。生成中（`Pending`／`Processing`）不准移除，否則背景工作結束時會把草稿寫回已經移除的紀錄。
@@ -149,6 +150,7 @@
 - `TodoExtractionParserTests`（1.0.44 新增 5 條）：`matchedTodoId` 的解析（數字／字串、只收送出的 Id、重複認領）與提示詞帶入未完成待辦；1.0.45 新增 3 條：提示詞要求 `parentTodoId` 並標主項目／子項目、只收主項目 Id 且可共用主待辦、兩者都給時以對應既有為準；`TodoChangeAndNotificationTests`：抽出更新只改期限與負責人、空日期不清原值。
 - 已完成＝封存（1.0.46）：`TodoChangeAndNotificationTests` 新增封存專案的待辦一般成員不能改、管理者可以、不能搬進封存專案、重新開啟後可再改、`ApplyScope` 分出使用中與已完成；`MeetingServiceTests` 新增封存專案一般成員不能歸屬會議、不能編修會議紀錄，管理者可以。
 - 主責團隊管團隊設定與刪除（1.0.47）：`ProjectAccessTests` 的 `UpdateProject_CollaboratorTeamMember_CanEditContent_ButNotTeams`（取代舊的 `...CanChangeCollaborators`）、`UpdateProject_PrimaryTeamMember_CanChangeTeams`、`DeleteProject_OnlyPrimaryTeamMemberOrAdmin_AndNotWhenArchived`、`ResolveProjectTeams_NotPrimaryMember_SameTeams_IsAllowed`；從專案移除只限上傳者見 `MeetingServiceTests.SameProjectMember_CanEditOthersMeeting_ButOnlyUploaderCanDeleteDetachReplaceOrRetranscribe`。
+- 記住上次選的專案（1.0.51）：`ProjectAccessTests` 的 `LastSelectedProject_IsRememberedPerUser_AndInvisibleProjectsAreIgnored`（各帳號分開記、看不到的專案不記）、`LastSelectedProject_UnresolvedUser_ReadsNullAndWritesNothing`（取不到使用者時讀 null、不寫入）。
 
 ## 八、相關程式與文件
 

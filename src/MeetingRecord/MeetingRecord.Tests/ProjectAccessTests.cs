@@ -258,6 +258,44 @@ public sealed class ProjectAccessTests
     }
 
     [Fact]
+    public async Task LastSelectedProject_IsRememberedPerUser_AndInvisibleProjectsAreIgnored()
+    {
+        // 1.0.51：專案頁記住上次選的專案，記在帳號上、每人一份；看不到的專案不記。
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
+        var rd = await fixture.AddTeamAsync("研發部", alice.Id, bob.Id);
+        var sales = await fixture.AddTeamAsync("業務部");
+        var first = await fixture.AddProjectAsync("專案一", rd.Id);
+        var second = await fixture.AddProjectAsync("專案二", rd.Id);
+        var secret = await fixture.AddProjectAsync("業務機密", sales.Id);
+        var aliceService = fixture.CreateProjectService(alice.Id);
+        var bobService = fixture.CreateProjectService(bob.Id);
+
+        Assert.Null(await aliceService.GetLastSelectedProjectIdAsync());
+
+        await aliceService.SaveLastSelectedProjectAsync(second.Id);
+        await bobService.SaveLastSelectedProjectAsync(first.Id);
+        await aliceService.SaveLastSelectedProjectAsync(secret.Id);
+
+        Assert.Equal(second.Id, await aliceService.GetLastSelectedProjectIdAsync());
+        Assert.Equal(first.Id, await bobService.GetLastSelectedProjectIdAsync());
+    }
+
+    [Fact]
+    public async Task LastSelectedProject_UnresolvedUser_ReadsNullAndWritesNothing()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var rd = await fixture.AddTeamAsync("研發部");
+        var project = await fixture.AddProjectAsync("專案一", rd.Id);
+        var service = fixture.CreateProjectService(0, isAdmin: true);
+
+        await service.SaveLastSelectedProjectAsync(project.Id);
+
+        Assert.Null(await service.GetLastSelectedProjectIdAsync());
+    }
+
+    [Fact]
     public void ResolveProjectTeams_NotPrimaryMember_SameTeams_IsAllowed()
     {
         var access = new ProjectAccess(false, 7, [2], [5], []);

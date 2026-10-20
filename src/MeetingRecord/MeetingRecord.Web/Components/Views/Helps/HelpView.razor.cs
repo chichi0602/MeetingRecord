@@ -55,6 +55,12 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
     private string? pendingScrollId;
     private bool pendingScrollTop;
 
+    /// <summary>「問 AI 助理」的問答串（1.0.50）：新的問答自動捲到最下方。</summary>
+    private ElementReference assistantThread;
+
+    /// <summary>下一次畫完要把問答串強制捲到底（發問時）。</summary>
+    private bool pendingAssistantScroll;
+
     [Inject]
     public HelpViewInterop HelpViewInterop { get; set; } = default!;
 
@@ -132,6 +138,7 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         assistantTurns.Add(turn);
         assistantQuestion = string.Empty;
         isAsking = true;
+        pendingAssistantScroll = true;
         askCts = new CancellationTokenSource();
         var token = askCts.Token;
         StateHasChanged();
@@ -304,6 +311,17 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
             pendingScrollId = null;
             pendingScrollTop = false;
             await HelpViewInterop.ScrollToAsync(rootElement, id);
+        }
+
+        // 問答串只在有內容時才渲染，清除對話後會是新的元素；follow 在 JS 端每個元素只掛一次。
+        if (assistantTurns.Count > 0 && assistantThread.Context is not null)
+        {
+            await HelpViewInterop.FollowChatAsync(assistantThread);
+            if (pendingAssistantScroll)
+            {
+                pendingAssistantScroll = false;
+                await HelpViewInterop.ChatToBottomAsync(assistantThread);
+            }
         }
     }
 

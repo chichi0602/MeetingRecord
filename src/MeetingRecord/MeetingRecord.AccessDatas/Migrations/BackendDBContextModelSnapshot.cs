@@ -470,6 +470,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("LastProjectId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("LockoutEndUtc")
                         .HasColumnType("TEXT");
 

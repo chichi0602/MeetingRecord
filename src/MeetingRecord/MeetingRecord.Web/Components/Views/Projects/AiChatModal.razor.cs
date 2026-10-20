@@ -57,6 +57,12 @@ public partial class AiChatModal : ComponentBase
 
     private readonly List<PendingView> pendingAttachments = [];
     private ElementReference chatArea;
+
+    /// <summary>訊息區（1.0.50）：交給 chat-scroll.js 自動捲到最下方。</summary>
+    private ElementReference chatLog;
+
+    /// <summary>下一次畫完要強制捲到底：送出問題、換對話、重新載入歷史時設成 true。</summary>
+    private bool pendingScrollToBottom;
     private int attachInputKey;
     private bool isReadingAttachments;
 
@@ -168,6 +174,39 @@ public partial class AiChatModal : ComponentBase
         catch (JSDisconnectedException)
         {
             // 使用者已經離開頁面，沒有東西可掛。
+        }
+
+        await FollowChatLogAsync();
+    }
+
+    /// <summary>
+    /// 新的問答自動捲到最下方（1.0.50）。follow 在 JS 端只掛一次：之後內容長出來時，
+    /// 使用者停在底部附近就跟著捲；往上捲看舊訊息時不打擾。送出問題、換對話時強制捲到底。
+    /// </summary>
+    private async Task FollowChatLogAsync()
+    {
+        if (chatLog.Context is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("meetingRecordChatScroll.follow", chatLog);
+            if (pendingScrollToBottom)
+            {
+                pendingScrollToBottom = false;
+                await JSRuntime.InvokeVoidAsync("meetingRecordChatScroll.toBottom", chatLog);
+            }
+        }
+        catch (JSException ex)
+        {
+            // 捲不動只是要自己往下捲，不該讓整個視窗壞掉。
+            Logger.LogWarning(ex, "Failed to scroll AI chat log.");
+        }
+        catch (JSDisconnectedException)
+        {
+            // 使用者已經離開頁面。
         }
     }
 
@@ -427,6 +466,9 @@ public partial class AiChatModal : ComponentBase
             Logger.LogError(ex, "Loading AI chat history failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
             errorMessage = $"載入對話歷史失敗：{ex.Message}";
         }
+
+        // 打開或換一段對話時，直接看到最新的那一則（1.0.50）。
+        pendingScrollToBottom = true;
     }
 
     /// <summary>
@@ -472,6 +514,9 @@ public partial class AiChatModal : ComponentBase
         streamingAnswer = string.Empty;
         errorMessage = null;
         isAsking = true;
+
+        // 送出時一律捲到底，就算剛才往上捲去看舊訊息（1.0.50）。
+        pendingScrollToBottom = true;
 
         // 先把提問放進畫面，使用者才不會覺得按了沒反應。實際落庫在服務層與回答一起做。
         // 附件在這裡只是顯示用的空殼（StoredName 空白＝還不能點），落庫後重載歷史就換成真的。

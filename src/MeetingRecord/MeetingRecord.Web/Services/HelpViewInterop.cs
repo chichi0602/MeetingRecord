@@ -40,6 +40,12 @@ public sealed class HelpViewInterop
 
     public Task ScrollToAsync(ElementReference root, string? id) => InvokeAsync(ScrollToFunction, root, id);
 
+    /// <summary>「問 AI 助理」的問答串跟著捲到最下方（1.0.50，<c>wwwroot/js/chat-scroll.js</c>，與 AI 問答視窗共用）。</summary>
+    public Task FollowChatAsync(ElementReference thread) => InvokeAsync("meetingRecordChatScroll.follow", thread);
+
+    /// <summary>強制捲到最下方並恢復跟隨：發問時呼叫。</summary>
+    public Task ChatToBottomAsync(ElementReference thread) => InvokeAsync("meetingRecordChatScroll.toBottom", thread);
+
     private async Task InvokeAsync(string identifier, params object?[] args)
     {
         try

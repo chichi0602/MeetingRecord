@@ -84,18 +84,24 @@ else
         @RetentionText
     </div>
 
+    <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                       OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
     <div class="call-log-panel">
+        @* ScrollX 多 32 給勾選欄（1.0.53）。 *@
         <Table TItem="AiCallLogAdapterModel"
                RemoteDataSource="true"
                DataSource="@rows"
                Loading="@isLoading"
                Size="TableSize.Small"
+               RowKey="x => x.Id"
+               @bind-SelectedRows="selectedRows"
                OnChange="OnTableChange"
                @bind-PageIndex="_pageIndex"
                @bind-PageSize="_pageSize"
                @bind-Total="_total"
-               ScrollX="1000">
+               ScrollX="1032">
             <ColumnDefinitions>
+                <Selection />
                 <Column TData="DateTime" DataIndex="@nameof(AiCallLogAdapterModel.OccurredAt)"
                         Title="時間" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">
                     <span class="call-log-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>

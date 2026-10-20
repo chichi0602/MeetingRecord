@@ -222,3 +222,10 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+/* 勾選欄（1.0.53）：包一層擋住點擊冒泡，點勾選框不會觸發「點列複製」。 */
+.exception-log-select {
+    display: flex;
+    justify-content: center;
+    cursor: default;
+}

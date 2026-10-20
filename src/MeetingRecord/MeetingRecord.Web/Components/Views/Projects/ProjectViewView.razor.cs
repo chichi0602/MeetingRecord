@@ -512,6 +512,10 @@ public partial class ProjectViewView : IDisposable
         projectFiles = (await projectService.GetAsync(selectedProjectId)).Files;
 
         projectMeetings = await meetingService.GetByProjectAsync(selectedProjectId);
+
+        // 1.0.53：生成進度會在背景重新載入，勾選依 Id 對回新的列；換專案時 Id 都不同，自然清空。
+        var selectedMeetingIds = selectedMeetings.Select(x => x.Id).ToHashSet();
+        selectedMeetings = projectMeetings.Where(x => selectedMeetingIds.Contains(x.Id) && CanDetach(x)).ToList();
         selectableTranscripts = await meetingService.GetSelectableTranscriptsAsync();
         promptTemplates = await promptTemplateService.GetEnabledSelectableAsync();
 
@@ -916,6 +920,60 @@ public partial class ProjectViewView : IDisposable
     /// 會刪掉 AI 產生的草稿且無法復原，所以一定先跳確認；但**影音檔與逐字稿會保留**，
     /// 這也是它與「會議紀錄」頁那個整筆刪除最大的差別，確認文案要講清楚。
     /// </summary>
+    #region 多選從專案移除（1.0.53）
+
+    /// <summary>歷史會議紀錄清單勾選的列；換專案、重新載入專案脈絡時清掉。</summary>
+    private IEnumerable<MeetingAdapterModel> selectedMeetings = [];
+
+    private bool isBatchDetaching;
+
+    private async Task OnBatchDetachAsync()
+    {
+        var items = selectedMeetings.Where(CanDetach).ToList();
+        if (items.Count == 0 || isBatchDetaching || SelectedProject is null)
+        {
+            return;
+        }
+
+        var project = SelectedProject;
+        var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認從專案移除",
+            Content = $"將把勾選的 {items.Count} 份會議紀錄從「{project.Title}」移除，"
+                + "已產生的會議紀錄內容會一併刪除且無法復原。"
+                + "影音檔與逐字稿會保留，之後可以把逐字稿指定到其他專案重新產生。確定要移除嗎？",
+            OkText = "移除",
+            CancelText = "取消",
+            MaskClosable = false,
+            OkButtonProps = new ButtonProps { Danger = true },
+        });
+        if (!confirmed)
+        {
+            return;
+        }
+
+        isBatchDetaching = true;
+        try
+        {
+            var result = await BatchRunner.RunAsync(items, x => x.Title, async x =>
+            {
+                var r = await meetingService.DetachFromProjectAsync(x.Id, project.Id);
+                return r.Success ? null : r.Message;
+            });
+            logger.LogInformation("Batch detach completed. ProjectId={ProjectId}, Succeeded={Succeeded}, Failed={Failed}", project.Id, result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(notificationService, result, "從專案移除");
+        }
+        finally
+        {
+            isBatchDetaching = false;
+        }
+
+        await ReloadProjectContextAsync();
+        StateHasChanged();
+    }
+
+    #endregion
+
     private async Task OnDetachMeetingAsync(MeetingAdapterModel meeting)
     {
         if (detachingMeetingId is not null || SelectedProject is null)

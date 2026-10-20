@@ -73,16 +73,24 @@ else
                 </HoverTip>
             </div>
         </div>
+        <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                           OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="prompt-template-view-table-wrap">
             <Table @ref="table"
                    TItem="PromptTemplateAdapterModel"
                    Class="prompt-template-view-table"
                    RemoteDataSource="true"
                    DataSource="@promptTemplateAdapterModels"
+                   RowKey="x => x.Id"
+                   @bind-SelectedRows="selectedRows"
                    OnChange="OnTableChange"
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
+                @if (CanDelete)
+                {
+                    <Selection />
+                }
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.ContentPreview)" Title="內容預覽" />
                 <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Description)" Title="描述" />

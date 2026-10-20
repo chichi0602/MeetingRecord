@@ -11,6 +11,7 @@ using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
 
@@ -248,6 +249,8 @@ public partial class AiCallLogView : ComponentBase
         }
         finally
         {
+            // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
+            selectedRows = [];
             isLoading = false;
             StateHasChanged();
         }
@@ -590,6 +593,63 @@ public partial class AiCallLogView : ComponentBase
             _ = MessageService.ErrorAsync(result.Message);
         }
     }
+
+    #region 多選刪除（1.0.53）
+
+    /// <summary>目前這一頁勾選的列；換頁、排序、搜尋、重新載入時清掉（ReloadAsync）。</summary>
+    private IEnumerable<AiCallLogAdapterModel> selectedRows = [];
+
+    private bool isBatchDeleting;
+
+    private async Task OnBatchDeleteAsync()
+    {
+        var items = selectedRows.ToList();
+        if (items.Count == 0 || isBatchDeleting || isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        {
+            return;
+        }
+
+        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "刪除 AI 對話紀錄",
+            Content = $"確定要刪除勾選的 {items.Count} 筆嗎？送出內容與回應的檔案會一併刪除，無法復原。Token 用量不受影響。",
+            OkText = "刪除",
+            CancelText = "取消",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false,
+        });
+        if (!confirmed)
+        {
+            return;
+        }
+
+        isBatchDeleting = true;
+        try
+        {
+            // 比照單筆：每刪成一筆就記一筆稽核。
+            var result = await BatchRunner.RunAsync(items, x => $"{x.OccurredAt:yyyy-MM-dd HH:mm:ss} {x.FeatureText}", async x =>
+            {
+                var r = await AiCallLogService.DeleteAsync(x.Id);
+                if (!r.Success)
+                {
+                    return r.Message;
+                }
+
+                await WriteAuditAsync(AuditActions.AiCallLogDelete, x.Id.ToString(), $"callId={x.CallId:N}; feature={x.Feature}");
+                return null;
+            });
+            Logger.LogInformation("Batch AI call log delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(NotificationService, result, "刪除");
+        }
+        finally
+        {
+            isBatchDeleting = false;
+        }
+
+        await ReloadAsync();
+    }
+
+    #endregion
 
     private async Task OnPurgeAsync()
     {

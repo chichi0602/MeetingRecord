@@ -295,11 +295,21 @@ else
                 <span class="project-view-section-count">本專案共 @projectMeetings.Count 份</span>
             </h3>
 
+            <BatchSelectionBar Count="@selectedMeetings.Count()" Busy="@isBatchDetaching"
+                               ActionText="從專案移除所選" Icon="link_off"
+                               OnAction="OnBatchDetachAsync" OnClear="@(() => selectedMeetings = [])" />
             <div class="project-view-table-wrap">
                 <Table TItem="MeetingAdapterModel"
                        Class="project-view-table"
                        DataSource="@projectMeetings"
+                       RowKey="x => x.Id"
+                       @bind-SelectedRows="selectedMeetings"
                        HidePagination="true">
+                    @* 多選「從專案移除」（1.0.53）：只有上傳者勾得起來（同單筆 CanDetach）；清單不分頁，全選＝整個清單。 *@
+                    @if (projectMeetings.Any(CanDetach))
+                    {
+                        <Selection Disabled="@(!CanDetach(context))" />
+                    }
                     <Column TData="string" Title="來源逐字稿">
                         <span class="project-view-cell-strong">@context.Title</span>
                     </Column>

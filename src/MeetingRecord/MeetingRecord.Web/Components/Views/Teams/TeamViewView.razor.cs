@@ -112,6 +112,8 @@ namespace MeetingRecord.Web.Components.Views.Teams
 
             teamAdapterModels = dataRequestResult.Result.ToList();
             _total = dataRequestResult.Count;
+            // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
+            selectedRows = [];
             logger.LogInformation("Team list reloaded successfully. Count={Count}", _total);
             StateHasChanged();
         }
@@ -204,6 +206,65 @@ namespace MeetingRecord.Web.Components.Views.Teams
             modalVisible = true;
             logger.LogInformation("Opened edit modal for team. TeamId={TeamId}, Name={Name}", teamAdapterModel.Id, teamAdapterModel.Name);
         }
+
+        #region 多選刪除（1.0.53）
+
+        /// <summary>目前這一頁勾選的列；換頁、排序、搜尋、重新載入時清掉（ReloadAsync）。</summary>
+        private IEnumerable<TeamAdapterModel> selectedRows = [];
+
+        private bool isBatchDeleting;
+
+        private bool CanDelete => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete);
+
+        async Task OnBatchDeleteAsync()
+        {
+            var items = selectedRows.ToList();
+            if (items.Count == 0 || isBatchDeleting)
+            {
+                return;
+            }
+
+            var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+            {
+                Title = "確認刪除",
+                Content = $"確定要刪除勾選的 {items.Count} 個團隊嗎？還是專案主責團隊的不會刪除。此操作無法復原。",
+                OkText = "刪除",
+                CancelText = "取消",
+                OkButtonProps = new ButtonProps { Danger = true },
+                MaskClosable = false
+            });
+            if (!ok)
+            {
+                return;
+            }
+
+            isBatchDeleting = true;
+            try
+            {
+                // 每一筆都先過刪除前檢查（還是某專案的主責團隊就不能刪），和單筆刪除同一套。
+                var result = await BatchRunner.RunAsync(items, x => x.Name, async x =>
+                {
+                    var check = await teamService.BeforeDeleteCheckAsync(x);
+                    if (!check.Success)
+                    {
+                        return check.Message;
+                    }
+
+                    var r = await teamService.DeleteAsync(x.Id);
+                    return r.Success ? null : r.Message;
+                });
+                logger.LogInformation("Batch team delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+                BatchResultNotifier.Notify(notificationService, result, "刪除");
+            }
+            finally
+            {
+                isBatchDeleting = false;
+            }
+
+            await ReloadAsync();
+        }
+
+        #endregion
 
         async Task OnDeleteAsync(TeamAdapterModel teamAdapterModel)
         {

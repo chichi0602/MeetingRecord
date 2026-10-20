@@ -115,6 +115,8 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
             roleViewAdapterModels = dataRequestResult.Result.ToList();
             _total = dataRequestResult.Count;
+            // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
+            selectedRows = [];
             logger.LogInformation("Role view list reloaded successfully. Count={Count}", _total);
             StateHasChanged();
         }
@@ -244,6 +246,65 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
             await ReloadAsync();
         }
+
+        #region 多選刪除（1.0.53）
+
+        /// <summary>目前這一頁勾選的列；換頁、排序、搜尋、重新載入時清掉（ReloadAsync）。</summary>
+        private IEnumerable<RoleViewAdapterModel> selectedRows = [];
+
+        private bool isBatchDeleting;
+
+        async Task OnBatchDeleteAsync()
+        {
+            var items = selectedRows.ToList();
+            if (items.Count == 0 || isBatchDeleting)
+            {
+                return;
+            }
+
+            // 比照單筆：有人掛著時先講清楚主要角色會被自動換掉（人數是各角色加總，同一人掛多個會重複計算）。
+            var userCount = 0;
+            foreach (var item in items)
+            {
+                userCount += await roleViewService.CountUsersAsync(item.Id);
+            }
+
+            var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+            {
+                Title = "確認刪除",
+                Content = userCount == 0
+                    ? $"確定要刪除勾選的 {items.Count} 個角色嗎？此操作無法復原。"
+                    : $"確定要刪除勾選的 {items.Count} 個角色嗎？目前共有 {userCount} 位使用者掛著這些角色。刪除後，以它們為主要角色的人會改用他們的其他角色，沒有其他角色的改用「{MagicObjectHelper.預設角色}」。此操作無法復原。",
+                OkText = "刪除",
+                CancelText = "取消",
+                OkButtonProps = new ButtonProps { Danger = true },
+                MaskClosable = false
+            });
+            if (!ok)
+            {
+                return;
+            }
+
+            isBatchDeleting = true;
+            try
+            {
+                var result = await BatchRunner.RunAsync(items, x => x.Name, async x =>
+                {
+                    var r = await roleViewService.DeleteAsync(x.Id);
+                    return r.Success ? null : r.Message;
+                });
+                logger.LogInformation("Batch role view delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+                BatchResultNotifier.Notify(notificationService, result, "刪除");
+            }
+            finally
+            {
+                isBatchDeleting = false;
+            }
+
+            await ReloadAsync();
+        }
+
+        #endregion
 
         bool isSeedingPresets;
 

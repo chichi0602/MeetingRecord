@@ -127,6 +127,8 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
             myUserAdapterModels = dataRequestResult.Result.ToList();
             _total = dataRequestResult.Count;
+            // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除、批次調整團隊後都會走到這裡，勾選一律清掉。
+            selectedUsers = [];
             logger.LogInformation("User list reloaded successfully. Count={Count}", _total);
             StateHasChanged();
         }
@@ -243,7 +245,20 @@ namespace MeetingRecord.Web.Components.Views.Admins
                 return;
             }
 
-            await myUserService.DeleteAsync(myUserAdapterModel.Id);
+            // 1.0.53：看結果（以前不看，失敗也顯示「刪除成功」）。
+            var deleteResult = await myUserService.DeleteAsync(myUserAdapterModel.Id);
+            if (!deleteResult.Success)
+            {
+                _ = notificationService.Open(new NotificationConfig()
+                {
+                    Message = "系統訊息",
+                    Description = deleteResult.Message,
+                    NotificationType = NotificationType.Error,
+                    Placement = NotificationPlacement.BottomRight
+                });
+                return;
+            }
+
             logger.LogInformation("User delete completed. UserId={UserId}", myUserAdapterModel.Id);
 
             _ = notificationService.Open(new NotificationConfig()
@@ -256,6 +271,63 @@ namespace MeetingRecord.Web.Components.Views.Admins
 
             await ReloadAsync();
         }
+
+        #region 多選刪除（1.0.53）
+
+        [Inject]
+        private CurrentUserService CurrentUserService { get; set; } = default!;
+
+        private bool isBatchDeleting;
+
+        async Task OnBatchDeleteAsync()
+        {
+            var items = selectedUsers.ToList();
+            if (items.Count == 0 || isBatchDeleting)
+            {
+                return;
+            }
+
+            var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+            {
+                Title = "確認刪除",
+                Content = $"確定要刪除勾選的 {items.Count} 個帳號嗎？此操作無法復原。",
+                OkText = "刪除",
+                CancelText = "取消",
+                OkButtonProps = new ButtonProps { Danger = true },
+                MaskClosable = false
+            });
+            if (!ok)
+            {
+                return;
+            }
+
+            // 自己的帳號不刪（刪了當下就失去登入身分），列為沒刪除讓使用者知道。
+            var currentUserId = CurrentUserService.CurrentUser.Id;
+            isBatchDeleting = true;
+            try
+            {
+                var result = await BatchRunner.RunAsync(items, x => x.Account, async x =>
+                {
+                    if (x.Id == currentUserId)
+                    {
+                        return "不能刪除自己的帳號";
+                    }
+
+                    var r = await myUserService.DeleteAsync(x.Id);
+                    return r.Success ? null : r.Message;
+                });
+                logger.LogInformation("Batch user delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+                BatchResultNotifier.Notify(notificationService, result, "刪除");
+            }
+            finally
+            {
+                isBatchDeleting = false;
+            }
+
+            await ReloadAsync();
+        }
+
+        #endregion
 
         async Task OnAddAsync(bool continueOnCapturedContext)
         {

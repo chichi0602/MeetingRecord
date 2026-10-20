@@ -422,8 +422,10 @@ button.todo-view-pill:focus-visible {
 
    ⚠️ 用 nth-child(2) 是因為 AntDesign 不會把欄位的 Class 帶到 <col> 上。
       .razor 裡欄位順序若改動（待辦事項不再是第 2 欄），這裡要一起改。
-   ⚠️ 要 !important：AntDesign 把寬度寫在 <col> 的 inline style 上。 */
-.todo-view-table-wrap ::deep colgroup > col:nth-child(2) {
+   ⚠️ 要 !important：AntDesign 把寬度寫在 <col> 的 inline style 上。
+   ⚠️ 1.0.53：有多選刪除的勾選欄時，待辦事項變成第 3 欄（外層加 .todo-view-has-selection）。 */
+.todo-view-table-wrap:not(.todo-view-has-selection) ::deep colgroup > col:nth-child(2),
+.todo-view-table-wrap.todo-view-has-selection ::deep colgroup > col:nth-child(3) {
     width: auto !important;
     min-width: 0 !important;
 }

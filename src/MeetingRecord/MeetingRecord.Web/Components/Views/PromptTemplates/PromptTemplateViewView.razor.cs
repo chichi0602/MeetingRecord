@@ -125,6 +125,8 @@ public partial class PromptTemplateViewView
 
         promptTemplateAdapterModels = dataRequestResult.Result.ToList();
         _total = dataRequestResult.Count;
+        // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
+        selectedRows = [];
 
         // 分頁修好之後（0.4.64）頁碼有可能落在最後一頁之後——例如停在第 2 頁時把該頁
         // 唯一一筆刪掉，Skip 就會跳過全部資料而顯示空白表格。夾回最後一頁重載一次。
@@ -375,6 +377,58 @@ public partial class PromptTemplateViewView
         return Task.CompletedTask;
     }
 
+    #region 多選刪除（1.0.53）
+
+    /// <summary>目前這一頁勾選的列；換頁、排序、搜尋、重新載入時清掉（ReloadAsync）。</summary>
+    private IEnumerable<PromptTemplateAdapterModel> selectedRows = [];
+
+    private bool isBatchDeleting;
+
+    private bool CanDelete => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Delete);
+
+    private async Task OnBatchDeleteAsync()
+    {
+        var items = selectedRows.ToList();
+        if (items.Count == 0 || isBatchDeleting)
+        {
+            return;
+        }
+
+        var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+        {
+            Title = "確認刪除",
+            Content = $"確定要刪除勾選的 {items.Count} 個提示詞嗎？此操作無法復原。",
+            OkText = "刪除",
+            CancelText = "取消",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false
+        });
+        if (!ok)
+        {
+            return;
+        }
+
+        isBatchDeleting = true;
+        try
+        {
+            var result = await BatchRunner.RunAsync(items, x => x.Name, async x =>
+            {
+                var r = await promptTemplateService.DeleteAsync(x.Id);
+                return r.Success ? null : r.Message;
+            });
+            logger.LogInformation("Batch prompt template delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(notificationService, result, "刪除");
+        }
+        finally
+        {
+            isBatchDeleting = false;
+        }
+
+        await ReloadAsync();
+    }
+
+    #endregion
+
     private async Task OnDeleteAsync(PromptTemplateAdapterModel promptTemplateAdapterModel)
     {
         logger.LogInformation("Delete prompt template requested. PromptTemplateId={PromptTemplateId}, Name={Name}", promptTemplateAdapterModel.Id, promptTemplateAdapterModel.Name);
@@ -395,7 +449,20 @@ public partial class PromptTemplateViewView
             return;
         }
 
-        await promptTemplateService.DeleteAsync(promptTemplateAdapterModel.Id);
+        // 1.0.53：看結果（以前不看，失敗也顯示「刪除成功」）。
+        var deleteResult = await promptTemplateService.DeleteAsync(promptTemplateAdapterModel.Id);
+        if (!deleteResult.Success)
+        {
+            _ = notificationService.Open(new NotificationConfig()
+            {
+                Message = "系統訊息",
+                Description = deleteResult.Message,
+                NotificationType = NotificationType.Error,
+                Placement = NotificationPlacement.BottomRight
+            });
+            return;
+        }
+
         logger.LogInformation("Prompt template delete completed. PromptTemplateId={PromptTemplateId}", promptTemplateAdapterModel.Id);
 
         _ = notificationService.Open(new NotificationConfig()

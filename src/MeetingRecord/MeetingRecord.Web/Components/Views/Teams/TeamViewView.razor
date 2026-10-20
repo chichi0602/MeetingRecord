@@ -43,16 +43,24 @@ else
                 </HoverTip>
             </div>
         </div>
+        <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                           OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="team-view-table-wrap">
             <Table @ref="table"
                    TItem="TeamAdapterModel"
                    Class="team-view-table"
                    RemoteDataSource="true"
                    DataSource="@teamAdapterModels"
+                   RowKey="x => x.Id"
+                   @bind-SelectedRows="selectedRows"
                    OnChange="OnTableChange"
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
+                @if (CanDelete)
+                {
+                    <Selection />
+                }
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Code)" Title="代號" Sortable ShowSorterTooltip="false" />
                 <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Description)" Title="描述" />

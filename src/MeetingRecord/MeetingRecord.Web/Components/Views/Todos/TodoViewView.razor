@@ -94,19 +94,29 @@ else
            它顯示的就是狀態分布，再被狀態過濾一次會得到「每個人都 100%」這種看似合理的錯誤數字。
            標題上會顯示目前範圍，免得使用者以為數字沒跟著過濾器動是 bug。 *@
         <div class="todo-view-body @(ownerPanelCollapsed ? "todo-view-body-collapsed" : string.Empty)">
-            <div class="todo-view-table-wrap">
+            <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                               OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
+            <div class="todo-view-table-wrap @(ShowSelection ? "todo-view-has-selection" : string.Empty)">
             <Table @ref="table"
                    TItem="TodoAdapterModel"
                    Class="todo-view-table"
-                   ScrollX="934px"
+                   ScrollX="966px"
                    RemoteDataSource="true"
                    DataSource="@todoAdapterModels"
                    OnChange="OnTableChange"
                    TreeChildren="@(item => item.Children)"
                    RowKey="@(item => item.Id.ToString())"
+                   @bind-SelectedRows="selectedRows"
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
+                @* 多選刪除（1.0.53）：只有專案負責人勾得起來（同單筆刪除）。CheckStrictly：主待辦與子項目各自勾，不連動；
+                   主待辦已勾時，批次刪除會略過它被勾的子項目（刪主待辦會連子項目一起刪）。
+                   這一欄是「選取」，旁邊的「完成」才是勾完成，兩者分開。 *@
+                @if (ShowSelection)
+                {
+                    <Selection CheckStrictly Disabled="@(!CanDelete(context))" />
+                }
                 <Column TData="bool" Title="完成" Width="48">
                     <Checkbox Checked="@context.IsCompleted"
                               Disabled="@(!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit) || IsReadOnly(context))"

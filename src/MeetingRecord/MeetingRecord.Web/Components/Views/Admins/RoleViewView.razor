@@ -48,16 +48,21 @@ else
                 </HoverTip>
             </div>
         </div>
+        <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                           OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="role-view-table-wrap">
             <Table @ref="table"
             TItem="RoleViewAdapterModel"
             Class="role-view-table"
             RemoteDataSource="true"
             DataSource="@roleViewAdapterModels"
+            RowKey="x => x.Id"
+            @bind-SelectedRows="selectedRows"
             OnChange=OnTableChange
             @bind-PageIndex="_pageIndex"
             @bind-PageSize="_pageSize"
             @bind-Total=_total>
+                <Selection />
                 <Column TData="string" DataIndex="@nameof(RoleViewAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />

@@ -113,6 +113,8 @@ namespace MeetingRecord.Web.Components.Views.Categories
 
             categoryAdapterModels = dataRequestResult.Result.ToList();
             _total = dataRequestResult.Count;
+            // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
+            selectedRows = [];
             logger.LogInformation("Category list reloaded successfully. Count={Count}", _total);
             StateHasChanged();
         }
@@ -225,7 +227,20 @@ namespace MeetingRecord.Web.Components.Views.Categories
                 return;
             }
 
-            await categoryService.DeleteAsync(categoryAdapterModel.Id);
+            // 1.0.53：看結果（以前不看，失敗也顯示「刪除成功」）。
+            var deleteResult = await categoryService.DeleteAsync(categoryAdapterModel.Id);
+            if (!deleteResult.Success)
+            {
+                _ = notificationService.Open(new NotificationConfig()
+                {
+                    Message = "系統訊息",
+                    Description = deleteResult.Message,
+                    NotificationType = NotificationType.Error,
+                    Placement = NotificationPlacement.BottomRight
+                });
+                return;
+            }
+
             logger.LogInformation("Category delete completed. CategoryId={CategoryId}", categoryAdapterModel.Id);
 
             _ = notificationService.Open(new NotificationConfig()
@@ -238,6 +253,58 @@ namespace MeetingRecord.Web.Components.Views.Categories
 
             await ReloadAsync();
         }
+
+        #region 多選刪除（1.0.53）
+
+        /// <summary>目前這一頁勾選的列；換頁、排序、搜尋、重新載入時清掉（ReloadAsync）。</summary>
+        private IEnumerable<CategoryAdapterModel> selectedRows = [];
+
+        private bool isBatchDeleting;
+
+        private bool CanDelete => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
+
+        async Task OnBatchDeleteAsync()
+        {
+            var items = selectedRows.ToList();
+            if (items.Count == 0 || isBatchDeleting)
+            {
+                return;
+            }
+
+            var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+            {
+                Title = "確認刪除",
+                Content = $"確定要刪除勾選的 {items.Count} 個分類嗎？此操作無法復原。",
+                OkText = "刪除",
+                CancelText = "取消",
+                OkButtonProps = new ButtonProps { Danger = true },
+                MaskClosable = false
+            });
+            if (!ok)
+            {
+                return;
+            }
+
+            isBatchDeleting = true;
+            try
+            {
+                var result = await BatchRunner.RunAsync(items, x => x.Name, async x =>
+                {
+                    var r = await categoryService.DeleteAsync(x.Id);
+                    return r.Success ? null : r.Message;
+                });
+                logger.LogInformation("Batch category delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+                BatchResultNotifier.Notify(notificationService, result, "刪除");
+            }
+            finally
+            {
+                isBatchDeleting = false;
+            }
+
+            await ReloadAsync();
+        }
+
+        #endregion
 
         async Task OnAddAsync()
         {

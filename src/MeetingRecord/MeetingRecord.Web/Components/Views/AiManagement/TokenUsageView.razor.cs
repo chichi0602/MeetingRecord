@@ -11,6 +11,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
 
@@ -299,6 +300,9 @@ public partial class TokenUsageView : ComponentBase
             rows = result.Rows;
             total = result.TotalCount;
         }
+
+        // 全選只算這一頁（1.0.53）：換頁、排序、篩選、刪除後都會走到這裡（ReloadAsync 與 OnTableChangeAsync 共用），勾選一律清掉。
+        selectedRows = [];
     }
 
     /// <summary>翻頁與排序。只重載明細，不重算整頁統計——統計與分頁無關。</summary>
@@ -587,6 +591,62 @@ public partial class TokenUsageView : ComponentBase
             _ = MessageService.ErrorAsync($"刪除失敗：{ex.Message}");
         }
     }
+
+    #region 多選刪除（1.0.53）
+
+    /// <summary>明細目前這一頁勾選的列；換頁、排序、篩選、重新載入時清掉（LoadRowsAsync）。</summary>
+    private IEnumerable<AiUsageRow> selectedRows = [];
+
+    private bool isBatchDeleting;
+
+    private async Task OnBatchDeleteAsync()
+    {
+        var items = selectedRows.ToList();
+        if (items.Count == 0 || isBatchDeleting || isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        {
+            return;
+        }
+
+        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "刪除用量紀錄",
+            Content = $"確定要刪除勾選的 {items.Count} 筆嗎？無法復原。{BuildImpactText(items.Any(x => x.OccurredAt >= CurrentMonthStart))}",
+            OkText = "刪除",
+            CancelText = "取消",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false,
+        });
+        if (!confirmed)
+        {
+            return;
+        }
+
+        isBatchDeleting = true;
+        try
+        {
+            // 比照單筆：每刪成一筆就記一筆稽核。
+            var result = await BatchRunner.RunAsync(items, x => $"{x.OccurredAt:yyyy-MM-dd HH:mm:ss} {x.FeatureText}", async x =>
+            {
+                if (!await AiUsageAnalysisService.DeleteAsync(x.Id))
+                {
+                    return "找不到這筆紀錄";
+                }
+
+                await WriteAuditAsync(AuditActions.AiUsageDelete, x.Id.ToString(), $"feature={x.Feature}; callId={x.CallId:N}");
+                return null;
+            });
+            Logger.LogInformation("Batch token usage delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(NotificationService, result, "刪除");
+        }
+        finally
+        {
+            isBatchDeleting = false;
+        }
+
+        await ReloadAsync();
+    }
+
+    #endregion
 
     private async Task OnPurgeAsync()
     {

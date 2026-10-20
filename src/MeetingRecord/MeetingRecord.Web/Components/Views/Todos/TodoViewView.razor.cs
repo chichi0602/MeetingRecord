@@ -282,6 +282,10 @@ public partial class TodoViewView : IAsyncDisposable
         todoAdapterModels = dataRequestResult.Result.ToList();
         _total = dataRequestResult.Count;
 
+        // 1.0.53：勾選依 Id 對回新的列（含子項目），已不能刪的拿掉；換頁、篩選、搜尋由各自的處理先清掉。
+        var selectedIds = selectedRows.Select(x => x.Id).ToHashSet();
+        selectedRows = TodoBatchSelection.Flatten(todoAdapterModels).Where(x => selectedIds.Contains(x.Id) && CanDelete(x)).ToList();
+
         // 分頁修好之後（0.4.85）頁碼有可能落在最後一頁之後——例如停在第 2 頁時把該頁
         // 唯一一筆刪掉，Skip 就會跳過全部資料而顯示空白表格。夾回最後一頁重載一次。
         //
@@ -347,6 +351,7 @@ public partial class TodoViewView : IAsyncDisposable
         }
 
         _pageIndex = 1;
+        selectedRows = [];
         await ReloadAsync();
     }
 
@@ -356,6 +361,7 @@ public partial class TodoViewView : IAsyncDisposable
     {
         selectedProjectFilter = value;
         _pageIndex = 1;
+        selectedRows = [];
         await ReloadAsync();
     }
 
@@ -363,6 +369,7 @@ public partial class TodoViewView : IAsyncDisposable
     {
         selectedStatusFilter = value ?? string.Empty;
         _pageIndex = 1;
+        selectedRows = [];
         await ReloadAsync();
     }
 
@@ -520,6 +527,7 @@ public partial class TodoViewView : IAsyncDisposable
             }
 
             _pageIndex = 1;
+            selectedRows = [];
             await ReloadAsync();
         }
 
@@ -553,6 +561,12 @@ public partial class TodoViewView : IAsyncDisposable
 
     private async Task OnTableChange(QueryModel<TodoAdapterModel> args)
     {
+        // 全選只算這一頁（1.0.53）：換頁、排序就清掉勾選。
+        if (args.PageIndex != _pageIndex || args.PageSize != _pageSize)
+        {
+            selectedRows = [];
+        }
+
         _pageIndex = args.PageIndex;
 
         // 0.4.85 之前分頁根本沒作用，所以「使用者改每頁筆數」不可能被觀察到；修好之後它第一次真的會動。
@@ -623,6 +637,7 @@ public partial class TodoViewView : IAsyncDisposable
     private async Task OnSearchAsync()
     {
         _pageIndex = 1;
+        selectedRows = [];
         logger.LogInformation("Todo search triggered. Search={Search}", searchText);
         await ReloadAsync();
     }
@@ -737,6 +752,70 @@ public partial class TodoViewView : IAsyncDisposable
         modalVisible = true;
         logger.LogInformation("Opened edit modal for todo. TodoId={TodoId}", todoAdapterModel.Id);
     }
+
+    #region 多選刪除（1.0.53）
+
+    /// <summary>目前這一頁勾選的列（主待辦與展開的子項目）。換頁、搜尋、篩選時清掉；重新載入時依 Id 保留。</summary>
+    private IEnumerable<TodoAdapterModel> selectedRows = [];
+
+    private bool isBatchDeleting;
+
+    /// <summary>有任何一列能刪才顯示勾選欄。</summary>
+    private bool ShowSelection => TodoBatchSelection.Flatten(todoAdapterModels).Any(CanDelete);
+
+    private async Task OnBatchDeleteAsync()
+    {
+        // 主待辦已勾選時略過它被勾的子項目：刪主待辦會連子項目一起刪。
+        var items = TodoBatchSelection.ExcludeChildrenOfSelectedParents(selectedRows.Where(CanDelete));
+        if (items.Count == 0 || isBatchDeleting)
+        {
+            return;
+        }
+
+        var childCount = items.Where(x => !x.IsSubtask).Sum(x => x.ChildrenTotal);
+        var ok = await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "確認刪除",
+            Content = childCount > 0
+                ? $"確定要刪除勾選的 {items.Count} 筆待辦事項嗎？它們底下的 {childCount} 個子項目也會一起刪除。此操作無法復原。"
+                : $"確定要刪除勾選的 {items.Count} 筆待辦事項嗎？此操作無法復原。",
+            OkText = "刪除",
+            CancelText = "取消",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false
+        });
+        if (!ok)
+        {
+            return;
+        }
+
+        isBatchDeleting = true;
+        try
+        {
+            var result = await BatchRunner.RunAsync(items, x => x.Title, async x =>
+            {
+                var check = await todoService.BeforeDeleteCheckAsync(x);
+                if (!check.Success)
+                {
+                    return check.Message;
+                }
+
+                var r = await todoService.DeleteAsync(x.Id);
+                return r.Success ? null : r.Message;
+            });
+            logger.LogInformation("Batch todo delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(notificationService, result, "刪除");
+        }
+        finally
+        {
+            isBatchDeleting = false;
+        }
+
+        selectedRows = [];
+        await ReloadAsync();
+    }
+
+    #endregion
 
     private async Task OnDeleteAsync(TodoAdapterModel todoAdapterModel)
     {

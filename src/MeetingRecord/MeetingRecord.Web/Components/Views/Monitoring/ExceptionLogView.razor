@@ -65,20 +65,38 @@ else
         @RetentionText
     </div>
 
+    <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                       OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
     <div class="exception-log-panel">
+        @* ScrollX 多 32 給勾選欄（1.0.53）。 *@
         <Table TItem="ExceptionLogAdapterModel"
                RemoteDataSource="true"
                DataSource="@rows"
                Loading="@isLoading"
                Size="TableSize.Small"
                RowClassName="@(_ => "exception-log-row")"
+               RowKey="x => x.Id"
                OnRowClick="OnRowClickAsync"
                OnChange="OnTableChange"
                @bind-PageIndex="_pageIndex"
                @bind-PageSize="_pageSize"
                @bind-Total="_total"
-               ScrollX="900">
+               ScrollX="932">
             <ColumnDefinitions>
+                @* 勾選欄自己做（1.0.53）：這張表點列就複製，AntDesign 的 Selection 擋不住點擊冒泡，
+                   所以用一般欄位包一層 stopPropagation，點勾選框不會觸發複製。表頭勾選＝全選這一頁。 *@
+                <Column TData="bool" Width="40">
+                    <TitleTemplate>
+                        <Checkbox Checked="@IsAllSelected" Indeterminate="@IsPartlySelected"
+                                  CheckedChanged="@((bool value) => OnSelectAllChanged(value))" />
+                    </TitleTemplate>
+                    <ChildContent>
+                        <div class="exception-log-select" @onclick:stopPropagation="true">
+                            <Checkbox Checked="@IsSelected(context)"
+                                      CheckedChanged="@((bool value) => OnRowSelectedChanged(context, value))" />
+                        </div>
+                    </ChildContent>
+                </Column>
                 @* 欄位刻意精簡：只留「何時、幾次、什麼錯、在哪一頁、誰」，其餘收進「查看」明細窗。 *@
                 <Column TData="DateTime" DataIndex="@nameof(ExceptionLogAdapterModel.LastOccurredAt)"
                         Title="最後發生" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">

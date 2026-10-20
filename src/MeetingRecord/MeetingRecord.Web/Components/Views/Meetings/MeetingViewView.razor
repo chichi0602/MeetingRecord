@@ -56,16 +56,25 @@ else
                 </HoverTip>
             </div>
         </div>
+        <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                           OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="meeting-view-table-wrap">
             <Table @ref="table"
                    TItem="MeetingAdapterModel"
                    Class="meeting-view-table"
                    RemoteDataSource="true"
                    DataSource="@meetingAdapterModels"
+                   RowKey="x => x.Id"
+                   @bind-SelectedRows="selectedRows"
                    OnChange="OnTableChange"
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
                    @bind-Total="_total">
+                @* 多選刪除（1.0.53）：不能刪的列（不是上傳者或專案負責人、上傳中）勾不起來，表頭全選只選得到能刪的。 *@
+                @if (ShowSelection)
+                {
+                    <Selection Disabled="@(!CanSelect(context))" />
+                }
                 @* 所屬專案併在標題底下當第二行，不另開一欄——操作欄最多會有 11 顆圖示，能省一欄是一欄。 *@
                 <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable ShowSorterTooltip="false">
                     <div class="meeting-title-cell">

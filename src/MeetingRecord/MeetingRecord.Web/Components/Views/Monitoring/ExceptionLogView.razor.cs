@@ -11,6 +11,7 @@ using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
@@ -227,6 +228,8 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         }
         finally
         {
+            // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
+            selectedRows = [];
             isLoading = false;
             StateHasChanged();
         }
@@ -450,6 +453,77 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             _ = MessageService.ErrorAsync(result.Message);
         }
     }
+
+    #region 多選刪除（1.0.53）
+
+    /// <summary>目前這一頁勾選的列；換頁、排序、搜尋、重新載入時清掉（ReloadAsync）。</summary>
+    private IEnumerable<ExceptionLogAdapterModel> selectedRows = [];
+
+    private bool isBatchDeleting;
+
+    private bool IsSelected(ExceptionLogAdapterModel row) => selectedRows.Any(x => x.Id == row.Id);
+
+    private bool IsAllSelected => rows.Count > 0 && rows.All(IsSelected);
+
+    private bool IsPartlySelected => selectedRows.Any() && !IsAllSelected;
+
+    private void OnRowSelectedChanged(ExceptionLogAdapterModel row, bool selected)
+        => selectedRows = selected
+            ? [.. selectedRows.Where(x => x.Id != row.Id), row]
+            : [.. selectedRows.Where(x => x.Id != row.Id)];
+
+    /// <summary>表頭勾選＝全選這一頁。</summary>
+    private void OnSelectAllChanged(bool selected) => selectedRows = selected ? [.. rows] : [];
+
+    private async Task OnBatchDeleteAsync()
+    {
+        var items = selectedRows.ToList();
+        if (items.Count == 0 || isBatchDeleting || isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        {
+            return;
+        }
+
+        var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "刪除例外紀錄",
+            Content = $"確定要刪除勾選的 {items.Count} 列嗎？相同的例外若再次發生，會重新出現並從 1 次開始計算。",
+            OkText = "刪除",
+            CancelText = "取消",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false,
+        });
+        if (!confirmed)
+        {
+            return;
+        }
+
+        isBatchDeleting = true;
+        try
+        {
+            // 比照單筆：每刪成一列就記一筆稽核。
+            var result = await BatchRunner.RunAsync(items, x => x.ShortExceptionType, async x =>
+            {
+                var r = await ExceptionLogService.DeleteAsync(x.Id);
+                if (!r.Success)
+                {
+                    return r.Message;
+                }
+
+                await WriteAuditAsync(AuditActions.ExceptionLogDelete, x.Id.ToString(), $"type={x.ShortExceptionType}");
+                return null;
+            });
+            Logger.LogInformation("Batch exception log delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(NotificationService, result, "刪除");
+        }
+        finally
+        {
+            isBatchDeleting = false;
+        }
+
+        await ReloadAsync();
+    }
+
+    #endregion
 
     private async Task OnPurgeAsync()
     {

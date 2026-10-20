@@ -247,17 +247,23 @@ else
                 </TabPane>
 
                 <TabPane Key="@TabDetail" Tab="@($"明細（{total:N0}）")">
+                    <BatchSelectionBar Count="@selectedRows.Count()" Busy="@isBatchDeleting"
+                                       OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
+                    @* ScrollX 多 32 給勾選欄（1.0.53）。 *@
                     <Table TItem="AiUsageRow"
                            RemoteDataSource="true"
                            DataSource="@rows"
                            Loading="@isLoading"
+                           RowKey="x => x.Id"
+                           @bind-SelectedRows="selectedRows"
                            OnChange="OnTableChangeAsync"
                            @bind-PageIndex="pageIndex"
                            @bind-PageSize="pageSize"
                            @bind-Total="total"
                            Size="TableSize.Small"
-                           ScrollX="1000">
+                           ScrollX="1032">
                         <ColumnDefinitions>
+                            <Selection />
                             <Column TData="DateTime" DataIndex="@nameof(AiUsageRow.OccurredAt)"
                                     Title="時間" Width="165" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending">
                                 <span class="token-number">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>

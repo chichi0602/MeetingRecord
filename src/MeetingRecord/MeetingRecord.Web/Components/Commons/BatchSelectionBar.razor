@@ -1,0 +1,29 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@* 清單的多選批次列（1.0.53）：勾選數大於 0 才出現。全選只選這一頁，換頁、排序、搜尋時由各頁清掉勾選。
+   真正的動作（確認框、逐筆刪除、通知）由各頁做，這裡只負責顯示與按鈕。 *@
+@if (Count > 0)
+{
+    <div class="batch-selection-bar" role="region" aria-label="批次動作">
+        <span class="batch-selection-count">已勾選 @Count 筆</span>
+        <Button Type="ButtonType.Default" Danger Loading="@Busy" Disabled="@Busy" OnClick="OnAction">
+            <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="@Icon" /><span>@ActionText</span></span>
+        </Button>
+        <Button Type="ButtonType.Default" Disabled="@Busy" OnClick="OnClear">取消勾選</Button>
+    </div>
+}
+
+@code {
+    [Parameter] public int Count { get; set; }
+
+    [Parameter] public string ActionText { get; set; } = "刪除所選";
+
+    [Parameter] public string Icon { get; set; } = "delete";
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback OnAction { get; set; }
+
+    [Parameter] public EventCallback OnClear { get; set; }
+}

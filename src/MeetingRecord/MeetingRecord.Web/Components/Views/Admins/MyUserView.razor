@@ -63,6 +63,13 @@ else
                     OnClick="@(async () => await OnBatchTeamAsync(add: false))">
                 <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="group_remove" /><span>移出團隊</span></span>
             </Button>
+            @* 多選刪除（1.0.53）：共用同一組勾選；自己的帳號會被略過並列為沒刪除。 *@
+            <Button Type="ButtonType.Default" Danger
+                    Loading="@isBatchDeleting"
+                    Disabled="@(!selectedUsers.Any() || isBatchDeleting)"
+                    OnClick="OnBatchDeleteAsync">
+                <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="delete" /><span>刪除所選</span></span>
+            </Button>
         </div>
         <div class="my-user-table-wrap">
             <Table @ref="table"

@@ -361,6 +361,12 @@ public partial class MeetingViewView : IDisposable
 
         meetingAdapterModels = dataRequestResult.Result.ToList();
         _total = dataRequestResult.Count;
+
+        // 1.0.53：轉錄進度會在背景觸發重新載入，勾選不能因此消失——依 Id 對回新的列，已不能刪的就拿掉。
+        // 換頁、搜尋、篩選由各自的處理先清掉勾選。
+        var selectedIds = selectedRows.Select(x => x.Id).ToHashSet();
+        selectedRows = meetingAdapterModels.Where(x => selectedIds.Contains(x.Id) && CanSelect(x)).ToList();
+
         logger.LogInformation("Meeting list reloaded successfully. Count={Count}", _total);
         StateHasChanged();
     }
@@ -387,6 +393,8 @@ public partial class MeetingViewView : IDisposable
 
         logger.LogDebug("Meeting table changed. PageIndex={PageIndex}, SortField={SortField}, SortDirection={SortDirection}", _pageIndex, sortField, sortDirection);
 
+        // 全選只算這一頁（1.0.53）：換頁、排序就清掉勾選。
+        selectedRows = [];
         await ReloadAsync();
     }
 
@@ -428,6 +436,7 @@ public partial class MeetingViewView : IDisposable
     {
         selectedCategoryFilters = values?.ToList() ?? [];
         _pageIndex = 1;
+        selectedRows = [];
         await ReloadAsync();
     }
 
@@ -439,6 +448,7 @@ public partial class MeetingViewView : IDisposable
     private async Task OnSearchAsync()
     {
         _pageIndex = 1;
+        selectedRows = [];
         logger.LogInformation("Meeting search triggered. Search={Search}", searchText);
         await ReloadAsync();
     }
@@ -484,6 +494,77 @@ public partial class MeetingViewView : IDisposable
         logger.LogInformation("Opened edit modal for meeting. MeetingId={MeetingId}, Title={Title}", meetingAdapterModel.Id, meetingAdapterModel.Title);
         return Task.CompletedTask;
     }
+
+    #region 多選刪除（1.0.53）
+
+    /// <summary>目前這一頁勾選的列。換頁、排序、搜尋、篩選時清掉；背景重新載入時依 Id 保留。</summary>
+    private IEnumerable<MeetingAdapterModel> selectedRows = [];
+
+    private bool isBatchDeleting;
+
+    /// <summary>能勾選＝能刪除（上傳者或專案負責人＋會議紀錄 edit），而且不在上傳中。</summary>
+    private bool CanSelect(MeetingAdapterModel meeting)
+        => CanDelete(meeting)
+            && GetLiveProgress(meeting.Id) is not { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading };
+
+    /// <summary>有任何一列能刪才顯示勾選欄。</summary>
+    private bool ShowSelection => meetingAdapterModels.Any(CanDelete);
+
+    private async Task OnBatchDeleteAsync()
+    {
+        var items = selectedRows.Where(CanSelect).ToList();
+        if (items.Count == 0 || isBatchDeleting)
+        {
+            return;
+        }
+
+        // 寫清楚會刪什麼、留下什麼（同單筆刪除）：待辦保留，只是不再連到會議。
+        var linkedTodos = 0;
+        foreach (var item in items)
+        {
+            linkedTodos += await meetingService.CountLinkedTodosAsync(item.Id);
+        }
+
+        var todoNote = linkedTodos > 0
+            ? $"從這些會議抽出的 {linkedTodos} 筆待辦會保留在專案裡（不再連到會議）。"
+            : string.Empty;
+
+        var ok = await modalService.ConfirmAsync(new ConfirmOptions()
+        {
+            Title = "確認刪除",
+            Content = $"確定要刪除勾選的 {items.Count} 筆會議紀錄嗎？影音檔、逐字稿、會議紀錄與 AI 問答會一併刪除。{todoNote}此操作無法復原。",
+            OkText = "刪除",
+            CancelText = "取消",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false
+        });
+        if (!ok)
+        {
+            return;
+        }
+
+        isBatchDeleting = true;
+        try
+        {
+            // 逐筆走單筆刪除：轉錄或生成中的會被服務擋下，原因列在通知裡。
+            var result = await BatchRunner.RunAsync(items, x => x.Title, async x =>
+            {
+                var r = await meetingService.DeleteAsync(x.Id);
+                return r.Success ? null : r.Message;
+            });
+            logger.LogInformation("Batch meeting delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
+            BatchResultNotifier.Notify(notificationService, result, "刪除");
+        }
+        finally
+        {
+            isBatchDeleting = false;
+        }
+
+        selectedRows = [];
+        await ReloadAsync();
+    }
+
+    #endregion
 
     private async Task OnDeleteAsync(MeetingAdapterModel meetingAdapterModel)
     {

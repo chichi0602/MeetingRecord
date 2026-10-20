@@ -12,21 +12,29 @@ namespace MeetingRecord.Business.Services.Other;
 /// <param name="UserId">使用者 Id；解析不到時為 0，這時什麼專案都看不到。</param>
 /// <param name="TeamIds">使用者所屬的團隊（<c>UserTeam</c>）。角色不帶任何團隊。</param>
 /// <param name="ProjectIds">看得到的專案：主責或協作團隊與 <see cref="TeamIds"/> 有交集。沒有公開專案。管理者不用這份清單。</param>
-/// <param name="PrimaryProjectIds">自己的團隊是<b>主責</b>的專案（1.0.47）：只有這些專案能改團隊設定、能刪除。管理者不用這份清單。</param>
+/// <param name="PrimaryProjectIds">自己的團隊是<b>主責</b>的專案（1.0.47）：只有這些專案能改團隊設定。管理者不用這份清單。</param>
+/// <param name="OwnedProjectIds">自己是<b>負責人</b>的專案（1.0.52，限看得到的）：能刪除專案與底下的會議、待辦、附件。管理者不用這份清單。</param>
 public sealed record ProjectAccess(
     bool IsAdmin,
     int UserId,
     IReadOnlyList<int> TeamIds,
     IReadOnlyList<int> ProjectIds,
-    IReadOnlyList<int>? PrimaryProjectIds = null)
+    IReadOnlyList<int>? PrimaryProjectIds = null,
+    IReadOnlyList<int>? OwnedProjectIds = null)
 {
+    /// <summary>
+    /// 是不是這個專案的負責人（1.0.52，<c>Project.OwnerUserId</c>）。負責人（與管理者）可以刪除專案本身，
+    /// 以及底下任何人的會議、待辦、附件；其他成員只能刪自己上傳的會議。
+    /// </summary>
+    public bool IsProjectOwner(int projectId) => IsAdmin || (OwnedProjectIds?.Contains(projectId) ?? false);
+
     public const string ProjectTeamManageMessage = "只有主責團隊的成員可以變更團隊設定。";
 
     public bool CanViewProject(int projectId) => IsAdmin || ProjectIds.Contains(projectId);
 
     /// <summary>
-    /// 能不能管理這個專案（1.0.47）：改主責／協作團隊、刪除專案。只有主責團隊的成員與管理者；
-    /// 協作團隊的人可以一起做事（改內容），但不能把主責團隊換掉或刪掉整個專案。
+    /// 能不能改這個專案的主責／協作團隊（1.0.47）。只有主責團隊的成員與管理者；
+    /// 協作團隊的人可以一起做事（改內容），但不能把主責團隊換掉。刪除專案 1.0.52 起改看 <see cref="IsProjectOwner"/>。
     /// </summary>
     public bool CanManageProject(int projectId) => IsAdmin || (PrimaryProjectIds?.Contains(projectId) ?? false);
 
@@ -210,7 +218,16 @@ public sealed class ProjectAccessService
             .Distinct()
             .ToListAsync();
 
-        return new ProjectAccess(false, scope.UserId, teamIds, projectIds, primaryProjectIds);
+        // 只算看得到的專案：負責人被移出團隊後就看不到了，也就不該還能刪。
+        var ownedProjectIds = scope.UserId == 0
+            ? []
+            : await context.Project
+                .AsNoTracking()
+                .Where(p => p.OwnerUserId == scope.UserId && projectIds.Contains(p.Id))
+                .Select(p => p.Id)
+                .ToListAsync();
+
+        return new ProjectAccess(false, scope.UserId, teamIds, projectIds, primaryProjectIds, ownedProjectIds);
     }
 
     /// <summary>

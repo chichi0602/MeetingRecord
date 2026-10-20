@@ -209,8 +209,9 @@ public class TodoController : ControllerBase
         }
     }
 
+    // 1.0.52：刪除只限專案負責人（服務層把關），負責人是一般使用者也能刪，所以這裡只要求「編輯」，與畫面一致。
     [HttpDelete("{id}")]
-    [HasPermission(MagicObjectHelper.角色_待辦事項, PermissionActions.Delete)]
+    [HasPermission(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit)]
     public async Task<ActionResult<ApiResult>> Delete(int id)
     {
         try

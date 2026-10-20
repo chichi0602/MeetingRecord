@@ -567,6 +567,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("OwnerUserId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Participants")
                         .HasColumnType("TEXT");
 
@@ -585,6 +588,8 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
 
                     b.ToTable("Project");
                 });
@@ -988,6 +993,16 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("RoleView");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.Project", b =>
+                {
+                    b.HasOne("MeetingRecord.AccessDatas.Models.MyUser", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("OwnerUser");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.ProjectFile", b =>

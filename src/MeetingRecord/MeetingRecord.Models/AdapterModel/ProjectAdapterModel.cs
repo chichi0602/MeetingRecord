@@ -39,9 +39,22 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
     [Range(0, 100, ErrorMessage = "完成百分比 必須介於 0 到 100")]
     public int CompletionPercentage { get; set; }
 
-    /// <summary>負責人，手打的描述欄位（不影響任何權限；誰看得到由主責與協作團隊決定）。</summary>
-    [Required(ErrorMessage = "負責人 不可為空白")]
+    /// <summary>
+    /// 負責人姓名快照（1.0.52 起由服務依 <see cref="OwnerUserId"/> 填入，畫面不直接編輯）。
+    /// 升級前手打、對不到帳號的舊值仍留在這裡，畫面顯示成「未指定（原：XXX）」。
+    /// </summary>
     public string Owner { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 負責人帳號（1.0.52）：從主責＋協作團隊裡啟用中的帳號選。
+    /// 負責人（與管理者）可以刪除這個專案，以及底下任何人的會議、待辦、附件。
+    /// ⚠️ 刻意不掛 [Required]：沒有權限換負責人的人（協作團隊成員）編輯舊專案時，負責人照原樣保留、可能是 null；
+    /// 必填檢查在 <c>ProjectService</c>，只在使用者能換負責人時才要求。
+    /// </summary>
+    public int? OwnerUserId { get; set; }
+
+    /// <summary>還沒有對應到帳號的負責人（升級前手打、對不到人的舊資料）。</summary>
+    public bool IsOwnerUnassigned => OwnerUserId is null;
 
     /// <summary>
     /// 主責團隊（0.4.102，必填）。團隊＝「誰的資料」：使用者所屬團隊與主責＋協作有交集才看得到。

@@ -237,9 +237,47 @@ public partial class ProjectViewView : IDisposable
     /// <summary>目前使用者的存取範圍（1.0.47），只用來決定按鈕與欄位；服務層另外把關。</summary>
     private ProjectAccess? access;
 
-    /// <summary>刪除專案：主責團隊成員（與管理者），已完成的要先重新開啟（1.0.47）。</summary>
+    /// <summary>刪除專案：專案負責人（與管理者），已完成的要先重新開啟（1.0.52，原本是主責團隊成員）。</summary>
     private bool CanDeleteSelectedProject
-        => SelectedProject is { } project && access?.CanManageProject(project.Id) == true && !IsReadOnlyProject;
+        => SelectedProject is { } project && access?.IsProjectOwner(project.Id) == true && !IsReadOnlyProject;
+
+    /// <summary>負責人下拉的候選人（1.0.52）：表單上目前選的主責＋協作團隊裡啟用中的帳號。</summary>
+    private IReadOnlyList<ProjectOwnerCandidate> ownerCandidates = [];
+
+    /// <summary>換負責人：新增時可選；修改時限主責團隊成員、目前的負責人、管理者（1.0.52）。</summary>
+    private bool CanChangeOwner => isNewRecordMode || (access is not null && ProjectOwnerRules.CanChangeOwner(access, CurrentRecord.Id));
+
+    /// <summary>附件的「移除」只有專案負責人看得到（1.0.52）。</summary>
+    private bool CanRemoveFiles => access?.IsProjectOwner(CurrentRecord.Id) == true;
+
+    /// <summary>摘要列的負責人：對到帳號時顯示姓名；升級前手打、對不到人的顯示「未指定（原：XXX）」。</summary>
+    private static string DescribeOwner(ProjectAdapterModel project)
+        => project.OwnerUserId is not null
+            ? project.Owner
+            : string.IsNullOrWhiteSpace(project.Owner) ? "未指定" : $"未指定（原：{project.Owner}）";
+
+    /// <summary>
+    /// 主責或協作團隊一改，就重新取負責人候選人（1.0.52）。原負責人不在新清單裡時清空、要求重選；
+    /// 新增專案還沒選負責人時，自己在清單裡就預設帶自己（修改時不自動帶，免得默默換掉負責人）。
+    /// </summary>
+    private async Task ReloadOwnerCandidatesAsync()
+    {
+        ownerCandidates = await projectService.GetOwnerCandidatesAsync(CurrentRecord.PrimaryTeamId, CurrentRecord.CollaboratorTeamIds);
+        if (!CanChangeOwner)
+        {
+            return;
+        }
+
+        if (CurrentRecord.OwnerUserId is { } ownerId && ownerCandidates.All(x => x.Id != ownerId))
+        {
+            CurrentRecord.OwnerUserId = null;
+        }
+
+        if (isNewRecordMode && CurrentRecord.OwnerUserId is null && access is { UserId: > 0 } && ownerCandidates.Any(x => x.Id == access.UserId))
+        {
+            CurrentRecord.OwnerUserId = access.UserId;
+        }
+    }
 
     /// <summary>專案表單的團隊欄位：新增時可選；修改時只有主責團隊成員（與管理者）能改（1.0.47）。</summary>
     private bool CanEditTeams => isNewRecordMode || access?.CanManageProject(CurrentRecord.Id) == true;
@@ -947,6 +985,7 @@ public partial class ProjectViewView : IDisposable
             ? new ProjectService.TeamOption(primaryId, CurrentRecord.PrimaryTeamName)
             : null;
         await LoadTeamOptionsAsync(CurrentRecord.CollaboratorTeamIds);
+        await ReloadOwnerCandidatesAsync();
         ClearPendingFiles();
         removedFileIds.Clear();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingFiles());
@@ -1023,6 +1062,7 @@ public partial class ProjectViewView : IDisposable
         };
 
         originalPrimaryOption = null;
+        ownerCandidates = [];
         ClearPendingFiles();
         removedFileIds.Clear();
         isNewRecordMode = true;
@@ -1050,9 +1090,10 @@ public partial class ProjectViewView : IDisposable
         availableCategories = await CategoryService.GetAllEnabledNamesAsync();
     }
 
-    private void OnCollaboratorTeamsChanged(IEnumerable<int> values)
+    private async Task OnCollaboratorTeamsChanged(IEnumerable<int> values)
     {
         CurrentRecord.CollaboratorTeamIds = values?.ToList() ?? [];
+        await ReloadOwnerCandidatesAsync();
     }
 
     private void OnRecordCategoriesChanged(IEnumerable<string> values)

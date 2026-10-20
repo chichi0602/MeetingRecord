@@ -59,11 +59,18 @@ public class ProjectCreateUpdateDto
     public int CompletionPercentage { get; set; }
 
     /// <summary>
-    /// 專案擁有者
+    /// 負責人姓名。1.0.52 起改成選填：有帶 <see cref="OwnerUserId"/> 時忽略、由伺服器填入帳號姓名；
+    /// 沒帶時，新增會用這個名字在專案團隊的啟用帳號裡找（剛好一位才採用）。
     /// </summary>
-    [Required(ErrorMessage = "負責人 不可為空白")]
     [JsonPropertyName("owner")]
     public string? Owner { get; set; }
+
+    /// <summary>
+    /// 負責人帳號 Id（1.0.52，選填）：必須是主責＋協作團隊裡啟用中的帳號。修改時不帶＝保留原本的負責人。
+    /// 負責人（與管理者）可以刪除這個專案，以及底下的會議、待辦。
+    /// </summary>
+    [JsonPropertyName("ownerUserId")]
+    public int? OwnerUserId { get; set; }
 
     /// <summary>
     /// 常用名詞（術語、產品名）

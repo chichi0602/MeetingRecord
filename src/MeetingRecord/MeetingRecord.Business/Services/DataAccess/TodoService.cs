@@ -667,6 +667,12 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
+            // 1.0.52：刪除待辦只限專案負責人與管理者。
+            if (!(await projectAccess.GetAsync()).IsProjectOwner(item.ProjectId))
+            {
+                return VerifyRecordResultFactory.Build(false, ProjectOwnerRules.DeleteTodoMessage);
+            }
+
             // 子項目（1.0.45）：刪主待辦時資料庫 Cascade 一起刪掉子項目；刪子項目時在主待辦記「移除子項目」。
             var childCount = await context.Todo.AsNoTracking().CountAsync(x => x.ParentTodoId == id);
 

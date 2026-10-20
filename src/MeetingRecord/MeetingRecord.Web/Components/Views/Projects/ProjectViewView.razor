@@ -44,7 +44,8 @@ else
                     </Button>
                 </HoverTip>
             }
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete))
+            @* 1.0.52：刪除專案只限負責人；負責人是一般使用者（沒有刪除權限）也能刪，所以這裡看「編輯」，按鈕本身再看是不是負責人。 *@
+            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
             {
                 <HoverTip Title="刪除專案">
                     <Button Type="ButtonType.Default" Class="project-view-icon-button-danger"
@@ -132,7 +133,7 @@ else
                 <div class="project-view-summary-item">
                     <span class="project-view-summary-key">負責人</span>
                     <span class="project-view-summary-value">
-                        @(string.IsNullOrWhiteSpace(SelectedProject.Owner) ? "—" : SelectedProject.Owner)
+                        @DescribeOwner(SelectedProject)
                     </span>
                 </div>
                 <div class="project-view-summary-item">
@@ -400,9 +401,29 @@ else
                             <ValidationMessage For="() => CurrentRecord.Title" />
                         </FormItem>
 
+                        @* 1.0.52：負責人從主責＋協作團隊裡啟用中的帳號選，可打姓名或帳號搜尋；團隊一改候選人就跟著變。
+                           負責人（與管理者）可以刪除專案與底下任何人的會議、待辦、附件。 *@
                         <FormItem Label="負責人" Required>
-                            <Input @bind-Value="CurrentRecord.Owner" Placeholder="請輸入負責人名稱" />
-                            <ValidationMessage For="() => CurrentRecord.Owner" />
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="int?" TItemValue="int?"
+                                        @bind-Value="CurrentRecord.OwnerUserId"
+                                        Disabled="@(!CanChangeOwner)"
+                                        Placeholder="@(ownerCandidates.Count == 0 ? "請先選擇主責團隊" : "請選擇負責人（可輸入姓名或帳號搜尋）")"
+                                        AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var candidate in ownerCandidates)
+                                    {
+                                        <SelectOption TItemValue="int?" TItem="int?" Value="@((int?)candidate.Id)" Label="@candidate.Label" />
+                                    }
+                                </Select>
+                            </div>
+                            @if (CurrentRecord.OwnerUserId is null && !string.IsNullOrWhiteSpace(CurrentRecord.Owner) && !isNewRecordMode)
+                            {
+                                <div class="project-view-hint">原負責人：@CurrentRecord.Owner（找不到對應的帳號，請重新選擇）</div>
+                            }
+                            @if (!CanChangeOwner)
+                            {
+                                <div class="project-view-hint">只有主責團隊的成員或目前的負責人可以變更負責人。</div>
+                            }
                         </FormItem>
 
                         @* 團隊＝「誰的資料」（0.4.102）：主責＋協作團隊的人看得到；能不能改由角色決定。
@@ -415,6 +436,7 @@ else
                             <div @onkeydown:stopPropagation="true">
                                 <Select TItem="int?" TItemValue="int?"
                                         @bind-Value="CurrentRecord.PrimaryTeamId"
+                                        @bind-Value:after="ReloadOwnerCandidatesAsync"
                                         Disabled="@(!CanEditTeams)"
                                         Placeholder="請選擇主責團隊"
                                         AllowClear EnableSearch Style="width: 100%;">
@@ -618,7 +640,11 @@ else
                                             </button>
                                             <span>
                                                 @FormatFileSize(file.FileSize)
-                                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="() => RemoveExistingFile(file.Id)">移除</button>
+                                                @if (CanRemoveFiles)
+                                                {
+                                                    @* 1.0.52：刪除附件只限專案負責人。 *@
+                                                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="() => RemoveExistingFile(file.Id)">移除</button>
+                                                }
                                             </span>
                                         </li>
                                     }

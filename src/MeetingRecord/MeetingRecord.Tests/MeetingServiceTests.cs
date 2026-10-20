@@ -1016,7 +1016,7 @@ public sealed class MeetingServiceTests
         var carols = await fixture.AddCompletedMeetingAsync("Carol 上傳的會議", projectId: projectA, draftStatus: DraftStatus.Completed, createdByUserId: carol.Id);
         var alice = fixture.CreateService(isAdmin: false, userA);
 
-        Assert.Equal(MeetingService.OwnerOnlyMessage("刪除這筆會議紀錄"), (await alice.DeleteAsync(carols.Id)).Message);
+        Assert.Equal(MeetingService.DeleteDeniedMessage, (await alice.DeleteAsync(carols.Id)).Message);
         Assert.Equal(MeetingService.OwnerOnlyMessage("把這筆會議紀錄從專案移除"), (await alice.DetachFromProjectAsync(carols.Id, projectA)).Message);
         Assert.Equal(MeetingService.OwnerOnlyMessage("重新轉錄這筆會議紀錄"), (await alice.RequeueTranscriptionAsync(carols.Id)).Message);
         Assert.Equal(MeetingService.OwnerOnlyMessage("更換這筆會議紀錄的影音檔"), (await alice.SaveMediaAsync(carols.Id, NewUpload("錄音.mp3", [1, 2, 3]))).Message);
@@ -1031,6 +1031,24 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task ProjectOwner_CanDeleteOthersMeeting()
+    {
+        // 1.0.52：專案負責人可以刪專案底下任何人上傳的會議（其他動作仍只限上傳者）。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var (userA, _, ids) = await fixture.SeedDefaultMeetingsAsync();
+        var projectA = (await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == ids["A專案會議"])).ProjectId!.Value;
+        var carol = await fixture.AddUserAsync("carol");
+        await fixture.AddMemberAsync(projectA, carol.Id);
+        var carols = await fixture.AddCompletedMeetingAsync("Carol 上傳的會議", projectId: projectA, createdByUserId: carol.Id);
+        await fixture.Context.Project.Where(x => x.Id == projectA).ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerUserId, userA));
+        var owner = fixture.CreateService(isAdmin: false, userA);
+
+        Assert.Equal(MeetingService.OwnerOnlyMessage("重新轉錄這筆會議紀錄"), (await owner.RequeueTranscriptionAsync(carols.Id)).Message);
+        Assert.True((await owner.DeleteAsync(carols.Id)).Success);
+        Assert.False(await fixture.Context.Meeting.AnyAsync(x => x.Id == carols.Id));
+    }
+
+    [Fact]
     public async Task LegacyMeetingWithoutUploader_OnlyAdminCanDelete()
     {
         await using var fixture = await MeetingServiceFixture.CreateAsync();
@@ -1039,7 +1057,7 @@ public sealed class MeetingServiceTests
         var byMember = await fixture.CreateService(isAdmin: false, userA).DeleteAsync(ids["A專案會議"]);
         var byAdmin = await fixture.CreateService().DeleteAsync(ids["A專案會議"]);
 
-        Assert.Equal(MeetingService.OwnerOnlyMessage("刪除這筆會議紀錄"), byMember.Message);
+        Assert.Equal(MeetingService.DeleteDeniedMessage, byMember.Message);
         Assert.True(byAdmin.Success);
     }
 

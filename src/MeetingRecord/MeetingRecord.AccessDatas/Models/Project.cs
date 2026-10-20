@@ -19,8 +19,20 @@ public class Project
     [Range(0, 100, ErrorMessage = "完成百分比 必須介於 0 到 100")]
     public int CompletionPercentage { get; set; }
 
+    /// <summary>
+    /// 負責人姓名。1.0.52 起是 <see cref="OwnerUserId"/> 那個帳號的姓名快照（存檔時由服務填入），
+    /// 留著是為了 API 的 <c>owner</c> 欄位與清單搜尋、排序；升級前手打、對不到帳號的舊值也保留在這裡。
+    /// </summary>
     [Required(ErrorMessage = "負責人 不可為空白")]
     public string Owner { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 負責人帳號（1.0.52）。負責人（與管理者）可以刪除這個專案，以及底下任何人的會議、待辦、附件。
+    /// 只能選主責＋協作團隊裡啟用中的帳號；帳號被刪除時設為 null（SetNull）。
+    /// </summary>
+    public int? OwnerUserId { get; set; }
+
+    public MyUser? OwnerUser { get; set; }
 
     /// <summary>
     /// 常用名詞（術語、產品名）。AI 產生會議紀錄時會連同與會者名單一起餵給模型，

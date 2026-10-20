@@ -142,6 +142,7 @@ public sealed class ProjectServiceTests
             Title = "Q3 產品改版專案",
             Status = "進行中",
             Owner = "林怡君",
+            OwnerUserId = 1,
             // 主責團隊必填（0.4.102）；夾具建立時先放一個 Id=1 的團隊。
             PrimaryTeamId = 1,
             GlossaryTerms = [.. glossaryTerms ?? []],
@@ -192,6 +193,10 @@ public sealed class ProjectServiceTests
             var context = new BackendDBContext(options);
             await context.Database.EnsureCreatedAsync();
             context.Team.Add(new Team { Id = 1, Name = "研發部", IsEnabled = true });
+            // 1.0.52：負責人要是團隊裡啟用中的帳號，NewProject 用 Id=1 的「林怡君」。
+            context.MyUser.Add(new MyUser { Id = 1, Account = "linyijun", Name = "林怡君", Password = "x", Status = true });
+            await context.SaveChangesAsync();
+            context.UserTeam.Add(new UserTeam { MyUserId = 1, TeamId = 1 });
             await context.SaveChangesAsync();
             context.ChangeTracker.Clear();
 

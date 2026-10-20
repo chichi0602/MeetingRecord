@@ -18,7 +18,6 @@ namespace MeetingRecord.Business.Services.DataAccess;
 public class ProjectService
 {
     public const long MaxUploadFileSize = 1024L * 1024L * 1024L;
-    public const string ProjectDeleteManageMessage = "只有主責團隊的成員可以刪除專案。";
 
     private readonly BackendDBContext context;
     private readonly string projectFileRootPath;
@@ -204,6 +203,16 @@ public class ProjectService
                 return VerifyRecordResultFactory.Build(false, teams.Error);
             }
 
+            // 1.0.52：負責人從專案團隊裡啟用中的帳號選，姓名快照由這裡填。
+            var owner = await ProjectOwnerRules.ResolveAsync(context, paraObject.OwnerUserId, teams);
+            if (owner.Error is not null)
+            {
+                return VerifyRecordResultFactory.Build(false, owner.Error);
+            }
+
+            itemParameter.OwnerUserId = owner.Id;
+            itemParameter.Owner = owner.Name;
+
             itemParameter.Teams = [];
             ProjectTeamWriter.Apply(itemParameter, teams);
 
@@ -294,12 +303,27 @@ public class ProjectService
                 return VerifyRecordResultFactory.Build(false, teams.Error);
             }
 
+            // 1.0.52：負責人才能刪附件。
+            if ((removedFileIds?.Any() ?? false) && !access.IsProjectOwner(currentItem.Id))
+            {
+                context.ChangeTracker.Clear();
+                return VerifyRecordResultFactory.Build(false, ProjectOwnerRules.DeleteFileMessage);
+            }
+
+            var owner = await ResolveOwnerForUpdateAsync(access, currentItem, paraObject.OwnerUserId, teams);
+            if (owner.Error is not null)
+            {
+                context.ChangeTracker.Clear();
+                return VerifyRecordResultFactory.Build(false, owner.Error);
+            }
+
             currentItem.Title = paraObject.Title;
             currentItem.StartDate = paraObject.StartDate;
             currentItem.EndDate = paraObject.EndDate;
             currentItem.Status = paraObject.Status;
             currentItem.CompletionPercentage = paraObject.CompletionPercentage;
-            currentItem.Owner = paraObject.Owner;
+            currentItem.OwnerUserId = owner.Id;
+            currentItem.Owner = owner.Name;
 
             ProjectTeamWriter.Apply(currentItem, teams);
 
@@ -358,10 +382,11 @@ public class ProjectService
             return VerifyRecordResultFactory.Build(false, "找不到要刪除的專案資料。");
         }
 
-        if (!access.CanManageProject(id))
+        // 1.0.52：刪除專案只限負責人（取代 1.0.47 的「主責團隊成員」）。
+        if (!access.IsProjectOwner(id))
         {
-            Logger.LogWarning("Project deletion denied because user is not in primary team. ProjectId={ProjectId}", id);
-            return VerifyRecordResultFactory.Build(false, ProjectDeleteManageMessage);
+            Logger.LogWarning("Project deletion denied because user is not the project owner. ProjectId={ProjectId}", id);
+            return VerifyRecordResultFactory.Build(false, ProjectOwnerRules.DeleteProjectMessage);
         }
 
         if (await ProjectArchiveRules.CheckWritableAsync(context, id, access) is { } archivedError)
@@ -679,6 +704,49 @@ public class ProjectService
         }
 
         File.Delete(fullPath);
+    }
+
+    /// <summary>
+    /// 負責人下拉的候選人（1.0.52）：表單上目前選的主責＋協作團隊裡啟用中的帳號。
+    /// 團隊一改就要重新取一次，原負責人不在新清單裡時由畫面清空、要求重選。
+    /// </summary>
+    public Task<IReadOnlyList<ProjectOwnerCandidate>> GetOwnerCandidatesAsync(
+        int? primaryTeamId, IEnumerable<int>? collaboratorTeamIds, CancellationToken cancellationToken = default)
+    {
+        var teamIds = (collaboratorTeamIds ?? []).ToList();
+        if (primaryTeamId is { } primary)
+        {
+            teamIds.Add(primary);
+        }
+
+        return ProjectOwnerRules.GetCandidatesAsync(context, teamIds, cancellationToken);
+    }
+
+    /// <summary>
+    /// 修改專案時的負責人（1.0.52）。負責人與團隊都沒變 → 照原樣保留（舊專案可能是 null，協作團隊的人編輯不會被卡住）；
+    /// 要換負責人 → 只限主責團隊成員、目前的負責人、管理者；團隊或負責人有變 → 重新驗證是不是團隊裡啟用中的帳號。
+    /// </summary>
+    private async Task<(int? Id, string Name, string? Error)> ResolveOwnerForUpdateAsync(
+        ProjectAccess access, Project current, int? requestedOwnerUserId, ProjectTeamResolution teams)
+    {
+        var currentTeams = current.Teams.Select(x => x.TeamId).ToHashSet();
+        var newTeams = teams.CollaboratorTeamIds.Append(teams.PrimaryTeamId).ToHashSet();
+        var teamsChanged = !currentTeams.SetEquals(newTeams);
+        var ownerChanged = requestedOwnerUserId != current.OwnerUserId;
+
+        // 沒換負責人：團隊也沒變，或本來就沒有負責人（舊資料，改團隊不強迫當下補選）→ 照原樣保留。
+        if (!ownerChanged && (!teamsChanged || current.OwnerUserId is null))
+        {
+            return (current.OwnerUserId, current.Owner, null);
+        }
+
+        if (ownerChanged && !ProjectOwnerRules.CanChangeOwner(access, current.Id))
+        {
+            return (null, string.Empty, ProjectOwnerRules.ChangeDeniedMessage);
+        }
+
+        var owner = await ProjectOwnerRules.ResolveAsync(context, requestedOwnerUserId, teams);
+        return owner.Error is null ? (owner.Id, owner.Name, null) : (null, string.Empty, owner.Error);
     }
 
     /// <summary>

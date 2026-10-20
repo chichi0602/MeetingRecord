@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.16
+- 文件版本：2.17
 - 文件狀態：已實作
-- 現行系統版本：1.0.48
+- 現行系統版本：1.0.52
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/10/19
+- 最後核對日期：2026/10/20
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -84,7 +84,7 @@
   - **抽出待辦：0.4.83 起本頁沒有這顆鈕**（0.4.73～0.4.82 曾有）。待辦在資料表層級就必須有專案，而這一頁有一半的會議是未歸屬的，按了只能跳訊息叫使用者先去歸屬——那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案項目頁的清單裡，入口集中在那裡。
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - **專案選單不列已完成專案（1.0.46）**：「歸屬到專案」與「產生會議紀錄」的專案下拉走 `ProjectService.GetSelectableAsync()`，預設排除狀態「已完成」（封存）的專案；已歸屬到已完成專案的會議，清單上照常顯示原本的專案名稱。規則見 [專案項目 PRD](專案項目-prd.md)。
-  - 修改（`edit`）、刪除（**1.0.47 起只對上傳者與管理者顯示**，角色要 `edit`；以前只看 `delete`）
+  - 修改（`edit`）、刪除（**1.0.47 起只對上傳者與管理者顯示**，角色要 `edit`；以前只看 `delete`。**1.0.52 起該會議所屬專案的負責人也看得到**，`MeetingViewView.CanDelete`）
   - 修改視窗（1.0.47）：不是上傳者時影音檔拖放區停用，下方顯示「只有上傳者或管理者可以更換影音檔；其他欄位可以照常修改。」；新增時一律可選檔。
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
 - 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。**1.0.47 起確認文字**：「確定要刪除這筆會議紀錄嗎？影音檔、逐字稿、會議紀錄與 AI 問答會一併刪除。從這場會議抽出的 N 筆待辦會保留在專案裡（不再連到這場會議）。此操作無法復原。」——N 取自 `MeetingService.CountLinkedTodosAsync`，N 為 0 時不顯示待辦那句。
@@ -174,9 +174,10 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - API 一律 `[Authorize(JwtBearer)]`；每個動作以 `[HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.*)]` 做動作級授權。
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`會議紀錄:view`、`會議紀錄:create`、`會議紀錄:edit`、`會議紀錄:delete`。裸鍵「會議紀錄」代表該頁全部動作（向後相容）。
 - **上傳影音檔與重新轉錄歸在 `edit`**，不新增動作類型。
-- **上傳者專屬動作（1.0.47）**：同專案看得到的人都能看、改欄位（標題、說明、分類）、編修會議紀錄、重新產生、AI 問答、下載；**刪除、從專案移除、換影音檔、重新轉錄只限上傳者（`Meeting.CreatedByUserId`）與管理者**。判斷一律用 `ProjectAccess.IsMeetingOwner`，在 `MeetingService` 的 `DeleteAsync`／`DetachFromProjectAsync`／`SaveMediaAsync`／`RequeueTranscriptionAsync` 擋下，訊息由 `MeetingService.OwnerOnlyMessage` 組成，例如「只有上傳者或管理者可以刪除這筆會議紀錄。」；上傳者為 null 的舊會議只有管理者。
-  - 上傳者本人只要有 `會議紀錄:edit` 就能刪自己上傳的（「一般使用者」角色沒有 `delete` 也能刪）；API `DELETE /api/Meeting/{id}` 因此改要求 `edit`，被上傳者規則擋下回 400 `ValidationError`。
-  - 「主管」角色有 `delete`，但從此**不能刪別人上傳的會議**。
+- **上傳者專屬動作（1.0.47）**：同專案看得到的人都能看、改欄位（標題、說明、分類）、編修會議紀錄、重新產生、AI 問答、下載；**刪除、從專案移除、換影音檔、重新轉錄只限上傳者（`Meeting.CreatedByUserId`）與管理者**。判斷一律用 `ProjectAccess.IsMeetingOwner`，在 `MeetingService` 的 `DeleteAsync`／`DetachFromProjectAsync`／`SaveMediaAsync`／`RequeueTranscriptionAsync` 擋下，訊息由 `MeetingService.OwnerOnlyMessage` 組成，例如「只有上傳者或管理者可以把這筆會議紀錄從專案移除。」；上傳者為 null 的舊會議只有管理者。
+  - **1.0.52 起刪除另外開放給專案負責人**：`MeetingService.DeleteAsync` 改成 `IsMeetingOwner` **或** `ProjectAccess.IsProjectOwner(meeting.ProjectId)`，負責人可以刪該專案底下任何人上傳的會議（上傳者為 null 的舊會議也可以）；擋下訊息改為「只有上傳者或專案負責人可以刪除這筆會議紀錄。」（`MeetingService.DeleteDeniedMessage`）。從專案移除、換影音檔、重新轉錄仍只限上傳者。未歸屬的會議沒有專案負責人，照舊只有上傳者與管理者。
+  - 上傳者（或負責人）只要有 `會議紀錄:edit` 就能刪（「一般使用者」角色沒有 `delete` 也能刪）；API `DELETE /api/Meeting/{id}` 因此改要求 `edit`，被規則擋下回 400 `ValidationError`。
+  - 「主管」角色有 `delete`，但從此**不能刪別人上傳的會議**（除非他是該專案的負責人）。
   - 歸屬到專案沒有另外加上傳者檢查：未歸屬的會議本來就只有上傳者（與管理者）看得到。
   - 原因：刪除與換檔會讓原始資料消失；從專案移除後只剩上傳者看得到，等於把會議從同事手上拿走。
 - 刪除會帶走什麼：影音檔、逐字稿、會議紀錄草稿、會議的 AI 問答對話、會議的 AI 對話紀錄（`AiCallLog` 與內容檔）；**從這場會議抽出的待辦保留**（`Todo.MeetingId` 設為 null，待辦異動紀錄保有來源會議標題快照），通知、稽核、Token 用量帳本也保留。沒有軟刪除或資源回收桶。整理表見 [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)。
@@ -286,6 +287,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - `GetAsync_Admin_ShouldSeeAllRecords`、`GetAsync_Member_ShouldSeeOwnProjectsAndOwnUnassignedMeetings`、`GetAsync_UserWithoutProjects_ShouldSeeNothingOfOthers`、`GetById_NonMember_ShouldDenyMeetingOfOtherProject`、`GetAsync_WithKeyword_ShouldMatchMediaFileName`：可見性（專案權控）與查詢條件。舊的團隊標籤可見性與 `TeamFilter` 測試已於 0.4.99／0.4.103 移除。
 - `ArchivedProject_MemberCannotAttachOrEditDrafts_AdminCan`（1.0.46）：已完成（封存）專案，一般成員不能把會議歸屬進去、不能編修會議紀錄，管理者可以。
 - 1.0.47：`SameProjectMember_CanEditOthersMeeting_ButOnlyUploaderCanDeleteDetachReplaceOrRetranscribe`（同專案成員可以改別人上傳的會議，但刪除、從專案移除、換影音檔、重新轉錄只限上傳者）、`LegacyMeetingWithoutUploader_OnlyAdminCanDelete`（沒有上傳者的舊會議只有管理者能刪）、`DeleteMeeting_KeepsExtractedTodos_AndCountLinkedTodos`（刪會議保留抽出的待辦、`CountLinkedTodosAsync` 筆數正確）。
+- 1.0.52：`ProjectOwner_CanDeleteOthersMeeting`（專案負責人可以刪同專案別人上傳的會議）。
 
 對應測試檔 `src/MeetingRecord/MeetingRecord.Tests/TranscriptionRequestTests.cs`（只測純函式，**不打真實 API、不跑真實 ffmpeg**）：
 

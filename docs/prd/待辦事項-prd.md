@@ -1,10 +1,10 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.13
+- 文件版本：1.14
 - 文件狀態：已實作
-- 現行系統版本：1.0.46
+- 現行系統版本：1.0.52
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/10/19
+- 最後核對日期：2026/10/20
 
 > **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
@@ -23,7 +23,7 @@
 | UI 路由 | `/todos`（`TodoPage.razor`，掛 `MainLayout`） |
 | REST API | `api/Todo`、`api/v1/Todo`（JWT Bearer） |
 | 選單路徑 | 專案管理（`Menu.json` id=2）→ 待辦事項（id=22，icon `checklist`） |
-| 權限鍵 | 資源鍵「待辦事項」（`MagicObjectHelper.角色_待辦事項`），動作 `view`／`create`／`edit`／`delete`；管理員短路 |
+| 權限鍵 | 資源鍵「待辦事項」（`MagicObjectHelper.角色_待辦事項`），動作 `view`／`create`／`edit`／`delete`；管理員短路。1.0.52 起刪除看「是不是專案負責人」＋`edit`，不看 `delete`（見「刪除只限專案負責人」） |
 
 ## 三、畫面與欄位
 
@@ -150,6 +150,16 @@
 - **唯讀**：已完成專案的待辦，勾完成停用，修改、刪除、新增子項目按鈕隱藏；異動紀錄照常可看。管理者不受限。服務層（`TodoService` 的新增、修改、勾完成、刪除、AI 抽出更新既有待辦）與 API（`TodoRepository`）都經 `ProjectArchiveRules.CheckWritableAsync` 擋下，訊息「這個專案已完成（封存），請先重新開啟再修改。」；修改時原專案與目標專案都檢查，**搬進或搬出已完成專案都不行**。API 的新增、修改、刪除回 **400**。
 - **深連結**：通知鈴或 `/todos?todoId=N` 點到已完成專案的待辦時，檢視自動切到「全部」，清單上才找得到它。
 
+### 刪除只限專案負責人（1.0.52）
+
+專案的「負責人」1.0.52 起是帳號（規則見 [專案項目 PRD](專案項目-prd.md)），**刪除待辦只限該專案的負責人與管理者**；新增、修改、勾完成、新增子項目照舊，同專案的人依角色都能做。
+
+- 畫面：「刪除」按鈕只在**是專案負責人**＋有 `待辦事項:edit`＋專案不是唯讀時出現（`TodoViewView.CanDelete`）。負責人是「一般使用者」角色（沒有 `delete`）也能刪；不是負責人的「主管」有 `delete` 也看不到按鈕。
+- 服務層：`TodoService.DeleteAsync` 與 API `TodoRepository.DeleteAsync` 都先擋封存，再用 `ProjectAccess.IsProjectOwner(todo.ProjectId)` 擋，訊息「只有專案負責人可以刪除待辦。」（`ProjectOwnerRules.DeleteTodoMessage`）。API `DELETE api/Todo/{id}` 因此改要求 `待辦事項:edit`（以前是 `delete`），被擋回 400 `ValidationError`。
+- 刪主待辦照舊連同子項目一起刪；子項目本身也一樣只有負責人能刪。
+- 升級前對不到帳號、還沒有負責人的專案，待辦只有管理者能刪。
+- 待辦自己的「負責人」欄位仍是文字，與這裡的專案負責人無關。
+
 ## 四、設計決策
 
 | 議題 | 結論 |
@@ -197,7 +207,7 @@
 - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoHierarchyRules.cs`（`ValidateAsync`、`MoveChildrenAsync`，1.0.45）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web/Components/Commons/ProjectScopeSwitch.razor`（1.0.46）
-- 測試：`TodoChangeAndNotificationTests`（34 條：1.0.44 的 15 條＋1.0.45 子項目 11 條＋1.0.46 封存 8 條）、`TodoServiceTests`
+- 測試：`TodoChangeAndNotificationTests`（35 條：1.0.44 的 15 條＋1.0.45 子項目 11 條＋1.0.46 封存 8 條＋1.0.52 `DeleteTodo_OnlyProjectOwnerOrAdmin_WebAndApi`）、`TodoServiceTests`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

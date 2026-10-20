@@ -275,6 +275,12 @@ public class TodoRepository
             throw new InvalidOperationException(archivedError);
         }
 
+        // 1.0.52：刪除待辦只限專案負責人與管理者，控制器回 400。
+        if (!(await projectAccess.GetAsync()).IsProjectOwner(todo.ProjectId))
+        {
+            throw new InvalidOperationException(ProjectOwnerRules.DeleteTodoMessage);
+        }
+
         context.Todo.Remove(todo);
         await context.SaveChangesAsync();
 

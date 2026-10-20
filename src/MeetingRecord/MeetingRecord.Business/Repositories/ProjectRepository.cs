@@ -211,6 +211,33 @@ public class ProjectRepository
             return (null, teams.Error);
         }
 
+        // 1.0.52：負責人帳號。有帶 ownerUserId 就照規則驗證；沒帶的話（1.0.52 前的呼叫端只有 owner 文字），
+        // 用名字在專案團隊的啟用帳號裡找，剛好一位才採用，找不到就是未指定（只有管理者能刪）。
+        // 兩個都沒帶仍然擋下（和 1.0.52 前一樣負責人必填）。
+        if (project.OwnerUserId is null && string.IsNullOrWhiteSpace(project.Owner))
+        {
+            return (null, "負責人 不可為空白");
+        }
+
+        if (project.OwnerUserId is not null)
+        {
+            var owner = await ProjectOwnerRules.ResolveAsync(context, project.OwnerUserId, teams);
+            if (owner.Error is not null)
+            {
+                return (null, owner.Error);
+            }
+
+            project.OwnerUserId = owner.Id;
+            project.Owner = owner.Name;
+        }
+        else if (await ProjectOwnerRules.MatchByNameAsync(context, project.Owner, teams) is { } matched)
+        {
+            project.OwnerUserId = matched.Id;
+            project.Owner = matched.Name;
+        }
+
+        project.Owner ??= string.Empty;
+
         project.Teams = [];
         ProjectTeamWriter.Apply(project, teams);
 
@@ -265,21 +292,58 @@ public class ProjectRepository
             return (false, null);
         }
 
+        var existingPrimaryTeam = existingProject.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
+        var existingCollaborators = existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId).ToList();
+        var effectiveTeams = new ProjectTeamResolution(existingPrimaryTeam ?? 0, existingCollaborators, null);
+        var teamsChanged = false;
+
         if (primaryTeamId is not null || collaboratorTeamIds is not null)
         {
-            var existingPrimary = existingProject.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
             var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(
-                existingPrimary,
-                primaryTeamId ?? existingPrimary,
-                collaboratorTeamIds ?? existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId),
+                existingPrimaryTeam,
+                primaryTeamId ?? existingPrimaryTeam,
+                collaboratorTeamIds ?? existingCollaborators,
                 existingProject.Id,
-                existingProject.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId)));
+                existingCollaborators));
             if (teams.Error is not null)
             {
                 return (true, teams.Error);
             }
 
-            ProjectTeamWriter.Apply(existingProject, teams);
+            teamsChanged = teams.PrimaryTeamId != existingPrimaryTeam
+                || !teams.CollaboratorTeamIds.ToHashSet().SetEquals(existingCollaborators);
+            effectiveTeams = teams;
+        }
+
+        // 1.0.52：負責人。沒帶 ownerUserId＝保留原本的；要換只限主責團隊成員、目前的負責人、管理者；
+        // 負責人或團隊有變就重新驗證是不是團隊裡啟用中的帳號。驗證都在改任何追蹤中的欄位之前。
+        var requestedOwner = project.OwnerUserId ?? existingProject.OwnerUserId;
+        var ownerChanged = requestedOwner != existingProject.OwnerUserId;
+        if (ownerChanged && !ProjectOwnerRules.CanChangeOwner(access, existingProject.Id))
+        {
+            return (true, ProjectOwnerRules.ChangeDeniedMessage);
+        }
+
+        if (ownerChanged || (teamsChanged && requestedOwner is not null))
+        {
+            var owner = await ProjectOwnerRules.ResolveAsync(context, requestedOwner, effectiveTeams);
+            if (owner.Error is not null)
+            {
+                return (true, owner.Error);
+            }
+
+            project.OwnerUserId = owner.Id;
+            project.Owner = owner.Name;
+        }
+        else
+        {
+            project.OwnerUserId = existingProject.OwnerUserId;
+            project.Owner = existingProject.Owner;
+        }
+
+        if (primaryTeamId is not null || collaboratorTeamIds is not null)
+        {
+            ProjectTeamWriter.Apply(existingProject, effectiveTeams);
         }
 
         project.UpdatedAt = DateTime.Now;

@@ -87,6 +87,12 @@ public partial class BackendDBContext : DbContext
                 .WithOne(x => x.Project)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // 負責人帳號（1.0.52）：帳號刪掉時專案留著、變成未指定負責人。
+            entity.HasOne(x => x.OwnerUser)
+                .WithMany()
+                .HasForeignKey(x => x.OwnerUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ProjectTeam>(entity =>

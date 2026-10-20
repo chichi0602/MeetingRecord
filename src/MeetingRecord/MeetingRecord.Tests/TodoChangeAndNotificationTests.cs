@@ -8,6 +8,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Notifications;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
@@ -216,6 +217,28 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
 
         Assert.True(result.Success);
         Assert.False(await context.TodoChange.AnyAsync());
+    }
+
+    [Fact]
+    public async Task DeleteTodo_OnlyProjectOwnerOrAdmin_WebAndApi()
+    {
+        // 1.0.52：刪待辦只限專案負責人（甲）與管理者；同專案的乙不行，API 同樣擋下。
+        var todo = await AddTodoAsync("完成報表", project1);
+        var access = TestProjectAccess.User(context, userB);
+        var actor = TestAuditActor.Fixed(userB, "b");
+        var repository = new TodoRepository(
+            context,
+            access,
+            TestAuditLogs.CreateService(context, actor),
+            TestTodoChanges.CreateRecorder(context, access, actor, notifier));
+
+        var byMember = await CreateService(userB).DeleteAsync(todo.Id);
+        var apiError = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.DeleteAsync(todo.Id));
+
+        Assert.Equal(ProjectOwnerRules.DeleteTodoMessage, byMember.Message);
+        Assert.Equal(ProjectOwnerRules.DeleteTodoMessage, apiError.Message);
+        Assert.True(await context.Todo.AnyAsync(x => x.Id == todo.Id));
+        Assert.True((await CreateService(userA).DeleteAsync(todo.Id)).Success);
     }
 
     [Fact]
@@ -627,6 +650,8 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
             new UserTeam { MyUserId = d.Id, TeamId = primary.Id },
             new UserTeam { MyUserId = e.Id, TeamId = collaborator.Id },
             new UserTeam { MyUserId = c.Id, TeamId = other.Id });
+        // 1.0.52：甲是專案一的負責人（刪待辦只限負責人）。
+        p1.OwnerUserId = a.Id;
         context.ProjectTeam.AddRange(
             new ProjectTeam { ProjectId = p1.Id, TeamId = primary.Id, IsPrimary = true },
             new ProjectTeam { ProjectId = p1.Id, TeamId = collaborator.Id, IsPrimary = false },

@@ -147,7 +147,7 @@ public sealed class ProjectAccessTests
         var result = await fixture.CreateProjectService(alice.Id).AddAsync(new ProjectAdapterModel
         {
             Title = "成大醫療平台",
-            Owner = "王小明",
+            OwnerUserId = alice.Id,
             PrimaryTeamId = rd.Id,
             CollaboratorTeamIds = [sales.Id],
             Categories = [".NET", "成大"],
@@ -157,7 +157,9 @@ public sealed class ProjectAccessTests
         var project = await fixture.Context.Project.AsNoTracking().Include(x => x.Teams).SingleAsync();
         Assert.Equal(rd.Id, project.Teams.Single(x => x.IsPrimary).TeamId);
         Assert.Equal([sales.Id], project.Teams.Where(x => !x.IsPrimary).Select(x => x.TeamId).ToList());
-        Assert.Equal("王小明", project.Owner);
+        // 1.0.52：負責人是帳號，姓名快照由服務填入。
+        Assert.Equal(alice.Id, project.OwnerUserId);
+        Assert.Equal("alice", project.Owner);
 
         var model = await fixture.CreateProjectService(alice.Id).GetAsync(project.Id);
         Assert.Equal([".NET", "成大"], model.Categories);
@@ -233,28 +235,106 @@ public sealed class ProjectAccessTests
     }
 
     [Fact]
-    public async Task DeleteProject_OnlyPrimaryTeamMemberOrAdmin_AndNotWhenArchived()
+    public async Task DeleteProject_OnlyOwnerOrAdmin_AndNotWhenArchived()
     {
+        // 1.0.52：刪除專案只限負責人（原本是主責團隊成員）；主責團隊的其他人、協作團隊的人都不行。
         await using var fixture = await Fixture.CreateAsync();
         var alice = await fixture.AddUserAsync("alice");
         var bob = await fixture.AddUserAsync("bob");
-        var sales = await fixture.AddTeamAsync("業務部", alice.Id);
+        var carol = await fixture.AddUserAsync("carol");
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id, carol.Id);
         var rd = await fixture.AddTeamAsync("研發部", bob.Id);
         var shared = await fixture.AddProjectAsync("共用專案", sales.Id, rd.Id);
         var archived = await fixture.AddProjectAsync("已結案", sales.Id);
+        await fixture.Context.Project.ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerUserId, alice.Id));
         await fixture.Context.Project.Where(x => x.Id == archived.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ProjectAdapterModel.ArchivedStatus));
 
         var byCollaborator = await fixture.CreateProjectService(bob.Id).DeleteAsync(shared.Id);
-        var archivedByPrimary = await fixture.CreateProjectService(alice.Id).DeleteAsync(archived.Id);
+        var byPrimaryMember = await fixture.CreateProjectService(carol.Id).DeleteAsync(shared.Id);
+        var archivedByOwner = await fixture.CreateProjectService(alice.Id).DeleteAsync(archived.Id);
 
-        Assert.Equal(ProjectService.ProjectDeleteManageMessage, byCollaborator.Message);
-        Assert.Equal(ProjectArchiveRules.ArchivedMessage, archivedByPrimary.Message);
+        Assert.Equal(ProjectOwnerRules.DeleteProjectMessage, byCollaborator.Message);
+        Assert.Equal(ProjectOwnerRules.DeleteProjectMessage, byPrimaryMember.Message);
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, archivedByOwner.Message);
         Assert.Equal(2, await fixture.Context.Project.CountAsync());
 
         Assert.True((await fixture.CreateProjectService(alice.Id).DeleteAsync(shared.Id)).Success);
         Assert.True((await fixture.CreateProjectService(0, isAdmin: true).DeleteAsync(archived.Id)).Success);
         Assert.False(await fixture.Context.Project.AnyAsync());
+    }
+
+    [Fact]
+    public async Task OwnerCandidates_OnlyEnabledMembersOfProjectTeams()
+    {
+        // 1.0.52：負責人下拉只列主責＋協作團隊裡啟用中的帳號，同一人只列一次。
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var bob = await fixture.AddUserAsync("bob");
+        var disabled = await fixture.AddUserAsync("disabled");
+        var outsider = await fixture.AddUserAsync("outsider");
+        await fixture.Context.MyUser.Where(x => x.Id == disabled.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, false));
+        var rd = await fixture.AddTeamAsync("研發部", alice.Id, disabled.Id);
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id, bob.Id);
+        await fixture.AddTeamAsync("人資部", outsider.Id);
+
+        var candidates = await fixture.CreateProjectService(alice.Id).GetOwnerCandidatesAsync(rd.Id, [sales.Id]);
+
+        Assert.Equal([alice.Id, bob.Id], candidates.Select(x => x.Id).Order().ToList());
+        Assert.Equal("alice（alice）", candidates.Single(x => x.Id == alice.Id).Label);
+    }
+
+    [Fact]
+    public async Task AddProject_OwnerMustBeEnabledTeamMember()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var outsider = await fixture.AddUserAsync("outsider");
+        var rd = await fixture.AddTeamAsync("研發部", alice.Id);
+        var service = fixture.CreateProjectService(alice.Id);
+
+        var noOwner = await service.AddAsync(new ProjectAdapterModel { Title = "A", PrimaryTeamId = rd.Id });
+        var outsiderOwner = await service.AddAsync(new ProjectAdapterModel { Title = "B", PrimaryTeamId = rd.Id, OwnerUserId = outsider.Id });
+
+        Assert.Equal(ProjectOwnerRules.RequiredMessage, noOwner.Message);
+        Assert.Equal(ProjectOwnerRules.InvalidCandidateMessage, outsiderOwner.Message);
+        Assert.False(await fixture.Context.Project.AnyAsync());
+    }
+
+    [Fact]
+    public async Task ChangeOwner_OnlyPrimaryMemberOrCurrentOwner_AndOnlyOwnerRemovesFiles()
+    {
+        // 協作團隊的人不能把自己設成負責人（不然就拿到刪除權）；主責團隊成員、目前的負責人可以換。
+        await using var fixture = await Fixture.CreateAsync();
+        var alice = await fixture.AddUserAsync("alice");
+        var carol = await fixture.AddUserAsync("carol");
+        var bob = await fixture.AddUserAsync("bob");
+        var sales = await fixture.AddTeamAsync("業務部", alice.Id, carol.Id);
+        var rd = await fixture.AddTeamAsync("研發部", bob.Id);
+        var project = await fixture.AddProjectAsync("共用專案", sales.Id, rd.Id);
+        await fixture.Context.Project.ExecuteUpdateAsync(s => s.SetProperty(x => x.OwnerUserId, alice.Id).SetProperty(x => x.Owner, "alice"));
+
+        var bobService = fixture.CreateProjectService(bob.Id);
+        var takeOver = await bobService.GetAsync(project.Id);
+        takeOver.OwnerUserId = bob.Id;
+        var removeFile = await bobService.GetAsync(project.Id);
+
+        Assert.Equal(ProjectOwnerRules.ChangeDeniedMessage, (await bobService.UpdateAsync(takeOver)).Message);
+        Assert.Equal(ProjectOwnerRules.DeleteFileMessage, (await bobService.UpdateAsync(removeFile, removedFileIds: [999])).Message);
+
+        // 協作團隊的人照常可以改內容，負責人保留。
+        var editTitle = await bobService.GetAsync(project.Id);
+        editTitle.Title = "改名";
+        Assert.True((await bobService.UpdateAsync(editTitle)).Success);
+
+        var byOwner = await fixture.CreateProjectService(alice.Id).GetAsync(project.Id);
+        byOwner.OwnerUserId = carol.Id;
+        Assert.True((await fixture.CreateProjectService(alice.Id).UpdateAsync(byOwner)).Success);
+
+        var saved = await fixture.Context.Project.AsNoTracking().SingleAsync();
+        Assert.Equal(carol.Id, saved.OwnerUserId);
+        Assert.Equal("carol", saved.Owner);
+        Assert.Equal("改名", saved.Title);
     }
 
     [Fact]
@@ -487,8 +567,9 @@ public sealed class ProjectAccessTests
     {
         // 畫面靠它選取剛建立的專案（同名專案時用標題找會選錯）。
         await using var fixture = await Fixture.CreateAsync();
-        var rd = await fixture.AddTeamAsync("研發部");
-        var model = new ProjectAdapterModel { Title = "新專案", Owner = "x", PrimaryTeamId = rd.Id };
+        var owner = await fixture.AddUserAsync("owner");
+        var rd = await fixture.AddTeamAsync("研發部", owner.Id);
+        var model = new ProjectAdapterModel { Title = "新專案", OwnerUserId = owner.Id, PrimaryTeamId = rd.Id };
 
         await fixture.CreateProjectService(0, isAdmin: true).AddAsync(model);
 

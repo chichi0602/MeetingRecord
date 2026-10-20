@@ -172,6 +172,7 @@ public partial class TodoViewView : IAsyncDisposable
         }
 
         availableProjects = await projectService.GetSelectableAsync(includeArchived: true);
+        access = await ProjectAccessService.GetAsync();
 
         await ReloadAsync();
     }
@@ -320,6 +321,20 @@ public partial class TodoViewView : IAsyncDisposable
 
     /// <summary>封存專案的待辦唯讀；管理者不受限（全站慣例）。</summary>
     private bool IsReadOnly(TodoAdapterModel todo) => todo.IsProjectArchived && !AuthenticationStateHelper.CheckIsAdmin();
+
+    [Inject]
+    private ProjectAccessService ProjectAccessService { get; set; } = default!;
+
+    /// <summary>目前使用者的存取範圍（1.0.52），只用來決定「刪除」要不要出現；服務層另外把關。</summary>
+    private ProjectAccess? access;
+
+    /// <summary>
+    /// 刪除待辦只限專案負責人與管理者（1.0.52）。負責人是一般使用者（沒有刪除權限）也能刪，要有待辦的「編輯」權限。
+    /// </summary>
+    private bool CanDelete(TodoAdapterModel todo)
+        => access?.IsProjectOwner(todo.ProjectId) == true
+            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit)
+            && !IsReadOnly(todo);
 
     private async Task OnProjectScopeChangedAsync(ProjectScope scope)
     {

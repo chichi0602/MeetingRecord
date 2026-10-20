@@ -198,7 +198,8 @@ else
                                                   OnClick="@(async () => await OnEditAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Delete) && !IsReadOnly(context))
+                        @* 1.0.52：刪除只限專案負責人與管理者。 *@
+                        @if (CanDelete(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="刪除" Icon="delete" Danger

@@ -384,10 +384,13 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "沒有權限刪除這筆會議紀錄。");
             }
 
-            // 1.0.47：同專案的人可以看、可以編修，但刪除只限上傳者與管理者。
-            if (!(await projectAccess.GetAsync()).IsMeetingOwner(item.CreatedByUserId))
+            // 1.0.47：同專案的人可以看、可以編修，但刪除只限上傳者與管理者；
+            // 1.0.52 起專案負責人也可以刪專案底下任何人的會議。
+            var deleteAccess = await projectAccess.GetAsync();
+            var isProjectOwner = item.ProjectId is { } projectId && deleteAccess.IsProjectOwner(projectId);
+            if (!deleteAccess.IsMeetingOwner(item.CreatedByUserId) && !isProjectOwner)
             {
-                return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("刪除這筆會議紀錄"));
+                return VerifyRecordResultFactory.Build(false, DeleteDeniedMessage);
             }
 
             // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
@@ -482,6 +485,9 @@ public class MeetingService
 
     /// <summary>上傳者專屬動作被擋下時的訊息（1.0.47）。</summary>
     public static string OwnerOnlyMessage(string action) => $"只有上傳者或管理者可以{action}。";
+
+    /// <summary>刪除會議被擋下時的訊息（1.0.52：上傳者或專案負責人）。</summary>
+    public const string DeleteDeniedMessage = "只有上傳者或專案負責人可以刪除這筆會議紀錄。";
 
     /// <summary>
     /// 從這場會議抽出、還連著它的待辦筆數（1.0.47，刪除確認框用）。刪會議時這些待辦會保留，只是不再連到會議。

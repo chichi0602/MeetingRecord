@@ -200,10 +200,11 @@ public partial class MeetingViewView : IDisposable
     private bool IsOwner(MeetingAdapterModel meeting) => access?.IsMeetingOwner(meeting.CreatedByUserId) == true;
 
     /// <summary>
-    /// 上傳者可以刪自己上傳的會議，即使角色沒有刪除權限；要有會議紀錄的「編輯」權限（與 API 的 DELETE 端點一致）。
+    /// 上傳者可以刪自己上傳的會議，即使角色沒有刪除權限；1.0.52 起專案負責人也可以刪專案底下任何人的會議。
+    /// 要有會議紀錄的「編輯」權限（與 API 的 DELETE 端點一致）。
     /// </summary>
     private bool CanDelete(MeetingAdapterModel meeting)
-        => IsOwner(meeting)
+        => (IsOwner(meeting) || (meeting.ProjectId is { } projectId && access?.IsProjectOwner(projectId) == true))
             && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit);
 
     /// <summary>新增時一定可以選檔；修改別人上傳的會議不能換檔。</summary>

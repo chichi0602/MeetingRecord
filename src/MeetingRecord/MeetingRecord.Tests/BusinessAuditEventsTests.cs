@@ -64,7 +64,7 @@ public sealed class BusinessAuditEventsTests : IAsyncDisposable
     {
         var teamId = await AddTeamAsync("研發");
         var service = CreateProjectService();
-        var model = NewProject(teamId);
+        var model = await NewProjectAsync(teamId);
 
         await service.AddAsync(model, [Upload("規格.pdf", "spec"), Upload("草圖.png", "png")]);
         var fileIds = await context.ProjectFile.AsNoTracking().OrderBy(x => x.Id).Select(x => x.Id).ToListAsync();
@@ -95,7 +95,7 @@ public sealed class BusinessAuditEventsTests : IAsyncDisposable
     {
         var teamId = await AddTeamAsync("研發");
         var service = CreateProjectService();
-        var model = NewProject(teamId);
+        var model = await NewProjectAsync(teamId);
         await service.AddAsync(model, [Upload("規格.pdf", "spec")]);
         var fileId = await context.ProjectFile.AsNoTracking().Select(x => x.Id).SingleAsync();
 
@@ -112,7 +112,7 @@ public sealed class BusinessAuditEventsTests : IAsyncDisposable
     public async Task Project_UpdateByOutsider_ShouldWriteDataScopeDenied()
     {
         var teamId = await AddTeamAsync("研發");
-        var model = NewProject(teamId);
+        var model = await NewProjectAsync(teamId);
         await CreateProjectService().AddAsync(model);
         var outsider = CreateProjectService(isAdmin: false, userId: 99, account: "outsider");
 
@@ -334,13 +334,22 @@ public sealed class BusinessAuditEventsTests : IAsyncDisposable
             Audit(userId));
     }
 
-    private static ProjectAdapterModel NewProject(int teamId) => new()
+    /// <summary>1.0.52：負責人要是團隊裡啟用中的帳號，這裡順便建一個並加進團隊。</summary>
+    private async Task<ProjectAdapterModel> NewProjectAsync(int teamId)
     {
-        Title = "Q3 產品改版專案",
-        Status = "進行中",
-        Owner = "林怡君",
-        PrimaryTeamId = teamId,
-    };
+        var ownerId = await AddUserAsync($"owner-{Guid.NewGuid():N}");
+        context.UserTeam.Add(new UserTeam { MyUserId = ownerId, TeamId = teamId });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        return new ProjectAdapterModel
+        {
+            Title = "Q3 產品改版專案",
+            Status = "進行中",
+            OwnerUserId = ownerId,
+            PrimaryTeamId = teamId,
+        };
+    }
 
     private static ProjectUploadFileInput Upload(string fileName, string content)
     {

@@ -89,6 +89,7 @@ public static class AuditActions
     public const string ProjectFileUpload = "Project.FileUpload";
     public const string ProjectFileDelete = "Project.FileDelete";
     public const string ProjectFileDownload = "Project.FileDownload";
+    public const string ProjectTodoExportPdf = "Project.TodoExportPdf";
     #endregion
 
     #region 會議（1.0.34）
@@ -225,6 +226,7 @@ public static class AuditActions
         [ProjectFileUpload] = "上傳專案附件",
         [ProjectFileDelete] = "刪除專案附件",
         [ProjectFileDownload] = "下載專案附件",
+        [ProjectTodoExportPdf] = "匯出專案待辦 PDF",
 
         [MeetingCreate] = "新增會議",
         [MeetingUpdate] = "修改會議",

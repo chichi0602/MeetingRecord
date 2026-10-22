@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.Options;
 using Microsoft.JSInterop;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.DataAccess;
@@ -39,8 +40,20 @@ public partial class ProjectViewView : IDisposable
     [Inject]
     private ClipboardInterop clipboardInterop { get; set; } = default!;
 
+    [Inject]
+    private TodoService TodoService { get; set; } = default!;
+
+    [Inject]
+    private CurrentUserService CurrentUserService { get; set; } = default!;
+
+    [Inject]
+    private IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
+
     /// <summary>正在匯出的會議 Id；用來顯示 loading 並擋重複點擊。</summary>
     private int? exportingMeetingId;
+
+    /// <summary>正在匯出專案待辦總覽（1.0.54）；用來顯示 loading 並擋重複點擊。</summary>
+    private bool isExportingTodos;
 
     /// <summary>已因「生成結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
     private readonly HashSet<int> reloadedFinishedMeetingIds = [];
@@ -859,6 +872,57 @@ public partial class ProjectViewView : IDisposable
         finally
         {
             exportingMeetingId = null;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// 把目前專案的所有待辦匯出成 PDF 總覽（1.0.54，看進度用）。唯讀動作：已完成（封存）的專案也能匯出。
+    /// </summary>
+    private async Task OnExportTodosAsync()
+    {
+        if (SelectedProject is not { } project || isExportingTodos)
+        {
+            return;
+        }
+
+        isExportingTodos = true;
+        StateHasChanged();
+
+        try
+        {
+            var exportedAt = DateTime.Now;
+            var todos = await TodoService.GetForProjectAsync(project.Id);
+            var html = ProjectTodoReportExporter.BuildHtml(new ProjectTodoReportRequest(
+                SystemSettingsOptions.Value.SystemInformation.SystemVersion,
+                CurrentUserService.CurrentUser.Account,
+                exportedAt,
+                project,
+                todos));
+            var pdf = await pdfRenderer.RenderAsync(html);
+            var fileName = ProjectTodoReportExporter.BuildFileName(project, exportedAt);
+
+            await fileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
+            await AuditLogService.WriteForCurrentUserAsync(
+                AuditActions.ProjectTodoExportPdf, targetType: "Project", targetId: project.Id.ToString(),
+                detail: $"file={fileName}; todos={todos.Count}; bytes={pdf.Length}");
+
+            logger.LogInformation(
+                "Project todos exported as pdf. ProjectId={ProjectId}, Todos={Todos}, Bytes={Bytes}",
+                project.Id,
+                todos.Count,
+                pdf.Length);
+
+            NotifySuccess($"已下載「{fileName}」。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to export project todos. ProjectId={ProjectId}", project.Id);
+            NotifyError($"匯出 PDF 失敗：{ex.Message}");
+        }
+        finally
+        {
+            isExportingTodos = false;
             StateHasChanged();
         }
     }

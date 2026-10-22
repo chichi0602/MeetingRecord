@@ -854,6 +854,26 @@ public class TodoService
         return models;
     }
 
+    /// <summary>
+    /// 單一專案的全部待辦（1.0.54，專案頁「待辦 PDF」用）：主待辦與子項目都有、已完成也在內，不分頁。
+    /// 刻意不套 <see cref="ProjectArchiveRules.ApplyScope"/>：已完成（封存）的專案也要能匯出。
+    /// 看不到的專案回空清單。排序與清單頁預設一致（有截止日的在前、近的在前）。
+    /// </summary>
+    public async Task<IReadOnlyList<TodoAdapterModel>> GetForProjectAsync(int projectId, CancellationToken cancellationToken = default)
+    {
+        var records = await (await projectAccess.GetAsync()).Filter(context.Todo.AsNoTracking())
+            .Include(x => x.Project)
+            .Include(x => x.Meeting)
+            .Include(x => x.Parent)
+            .Where(x => x.ProjectId == projectId)
+            .OrderBy(x => x.DueDate == null)
+            .ThenBy(x => x.DueDate)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<TodoAdapterModel>>(records);
+    }
+
     private static string OwnerKey(string? owner)
     {
         return string.IsNullOrWhiteSpace(owner) ? UnassignedOwner : owner.Trim();

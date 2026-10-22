@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.DataAccess;
+using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Web.Components.Views.Todos;
@@ -208,6 +209,60 @@ public sealed class TodoServiceTests
 
     #endregion
 
+
+    #region 專案待辦總覽
+
+    [Fact]
+    public async Task GetForProjectAsync_ShouldReturnAllTodosOfThatProject_IncludingCompletedAndSubtasks()
+    {
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案A");
+        var other = await fixture.AddProjectAsync("專案B");
+        var meeting = await fixture.AddMeetingAsync("週會");
+        var parent = await fixture.AddTodoAsync("主待辦", project.Id, meetingId: meeting.Id);
+        await fixture.AddTodoAsync("做完的", project.Id, status: "已完成");
+        fixture.Context.Todo.Add(new Todo { Title = "子項目", ProjectId = project.Id, ParentTodoId = parent.Id, Status = "待辦" });
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        await fixture.AddTodoAsync("別的專案", other.Id);
+        var service = fixture.CreateService();
+
+        var items = await service.GetForProjectAsync(project.Id);
+
+        Assert.Equal(new HashSet<string> { "主待辦", "做完的", "子項目" }, items.Select(x => x.Title).ToHashSet());
+        Assert.Equal("週會", items.Single(x => x.Title == "主待辦").MeetingTitle);
+        Assert.Equal(parent.Id, items.Single(x => x.Title == "子項目").ParentTodoId);
+    }
+
+    [Fact]
+    public async Task GetForProjectAsync_ShouldIncludeArchivedProject()
+    {
+        // 已完成（封存）的專案唯讀，但仍要能下載 PDF。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("結案專案");
+        await fixture.AddTodoAsync("待辦一", project.Id);
+        var archived = await fixture.Context.Project.SingleAsync(x => x.Id == project.Id);
+        archived.Status = ProjectAdapterModel.ArchivedStatus;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var service = fixture.CreateService();
+
+        Assert.Single(await service.GetForProjectAsync(project.Id));
+    }
+
+    [Fact]
+    public async Task GetForProjectAsync_ShouldReturnEmpty_WhenProjectIsNotVisible()
+    {
+        // 看不到的專案當成不存在：沒有任何團隊的一般使用者看不到。
+        await using var fixture = await TodoServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("別人的專案");
+        await fixture.AddTodoAsync("待辦一", project.Id);
+        var service = fixture.CreateService(TestProjectAccess.User(fixture.Context, 99));
+
+        Assert.Empty(await service.GetForProjectAsync(project.Id));
+    }
+
+    #endregion
 
     #region 負責人工作量
 
@@ -567,13 +622,13 @@ public sealed class TodoServiceTests
         /// <summary>1.0.44：記下鈴鐺被叫醒的收件人。</summary>
         public RecordingNotificationNotifier Notifier { get; } = new();
 
-        public TodoService CreateService()
+        public TodoService CreateService(ProjectAccessService? projectAccess = null)
         {
             return new TodoService(
                 Context,
                 mapper,
                 loggerFactory.CreateLogger<TodoService>(),
-                TestProjectAccess.Admin(Context),
+                projectAccess ?? TestProjectAccess.Admin(Context),
                 TestAuditLogs.CreateService(Context, TestAuditActor.Fixed(1, "tester")),
                 TestTodoChanges.CreateRecorder(Context, TestProjectAccess.Admin(Context), TestAuditActor.Fixed(1, "tester"), Notifier));
         }

@@ -67,6 +67,15 @@ else
                     </span>
                 </Button>
             </HoverTip>
+            @* 1.0.54：唯讀動作，比照 AI 問答只要頁面權限；已完成（封存）的專案也能匯出。 *@
+            <HoverTip Title="把這個專案的所有待辦匯出成 PDF，看進度">
+                <Button Type="ButtonType.Default"
+                        Disabled="@(SelectedProject is null)"
+                        Loading="@isExportingTodos"
+                        OnClick="OnExportTodosAsync">
+                    <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="picture_as_pdf" /><span>待辦 PDF</span></span>
+                </Button>
+            </HoverTip>
           </div>
 
           @* 篩選只縮小上面的專案下拉，不影響誰看得到。MaxTagCount=1：多選時收成「+N」，寬度固定不撐開。 *@

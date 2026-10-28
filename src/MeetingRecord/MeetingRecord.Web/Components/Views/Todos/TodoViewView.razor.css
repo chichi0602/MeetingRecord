@@ -511,6 +511,14 @@ button.todo-view-pill:focus-visible {
     gap: 6px;
 }
 
+/* 1.0.55：改期限的原因。 */
+.todo-view-change-note {
+    margin-top: 4px;
+    color: var(--oat-ink-mid);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .todo-view-change-field {
     padding: 0 8px;
     border-radius: 999px;

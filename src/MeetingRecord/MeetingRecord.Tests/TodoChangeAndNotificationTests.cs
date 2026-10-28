@@ -58,6 +58,7 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
         var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
         var model = await CreateService(userA).GetAsync(todo.Id);
         model.DueDate = new DateTime(2026, 10, 31);
+        model.DueDateChangeNote = "延後";
 
         var result = await CreateService(userA).UpdateAsync(model);
 
@@ -258,11 +259,220 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
         update.DueDate = new DateTime(2026, 11, 5);
         context.ChangeTracker.Clear();
 
-        Assert.True(await repository.UpdateAsync(update));
+        Assert.True(await repository.UpdateAsync(update, "延後"));
         var change = await context.TodoChange.AsNoTracking().SingleAsync();
         Assert.Equal(AuditVia.Api, change.Via);
         Assert.Equal("2026/11/05", change.NewValue);
         Assert.True(await context.UserNotification.AnyAsync(x => x.UserId == userB));
+    }
+
+    // ───────── 改期限原因（1.0.55） ─────────
+
+    [Fact]
+    public async Task UpdateAsync_DueDateChangedWithoutNote_ShouldBeRejected_WebAndApi()
+    {
+        var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
+        var model = await CreateService(userA).GetAsync(todo.Id);
+        model.DueDate = new DateTime(2026, 10, 31);
+        model.DueDateChangeNote = "   ";
+
+        var web = await CreateService(userA).UpdateAsync(model);
+
+        var update = await context.Todo.AsNoTracking().SingleAsync(x => x.Id == todo.Id);
+        update.DueDate = new DateTime(2026, 11, 5);
+        context.ChangeTracker.Clear();
+        var api = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateRepository(userA).UpdateAsync(update));
+
+        Assert.False(web.Success);
+        Assert.Equal(TodoChangeRecorder.DueDateNoteRequiredMessage, web.Message);
+        Assert.Equal(TodoChangeRecorder.DueDateNoteRequiredMessage, api.Message);
+        Assert.Equal(new DateTime(2026, 10, 20), (await context.Todo.AsNoTracking().SingleAsync()).DueDate);
+        Assert.False(await context.TodoChange.AnyAsync());
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DueDateChangedWithNote_ShouldRecordNoteAndAppendToMessage()
+    {
+        var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
+        var model = await CreateService(userA).GetAsync(todo.Id);
+        model.DueDate = new DateTime(2026, 10, 31);
+        model.Priority = "高";
+        model.DueDateChangeNote = "甲方要求延後驗收";
+
+        Assert.True((await CreateService(userA).UpdateAsync(model)).Success);
+
+        var changes = await context.TodoChange.AsNoTracking().ToListAsync();
+        Assert.Equal("甲方要求延後驗收", changes.Single(x => x.Field == TodoChangeFields.DueDate).Note);
+        Assert.Null(changes.Single(x => x.Field == TodoChangeFields.Priority).Note);
+        Assert.All(
+            await context.UserNotification.AsNoTracking().ToListAsync(),
+            x => Assert.EndsWith("（備註：甲方要求延後驗收）", x.Message));
+
+        // 清單的「期限已變更」提示也帶上原因。
+        var listed = (await CreateService(userA).GetAsync(new DataRequest { CurrentPage = 1, PageSize = 20 })).Result.Single();
+        Assert.Contains("原因：甲方要求延後驗收", listed.DueDateChangeText);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_OtherFieldsOnly_ShouldNotRequireNote()
+    {
+        var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
+        var model = await CreateService(userA).GetAsync(todo.Id);
+        model.Owner = "林大華";
+        // 同一天、只差時間不算改期限。
+        model.DueDate = new DateTime(2026, 10, 20, 9, 0, 0);
+
+        Assert.True((await CreateService(userA).UpdateAsync(model)).Success);
+    }
+
+    [Fact]
+    public async Task ApplyExtractedUpdateAsync_ShouldNotRequireNote()
+    {
+        var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
+
+        var result = await CreateService(userA).ApplyExtractedUpdateAsync(todo.Id, new DateTime(2026, 11, 1), null, 0, "週會");
+
+        Assert.True(result.Success);
+        Assert.Null((await context.TodoChange.AsNoTracking().SingleAsync()).Note);
+    }
+
+    // ───────── 甲方帳號（1.0.55）：戊在協作團隊，設成甲方；甲是專案一的負責人 ─────────
+
+    [Fact]
+    public async Task External_ChangePriority_ShouldNotifyProjectOwnerOnly()
+    {
+        await MakeExternalAsync(userE);
+        var todo = await AddTodoAsync("完成報表", project1);
+        var model = await CreateService(userE).GetAsync(todo.Id);
+        model.Priority = "高";
+        model.Description = "補上附件";
+
+        Assert.True((await CreateService(userE).UpdateAsync(model)).Success);
+
+        var notification = await context.UserNotification.AsNoTracking().SingleAsync();
+        Assert.Equal(userA, notification.UserId);
+        Assert.Equal("戊 把『完成報表』的優先度改為 高，並修改了描述", notification.Message);
+        Assert.Equal(new[] { userA }, notifier.Calls.Single());
+    }
+
+    [Fact]
+    public async Task NonExternal_ChangePriority_ShouldStillNotifyNobody()
+    {
+        var todo = await AddTodoAsync("完成報表", project1);
+        var model = await CreateService(userB).GetAsync(todo.Id);
+        model.Priority = "高";
+
+        Assert.True((await CreateService(userB).UpdateAsync(model)).Success);
+
+        Assert.False(await context.UserNotification.AnyAsync());
+    }
+
+    [Fact]
+    public async Task External_ChangeDueDate_OwnerGetsOneNotification_MembersToo()
+    {
+        await MakeExternalAsync(userE);
+        var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
+        var model = await CreateService(userE).GetAsync(todo.Id);
+        model.DueDate = new DateTime(2026, 10, 31);
+        model.DueDateChangeNote = "等待對方提供資料";
+
+        Assert.True((await CreateService(userE).UpdateAsync(model)).Success);
+
+        var recipients = await context.UserNotification.AsNoTracking().Select(x => x.UserId).OrderBy(x => x).ToListAsync();
+        Assert.Equal(new[] { userA, userB }.Order(), recipients);
+        Assert.All(
+            await context.UserNotification.AsNoTracking().ToListAsync(),
+            x => Assert.Contains("（備註：等待對方提供資料）", x.Message));
+    }
+
+    [Fact]
+    public async Task External_AddAndDelete_ShouldNotifyProjectOwner_WebAndApi()
+    {
+        await MakeExternalAsync(userE);
+
+        Assert.True((await CreateService(userE).AddAsync(NewModel("請廠商報價", project1))).Success);
+        var created = await context.Todo.AsNoTracking().SingleAsync();
+        Assert.Equal(userE, created.CreatedByUserId);
+
+        var apiCreated = await CreateRepository(userE).AddAsync(new Todo { Title = "API 建的", ProjectId = project1, Status = "待辦", Priority = "中" });
+        context.ChangeTracker.Clear();
+
+        Assert.True((await CreateService(userE).DeleteAsync(created.Id)).Success);
+        Assert.True(await CreateRepository(userE).DeleteAsync(apiCreated.Id));
+
+        var messages = await context.UserNotification.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
+        Assert.All(messages, x => Assert.Equal(userA, x.UserId));
+        Assert.Equal(
+            ["戊 新增了待辦『請廠商報價』", "戊 新增了待辦『API 建的』", "戊 刪除了待辦『請廠商報價』", "戊 刪除了待辦『API 建的』"],
+            messages.Select(x => x.Message));
+        Assert.Equal(created.Id, messages[0].TodoId);
+    }
+
+    [Fact]
+    public async Task NonExternal_Add_ShouldNotNotify_ButRecordCreator()
+    {
+        Assert.True((await CreateService(userB).AddAsync(NewModel("一般新增", project1))).Success);
+
+        Assert.Equal(userB, (await context.Todo.AsNoTracking().SingleAsync()).CreatedByUserId);
+        Assert.False(await context.UserNotification.AnyAsync());
+    }
+
+    [Fact]
+    public async Task External_CanDeleteOnlyOwnTodos_OwnerCanStillDeleteAny()
+    {
+        await MakeExternalAsync(userE);
+        Assert.True((await CreateService(userB).AddAsync(NewModel("乙建的", project1))).Success);
+        var byB = await context.Todo.AsNoTracking().SingleAsync();
+
+        var web = await CreateService(userE).DeleteAsync(byB.Id);
+        var api = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateRepository(userE).DeleteAsync(byB.Id));
+
+        Assert.Equal(ProjectOwnerRules.DeleteOwnTodoOnlyMessage, web.Message);
+        Assert.Equal(ProjectOwnerRules.DeleteOwnTodoOnlyMessage, api.Message);
+        context.ChangeTracker.Clear();
+        Assert.True((await CreateService(userA).DeleteAsync(byB.Id)).Success);
+    }
+
+    [Fact]
+    public async Task Update_ShouldKeepCreator()
+    {
+        Assert.True((await CreateService(userB).AddAsync(NewModel("乙建的", project1))).Success);
+        var model = await CreateService(userA).GetAsync((await context.Todo.AsNoTracking().SingleAsync()).Id);
+        model.CreatedByUserId = null;
+        model.Title = "改了標題";
+
+        Assert.True((await CreateService(userA).UpdateAsync(model)).Success);
+
+        Assert.Equal(userB, (await context.Todo.AsNoTracking().SingleAsync()).CreatedByUserId);
+    }
+
+    [Fact]
+    public async Task OwnerCandidates_ShouldExcludeExternalUsers()
+    {
+        await MakeExternalAsync(userE);
+        var teamIds = await context.Team.AsNoTracking().Select(x => x.Id).ToListAsync();
+
+        var candidates = await ProjectOwnerRules.GetCandidatesAsync(context, teamIds);
+
+        Assert.DoesNotContain(candidates, x => x.Id == userE);
+        Assert.Contains(candidates, x => x.Id == userB);
+    }
+
+    private async Task MakeExternalAsync(int userId)
+    {
+        await context.MyUser.Where(x => x.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsExternal, true));
+        context.ChangeTracker.Clear();
+    }
+
+    private TodoRepository CreateRepository(int userId)
+    {
+        var access = TestProjectAccess.User(context, userId);
+        var actor = TestAuditActor.Fixed(userId, $"user{userId}");
+        return new TodoRepository(
+            context,
+            access,
+            TestAuditLogs.CreateService(context, actor),
+            TestTodoChanges.CreateRecorder(context, access, actor, notifier));
     }
 
     // ───────── 通知服務 ─────────

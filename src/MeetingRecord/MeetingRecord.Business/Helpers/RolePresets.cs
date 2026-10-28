@@ -4,7 +4,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Business.Helpers;
 
 /// <summary>
-/// 預設角色目錄（0.4.108）。正式上線時系統是空的，角色管理頁的「建立預設角色」一鍵建出這四個。
+/// 預設角色目錄（0.4.108）。正式上線時系統是空的，角色管理頁的「建立預設角色」一鍵建出這些角色（1.0.55 加「甲方」）。
 ///
 /// <para>
 /// 內容照 2026/10/01 實際使用中的四個角色。角色只管「能做什麼」，不帶團隊。
@@ -58,7 +58,19 @@ public static class RolePresets
             .. Actions(MagicObjectHelper.角色_團隊清單, PermissionActions.View),
             MagicObjectHelper.角色_登出,
         ]),
+        // 1.0.55：專案的業主。專案只能看，待辦全部動作；帳號另外要在使用者管理勾「甲方」——
+        // 「只能刪自己建立的待辦、每個修改都通知專案負責人」看的是帳號，不是這個角色。
+        new(甲方角色名稱,
+        [
+            MagicObjectHelper.角色_使用說明,
+            MagicObjectHelper.角色_專案管理,
+            .. Actions(MagicObjectHelper.角色_專案項目, PermissionActions.View),
+            MagicObjectHelper.角色_待辦事項,
+            MagicObjectHelper.角色_登出,
+        ]),
     ];
+
+    public const string 甲方角色名稱 = "甲方";
 
     private static IEnumerable<string> Actions(string page, params string[] actions)
         => actions.Select(action => PermissionKey.For(page, action));

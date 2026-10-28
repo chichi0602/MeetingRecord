@@ -427,6 +427,16 @@ else
                             <ValidationMessage For="() => CurrentRecord.DueDate" />
                         </FormItem>
 
+                        @* 1.0.55：改了期限就要寫原因，會附在小鈴鐺的通知與異動紀錄裡。 *@
+                        @if (IsDueDateChanged)
+                        {
+                            <FormItem Label="改期限原因" Required>
+                                <TextArea @bind-Value="CurrentRecord.DueDateChangeNote" Rows="2" MaxLength="500"
+                                          Placeholder="例如：甲方要求延後驗收、等待對方提供資料…（會通知專案成員）" />
+                                <ValidationMessage For="() => CurrentRecord.DueDateChangeNote" />
+                            </FormItem>
+                        }
+
                         <FormItem Label="優先度" Required>
                             <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Priority" Style="width: 100%;">
                                 @foreach (var priority in PriorityOptions)
@@ -508,6 +518,10 @@ else
                         <span class="todo-view-change-arrow">→</span>
                         <span class="todo-view-change-new">@TodoChangeRecorder.DisplayValue(change.Field, change.NewValue)</span>
                     </div>
+                    @if (!string.IsNullOrWhiteSpace(change.Note))
+                    {
+                        <div class="todo-view-change-note">原因：@change.Note</div>
+                    }
                 </li>
             }
         </ul>

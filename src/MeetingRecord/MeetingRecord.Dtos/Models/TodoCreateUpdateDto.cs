@@ -67,6 +67,13 @@ public class TodoCreateUpdateDto
     public DateTime? DueDate { get; set; }
 
     /// <summary>
+    /// 改期限的原因（1.0.55，僅更新時使用）：截止日的日期有變時必填，寫進異動紀錄並附在通知訊息後面。
+    /// </summary>
+    [StringLength(500, ErrorMessage = "改期限原因不可超過 500 字元")]
+    [JsonPropertyName("dueDateChangeNote")]
+    public string? DueDateChangeNote { get; set; }
+
+    /// <summary>
     /// 優先度（低／中／高）
     /// </summary>
     [Required(ErrorMessage = "優先度 不可為空白")]

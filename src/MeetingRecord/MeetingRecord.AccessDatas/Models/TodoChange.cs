@@ -45,4 +45,9 @@ public class TodoChange
 
     /// <summary>來源會議標題（快照）。</summary>
     public string? SourceMeetingTitle { get; set; }
+
+    /// <summary>改期限的原因（1.0.55）：只記在期限那一列；從畫面或 API 改期限時必填，AI 抽出的更新沒有。</summary>
+    public string? Note { get; set; }
+
+    public const int NoteMaxLength = 500;
 }

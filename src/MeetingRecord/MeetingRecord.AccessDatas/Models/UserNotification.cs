@@ -1,8 +1,8 @@
 ﻿namespace MeetingRecord.AccessDatas.Models;
 
 /// <summary>
-/// 站內通知（1.0.44），右上角鈴鐺。目前只有「待辦的期限／負責人／狀態被改了」這一種，
-/// 收件人是待辦所屬專案的主責＋協作團隊成員（不含改的人自己）。
+/// 站內通知（1.0.44），右上角鈴鐺。都是待辦的異動：期限／負責人／狀態被改了，收件人是待辦所屬專案的
+/// 主責＋協作團隊成員；1.0.55 起甲方帳號的任何修改（含新增、刪除）另外通知專案負責人。都不含改的人自己。
 /// 使用者刪除時一併刪除；過了保留期限（<c>LogRetentionSettings.NotificationDays</c>）自動清除。
 /// </summary>
 public class UserNotification

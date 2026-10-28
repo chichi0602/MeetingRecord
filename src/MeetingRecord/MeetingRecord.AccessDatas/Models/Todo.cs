@@ -61,4 +61,10 @@ public class Todo
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+    /// <summary>
+    /// 建立者（1.0.55）：甲方帳號只能刪自己建立的待辦。刻意不設外鍵（同 <c>MyUser.LastProjectId</c>）；
+    /// 1.0.55 以前的待辦為 null。
+    /// </summary>
+    public int? CreatedByUserId { get; set; }
 }

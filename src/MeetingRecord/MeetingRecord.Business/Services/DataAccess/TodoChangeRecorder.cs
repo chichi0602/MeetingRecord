@@ -46,15 +46,18 @@ public class TodoChangeRecorder
     /// <param name="before">修改前的值（呼叫端在覆寫前抓的快照）。</param>
     /// <param name="after">修改後的值。</param>
     /// <param name="via">從哪裡改的（<see cref="AuditVia"/>）。</param>
+    /// <param name="note">改期限的原因（1.0.55）：記在期限那一列，並附在通知訊息後面。</param>
     public async Task<IReadOnlyList<int>> StageAsync(
         Todo before,
         Todo after,
         string via,
         int? sourceMeetingId = null,
-        string? sourceMeetingTitle = null)
+        string? sourceMeetingTitle = null,
+        string? note = null)
     {
         var diffs = Diff(before, after);
-        if (diffs.Count == 0)
+        var descriptionChanged = !string.Equals(before.Description?.Trim() ?? string.Empty, after.Description?.Trim() ?? string.Empty, StringComparison.Ordinal);
+        if (diffs.Count == 0 && !descriptionChanged)
         {
             return [];
         }
@@ -62,6 +65,7 @@ public class TodoChangeRecorder
         var (actorId, actorAccount) = actorProvider.GetActor();
         var actorName = await ResolveActorNameAsync(actorId, actorAccount);
         var now = DateTime.Now;
+        note = NormalizeNote(note);
 
         foreach (var (field, oldValue, newValue) in diffs)
         {
@@ -78,39 +82,105 @@ public class TodoChangeRecorder
                 Via = via,
                 SourceMeetingId = sourceMeetingId,
                 SourceMeetingTitle = sourceMeetingTitle,
+                Note = field == TodoChangeFields.DueDate ? note : null,
             });
         }
 
+        var messages = new Dictionary<int, string>();
+
+        // 期限、負責人、狀態有變：通知專案成員。移到別的專案時，新舊兩個專案的人都要知道。
         var notifying = diffs.Where(x => TodoChangeFields.Notifying.Contains(x.Field)).ToList();
-        if (notifying.Count == 0)
+        if (notifying.Count > 0)
+        {
+            var message = BuildMessage(actorName, after.Title, notifying, via, sourceMeetingTitle, note);
+            foreach (var userId in await projectAccess.GetProjectMemberIdsAsync([before.ProjectId, after.ProjectId]))
+            {
+                messages[userId] = message;
+            }
+        }
+
+        // 1.0.55：甲方的任何修改都通知專案負責人，訊息列出全部變動（已是成員的就改收這一則，不重複）。
+        if ((await projectAccess.GetAsync()).IsExternal)
+        {
+            var message = BuildMessage(actorName, after.Title, diffs, via, sourceMeetingTitle, note, descriptionChanged);
+            foreach (var userId in await projectAccess.GetProjectOwnerIdsAsync([before.ProjectId, after.ProjectId]))
+            {
+                messages[userId] = message;
+            }
+        }
+
+        return AddNotifications(messages, actorId, after.Id, after.ProjectId, now);
+    }
+
+    /// <summary>
+    /// 新增了一筆待辦（1.0.55）：只有甲方新增時通知專案負責人。待辦要先存檔拿到 Id 才呼叫；只加進 DbContext、不存檔。
+    /// </summary>
+    public Task<IReadOnlyList<int>> StageCreatedAsync(Todo todo)
+        => StageExternalEventAsync(todo, actorName => $"{actorName} 新增了待辦『{todo.Title?.Trim()}』");
+
+    /// <summary>刪除了一筆待辦（1.0.55）：只有甲方刪除時通知專案負責人。只加進 DbContext、不存檔。</summary>
+    public Task<IReadOnlyList<int>> StageDeletedAsync(Todo todo)
+        => StageExternalEventAsync(todo, actorName => $"{actorName} 刪除了待辦『{todo.Title?.Trim()}』");
+
+    private async Task<IReadOnlyList<int>> StageExternalEventAsync(Todo todo, Func<string, string> buildMessage)
+    {
+        if (!(await projectAccess.GetAsync()).IsExternal)
         {
             return [];
         }
 
-        // 移到別的專案時，新舊兩個專案的人都要知道。
-        var recipients = (await projectAccess.GetProjectMemberIdsAsync([before.ProjectId, after.ProjectId]))
-            .Where(id => id != actorId)
-            .ToList();
+        var (actorId, actorAccount) = actorProvider.GetActor();
+        var message = Truncate(buildMessage(await ResolveActorNameAsync(actorId, actorAccount)));
+        var messages = (await projectAccess.GetProjectOwnerIdsAsync([todo.ProjectId])).ToDictionary(id => id, _ => message);
+        return AddNotifications(messages, actorId, todo.Id, todo.ProjectId, DateTime.Now);
+    }
 
-        if (recipients.Count == 0)
-        {
-            return [];
-        }
-
-        var message = BuildMessage(actorName, after.Title, notifying, via, sourceMeetingTitle);
+    /// <summary>每位收件人一則通知（改的人自己不收）。回傳收件人。</summary>
+    private List<int> AddNotifications(Dictionary<int, string> messages, int? actorId, int todoId, int projectId, DateTime now)
+    {
+        var recipients = messages.Keys.Where(id => id != actorId).ToList();
         foreach (var userId in recipients)
         {
             context.UserNotification.Add(new UserNotification
             {
                 UserId = userId,
-                TodoId = after.Id,
-                ProjectId = after.ProjectId,
-                Message = message,
+                TodoId = todoId,
+                ProjectId = projectId,
+                Message = messages[userId],
                 CreatedAt = now,
             });
         }
 
         return recipients;
+    }
+
+    public const string DueDateNoteRequiredMessage = "改期限請填寫原因。";
+
+    /// <summary>
+    /// 從畫面或 API 改期限（日期有變）時必須附原因（1.0.55）；回傳錯誤訊息，沒問題時為 null。
+    /// AI 抽出的更新不經過這裡。
+    /// </summary>
+    public static string? ValidateDueDateNote(DateTime? oldDueDate, DateTime? newDueDate, string? note)
+    {
+        if (FormatDate(oldDueDate) == FormatDate(newDueDate))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(note))
+        {
+            return DueDateNoteRequiredMessage;
+        }
+
+        return note.Trim().Length > TodoChange.NoteMaxLength ? $"改期限原因不可超過 {TodoChange.NoteMaxLength} 字。" : null;
+    }
+
+    private static string? NormalizeNote(string? note)
+    {
+        var value = note?.Trim();
+        return string.IsNullOrEmpty(value) ? null
+            : value.Length <= TodoChange.NoteMaxLength ? value
+            : value[..TodoChange.NoteMaxLength];
     }
 
     /// <summary>
@@ -185,25 +255,40 @@ public class TodoChangeRecorder
         return result;
     }
 
-    /// <summary>例：「王小明 把『完成報表』的期限改為 2026/10/31、負責人改為 林大華（來源：從〈週會〉抽出）」。</summary>
+    /// <summary>
+    /// 例：「王小明 把『完成報表』的期限改為 2026/10/31、負責人改為 林大華（來源：從〈週會〉抽出）」；
+    /// 有改期限原因時再附「（備註：…）」（1.0.55）。
+    /// </summary>
+    /// <param name="descriptionChanged">描述也改了（1.0.55，只有通知甲方修改時會帶）。</param>
     public static string BuildMessage(
         string actorName,
         string? title,
         IReadOnlyList<(string Field, string? Old, string? New)> changes,
         string via,
-        string? sourceMeetingTitle)
+        string? sourceMeetingTitle,
+        string? note = null,
+        bool descriptionChanged = false)
     {
-        var parts = changes.Select(x => $"{TodoChangeFields.Describe(x.Field)}改為 {DisplayValue(x.Field, x.New)}");
-        var message = $"{actorName} 把『{title?.Trim()}』的{string.Join("、", parts)}";
+        var parts = changes.Select(x => $"{TodoChangeFields.Describe(x.Field)}改為 {DisplayValue(x.Field, x.New)}").ToList();
+        var message = parts.Count > 0
+            ? $"{actorName} 把『{title?.Trim()}』的{string.Join("、", parts)}{(descriptionChanged ? "，並修改了描述" : string.Empty)}"
+            : $"{actorName} 修改了『{title?.Trim()}』的描述";
 
         if (via == AuditVia.AiExtract)
         {
             message += $"（來源：{TodoChangeFields.DescribeVia(via, sourceMeetingTitle)}）";
         }
 
-        // 欄位上限 500：標題本身最長 200，正常不會超過，這裡只是保險。
-        return message.Length <= 500 ? message : message[..497] + "…";
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            message += $"（備註：{note.Trim()}）";
+        }
+
+        return Truncate(message);
     }
+
+    /// <summary>欄位上限 500：標題最長 200、備註最長 500，太長就截斷。</summary>
+    private static string Truncate(string message) => message.Length <= 500 ? message : message[..497] + "…";
 
     /// <summary>空值在畫面上要講清楚是「未設定」而不是一片空白。</summary>
     public static string DisplayValue(string field, string? value)

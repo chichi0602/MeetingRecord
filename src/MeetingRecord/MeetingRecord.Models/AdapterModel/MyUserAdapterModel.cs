@@ -15,6 +15,8 @@ public class MyUserAdapterModel : ICloneable
     public bool Status { get; set; } = true;
     public string? Email { get; set; }
     public bool IsAdmin { get; set; } = false;
+    /// <summary>甲方（外部帳號，1.0.55）。</summary>
+    public bool IsExternal { get; set; }
     public DateTime CreateAt { get; set; } = DateTime.Now;
     public DateTime UpdateAt { get; set; } = DateTime.Now;
     [Required(ErrorMessage = "角色 不可為空白")]

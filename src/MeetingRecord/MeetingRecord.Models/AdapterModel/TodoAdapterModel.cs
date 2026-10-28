@@ -49,6 +49,16 @@ public class TodoAdapterModel : ICloneable
 
     public bool HasRecentDueDateChange => DueDateChangedAt is not null;
 
+    /// <summary>
+    /// 這次改期限的原因（1.0.55）：只隨這一次修改傳給服務層，寫進異動紀錄與通知，不存在待辦本身。
+    /// 期限的日期有變時必填。
+    /// </summary>
+    [StringLength(500, ErrorMessage = "改期限原因不可超過 500 字")]
+    public string? DueDateChangeNote { get; set; }
+
+    /// <summary>建立者（1.0.55）：甲方帳號只能刪自己建立的待辦。</summary>
+    public int? CreatedByUserId { get; set; }
+
     /// <summary>主待辦（1.0.45）。有值＝這筆是子項目；只分一層。</summary>
     public int? ParentTodoId { get; set; }
 

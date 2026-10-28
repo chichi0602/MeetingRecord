@@ -218,6 +218,7 @@ public partial class BackendDBContext : DbContext
             entity.Property(x => x.ChangedByName).HasMaxLength(100);
             entity.Property(x => x.Via).HasMaxLength(20);
             entity.Property(x => x.SourceMeetingTitle).HasMaxLength(200);
+            entity.Property(x => x.Note).HasMaxLength(Models.TodoChange.NoteMaxLength);
 
             // 待辦刪了，它的異動紀錄就沒有意義；全站預設 Restrict，這裡要明寫，否則刪待辦會失敗。
             entity.HasOne(x => x.Todo)

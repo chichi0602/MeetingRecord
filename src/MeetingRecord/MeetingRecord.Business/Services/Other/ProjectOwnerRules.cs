@@ -24,6 +24,7 @@ public static class ProjectOwnerRules
     public const string ChangeDeniedMessage = "只有主責團隊的成員或目前的負責人可以變更負責人。";
     public const string DeleteProjectMessage = "只有專案負責人可以刪除專案。";
     public const string DeleteTodoMessage = "只有專案負責人可以刪除待辦。";
+    public const string DeleteOwnTodoOnlyMessage = "甲方帳號只能刪除自己建立的待辦。";
     public const string DeleteFileMessage = "只有專案負責人可以刪除附件。";
 
     /// <summary>這些團隊裡啟用中的帳號，依姓名排序（同一人在多個團隊只列一次）。</summary>
@@ -37,7 +38,8 @@ public static class ProjectOwnerRules
         }
 
         var users = await context.UserTeam.AsNoTracking()
-            .Where(x => ids.Contains(x.TeamId) && x.MyUser!.Status)
+            // 甲方帳號（1.0.55）不當專案負責人：負責人能刪專案與底下所有資料，也是甲方修改時的通知對象。
+            .Where(x => ids.Contains(x.TeamId) && x.MyUser!.Status && !x.MyUser.IsExternal)
             .Select(x => new { x.MyUser!.Id, x.MyUser.Name, x.MyUser.Account })
             .Distinct()
             .ToListAsync(cancellationToken);

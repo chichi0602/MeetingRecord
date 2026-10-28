@@ -186,7 +186,7 @@ public class TodoController : ControllerBase
             }
 
             var todo = mapper.Map<Todo>(todoDto);
-            var success = await todoRepository.UpdateAsync(todo);
+            var success = await todoRepository.UpdateAsync(todo, todoDto.DueDateChangeNote);
             if (!success)
             {
                 logger.LogWarning("Todo update request could not find record. TodoId={TodoId}", id);

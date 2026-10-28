@@ -16,8 +16,8 @@ else
                         <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="add" /><span>新增</span></span>
                     </Button>
                 </HoverTip>
-                @* 上線時系統是空的：一次建好四個預設角色（0.4.108，RolePresets）。已存在同名者會略過，可重複按。 *@
-                <HoverTip Title="一次建立管理者、一般使用者、檢視者、主管四個角色，已存在的會略過">
+                @* 上線時系統是空的：一次建好預設角色（0.4.108，RolePresets；1.0.55 加甲方）。已存在同名者會略過，可重複按。 *@
+                <HoverTip Title="一次建立管理者、一般使用者、檢視者、主管、甲方五個角色，已存在的會略過">
                     <Button Type="ButtonType.Default"
                             Loading="@isSeedingPresets"
                             OnClick="@(async () => await OnAddPresetsAsync())">

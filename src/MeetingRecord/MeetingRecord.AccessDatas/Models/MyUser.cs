@@ -61,5 +61,12 @@ public class MyUser
     /// </summary>
     public int? LastProjectId { get; set; }
 
+    /// <summary>
+    /// 甲方（外部帳號，1.0.55）。專案的業主：看得到哪些專案照樣靠團隊。
+    /// 甲方每做一個待辦的修改動作（新增、修改、勾完成、刪除）都通知專案負責人；
+    /// 刪除待辦只能刪自己建立的；不會出現在專案負責人的候選名單。
+    /// </summary>
+    public bool IsExternal { get; set; }
+
     public RoleView? RoleView { get; set; }
 }

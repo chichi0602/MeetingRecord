@@ -14,19 +14,27 @@ namespace MeetingRecord.Business.Services.Other;
 /// <param name="ProjectIds">看得到的專案：主責或協作團隊與 <see cref="TeamIds"/> 有交集。沒有公開專案。管理者不用這份清單。</param>
 /// <param name="PrimaryProjectIds">自己的團隊是<b>主責</b>的專案（1.0.47）：只有這些專案能改團隊設定。管理者不用這份清單。</param>
 /// <param name="OwnedProjectIds">自己是<b>負責人</b>的專案（1.0.52，限看得到的）：能刪除專案與底下的會議、待辦、附件。管理者不用這份清單。</param>
+/// <param name="IsExternal">甲方帳號（1.0.55，<c>MyUser.IsExternal</c>）。管理者一律為 false。</param>
 public sealed record ProjectAccess(
     bool IsAdmin,
     int UserId,
     IReadOnlyList<int> TeamIds,
     IReadOnlyList<int> ProjectIds,
     IReadOnlyList<int>? PrimaryProjectIds = null,
-    IReadOnlyList<int>? OwnedProjectIds = null)
+    IReadOnlyList<int>? OwnedProjectIds = null,
+    bool IsExternal = false)
 {
     /// <summary>
     /// 是不是這個專案的負責人（1.0.52，<c>Project.OwnerUserId</c>）。負責人（與管理者）可以刪除專案本身，
     /// 以及底下任何人的會議、待辦、附件；其他成員只能刪自己上傳的會議。
     /// </summary>
     public bool IsProjectOwner(int projectId) => IsAdmin || (OwnedProjectIds?.Contains(projectId) ?? false);
+
+    /// <summary>
+    /// 能不能刪這筆待辦：專案負責人與管理者可刪任何待辦；甲方帳號（1.0.55）另外可刪自己建立的。
+    /// </summary>
+    public bool CanDeleteTodo(int projectId, int? createdByUserId)
+        => IsProjectOwner(projectId) || (IsExternal && UserId != 0 && createdByUserId == UserId);
 
     public const string ProjectTeamManageMessage = "只有主責團隊的成員可以變更團隊設定。";
 
@@ -227,7 +235,29 @@ public sealed class ProjectAccessService
                 .Select(p => p.Id)
                 .ToListAsync();
 
-        return new ProjectAccess(false, scope.UserId, teamIds, projectIds, primaryProjectIds, ownedProjectIds);
+        var isExternal = scope.UserId != 0
+            && await context.MyUser.AsNoTracking().AnyAsync(u => u.Id == scope.UserId && u.IsExternal);
+
+        return new ProjectAccess(false, scope.UserId, teamIds, projectIds, primaryProjectIds, ownedProjectIds, isExternal);
+    }
+
+    /// <summary>
+    /// 這些專案的負責人（1.0.55，甲方修改待辦時的收件人）：<c>Project.OwnerUserId</c>，帳號啟用中的才算。
+    /// </summary>
+    public async Task<IReadOnlyList<int>> GetProjectOwnerIdsAsync(IEnumerable<int> projectIds)
+    {
+        var ids = projectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await context.Project
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id) && p.OwnerUserId != null)
+            .Join(context.MyUser.Where(u => u.Status), p => p.OwnerUserId, u => (int?)u.Id, (p, u) => u.Id)
+            .Distinct()
+            .ToListAsync();
     }
 
     /// <summary>

@@ -254,6 +254,8 @@ public class TodoService
             Todo itemParameter = Mapper.Map<Todo>(paraObject);
             itemParameter.CreatedAt = DateTime.Now;
             itemParameter.UpdatedAt = DateTime.Now;
+            var userId = (await projectAccess.GetAsync()).UserId;
+            itemParameter.CreatedByUserId = userId == 0 ? null : userId;
 
             await context.Todo.AddAsync(itemParameter);
 
@@ -269,8 +271,16 @@ public class TodoService
             }
 
             await context.SaveChangesAsync();
+
+            // 1.0.55：甲方新增的要通知專案負責人；通知要帶待辦 Id，所以存完才加。
+            var recipients = await changeRecorder.StageCreatedAsync(itemParameter);
+            if (recipients.Count > 0)
+            {
+                await context.SaveChangesAsync();
+            }
+
             CleanTrackingHelper.Clean<Todo>(context);
-            changeRecorder.Publish([]);
+            changeRecorder.Publish(recipients);
 
             await AuditAsync(AuditActions.TodoCreate, itemParameter.Id, $"title={itemParameter.Title}; projectId={itemParameter.ProjectId}; via={via}");
             Logger.LogInformation("Todo created successfully. TodoId={TodoId}, Title={TodoTitle}", itemParameter.Id, itemParameter.Title);
@@ -324,8 +334,15 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, hierarchyError);
             }
 
+            // 1.0.55：改期限要附原因（通知與異動紀錄都看得到）。
+            if (TodoChangeRecorder.ValidateDueDateNote(item.DueDate, paraObject.DueDate, paraObject.DueDateChangeNote) is { } noteError)
+            {
+                return VerifyRecordResultFactory.Build(false, noteError);
+            }
+
             Todo itemData = Mapper.Map<Todo>(paraObject);
             itemData.CreatedAt = item.CreatedAt;
+            itemData.CreatedByUserId = item.CreatedByUserId;
             itemData.UpdatedAt = DateTime.Now;
             // 來源會議紀錄不開放從畫面修改，一律沿用既有值；但搬到別的專案時清掉（0.4.115）——
             // 來源會議屬於原專案，留著的話新專案的人會看到他們看不到的會議標題。
@@ -335,7 +352,7 @@ public class TodoService
             context.Entry(itemData).State = EntityState.Modified;
 
             // 1.0.44：異動紀錄與通知和待辦同一次存檔；item 是存檔前的舊值。
-            var recipients = await changeRecorder.StageAsync(item, itemData, AuditVia.Web);
+            var recipients = await changeRecorder.StageAsync(item, itemData, AuditVia.Web, note: paraObject.DueDateChangeNote);
 
             // 1.0.45：換了主待辦，新舊主待辦的異動紀錄各記一筆。
             if (item.ParentTodoId != itemData.ParentTodoId)
@@ -500,7 +517,8 @@ public class TodoService
                 todo.DueDateChangeText =
                     $"原 {TodoChangeRecorder.DisplayValue(TodoChangeFields.DueDate, change.OldValue)}，"
                     + $"{change.ChangedByName ?? "有人"} 於 {change.ChangedAt:MM/dd HH:mm} 改為 {TodoChangeRecorder.DisplayValue(TodoChangeFields.DueDate, change.NewValue)}"
-                    + $"（{TodoChangeFields.DescribeVia(change.Via, change.SourceMeetingTitle)}）";
+                    + $"（{TodoChangeFields.DescribeVia(change.Via, change.SourceMeetingTitle)}）"
+                    + (string.IsNullOrWhiteSpace(change.Note) ? string.Empty : $"，原因：{change.Note}");
             }
         }
     }
@@ -576,6 +594,7 @@ public class TodoService
         Id = item.Id,
         ProjectId = item.ProjectId,
         Title = item.Title,
+        Description = item.Description,
         DueDate = item.DueDate,
         Owner = item.Owner,
         Status = item.Status,
@@ -667,10 +686,11 @@ public class TodoService
                 return VerifyRecordResultFactory.Build(false, archivedError);
             }
 
-            // 1.0.52：刪除待辦只限專案負責人與管理者。
-            if (!(await projectAccess.GetAsync()).IsProjectOwner(item.ProjectId))
+            // 1.0.52：刪除待辦只限專案負責人與管理者；1.0.55 起甲方另外可刪自己建立的。
+            var access = await projectAccess.GetAsync();
+            if (!access.CanDeleteTodo(item.ProjectId, item.CreatedByUserId))
             {
-                return VerifyRecordResultFactory.Build(false, ProjectOwnerRules.DeleteTodoMessage);
+                return VerifyRecordResultFactory.Build(false, access.IsExternal ? ProjectOwnerRules.DeleteOwnTodoOnlyMessage : ProjectOwnerRules.DeleteTodoMessage);
             }
 
             // 子項目（1.0.45）：刪主待辦時資料庫 Cascade 一起刪掉子項目；刪子項目時在主待辦記「移除子項目」。
@@ -683,9 +703,10 @@ public class TodoService
                 await changeRecorder.StageSubtaskAsync(parentId, item.ProjectId, item.Title, added: false, AuditVia.Web);
             }
 
+            var recipients = await changeRecorder.StageDeletedAsync(item);
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
-            changeRecorder.Publish([]);
+            changeRecorder.Publish(recipients);
 
             var children = childCount > 0 ? $"; children={childCount}" : string.Empty;
             await AuditAsync(AuditActions.TodoDelete, id, $"title={item.Title}; projectId={item.ProjectId}{children}; via={AuditVia.Web}");

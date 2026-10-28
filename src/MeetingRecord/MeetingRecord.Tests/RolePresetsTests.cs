@@ -75,6 +75,13 @@ public sealed class RolePresetsTests : IAsyncDisposable
         Assert.DoesNotContain(MagicObjectHelper.角色_團隊清單, manager);
         Assert.Contains(MagicObjectHelper.角色_分類清單, manager);
 
+        // 甲方（1.0.55）：專案只能看，待辦全部動作，沒有會議紀錄。
+        var client = await PermissionKeysOfAsync(RolePresets.甲方角色名稱);
+        Assert.Contains(PermissionKey.For(MagicObjectHelper.角色_專案項目, PermissionActions.View), client);
+        Assert.DoesNotContain(PermissionKey.For(MagicObjectHelper.角色_專案項目, PermissionActions.Edit), client);
+        Assert.Contains(MagicObjectHelper.角色_待辦事項, client);
+        Assert.DoesNotContain(MagicObjectHelper.角色_會議管理, client);
+
         // 管理者角色有全部頁面。
         var admin = await PermissionKeysOfAsync("管理者");
         Assert.Equal(new RolePermissionService().GetRolePermissionAllName().Distinct().Count(), admin.Distinct().Count());
@@ -98,7 +105,7 @@ public sealed class RolePresetsTests : IAsyncDisposable
 
         Assert.Contains("略過 1 個", first.Message);
         Assert.Contains("已新增 0 個", second.Message);
-        Assert.Equal(4, await context.RoleView.CountAsync());
+        Assert.Equal(RolePresets.All.Count, await context.RoleView.CountAsync());
         Assert.Equal([MagicObjectHelper.角色_使用說明], await PermissionKeysOfAsync("主管"));
     }
 

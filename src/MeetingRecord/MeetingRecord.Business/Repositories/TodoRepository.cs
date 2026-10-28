@@ -165,6 +165,7 @@ public class TodoRepository
             throw new InvalidOperationException(hierarchyError);
         }
 
+        todo.CreatedByUserId = access.UserId == 0 ? null : access.UserId;
         await context.Todo.AddAsync(todo);
         if (todo.ParentTodoId is { } parentId)
         {
@@ -172,13 +173,22 @@ public class TodoRepository
         }
 
         await context.SaveChangesAsync();
-        changeRecorder.Publish([]);
+
+        // 1.0.55：甲方新增的要通知專案負責人；通知要帶待辦 Id，所以存完才加。
+        var recipients = await changeRecorder.StageCreatedAsync(todo);
+        if (recipients.Count > 0)
+        {
+            await context.SaveChangesAsync();
+        }
+
+        changeRecorder.Publish(recipients);
 
         await AuditAsync(AuditActions.TodoCreate, todo.Id, $"title={todo.Title}; projectId={todo.ProjectId}; via={AuditVia.Api}");
         return todo;
     }
 
-    public async Task<bool> UpdateAsync(Todo todo)
+    /// <param name="dueDateChangeNote">改期限的原因（1.0.55）：截止日的日期有變時必填，否則丟 <see cref="InvalidOperationException"/>（控制器回 400）。</param>
+    public async Task<bool> UpdateAsync(Todo todo, string? dueDateChangeNote = null)
     {
         var existing = await context.Todo.FindAsync(todo.Id);
         var access = await projectAccess.GetAsync();
@@ -206,6 +216,11 @@ public class TodoRepository
             throw new InvalidOperationException(hierarchyError);
         }
 
+        if (TodoChangeRecorder.ValidateDueDateNote(existing.DueDate, todo.DueDate, dueDateChangeNote) is { } noteError)
+        {
+            throw new InvalidOperationException(noteError);
+        }
+
         var previousParentId = existing.ParentTodoId;
         var previousProjectId = existing.ProjectId;
 
@@ -215,6 +230,7 @@ public class TodoRepository
             Id = existing.Id,
             ProjectId = existing.ProjectId,
             Title = existing.Title,
+            Description = existing.Description,
             DueDate = existing.DueDate,
             Owner = existing.Owner,
             Status = existing.Status,
@@ -223,11 +239,12 @@ public class TodoRepository
 
         todo.UpdatedAt = DateTime.Now;
         todo.CreatedAt = existing.CreatedAt;
+        todo.CreatedByUserId = existing.CreatedByUserId;
         // 來源會議紀錄由系統寫入，不開放 API 用戶端覆寫；搬到別的專案時清掉（0.4.115）。
         todo.MeetingId = existing.ProjectId == todo.ProjectId ? existing.MeetingId : null;
 
         context.Entry(existing).CurrentValues.SetValues(todo);
-        var recipients = await changeRecorder.StageAsync(before, existing, AuditVia.Api);
+        var recipients = await changeRecorder.StageAsync(before, existing, AuditVia.Api, note: dueDateChangeNote);
         if (previousParentId != existing.ParentTodoId)
         {
             if (previousParentId is { } oldParent)
@@ -275,14 +292,17 @@ public class TodoRepository
             throw new InvalidOperationException(archivedError);
         }
 
-        // 1.0.52：刪除待辦只限專案負責人與管理者，控制器回 400。
-        if (!(await projectAccess.GetAsync()).IsProjectOwner(todo.ProjectId))
+        // 1.0.52：刪除待辦只限專案負責人與管理者，控制器回 400；1.0.55 起甲方另外可刪自己建立的。
+        var access = await projectAccess.GetAsync();
+        if (!access.CanDeleteTodo(todo.ProjectId, todo.CreatedByUserId))
         {
-            throw new InvalidOperationException(ProjectOwnerRules.DeleteTodoMessage);
+            throw new InvalidOperationException(access.IsExternal ? ProjectOwnerRules.DeleteOwnTodoOnlyMessage : ProjectOwnerRules.DeleteTodoMessage);
         }
 
         context.Todo.Remove(todo);
+        var recipients = await changeRecorder.StageDeletedAsync(todo);
         await context.SaveChangesAsync();
+        changeRecorder.Publish(recipients);
 
         await AuditAsync(AuditActions.TodoDelete, id, $"title={todo.Title}; projectId={todo.ProjectId}; via={AuditVia.Api}");
         return true;

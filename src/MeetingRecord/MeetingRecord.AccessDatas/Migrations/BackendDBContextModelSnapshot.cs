@@ -470,6 +470,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsExternal")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("LastProjectId")
                         .HasColumnType("INTEGER");
 
@@ -777,6 +780,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
@@ -844,6 +850,10 @@ namespace MeetingRecord.AccessDatas.Migrations
 
                     b.Property<string>("NewValue")
                         .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OldValue")

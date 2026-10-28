@@ -76,6 +76,12 @@ public partial class TodoViewView : IAsyncDisposable
     /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
     private string? formSnapshot;
 
+    /// <summary>開啟修改視窗時的期限（1.0.55）：日期跟它不同才出現「改期限原因」。</summary>
+    private DateTime? originalDueDate;
+
+    private bool IsDueDateChanged
+        => !isNewRecordMode && originalDueDate?.Date != CurrentRecord.DueDate?.Date;
+
     /// <summary>
     /// ⚠️ Esc 會**同時**走兩條路：AntDesign Modal 的 <c>Keyboard="true"</c> 與表單上的
     /// <c>@onkeydown</c>，兩者都會呼叫 <see cref="OnModalCancelHandleAsync"/>。0.4.84 之前兩次
@@ -333,10 +339,11 @@ public partial class TodoViewView : IAsyncDisposable
     private ProjectAccess? access;
 
     /// <summary>
-    /// 刪除待辦只限專案負責人與管理者（1.0.52）。負責人是一般使用者（沒有刪除權限）也能刪，要有待辦的「編輯」權限。
+    /// 刪除待辦只限專案負責人與管理者（1.0.52）；甲方帳號另外可刪自己建立的（1.0.55）。
+    /// 負責人是一般使用者（沒有刪除權限）也能刪，要有待辦的「編輯」權限。
     /// </summary>
     private bool CanDelete(TodoAdapterModel todo)
-        => access?.IsProjectOwner(todo.ProjectId) == true
+        => access?.CanDeleteTodo(todo.ProjectId, todo.CreatedByUserId) == true
             && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit)
             && !IsReadOnly(todo);
 
@@ -747,6 +754,8 @@ public partial class TodoViewView : IAsyncDisposable
         isNewRecordMode = false;
         modalTitle = "修改待辦事項";
         CurrentRecord = todoAdapterModel.Clone();
+        CurrentRecord.DueDateChangeNote = null;
+        originalDueDate = todoAdapterModel.DueDate;
         await LoadParentCandidatesAsync();
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord);
         modalVisible = true;

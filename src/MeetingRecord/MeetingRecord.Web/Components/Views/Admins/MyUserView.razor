@@ -201,6 +201,13 @@ else
                                 管理者（不看角色與團隊，擁有全部功能、看得到所有資料）
                             </Checkbox>
                         </FormItem>
+
+                        <FormItem>
+                            <Checkbox Checked="@CurrentRecord.IsExternal"
+                                      CheckedChanged="@(value => CurrentRecord.IsExternal = value)">
+                                甲方（只能刪自己建立的待辦；每次修改待辦都通知專案負責人；不能當專案負責人）
+                            </Checkbox>
+                        </FormItem>
                     </div>
                 </AntDesign.Form>
             </EditForm>

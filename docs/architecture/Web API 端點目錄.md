@@ -1,10 +1,10 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.10
+- 文件版本：1.11
 - 文件狀態：已實作
-- 現行系統版本：1.0.52
+- 現行系統版本：1.0.55
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/10/20
+- 最後核對日期：2026/10/22
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
@@ -64,6 +64,7 @@
 - `DELETE` 走 `MeetingService.DeleteAsync`（0.4.115）：和畫面同一套，一併清影音檔、逐字稿與 AI 問答對話；轉錄或會議紀錄生成進行中回 **400**。以前由控制器自己清兩個實體檔，對話檔留在磁碟上。
 - **`DELETE api/Meeting/{id}` 1.0.47 起要求 `會議紀錄:edit`（以前是 `delete`）**：刪除只限上傳者與管理者，由 `MeetingService.DeleteAsync` 把關，上傳者的角色只要能編輯就能刪自己上傳的（與畫面一致）。不是上傳者回 **400** `ValidationError`「只有上傳者或管理者可以刪除這筆會議紀錄。」；看不到回 404；沒有 `edit` 回 403。只有 `delete` 沒有 `edit` 的自訂角色從此呼叫不了這支 API。刪除會保留從這場會議抽出的待辦（`MeetingId` 改成 null）。**1.0.52 起專案負責人也能刪**該專案底下任何人的會議，擋下的訊息改為「只有上傳者或專案負責人可以刪除這筆會議紀錄。」。
 - **`DELETE api/Todo/{id}` 1.0.52 起要求 `待辦事項:edit`（以前是 `delete`）**：刪除只限專案負責人與管理者（`TodoRepository.DeleteAsync`，與畫面一致），不是負責人回 **400** `ValidationError`「只有專案負責人可以刪除待辦。」；看不到 404；沒有 `edit` 回 403。主待辦連同子項目一起刪。
+- **`PUT api/Todo/{id}` 改期限要附原因（1.0.55）**：`dueDate` 的日期與原本不同時，`dueDateChangeNote` 必填（≤500），否則 **400**「改期限請填寫原因。」；原因寫進異動紀錄並附在通知後面。甲方帳號（`MyUser.IsExternal`）`DELETE` 只能刪自己 `POST` 建立的待辦，否則 **400**「甲方帳號只能刪除自己建立的待辦。」。
 - `POST` 一律由資料庫配號，不照抄用戶端的 `id`（0.4.115，待辦、專案同）。
 - 待辦的 `status` 必須是 待辦／進行中／已完成、`priority` 必須是 低／中／高，否則 **400**（0.4.115）。
 - 待辦的 `parentTodoId`（1.0.45，`TodoCreateUpdateDto`，`TodoDto` 繼承）：指定主待辦就成為子項目。與畫面共用 `TodoHierarchyRules`，違反時 `POST`／`PUT` 都回 **400** 並帶訊息：主待辦本身是子項目（只允許一層）、這筆已有子項目卻要掛到別人底下、指定自己、與主待辦不同專案。`PUT` 現在也把 `InvalidOperationException` 轉成 400。⚠️ `PUT` 是**整筆取代**：沒帶 `parentTodoId` 會把子項目脫離主待辦。主待辦換專案時子項目跟著搬；`DELETE` 主待辦會連同子項目一起刪。

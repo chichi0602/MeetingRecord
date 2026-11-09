@@ -1,0 +1,130 @@
+using System.Text.RegularExpressions;
+
+namespace MeetingRecord.Tests;
+
+/// <summary>
+/// 釘住 1.0.59 的修正：表格勾選欄（AntDesign <c>&lt;Selection&gt;</c>）出不出現，**不可以跟著資料變**。
+///
+/// <para>
+/// AntDesign 1.6.0（1.6.2 也一樣）的 <c>Selection.Dispose</c> 寫的是 <c>Table?.Selection.Type</c>，
+/// 表頭那顆 Selection 不在時 <c>Table.Selection</c> 是 null，清掉列上的 Selection 就丟
+/// <see cref="NullReferenceException"/>：Blazor 連線當場斷掉，同一個例外接著在 finalizer 執行緒再丟一次，
+/// **整個伺服器行程跟著當掉**（所有人都斷線，IIS 重啟應用程式集區）。
+/// 1.0.53 的會議紀錄頁、專案頁歷史會議、待辦頁用「這頁有沒有可以刪的列」決定要不要畫勾選欄，
+/// 進頁面（資料還沒載入）與每次存檔重載都會讓勾選欄一下有一下沒有——正式機的「重新連線」與網站重啟就是這個。
+/// </para>
+///
+/// <para>
+/// 規則：<c>&lt;Selection&gt;</c> 要嘛無條件出現，要嘛包在 <c>@if (屬性名)</c> 裡，而且那個屬性只由
+/// <c>AuthenticationStateHelper.CheckAccessAction(...)</c> 組成（權限在頁面存活期間不會變）。
+/// 不能勾的列用 <c>Disabled</c> 擋，不要用拿掉整欄的方式。
+/// </para>
+/// </summary>
+public sealed partial class TableSelectionColumnTests
+{
+    [Fact]
+    public void SelectionColumn_ShouldNotBeToggledByData()
+    {
+        var offenders = new List<string>();
+        var components = Path.Combine(FindWebProject(), "Components");
+
+        foreach (var razorPath in Directory.EnumerateFiles(components, "*.razor", SearchOption.AllDirectories))
+        {
+            var markup = RazorCommentPattern().Replace(File.ReadAllText(razorPath), string.Empty);
+            foreach (Match selection in SelectionTagPattern().Matches(markup))
+            {
+                var before = markup[..selection.Index];
+                var lastIf = IfConditionPattern().Matches(before).LastOrDefault();
+
+                // 最近的 @if 要在勾選欄正上方（中間只隔「{」與空白）才算包住它。
+                if (lastIf is null || !string.IsNullOrWhiteSpace(before[(lastIf.Index + lastIf.Length)..].Replace("{", string.Empty)))
+                {
+                    continue;
+                }
+
+                var condition = lastIf.Groups["condition"].Value.Trim();
+                var codeBehind = File.Exists(razorPath + ".cs") ? File.ReadAllText(razorPath + ".cs") : string.Empty;
+                if (!IsPermissionOnly(condition, codeBehind))
+                {
+                    offenders.Add($"{Path.GetFileName(razorPath)}：@if ({condition})");
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "以下表格的勾選欄會跟著資料出現／消失，AntDesign 1.6 會在清掉 Selection 時丟 NullReferenceException 並拖垮整個伺服器行程。"
+            + "請改成只看權限（CheckAccessAction）的條件，不能勾的列用 Disabled：\n" + string.Join("\n", offenders));
+    }
+
+    [Fact]
+    public void Rule_ShouldRejectDataDrivenConditions_AndAcceptPermissionOnlyOnes()
+    {
+        // 規則本身的回歸測試：1.0.53 的三種寫法要被擋下，權限屬性要放行。
+        const string code = """
+            private bool ShowSelection => meetingAdapterModels.Any(CanDelete);
+            private bool CanDelete => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
+            private bool CanBatch => AuthenticationStateHelper.CheckAccessAction(A, B)
+                || AuthenticationStateHelper.CheckAccessAction(A, C);
+            """;
+
+        Assert.False(IsPermissionOnly("ShowSelection", code));
+        Assert.False(IsPermissionOnly("projectMeetings.Any(CanDetach)", code));
+        Assert.False(IsPermissionOnly("Missing", code));
+        Assert.True(IsPermissionOnly("CanDelete", code));
+        Assert.True(IsPermissionOnly("CanBatch", code));
+    }
+
+    private static bool IsPermissionOnly(string condition, string codeBehind)
+    {
+        if (!IdentifierPattern().IsMatch(condition))
+        {
+            return false;
+        }
+
+        var property = Regex.Match(codeBehind, $@"\bbool\s+{Regex.Escape(condition)}\s*=>\s*(?<expression>[^;]+);");
+        if (!property.Success)
+        {
+            return false;
+        }
+
+        var rest = PermissionCallPattern().Replace(property.Groups["expression"].Value, string.Empty);
+        return property.Groups["expression"].Value.Contains("CheckAccessAction", StringComparison.Ordinal)
+               && LogicOnlyPattern().IsMatch(rest);
+    }
+
+    [GeneratedRegex(@"<Selection[\s/>]")]
+    private static partial Regex SelectionTagPattern();
+
+    [GeneratedRegex(@"@if\s*\((?<condition>(?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)")]
+    private static partial Regex IfConditionPattern();
+
+    [GeneratedRegex(@"AuthenticationStateHelper\.CheckAccessAction\([^()]*\)")]
+    private static partial Regex PermissionCallPattern();
+
+    [GeneratedRegex(@"^[\s()!|&]*$")]
+    private static partial Regex LogicOnlyPattern();
+
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$")]
+    private static partial Regex IdentifierPattern();
+
+    [GeneratedRegex(@"@\*.*?\*@", RegexOptions.Singleline)]
+    private static partial Regex RazorCommentPattern();
+
+    private static string FindWebProject()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "MeetingRecord.Web");
+            if (File.Exists(Path.Combine(candidate, "Components", "App.razor")))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("找不到 MeetingRecord.Web 專案目錄。");
+    }
+}

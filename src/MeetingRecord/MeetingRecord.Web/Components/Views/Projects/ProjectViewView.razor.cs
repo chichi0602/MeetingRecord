@@ -302,6 +302,17 @@ public partial class ProjectViewView : IDisposable
             && (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
                 || AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete));
 
+    /// <summary>
+    /// 有專案「編輯」或「刪除」權限才顯示歷史會議的勾選欄（同 CanDetach 的權限部分；上傳者與封存在列上用 Disabled 擋）。
+    /// ⚠️ 1.0.59：只看權限，**不可以看資料**（原本是「有任何一列能刪才顯示」）。AntDesign 1.6 的 Selection 在勾選欄
+    /// 一下有一下沒有時，清掉列上的 Selection 會丟 NullReferenceException，連線斷掉、finalizer 再丟一次就拖垮整個伺服器行程
+    /// （正式機的「重新連線」與網站重啟）。不能刪的列靠 Disabled 擋；TableSelectionColumnTests 會擋回頭路。
+    /// 切換專案時歷史會議整批換掉，原本的寫法每換一次專案就可能讓勾選欄消失又出現。
+    /// </summary>
+    private bool ShowDetachSelection
+        => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
+            || AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete);
+
     /// <summary>狀態細篩只列目前檢視範圍內的狀態（例如「使用中」就不列「已完成」）。</summary>
     private IEnumerable<string> ScopeStatusOptions
         => StatusOptions.Where(s => ProjectArchiveRules.Matches(s, projectScope));

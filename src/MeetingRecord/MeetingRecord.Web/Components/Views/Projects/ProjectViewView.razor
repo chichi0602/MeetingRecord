@@ -315,7 +315,8 @@ else
                        @bind-SelectedRows="selectedMeetings"
                        HidePagination="true">
                     @* 多選「從專案移除」（1.0.53）：只有上傳者勾得起來（同單筆 CanDetach）；清單不分頁，全選＝整個清單。 *@
-                    @if (projectMeetings.Any(CanDetach))
+                    @* ⚠️ 1.0.59：勾選欄只看權限、不看資料（原本是 projectMeetings.Any(CanDetach)），理由見 ShowDetachSelection。 *@
+                    @if (ShowDetachSelection)
                     {
                         <Selection Disabled="@(!CanDetach(context))" />
                     }

@@ -769,8 +769,13 @@ public partial class TodoViewView : IAsyncDisposable
 
     private bool isBatchDeleting;
 
-    /// <summary>有任何一列能刪才顯示勾選欄。</summary>
-    private bool ShowSelection => TodoBatchSelection.Flatten(todoAdapterModels).Any(CanDelete);
+    /// <summary>
+    /// 有待辦「編輯」權限才顯示勾選欄（刪除要求的就是 edit）。
+    /// ⚠️ 1.0.59：只看權限，**不可以看資料**（原本是「有任何一列能刪才顯示」）。AntDesign 1.6 的 Selection 在勾選欄
+    /// 一下有一下沒有時，清掉列上的 Selection 會丟 NullReferenceException，連線斷掉、finalizer 再丟一次就拖垮整個伺服器行程
+    /// （正式機的「重新連線」與網站重啟）。不能刪的列靠 Disabled 擋；TableSelectionColumnTests 會擋回頭路。
+    /// </summary>
+    private bool ShowSelection => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit);
 
     private async Task OnBatchDeleteAsync()
     {

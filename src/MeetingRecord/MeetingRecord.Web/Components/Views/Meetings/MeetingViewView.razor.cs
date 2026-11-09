@@ -519,8 +519,13 @@ public partial class MeetingViewView : IDisposable
         => CanDelete(meeting)
             && GetLiveProgress(meeting.Id) is not { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading };
 
-    /// <summary>有任何一列能刪才顯示勾選欄。</summary>
-    private bool ShowSelection => meetingAdapterModels.Any(CanDelete);
+    /// <summary>
+    /// 有會議紀錄「編輯」權限才顯示勾選欄（刪除要求的就是 edit）。
+    /// ⚠️ 1.0.59：只看權限，**不可以看資料**（原本是「有任何一列能刪才顯示」）。AntDesign 1.6 的 Selection 在勾選欄
+    /// 一下有一下沒有時，清掉列上的 Selection 會丟 NullReferenceException，連線斷掉、finalizer 再丟一次就拖垮整個伺服器行程
+    /// （正式機的「重新連線」與網站重啟）。不能刪的列靠 Disabled 擋；TableSelectionColumnTests 會擋回頭路。
+    /// </summary>
+    private bool ShowSelection => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit);
 
     private async Task OnBatchDeleteAsync()
     {

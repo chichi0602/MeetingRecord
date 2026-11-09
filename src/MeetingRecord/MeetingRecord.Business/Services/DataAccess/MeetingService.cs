@@ -190,11 +190,10 @@ public class MeetingService
         }
 
         result.Count = await dataSource.CountAsync();
-        dataSource = dataSource.Skip((dataRequest.CurrentPage - 1) * dataRequest.PageSize);
-        if (dataRequest.Take != 0)
-        {
-            dataSource = dataSource.Take(dataRequest.PageSize);
-        }
+        // Take 刻意不看 dataRequest.Take：清單頁一律傳 0，原本包在 if (Take != 0) 裡等於從來沒有分頁（1.0.57 修正）。
+        dataSource = dataSource
+            .Skip((dataRequest.CurrentPage - 1) * dataRequest.PageSize)
+            .Take(dataRequest.PageSize);
 
         List<Meeting> records = await dataSource.ToListAsync();
         result.Result = MapWithProjectTitle(records);

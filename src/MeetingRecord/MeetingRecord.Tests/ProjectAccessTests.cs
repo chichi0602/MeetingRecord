@@ -433,6 +433,28 @@ public sealed class ProjectAccessTests
         Assert.Equal(["成大"], result.Result.Select(x => x.Title).ToList());
     }
 
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(3, 1)]
+    [InlineData(4, 0)]
+    public async Task ProjectList_ShouldReturnOnlyRequestedPage(int currentPage, int expectedRows)
+    {
+        // 回歸測試（1.0.57）：Take 原本包在 if (dataRequest.Take != 0) 裡，呼叫端一律傳 0，
+        // 第 1 頁會吐出全部資料。Count 一律是總數。
+        await using var fixture = await Fixture.CreateAsync();
+        var rd = await fixture.AddTeamAsync("研發部");
+        for (var index = 0; index < 5; index++)
+        {
+            await fixture.AddProjectAsync($"專案{index}", [], rd.Id);
+        }
+
+        var result = await fixture.CreateProjectService(0, isAdmin: true)
+            .GetAsync(new DataRequest { CurrentPage = currentPage, PageSize = 2, Take = 0 });
+
+        Assert.Equal(expectedRows, result.Result.Count());
+        Assert.Equal(5, result.Count);
+    }
+
     #endregion
 
     #region 待辦

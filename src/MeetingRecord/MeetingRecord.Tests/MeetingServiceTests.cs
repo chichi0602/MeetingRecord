@@ -1580,6 +1580,27 @@ public sealed class MeetingServiceTests
         Assert.Equal(4, result.Count);
     }
 
+    [Theory]
+    [InlineData(1, 3)]
+    [InlineData(2, 1)]
+    [InlineData(3, 0)]
+    public async Task GetAsync_ShouldReturnOnlyRequestedPage(int currentPage, int expectedRows)
+    {
+        // 回歸測試（1.0.57）：Take 原本包在 if (dataRequest.Take != 0) 裡，清單頁一律傳 0，
+        // 第 1 頁會吐出全部資料。Count 一律是總數，畫面靠它把越界頁碼夾回最後一頁。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        await fixture.SeedDefaultMeetingsAsync();
+        var service = fixture.CreateService();
+        var request = NewRequest();
+        request.PageSize = 3;
+        request.CurrentPage = currentPage;
+
+        var result = await service.GetAsync(request);
+
+        Assert.Equal(expectedRows, result.Result.Count());
+        Assert.Equal(4, result.Count);
+    }
+
     [Fact]
     public async Task GetAsync_Member_ShouldSeeOwnProjectsAndOwnUnassignedMeetings()
     {

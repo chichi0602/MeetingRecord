@@ -292,6 +292,8 @@ public partial class PromptTemplateViewView
     private async Task OnTableChange(QueryModel<PromptTemplateAdapterModel> args)
     {
         _pageIndex = args.PageIndex;
+        // 分頁真的生效之後，使用者改每頁筆數第一次真的會動；明確賦值，不賭 @bind-PageSize 與 AntDesign 內部 callback 的先後順序（同 TodoViewView）。
+        _pageSize = args.PageSize;
 
         if (args.SortModel?.Any() == true)
         {

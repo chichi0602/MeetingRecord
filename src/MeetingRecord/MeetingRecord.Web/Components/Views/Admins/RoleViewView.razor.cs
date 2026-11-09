@@ -117,6 +117,16 @@ namespace MeetingRecord.Web.Components.Views.Admins
             _total = dataRequestResult.Count;
             // 全選只算這一頁（1.0.53）：換頁、排序、搜尋、刪除後都會走到這裡，勾選一律清掉。
             selectedRows = [];
+            // 分頁 1.0.57 起真的生效：頁碼可能落在最後一頁之後（例如停在第 2 頁時把該頁唯一一筆刪掉），
+            // Skip 會跳過全部資料而顯示空白表格。夾回最後一頁重載一次；Math.Max(1, ...) 是因為 AntDesign 在 PageIndex < 1 時不觸發 OnChange。
+            if (roleViewAdapterModels.Count == 0 && _total > 0 && _pageIndex > 1)
+            {
+                _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);
+                logger.LogDebug("Role view page index clamped to the last page. PageIndex={PageIndex}", _pageIndex);
+                await ReloadAsync();
+                return;
+            }
+
             logger.LogInformation("Role view list reloaded successfully. Count={Count}", _total);
             StateHasChanged();
         }
@@ -124,6 +134,8 @@ namespace MeetingRecord.Web.Components.Views.Admins
         async Task OnTableChange(QueryModel<RoleViewAdapterModel> args)
         {
             _pageIndex = args.PageIndex;
+            // 分頁真的生效之後，使用者改每頁筆數第一次真的會動；明確賦值，不賭 @bind-PageSize 與 AntDesign 內部 callback 的先後順序（同 TodoViewView）。
+            _pageSize = args.PageSize;
 
             if (args.SortModel?.Any() == true)
             {

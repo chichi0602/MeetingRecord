@@ -1,3 +1,4 @@
+using MeetingRecord.Share.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeetingRecord.Web.Uploads;
 
@@ -126,16 +127,17 @@ public sealed class ChunkedUploadStoreTests
     }
 
     [Fact]
-    public async Task Fail_ShouldSurfaceAsIOException_ToTheReader()
+    public async Task Fail_ShouldSurfaceAsUploadInterrupted_ToTheReader()
     {
-        // 瀏覽器放棄（重試用完、登入失效）時，服務層要像讀檔失敗一樣走「上傳失敗」。
+        // 瀏覽器放棄（重試用完、登入失效）時，服務層要像讀檔失敗一樣走「上傳失敗」；
+        // 1.0.67 起是專用型別（仍是 IOException），服務層才認得出來、把原因帶到畫面。
         var store = NewStore();
         await using var session = store.Create(7, Chunk * 2);
         await session.WriteChunkAsync(0, new byte[Chunk]);
 
         session.Fail("網路斷線");
 
-        var ex = await Assert.ThrowsAsync<IOException>(() => ReadAllAsync(session.Stream));
+        var ex = await Assert.ThrowsAsync<UploadInterruptedException>(() => ReadAllAsync(session.Stream));
         Assert.Equal("網路斷線", ex.Message);
         Assert.False(store.TryGet(session.Id, 7, out _));
     }
@@ -163,7 +165,7 @@ public sealed class ChunkedUploadStoreTests
         var store = new ChunkedUploadStore(NullLogger<ChunkedUploadStore>.Instance, TimeSpan.FromMilliseconds(100));
         await using var session = store.Create(7, Chunk * 2);
 
-        var ex = await Assert.ThrowsAsync<IOException>(() => ReadAllAsync(session.Stream));
+        var ex = await Assert.ThrowsAsync<UploadInterruptedException>(() => ReadAllAsync(session.Stream));
 
         Assert.Equal(ChunkedUploadStore.IdleTimeoutMessage, ex.Message);
     }

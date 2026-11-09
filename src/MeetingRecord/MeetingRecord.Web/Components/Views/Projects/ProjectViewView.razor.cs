@@ -1333,7 +1333,10 @@ public partial class ProjectViewView : IDisposable
             {
                 TryDeleteTempFile(tempPath);
                 logger.LogError(ex, "Failed to read selected project file. FileName={FileName}", file.Name);
-                NotifyError($"{file.Name} 讀取失敗，請重新選擇。");
+                // 瀏覽器端放棄（登入失效、重試用完）時講明原因（1.0.67），使用者才知道要重新登入還是重選。
+                NotifyError(ex is UploadInterruptedException interrupted
+                    ? $"{file.Name} 上傳失敗：{interrupted.Message}"
+                    : $"{file.Name} 讀取失敗，請重新選擇。");
                 continue;
             }
 

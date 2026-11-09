@@ -737,14 +737,19 @@ public class MeetingService
                     deleteResult.Message);
             }
 
+            // 瀏覽器端放棄（登入失效、重試用完）或逾時，原因要帶給使用者（1.0.67）：
+            // 以前一律「影音檔上傳失敗」，登入過期的人不知道要重新登入。其他例外的訊息是內部細節，不秀出來。
+            var interrupted = ex as UploadInterruptedException ?? ex.InnerException as UploadInterruptedException;
+            var failureMessage = interrupted is null ? null : $"影音檔上傳失敗：{interrupted.Message}";
+
             // 其他視窗正看著「上傳中 xx%」，不標成失敗就會永遠卡在那個百分比（0.4.117）。
             if (uploadStarted && !committed)
             {
-                progressNotifier.ReportFailed(meetingId, cancelledByUser ? UploadCancelledMessage : "影音檔上傳失敗，請重新上傳。");
+                progressNotifier.ReportFailed(meetingId, cancelledByUser ? UploadCancelledMessage : failureMessage ?? "影音檔上傳失敗，請重新上傳。");
             }
             return cancelledByUser
                 ? VerifyRecordResultFactory.Build(false, UploadCancelledMessage)
-                : VerifyRecordResultFactory.Build(false, "影音檔上傳失敗。", ex);
+                : VerifyRecordResultFactory.Build(false, failureMessage ?? "影音檔上傳失敗。", ex);
         }
     }
 

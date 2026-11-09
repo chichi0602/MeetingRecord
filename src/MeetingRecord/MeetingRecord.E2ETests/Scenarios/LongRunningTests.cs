@@ -204,7 +204,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
 
     [E2EFact]
     [Trait("Scenario", "L4-07")]
-    [Trait("Title", "登入過期時上傳影音檔：明確失敗、會議保留，不會卡在上傳中")]
+    [Trait("Title", "登入過期時上傳影音檔：提示登入已失效、會議保留，不會卡在上傳中")]
     [Trait("Page", "會議紀錄")]
     [Trait("Persona", "主責團隊成員")]
     public async Task ExpiredLogin_Upload_ShouldFailCleanly()
@@ -215,7 +215,8 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         await page.Context.ClearCookiesAsync();
         await SaveNewMeetingWithMediaAsync(page, title);
 
-        await Expect(Notice(page, "會議資料已保留")).ToBeVisibleAsync(new() { Timeout = 60_000 });
+        // 1.0.67：要講明是登入失效，使用者才知道要重新登入（以前只說「影音檔上傳失敗」）。
+        await Expect(Notice(page, "會議資料已保留")).ToContainTextAsync("登入已失效", new() { Timeout = 60_000 });
         await Expect(Row(page, title)).Not.ToContainTextAsync("上傳中");
         await using var db = App.CreateDbContext();
         var meeting = await db.Meeting.AsNoTracking().SingleAsync(x => x.Title == title);

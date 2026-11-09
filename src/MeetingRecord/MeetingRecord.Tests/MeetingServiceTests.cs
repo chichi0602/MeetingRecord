@@ -360,6 +360,9 @@ public sealed class MeetingServiceTests
         Assert.Equal(TranscriptionPhase.Failed, item.Phase);
         Assert.False(item.IsRunning);
         Assert.Empty(fixture.Queue.Enqueued);
+        // 一般的串流錯誤（不是瀏覽器放棄）訊息照舊，不把內部例外訊息秀給使用者。
+        Assert.Equal("影音檔上傳失敗。", result.Message);
+        Assert.Equal("影音檔上傳失敗，請重新上傳。", item.ErrorMessage);
     }
 
     [Fact]
@@ -481,7 +484,11 @@ public sealed class MeetingServiceTests
         Assert.False(result.Success);
         Assert.NotEqual(MeetingService.UploadCancelledMessage, result.Message);
         Assert.True(await fixture.Context.Meeting.AsNoTracking().AnyAsync(x => x.Id == existing.Id));
-        Assert.Equal(TranscriptionPhase.Failed, fixture.ProgressNotifier.Find(existing.Id)!.Phase);
+        var item = fixture.ProgressNotifier.Find(existing.Id)!;
+        Assert.Equal(TranscriptionPhase.Failed, item.Phase);
+        // 1.0.67：瀏覽器給的原因要帶到畫面與面板，不能只說「上傳失敗」（登入過期的人才知道要重新登入）。
+        Assert.Equal("影音檔上傳失敗：網路不穩，重試多次仍無法上傳，請稍後重新上傳。", result.Message);
+        Assert.Equal(result.Message, item.ErrorMessage);
         Assert.False(Directory.Exists(fixture.MediaRoot) && Directory.EnumerateFiles(fixture.MediaRoot, "*", SearchOption.AllDirectories).Any());
     }
 

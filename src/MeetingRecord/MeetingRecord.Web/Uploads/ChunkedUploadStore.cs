@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Uploads;
 
@@ -229,8 +230,8 @@ public sealed class ChunkedUploadSession : IAsyncDisposable
     }
 
     /// <summary>
-    /// 瀏覽器端放棄（重試用完、登入失效）或逾時：讓讀取端拿到 <see cref="IOException"/>，
-    /// 服務層就會走既有的「上傳失敗」流程（刪孤兒檔、通知器標失敗）。
+    /// 瀏覽器端放棄（重試用完、登入失效）或逾時：讓讀取端拿到 <see cref="UploadInterruptedException"/>（是一種 <see cref="IOException"/>），
+    /// 服務層就會走既有的「上傳失敗」流程（刪孤兒檔、通知器標失敗），並把 <paramref name="message"/> 這個原因帶到畫面（1.0.67）。
     /// </summary>
     public void Fail(string message)
     {
@@ -249,7 +250,7 @@ public sealed class ChunkedUploadSession : IAsyncDisposable
             // 已經收齊的話讀取端照常讀完，不必中止。
             if (!writerCompleted)
             {
-                pipe.Writer.Complete(new IOException(message));
+                pipe.Writer.Complete(new UploadInterruptedException(message));
                 writerCompleted = true;
             }
         }

@@ -38,6 +38,14 @@ public partial class FileDropZone : ComponentBase
     /// </summary>
     private Guid resetToken = Guid.NewGuid();
 
+    private InputFile? inputFile;
+
+    /// <summary>
+    /// 底下那個 <c>&lt;input type="file"&gt;</c>（1.0.59）。分塊上傳由瀏覽器直接從它取檔，
+    /// 呼叫端把它交給 <c>BrowserFileUploader.OpenAsync</c>。還沒算繪出來時是 null。
+    /// </summary>
+    public ElementReference? InputElement => inputFile?.Element;
+
     /// <summary>區塊中央的主要文字。</summary>
     [Parameter]
     public string Title { get; set; } = "把檔案拖到這裡，或點擊選擇檔案";

@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.18
+- 文件版本：2.19
 - 文件狀態：已實作
-- 現行系統版本：1.0.53
+- 現行系統版本：1.0.60
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/10/20
+- 最後核對日期：2026/11/09
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -227,8 +227,8 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 
 ### 已知限制
 
-- 1GB 檔案經 Blazor Server 的 SignalR 傳輸相當慢，進度列會如實反映；這是 Blazor Server 的架構天花板，不在本版處理範圍。
-- **大檔上傳可能整條連線中斷**（0.4.116 記錄）：IIS Production 上 127MB 的 mp4 傳到第 11 秒，Blazor 讀檔串流判定逾時並終止連線，整頁空白，會議已建立但沒有影音檔（可重新整理後編輯該筆再上傳）。根本原因尚未確認，先檢查 IIS 是否啟用 WebSocket；若啟用後仍中斷，改走 HTTP 上傳 API。見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)。
+- ~~1GB 檔案經 Blazor Server 的 SignalR 傳輸相當慢~~——1.0.60 起檔案內容改走 HTTP 分塊上傳（見 [檔案上傳機制](../features/檔案上傳機制.md) §3.0.1），不再經 SignalR。
+- **大檔上傳可能整條連線中斷**（0.4.116 記錄）：IIS Production 上 127MB 的 mp4 傳到第 11 秒，Blazor 讀檔串流判定逾時並終止連線，整頁空白，會議已建立但沒有影音檔（可重新整理後編輯該筆再上傳）。根本原因尚未確認，先檢查 IIS 是否啟用 WebSocket；若啟用後仍中斷，改走 HTTP 上傳 API。見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)。 **1.0.60 已改走 HTTP 分塊上傳解決**（就是這裡記的備案），不再經 Blazor 讀檔串流。
 - 清單上的轉錄狀態**不會自動更新**，需要按「重新整理」才會看到背景轉錄的最新進度。
 - 1.0.37 起文字生成走 v1 API、不需要版本；轉錄的 api-version 內建 `2025-03-01-preview`，`TranscriptionApiVersion` 只在需要換版本時填。
 

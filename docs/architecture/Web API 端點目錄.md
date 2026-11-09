@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.12
+- 文件版本：1.13
 - 文件狀態：已實作
-- 現行系統版本：1.0.58
+- 現行系統版本：1.0.60
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/09
 
@@ -88,6 +88,14 @@
 |------|------|------|
 | 觸發 Google 驗證 | `GET Auths/Google/Login` | 未設定金鑰時導回 `/Auths/Login`|
 | 驗證回呼 | `GET Auths/Google/Callback` | 查找/建立帳號；停用帳號導向 `/Auths/Pending`，啟用則完成 Cookie 登入 |
+
+## 四之一、上傳分塊（網頁內部使用）
+
+`src/MeetingRecord/MeetingRecord.Web/Controllers/UploadChunkController.cs`（1.0.60）。**給網頁本身用、不是給外部用戶端的 API**：走網頁登入 Cookie，工作階段由網頁在使用者按下存檔、通過權限與資料範圍檢查後才建立。
+
+| 動作 | 路由 | 說明 |
+|------|------|------|
+| 送一塊 | `PUT api/v1/uploads/{uploadId}/chunks/{index}` | body 為原始位元組（每塊 8 MB，最後一塊為餘數）；須帶 `X-MeetingRecord-Upload: 1`；200 收下、400 編號或長度不對、401 未登入、404 找不到或不是自己的、409 已停止；免除限流 |
 
 ## 五、模板遺留
 

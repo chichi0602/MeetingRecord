@@ -17,6 +17,8 @@ using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using Microsoft.Extensions.Logging.Abstractions;
+using MeetingRecord.Web.Uploads;
 
 namespace MeetingRecord.Tests;
 
@@ -420,6 +422,92 @@ public sealed class MeetingServiceTests
         Assert.Null(fixture.ProgressNotifier.Find(existing.Id));
         Assert.Empty(fixture.Queue.Enqueued);
     }
+
+    #region 分塊上傳（1.0.59）：服務層讀的是 ChunkedUploadSession.Stream，行為要跟讀瀏覽器檔案串流一樣
+
+    [Fact]
+    public async Task SaveMediaAsync_FromChunkedUpload_ShouldStoreAllBytes()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("分塊上傳的會議");
+        var payload = new byte[ChunkedUploadStore.ChunkSize + 321];
+        new Random(7).NextBytes(payload);
+        await using var session = new ChunkedUploadStore(NullLogger<ChunkedUploadStore>.Instance).Create(1, payload.Length);
+
+        var saving = fixture.CreateService().SaveMediaAsync(existing.Id, ChunkedUpload("錄音.mp3", session));
+        await session.WriteChunkAsync(0, payload.AsMemory(0, ChunkedUploadStore.ChunkSize));
+        await session.WriteChunkAsync(1, payload.AsMemory(ChunkedUploadStore.ChunkSize));
+        var result = await saving;
+
+        Assert.True(result.Success, result.Message);
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(fixture.MediaFullPath(saved.MediaRelativePath!)));
+        Assert.Equal([existing.Id], fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_FromChunkedUpload_PanelCancelWhileWaitingForNextChunk_ShouldDeleteNewMeeting()
+    {
+        // 瀏覽器還沒送下一塊時，讀取端正在等資料；右下角面板按取消要能把它叫醒，照 1.0.37 的規則刪掉剛新增的會議。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("等下一塊時取消");
+        await using var session = new ChunkedUploadStore(NullLogger<ChunkedUploadStore>.Instance).Create(1, ChunkedUploadStore.ChunkSize * 2L);
+        await session.WriteChunkAsync(0, new byte[ChunkedUploadStore.ChunkSize]);
+
+        var saving = fixture.CreateService().SaveMediaAsync(existing.Id, ChunkedUpload("錄音.mp3", session), deleteMeetingOnCancel: true);
+        await WaitUntilAsync(() => fixture.ProgressNotifier.Find(existing.Id) is { Phase: TranscriptionPhase.Uploading, Percent: >= 50 });
+        fixture.CancellationRegistry.RequestCancel(BackgroundJobKind.Upload, existing.Id);
+        var result = await saving.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(MeetingService.UploadCancelledAndMeetingDeletedMessage, result.Message);
+        Assert.False(await fixture.Context.Meeting.AsNoTracking().AnyAsync(x => x.Id == existing.Id));
+        Assert.Empty(fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task SaveMediaAsync_FromChunkedUpload_BrowserGaveUp_ShouldFailAndKeepMeeting()
+    {
+        // 瀏覽器重試用完（或逾時）時工作階段 Fail：服務層要走「上傳失敗」——刪孤兒檔、面板標失敗、會議保留。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("網路斷掉的上傳");
+        await using var session = new ChunkedUploadStore(NullLogger<ChunkedUploadStore>.Instance).Create(1, ChunkedUploadStore.ChunkSize * 2L);
+        await session.WriteChunkAsync(0, new byte[ChunkedUploadStore.ChunkSize]);
+
+        var saving = fixture.CreateService().SaveMediaAsync(existing.Id, ChunkedUpload("錄音.mp3", session), deleteMeetingOnCancel: true);
+        await WaitUntilAsync(() => fixture.ProgressNotifier.Find(existing.Id) is { Phase: TranscriptionPhase.Uploading, Percent: >= 50 });
+        session.Fail("網路不穩，重試多次仍無法上傳，請稍後重新上傳。");
+        var result = await saving.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(result.Success);
+        Assert.NotEqual(MeetingService.UploadCancelledMessage, result.Message);
+        Assert.True(await fixture.Context.Meeting.AsNoTracking().AnyAsync(x => x.Id == existing.Id));
+        Assert.Equal(TranscriptionPhase.Failed, fixture.ProgressNotifier.Find(existing.Id)!.Phase);
+        Assert.False(Directory.Exists(fixture.MediaRoot) && Directory.EnumerateFiles(fixture.MediaRoot, "*", SearchOption.AllDirectories).Any());
+    }
+
+    private static MeetingMediaUploadInput ChunkedUpload(string fileName, ChunkedUploadSession session) => new()
+    {
+        FileName = fileName,
+        ContentType = "audio/mpeg",
+        FileSize = session.FileSize,
+        Content = session.Stream,
+    };
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("等待的狀態沒有出現。");
+            }
+
+            await Task.Delay(20);
+        }
+    }
+
+    #endregion
 
     [Fact]
     public async Task SaveMediaAsync_UploadFailureWithDeleteMeetingOnCancel_ShouldKeepMeeting()

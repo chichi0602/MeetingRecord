@@ -31,6 +31,7 @@ public sealed class ApiAuthorizationConventionTests
     private static readonly Dictionary<string, string> AuthenticatedOnlyAllowList = new(StringComparer.Ordinal)
     {
         ["AuthController.Me"] = "回傳呼叫者自己的帳號資料，任何登入者都可以看自己",
+        ["UploadChunkController.PutChunk"] = "分塊上傳只收位元組（1.0.59）：授權靠「上傳工作階段的擁有者＝目前使用者」，工作階段由網頁在通過權限與資料範圍檢查後才建立",
     };
 
     [Fact]

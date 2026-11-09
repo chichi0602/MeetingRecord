@@ -26,6 +26,7 @@
        而呼叫端剛拿到的 IBrowserFile 正是綁在它身上——稍後讀檔就會拿到
        「Cannot read properties of null (reading '_blazorFilesById')」，上傳全部失敗。 *@
     <InputFile @key="resetToken"
+               @ref="inputFile"
                OnChange="OnFileChangedAsync"
                multiple="@Multiple"
                accept="@Accept"

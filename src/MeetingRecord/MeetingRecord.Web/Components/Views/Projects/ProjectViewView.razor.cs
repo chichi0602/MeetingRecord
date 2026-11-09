@@ -16,6 +16,7 @@ using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Services;
 using MeetingRecord.Web.Components.Commons;
+using MeetingRecord.Web.Uploads;
 
 namespace MeetingRecord.Web.Components.Views.Projects;
 
@@ -39,6 +40,10 @@ public partial class ProjectViewView : IDisposable
 
     [Inject]
     private ClipboardInterop clipboardInterop { get; set; } = default!;
+
+    /// <summary>分塊上傳（1.0.59）：附件改由瀏覽器以 HTTP 一塊一塊送，不再經 Blazor 連線。</summary>
+    [Inject]
+    private BrowserFileUploader browserFileUploader { get; set; } = default!;
 
     [Inject]
     private TodoService TodoService { get; set; } = default!;
@@ -1285,8 +1290,10 @@ public partial class ProjectViewView : IDisposable
 
     private async Task ReadSelectedFilesAsync(InputFileChangeEventArgs args)
     {
-        foreach (var file in args.GetMultipleFiles(1000))
+        var files = args.GetMultipleFiles(1000);
+        for (var fileIndex = 0; fileIndex < files.Count; fileIndex++)
         {
+            var file = files[fileIndex];
             if (file.Size > ProjectService.MaxUploadFileSize)
             {
                 _ = notificationService.Open(new NotificationConfig
@@ -1302,11 +1309,18 @@ public partial class ProjectViewView : IDisposable
             var tempPath = Path.Combine(PendingUploadTempDirectory, $"{Guid.NewGuid():N}.tmp");
             try
             {
+                // 1.0.59：位元組改由瀏覽器以 HTTP 分塊送（chunk-upload.js），不再經 Blazor 連線——
+                // 以前經連線串流，IIS 上大檔約十幾秒就斷線並拖垮整條連線。fileIndex 對應 input.files 的順序。
+                if (attachmentDropZone?.InputElement is not { } input)
+                {
+                    throw new InvalidOperationException("找不到檔案選取區。");
+                }
+
                 Directory.CreateDirectory(PendingUploadTempDirectory);
-                await using (var source = file.OpenReadStream(ProjectService.MaxUploadFileSize))
+                await using (var upload = await browserFileUploader.OpenAsync(input, fileIndex, file.Name, file.Size))
                 await using (var target = File.Create(tempPath))
                 {
-                    await source.CopyToAsync(target);
+                    await upload.Stream.CopyToAsync(target);
                 }
             }
             catch (Exception ex)

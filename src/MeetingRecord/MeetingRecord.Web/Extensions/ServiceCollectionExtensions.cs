@@ -180,6 +180,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
         services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();
         services.AddScoped<MeetingRecord.Web.Services.TodoAutoFitInterop>();
+        // 分塊上傳（1.0.59）：工作階段登記處是全站共用的；網頁元件用的入口一條連線一個。
+        services.AddSingleton<MeetingRecord.Web.Uploads.ChunkedUploadStore>();
+        services.AddScoped<MeetingRecord.Web.Uploads.BrowserFileUploader>();
         services.AddScoped<MeetingRecord.Web.Services.HelpViewInterop>();
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();

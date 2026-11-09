@@ -17,6 +17,7 @@ using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Services;
 using MeetingRecord.Web.Components.Commons;
+using MeetingRecord.Web.Uploads;
 
 namespace MeetingRecord.Web.Components.Views.Meetings;
 
@@ -110,6 +111,10 @@ public partial class MeetingViewView : IDisposable
 
     [Inject]
     private ClipboardInterop clipboardInterop { get; set; } = default!;
+
+    /// <summary>分塊上傳（1.0.59）：影音檔改由瀏覽器以 HTTP 一塊一塊送，不再經 Blazor 連線。</summary>
+    [Inject]
+    private BrowserFileUploader browserFileUploader { get; set; } = default!;
 
     /// <summary>專案與提示詞清單只在開啟對話框時撈，不放進 ReloadAsync——那支會被兩個進度通知器頻繁呼叫。</summary>
     private List<ProjectAdapterModel> projects = [];
@@ -938,7 +943,17 @@ public partial class MeetingViewView : IDisposable
 
         try
         {
-            await using var stream = file.OpenReadStream(MeetingMediaPolicy.MaxUploadFileSize);
+            // 1.0.59：位元組改由瀏覽器以 HTTP 分塊送（chunk-upload.js），不再經 Blazor 連線——
+            // 以前經連線串流，IIS 上 127 MB 約 11 秒就斷線並拖垮整條連線。服務層照舊讀這個 Stream，
+            // 驗證、進度、取消（本頁或右下角面板）、取消時刪會議全部不變；讀完或中止時釋放，瀏覽器就停止送。
+            if (mediaDropZone?.InputElement is not { } input)
+            {
+                NotifyError("找不到要上傳的檔案，請按這一列的「修改」重新選擇檔案。");
+                return;
+            }
+
+            await using var upload = await browserFileUploader.OpenAsync(input, 0, file.Name, file.Size);
+            var stream = upload.Stream;
 
             var result = await meetingService.SaveMediaAsync(
                 meetingId,
@@ -1030,8 +1045,8 @@ public partial class MeetingViewView : IDisposable
         "影音檔已經上傳完成，來不及取消；如果不需要轉錄，可以在右下角的進度面板取消轉錄。";
 
     /// <summary>
-    /// 上傳期間唯一能按的按鈕（1.0.25）。不提供「暫停」：檔案經 Blazor 連線傳送，
-    /// 伺服器超過 1 分鐘沒收到資料就會切斷整條連線，暫停稍久頁面就壞了。
+    /// 上傳期間唯一能按的按鈕（1.0.25）。不提供「暫停」：伺服器超過 2 分鐘沒收到下一塊就當成中斷
+    /// （<see cref="ChunkedUploadStore.DefaultIdleTimeout"/>；1.0.59 以前檔案經 Blazor 連線傳送，暫停會讓整條連線被切斷）。
     /// </summary>
     private async Task OnCancelUploadAsync()
     {

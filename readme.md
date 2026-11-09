@@ -342,7 +342,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 ### 專案規劃（planning）
 
-- [docs/planning/](docs/planning/README.md) — Meeting Ink 對標分析與決策清單（進行中）；樣板時期的 `01`～`06` TODO 為已封存快照。
+- [docs/planning/](docs/planning/README.md) — Meeting Ink 對標分析與決策清單（進行中）、Blazor WASM 遷移評估與測試策略（待決定）；樣板時期的 `01`～`06` TODO 為已封存快照。
 
 ---
 

@@ -1,10 +1,10 @@
 ﻿# Web API 設計慣例
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.58
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/11/09
 
 ## 目的
 本文件記錄 MeetingRecord Web API 的固定設計規範（沿用自本系統源頭 NET10-Blazor-Starter 樣板），未來新增 API 時應遵守同一套 contract，讓前端與外部用戶端能用一致格式處理成功、失敗、驗證錯誤、授權錯誤與例外。
@@ -67,6 +67,12 @@ JWT access token 與 refresh token 由 `AuthController` 提供：
 - **權限鍵兩型**：裸頁面鍵（如 `專案項目`）＝該頁全動作（向後相容）；動作鍵（如 `專案項目:edit`）＝特定動作。「唯讀角色」只給 `專案項目:view`。
 - 無權限一律回 **403**，Body 維持 `ApiResult` 格式並標示缺少的權限鍵。多角色時權限取聯集。
 - 詳見 [認證授權與權限機制](../security/認證授權與權限機制.md)。
+- **授權守門測試（1.0.58）**：`ApiAuthorizationConventionTests` 以反射掃描所有 Controller 的每個 action，每一個必須是下列其一，否則測試失敗並列出缺的端點：
+  1. 在**匿名白名單**（目前只有 `AuthController.Login`／`Refresh` 與 `ExternalAuthController.*`）；
+  2. 有 `[Authorize]` **且**有 `[HasPermission]`；
+  3. 有 `[Authorize]` 且在**「只需登入」白名單**（目前只有 `AuthController.Me`）。
+  另外每個 `[Authorize]` 都必須寫 `AuthenticationSchemes`（預設 scheme 是網頁 Cookie，沒寫會靜靜改用 Cookie 驗證）。白名單每一項都要寫理由，**不要為了讓測試變綠就把端點加進去**。
+- **授權矩陣測試（1.0.58）**：`ApiIntegrationTests.Authorization.cs` 對分類、提示詞、團隊、會議每支端點驗三件事：沒權杖 401；角色有該頁其他所有動作、唯獨缺這個動作時 403（並留 `PermissionDenied` 稽核）；角色只有這一個動作時成功。新增 Controller 時把端點加進 `GuardedEndpoints`，建測試帳號用 `CreateApiUserAsync`。
 
 ## 例外與驗證
 - `ApiValidationFilter` 會將 ModelState 錯誤轉成 `ApiResult<T>.Errors`。

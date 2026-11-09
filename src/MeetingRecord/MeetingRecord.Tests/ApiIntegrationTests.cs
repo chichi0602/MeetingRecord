@@ -8,6 +8,10 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,7 +33,8 @@ using System.Text.Json;
 
 namespace MeetingRecord.Tests;
 
-public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactory>
+[Collection(nameof(ApiHostCollection))]
+public sealed partial class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -769,6 +774,16 @@ public sealed class ApiIntegrationTests : IClassFixture<ApiTestApplicationFactor
     }
 }
 
+/// <summary>
+/// 用 <see cref="ApiTestApplicationFactory"/> 的測試類別共用此 Collection（1.0.58）：factory 的建構子會設**行程層級**的環境變數，
+/// 兩個 factory 平行啟動時會互相蓋掉，讓兩台測試主機指到同一個資料庫、同時跑啟動種子資料而撞 UNIQUE（Permission.Key）。
+/// 同一個 Collection 的類別依序執行，每個類別仍有自己的 factory 與資料庫。
+/// </summary>
+[CollectionDefinition(nameof(ApiHostCollection), DisableParallelization = true)]
+public sealed class ApiHostCollection
+{
+}
+
 public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string rootPath = Path.Combine(
@@ -811,6 +826,27 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
                 .PartManager
                 .ApplicationParts
                 .Add(new AssemblyPart(typeof(ContractProbeController).Assembly));
+        });
+        builder.ConfigureTestServices(services =>
+        {
+            // 1.0.58：正式環境的 "api" 限流是全站共用一個桶、每分鐘 120 次。這個 factory 被
+            // ApiIntegrationTests（含授權矩陣的 60 則）共用，一分鐘內就會超過，之後的請求全部回 429 空 body，
+            // 看起來像一堆無關的測試壞掉。這裡把限流設定換成同名但幾乎不限的版本——只影響測試主機。
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IConfigureOptions<RateLimiterOptions>)).ToList())
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddFixedWindowLimiter("api", limiterOptions =>
+                {
+                    limiterOptions.PermitLimit = int.MaxValue;
+                    limiterOptions.Window = TimeSpan.FromMinutes(1);
+                    limiterOptions.QueueLimit = 0;
+                });
+            });
         });
     }
 

@@ -23,6 +23,7 @@ namespace MeetingRecord.Tests;
 /// <summary>
 /// 上線前審查（0.4.115）在 API 這一層找到的問題：帳號狀態、選項白名單、會議刪除與編號、錯誤細節。
 /// </summary>
+[Collection(nameof(ApiHostCollection))]
 public sealed class GoLiveReviewApiTests : IClassFixture<ApiTestApplicationFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

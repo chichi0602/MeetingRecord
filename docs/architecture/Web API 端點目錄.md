@@ -1,10 +1,10 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.11
+- 文件版本：1.12
 - 文件狀態：已實作
-- 現行系統版本：1.0.55
+- 現行系統版本：1.0.58
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/10/22
+- 最後核對日期：2026/11/09
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
@@ -91,7 +91,7 @@
 
 ## 五、模板遺留
 
-`WeatherForecastController`（路由 `[controller]`，即 `/WeatherForecast`）為專案模板遺留範例，非正式能力；新專案啟動時可移除（見《[腳手架新專案啟動流程](../guides/腳手架新專案啟動流程.md)》）。
+~~`WeatherForecastController`~~（路由 `/WeatherForecast`）是專案模板遺留範例，沒有任何驗證、任何人都能呼叫，**1.0.58 已刪除**（連同 `MeetingRecord.Models/Others/WeatherForecast.cs`）。目前沒有模板遺留的 API；新增端點一律要有授權屬性，`ApiAuthorizationConventionTests` 會擋（見《[Web API 設計慣例](Web%20API%20設計慣例.md)》）。
 
 ## 六、相關文件
 

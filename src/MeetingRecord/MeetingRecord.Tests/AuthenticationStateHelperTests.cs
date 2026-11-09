@@ -339,16 +339,18 @@ public sealed class AuthenticationStateHelperTests
         public AuthenticationStateHelper CreateHelper()
         {
             var rolePermissionService = new RolePermissionService();
+            var myUserService = new MyUserService(Context, mapper, loggerFactory.CreateLogger<MyUserService>(), new RbacWriteService(Context), TestAuditLogs.CreateService(Context), CurrentUserService);
 
             return new AuthenticationStateHelper(
                 loggerFactory.CreateLogger<AuthenticationStateHelper>(),
                 mapper,
-                new MyUserService(Context, mapper, loggerFactory.CreateLogger<MyUserService>(), new RbacWriteService(Context), TestAuditLogs.CreateService(Context), CurrentUserService),
+                myUserService,
                 CurrentUserService,
                 rolePermissionService,
                 new EffectiveTeamResolver(Context),
                 new PermissionChecker(Context),
-                TestAuditLogs.CreateService(Context));
+                TestAuditLogs.CreateService(Context),
+                new UserSessionService(myUserService));
         }
 
         public async Task<MyUser> AddUserAsync(

@@ -119,6 +119,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILoggerProvider, ExceptionLogProvider>();
         #endregion
         services.AddScoped<AuthenticationStateHelper>();
+        services.AddScoped<UserSessionService>();
         services.AddScoped<CurrentUserService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<AuditLogQueryService>();

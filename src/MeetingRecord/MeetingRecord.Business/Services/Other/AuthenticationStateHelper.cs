@@ -22,6 +22,7 @@ public class AuthenticationStateHelper
     private readonly IEffectiveTeamResolver effectiveTeamResolver;
     private readonly IPermissionChecker permissionChecker;
     private readonly IAuditLogService auditLogService;
+    private readonly UserSessionService userSessionService;
 
     public AuthenticationStateHelper(
         ILogger<AuthenticationStateHelper> logger,
@@ -31,7 +32,8 @@ public class AuthenticationStateHelper
         RolePermissionService rolePermissionService,
         IEffectiveTeamResolver effectiveTeamResolver,
         IPermissionChecker permissionChecker,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        UserSessionService userSessionService)
     {
         this.logger = logger;
         this.mapper = mapper;
@@ -41,6 +43,7 @@ public class AuthenticationStateHelper
         this.effectiveTeamResolver = effectiveTeamResolver;
         this.permissionChecker = permissionChecker;
         this.auditLogService = auditLogService;
+        this.userSessionService = userSessionService;
     }
 
     public async Task<AuthenticationCheckResult> Check(AuthenticationStateProvider authStateProvider, NavigationManager navigationManager)
@@ -76,8 +79,9 @@ public class AuthenticationStateHelper
             return AuthenticationCheckResult.InvalidUser;
         }
 
-        var myUser = await myUserService.GetAsync(id);
-        if (myUser.Id == 0)
+        // 狀態判斷與 Session API 共用 UserSessionService（1.1.0）；這裡只負責導向，順序與行為照舊。
+        var evaluation = await userSessionService.EvaluateAsync(id);
+        if (evaluation.Status == UserSessionStatus.Deleted)
         {
             logger.LogWarning("Authentication check failed because UserId={UserId} was not found.", id);
             await Task.Delay(200);
@@ -85,7 +89,8 @@ public class AuthenticationStateHelper
             return AuthenticationCheckResult.InvalidUser;
         }
 
-        if (!myUser.Status)
+        var myUser = evaluation.User!;
+        if (evaluation.Status == UserSessionStatus.Disabled)
         {
             logger.LogWarning("Authentication check failed because UserId={UserId} is disabled.", id);
             await Task.Delay(200);
@@ -95,8 +100,7 @@ public class AuthenticationStateHelper
 
         logger.LogDebug("Resolved authenticated user information for UserId={UserId}.", id);
 
-        bool needChangePassword = await myUserService.NeedChangePasswordAsync(myUser);
-        if (needChangePassword && !IsChangePasswordPage(navigationManager))
+        if (evaluation.MustChangePassword && !IsChangePasswordPage(navigationManager))
         {
             logger.LogWarning("User {UserId} is required to change password before continuing.", id);
             await Task.Delay(200);
@@ -107,7 +111,7 @@ public class AuthenticationStateHelper
         CurrentUser currentUser = mapper.Map<CurrentUser>(myUser);
         RolePermission rolePermission = rolePermissionService.InitializePermissionSetting();
 
-        if (myUser.RoleView == null)
+        if (evaluation.Status == UserSessionStatus.NoRole)
         {
             logger.LogWarning("User {UserId} does not have a role view assigned. Redirecting to logout.", id);
             await Task.Delay(200);
@@ -207,23 +211,30 @@ public class AuthenticationStateHelper
 
     public bool CheckAccessPage(string name)
     {
-        // 管理員一律通過：GetEffectivePermissionKeysAsync 不含 admin 隱含全通過（回空集合），
-        // 故此處需比照 CheckAccessAction 短路，否則管理員選單/頁面會全被隱藏。
-        if (currentUserService.CurrentUser.IsAdmin)
-        {
-            return true;
-        }
-
-        // 有整頁鍵（＝全部動作）或有「頁面:view」就能進頁面（0.4.109）。0.4.108 以前只認整頁鍵，
-        // 只勾部分動作的角色（例如檢視者只有 專案項目:view）連頁面與選單都看不到。
-        var roleList = currentUserService.CurrentUser.RoleList;
-        var result = roleList.Contains(name) || roleList.Contains(PermissionKey.For(name, PermissionActions.View));
+        var result = CanAccessPage(currentUserService.CurrentUser.RoleList, currentUserService.CurrentUser.IsAdmin, name);
         logger.LogDebug(
             "Checked page access for UserId={UserId}, Page={PageName}, Allowed={Allowed}.",
             currentUserService.CurrentUser.Id,
             name,
             result);
         return result;
+    }
+
+    /// <summary>
+    /// 進頁面（與看到選單項目）的規則，純函式（1.1.0 抽出，Session 選單 API 共用）。
+    /// </summary>
+    public static bool CanAccessPage(IReadOnlyCollection<string> permissionKeys, bool isAdmin, string name)
+    {
+        // 管理員一律通過：GetEffectivePermissionKeysAsync 不含 admin 隱含全通過（回空集合），
+        // 故此處需比照 CheckAccessAction 短路，否則管理員選單/頁面會全被隱藏。
+        if (isAdmin)
+        {
+            return true;
+        }
+
+        // 有整頁鍵（＝全部動作）或有「頁面:view」就能進頁面（0.4.109）。0.4.108 以前只認整頁鍵，
+        // 只勾部分動作的角色（例如檢視者只有 專案項目:view）連頁面與選單都看不到。
+        return permissionKeys.Contains(name) || permissionKeys.Contains(PermissionKey.For(name, PermissionActions.View));
     }
 
     /// <summary>

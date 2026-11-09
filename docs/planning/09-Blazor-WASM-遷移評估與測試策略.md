@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.4
-- 文件狀態：評估完成，待決定是否啟動（本輪只評估，未改任何程式碼）
-- 現行系統版本：1.0.66
+- 文件版本：1.5
+- 文件狀態：已啟動遷移（分支 `wasm-migration`，M1 進行中）
+- 現行系統版本：1.1.0
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/09
 
@@ -416,6 +416,19 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 大檔上傳改走 HTTP 分塊（§4.6 第一步） | 1.0.60 | ✅ 完成 |
 | **M0 基準端對端測試與基準報告**（L3） | 1.0.61 | ✅ 完成，報告見 [docs/testing](../testing/README.md) |
 | L4 即時與長時間端對端測試（上傳、推播、重連、登入過期） | 1.0.66 | ✅ 完成（七則），基準報告改為 1.0.66 |
+
+## 十、之二 M1 進度（分支 `wasm-migration`）
+
+- **分支與版本**：2026/11/09 由 1.0.67 開分支 `wasm-migration`，分支版本從 1.1.0 起每次異動 Patch +1；main 凍結新功能、只修 bug（1.0.x），每筆修正當天以 `git merge main` 同步進分支，版本衝突保留分支的版號。分支每版推到 `origin/wasm-migration`，M6 完成才合回 main。
+- **過渡方式**：逐頁切換——已遷移的路徑走 WASM，其餘維持 Blazor Server，兩者之間整頁載入；每個里程碑結束 L1～L3 都要全綠。
+- **測試機**：目前沒有 IIS 測試機，M1 先在本機驗證，測試機驗證待補。
+
+| 步驟 | 版本 | 狀態 |
+|------|------|------|
+| 伺服器端驗證基礎：policy scheme（Bearer→JWT，否則 Cookie）、Cookie 路徑 CSRF 標頭、統一讀使用者 Id、`/api` 回 401／403 JSON、`UserSessionService`、Session 與選單 API | 1.1.0 | ✅ 完成 |
+| 新增 `MeetingRecord.Web.Client`、WASM 空殼頁 `/wasm`、`ApiClient` 基底、自訂 `AuthenticationStateProvider` | 1.1.1 | 待做 |
+| SignalR Hub 骨架（通知鈴未讀數） | 1.1.2 | 待做 |
+| 本機部署驗證、重估端點數、M1 報告 | 1.1.3 | 待做 |
 
 ## 十一、下一步
 

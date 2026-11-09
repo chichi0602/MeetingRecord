@@ -64,14 +64,18 @@ public sealed class SidebarMenuService
         this.cacheService = cacheService;
     }
 
-    public async Task<IReadOnlyList<SidebarMenuItemModel>> LoadAuthorizedMenuItemsAsync(AuthenticationStateHelper authenticationStateHelper)
+    public Task<IReadOnlyList<SidebarMenuItemModel>> LoadAuthorizedMenuItemsAsync(AuthenticationStateHelper authenticationStateHelper)
+        => LoadAuthorizedMenuItemsAsync(authenticationStateHelper.CheckAccessPage, authenticationStateHelper.CheckIsAdmin());
+
+    /// <summary>
+    /// 依指定的權限判斷載入選單（1.1.0）：Session 選單 API 用 <see cref="AuthenticationStateHelper.CanAccessPage"/> 與權限鍵直接判斷，
+    /// 不經 Blazor 連線的 CurrentUserService。規則與網頁側邊欄同一套。
+    /// </summary>
+    public async Task<IReadOnlyList<SidebarMenuItemModel>> LoadAuthorizedMenuItemsAsync(Func<string, bool> canAccessPage, bool isAdmin)
     {
         var items = await LoadMenuItemsAsync();
         var permissionMappedItems = ApplyPermissionStructure(items);
-        var authorizedItems = FilterAuthorizedMenuItems(
-            permissionMappedItems,
-            authenticationStateHelper.CheckAccessPage,
-            authenticationStateHelper.CheckIsAdmin());
+        var authorizedItems = FilterAuthorizedMenuItems(permissionMappedItems, canAccessPage, isAdmin);
 
         logger.LogInformation("Loaded authorized sidebar menu successfully. ItemCount={ItemCount}", authorizedItems.Count);
         return authorizedItems;

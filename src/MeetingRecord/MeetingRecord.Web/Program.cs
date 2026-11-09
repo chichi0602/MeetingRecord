@@ -100,6 +100,8 @@ namespace MeetingRecord.Web
                 builder.Services.AddControllers(options =>
                 {
                     options.Filters.Add<ApiExceptionFilterAttribute>();
+                    // 1.1.0：Cookie 驗證的寫入請求要帶防偽標頭（WASM 前端打 API 的 CSRF 防護）。
+                    options.Filters.Add<CookieApiCsrfFilter>();
                 });
                 builder.Services.Configure<ApiBehaviorOptions>(options =>
                 {
@@ -189,6 +191,24 @@ namespace MeetingRecord.Web
                         // scheme 共用的，做不出兩種，故在 Login.razor.cs 明寫 ExpiresUtc 覆蓋。
                         options.ExpireTimeSpan = TimeSpan.FromMinutes(cookieSettings.ExpireMinutes);
                         options.SlidingExpiration = cookieSettings.SlidingExpiration;
+
+                        // 1.1.0：Web API 用 Cookie 驗證（WASM 前端）時，未登入／沒權限回 ApiResult JSON，不要 302 導去登入頁——
+                        // 前端拿到 302 只會看到一頁登入畫面的 HTML，分不出是登入失效。網頁照舊導向。
+                        options.Events = new CookieAuthenticationEvents
+                        {
+                            OnRedirectToLogin = context => WriteApiResultOrRedirectAsync(
+                                context, StatusCodes.Status401Unauthorized, ApiResult.UnauthorizedResult("尚未登入或登入已失效。")),
+                            OnRedirectToAccessDenied = context => WriteApiResultOrRedirectAsync(
+                                context, StatusCodes.Status403Forbidden, ApiResult.ForbiddenResult("目前使用者沒有權限存取此 API。")),
+                        };
+                    })
+                    // 1.1.0（WASM 遷移 M1）：API 帶 Bearer 走 JWT（外部用戶端），否則走登入 Cookie（WASM 前端）。
+                    .AddPolicyScheme(MagicObjectHelper.ApiScheme, "Bearer 或 Cookie", options =>
+                    {
+                        options.ForwardDefaultSelector = context =>
+                            context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                                ? JwtBearerDefaults.AuthenticationScheme
+                                : MagicObjectHelper.CookieScheme;
                     })
                     .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
                     {
@@ -665,6 +685,23 @@ namespace MeetingRecord.Web
                     logger.LogInformation("Application is shutting down.");
                 LogManager.Shutdown();
             }
+        }
+
+        /// <summary>
+        /// Cookie 驗證的挑戰／拒絕（1.1.0）：<c>/api</c> 底下回 ApiResult JSON 與狀態碼，其餘（網頁）照舊導向登入頁。
+        /// </summary>
+        private static async Task WriteApiResultOrRedirectAsync(Microsoft.AspNetCore.Authentication.RedirectContext<CookieAuthenticationOptions> context, int statusCode, ApiResult<object> result)
+        {
+            if (!context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.Redirect(context.RedirectUri);
+                return;
+            }
+
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            result.TraceId = context.HttpContext.TraceIdentifier;
+            await context.Response.WriteAsync(JsonSerializer.Serialize(result));
         }
     }
 }

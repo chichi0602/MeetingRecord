@@ -1,8 +1,8 @@
 ﻿# Web API 設計慣例
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.0.63
+- 現行系統版本：1.1.0
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/09
 
@@ -13,7 +13,8 @@
 - API Controller 放在 `src/MeetingRecord/MeetingRecord.Web/Controllers/`。
 - 路由需同時提供 `[Route("api/[controller]")]` 與 `[Route("api/v1/[controller]")]`；新用戶端優先使用 `/api/v1/...`。
 - Controller 必須使用 `[ApiController]` 與 `[ApiValidationFilter]`。
-- 需要保護的 CRUD API 必須加上 `[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]`。
+- 需要保護的 API 必須加上 `[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]`（1.1.0 起；以前是 `JwtBearerDefaults.AuthenticationScheme`）：帶 Bearer 走 JWT，否則走登入 Cookie（WASM 前端）。
+- 以 Cookie 驗證、會改資料的請求要帶 `X-MeetingRecord-Client: 1`（CSRF 防護，全域 `CookieApiCsrfFilter`，缺了回 403）；讀使用者 Id 用 `UserClaims.GetUserId`（Cookie 與 JWT 放的 claim 不同）。
 - 除驗證身分外，受保護動作方法**必須**以 `[HasPermission("resource", "action")]` 標註做**功能級／動作級授權**（見「功能級／動作級授權」節）。
 - API request/response 必須使用 DTO，不可以直接接收或回傳 Entity。
 - Entity 與 DTO 轉換優先使用 AutoMapper profile 維護。
@@ -42,7 +43,7 @@ API 必須維持語意正確的 HTTP 狀態碼，Body 再包成 `ApiResult<T>`�
 | --- | --- |
 | 200 | 查詢、更新、刪除等成功 |
 | 400 | ModelState 或商業規則驗證失敗 |
-| 401 | 未登入、未提供 Bearer token、token 無效 |
+| 401 | 未登入、未提供 Bearer token、token 無效；Cookie 未登入或已失效（1.1.0 起回 JSON，不再 302 到登入頁） |
 | 403 | 已登入但權限不足（由 `HasPermissionAttribute` 判定產生） |
 | 404 | 找不到指定資源 |
 | 409 | 資料衝突，例如名稱重複 |

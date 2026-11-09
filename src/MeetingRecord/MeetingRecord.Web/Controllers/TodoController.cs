@@ -1,5 +1,4 @@
 using AutoMapper;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRecord.AccessDatas.Models;
@@ -16,7 +15,7 @@ namespace MeetingRecord.Web.Controllers;
 [Route("api/v1/[controller]")]
 [ApiController]
 [ApiValidationFilter]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]
 public class TodoController : ControllerBase
 {
     private readonly ILogger<TodoController> logger;

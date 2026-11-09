@@ -31,6 +31,8 @@ public sealed class ApiAuthorizationConventionTests
     private static readonly Dictionary<string, string> AuthenticatedOnlyAllowList = new(StringComparer.Ordinal)
     {
         ["AuthController.Me"] = "回傳呼叫者自己的帳號資料，任何登入者都可以看自己",
+        ["SessionController.Get"] = "回傳呼叫者自己的登入狀態與權限鍵（1.1.0，WASM 前端決定導向用）；權限判斷仍在各 API 的 [HasPermission]",
+        ["SessionController.GetMenu"] = "回傳依呼叫者自己權限過濾好的側邊選單（1.1.0），規則與網頁側邊欄相同",
         ["UploadChunkController.PutChunk"] = "分塊上傳只收位元組（1.0.59）：授權靠「上傳工作階段的擁有者＝目前使用者」，工作階段由網頁在通過權限與資料範圍檢查後才建立",
     };
 

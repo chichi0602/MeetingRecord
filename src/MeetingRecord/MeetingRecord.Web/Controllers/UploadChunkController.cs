@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Filters;
 using MeetingRecord.Web.Uploads;
 
 namespace MeetingRecord.Web.Controllers;
@@ -29,6 +30,7 @@ namespace MeetingRecord.Web.Controllers;
 // .NET 10 的 Cookie 驗證對 API 端點不導向登入頁、直接回空白 401；全站的 UseStatusCodePagesWithReExecute
 // 會把空白 401 拿去重跑 /not-found，PUT 打到頁面變成 405，瀏覽器就誤判成網路問題一直重試。
 [SkipStatusCodePages]
+[OwnCsrfCheck]
 public class UploadChunkController : ControllerBase
 {
     public const string CsrfHeaderName = "X-MeetingRecord-Upload";

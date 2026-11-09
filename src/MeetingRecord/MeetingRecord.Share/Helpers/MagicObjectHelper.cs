@@ -11,6 +11,17 @@ public class MagicObjectHelper
     }
     public const string CookieScheme = "CookieAuthenticationScheme";
     /// <summary>
+    /// Web API 用的驗證方式（1.1.0，WASM 遷移 M1）：帶 <c>Authorization: Bearer</c> 走 JWT（外部用戶端），
+    /// 否則走登入 Cookie（WASM 前端）。Cookie 路徑會改資料的請求另要防偽標頭 <see cref="ClientRequestHeader"/>。
+    /// </summary>
+    public const string ApiScheme = "MeetingRecordApi";
+
+    /// <summary>
+    /// WASM 前端打 API 時一律帶的自訂標頭（值為 1，1.1.0）。用 Cookie 驗證、會改資料的請求沒帶就回 403：
+    /// 別的網站做不出帶自訂標頭的跨站請求（要先過 CORS 預檢，而 CORS 沒開放任何網域），這樣就擋掉 CSRF。
+    /// </summary>
+    public const string ClientRequestHeader = "X-MeetingRecord-Client";
+    /// <summary>
     /// OAuth 外部登入流程暫存身分用的 Cookie 配置名稱
     /// </summary>
     public const string ExternalCookieScheme = "ExternalCookieScheme";

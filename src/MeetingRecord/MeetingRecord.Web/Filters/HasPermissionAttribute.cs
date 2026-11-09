@@ -42,8 +42,8 @@ public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilte
             return;
         }
 
-        var idValue = principal.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(idValue, out var userId))
+        // 1.1.0：Cookie（Id 在 Sid）與 JWT（Id 在 NameIdentifier）都認得，見 UserClaims。
+        if (UserClaims.GetUserId(principal) is not { } userId)
         {
             context.Result = new ObjectResult(ApiResult.UnauthorizedResult("無法識別使用者身分。"))
             {

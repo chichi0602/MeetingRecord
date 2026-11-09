@@ -399,21 +399,75 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddConfiguredRateLimiting(this IServiceCollection services)
+    /// <summary>
+    /// Web API 限流（1.0.63 起依使用者分開計算，設定見 <see cref="RateLimitSettings"/>）。
+    /// ⚠️ 依使用者分區要知道「是誰」，所以 <c>UseRateLimiter()</c> 必須排在 <c>UseAuthentication()</c> 之後（Program.cs）。
+    /// </summary>
+    public static IServiceCollection AddConfiguredRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddOptions<RateLimitSettings>()
+            .Bind(configuration.GetSection(RateLimitSettings.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        var settings = configuration.GetSection(RateLimitSettings.SectionName).Get<RateLimitSettings>() ?? new RateLimitSettings();
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddFixedWindowLimiter("api", limiterOptions =>
+            options.AddPolicy(ApiRateLimitPolicy, context =>
             {
-                limiterOptions.PermitLimit = 120;
-                limiterOptions.Window = TimeSpan.FromMinutes(1);
-                limiterOptions.QueueLimit = 0;
-                limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                var key = ResolveRateLimitPartitionKey(context);
+                var permitLimit = key.StartsWith("user:", StringComparison.Ordinal)
+                    ? settings.PermitLimitPerUser
+                    : settings.PermitLimitPerAnonymousIp;
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = permitLimit,
+                    Window = TimeSpan.FromSeconds(settings.WindowSeconds),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
             });
+
+            // 被擋的回應也包成 ApiResult（Web API 慣例），並告訴用戶端多久之後再試。
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                {
+                    context.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+                }
+
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    MeetingRecord.Dtos.Commons.ApiResult.FailureResult("請求太頻繁，請稍後再試。", StatusCodes.Status429TooManyRequests),
+                    cancellationToken);
+            };
         });
 
         return services;
+    }
+
+    /// <summary>Web API 的限流政策名稱（<c>MapControllers().RequireRateLimiting(...)</c>）。</summary>
+    public const string ApiRateLimitPolicy = "api";
+
+    /// <summary>
+    /// 限流的分區鍵：已登入 → <c>user:{帳號 Id}</c>；未登入 → <c>ip:{來源 IP}</c>。
+    /// 網頁登入 Cookie 的帳號 Id 放在 Sid、JWT 放在 NameIdentifier（與 <c>RecordAccessScopeProvider</c> 同樣兩個都看）。
+    /// 來源 IP 在 <c>UseConfiguredForwardedHeaders</c> 之後已換成反向代理前的真實 IP。
+    /// </summary>
+    public static string ResolveRateLimitPartitionKey(HttpContext context)
+    {
+        var user = context.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var id = user.FindFirst(System.Security.Claims.ClaimTypes.Sid)?.Value
+                ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(id, out var userId) && userId > 0)
+            {
+                return $"user:{userId}";
+            }
+        }
+
+        return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
     }
 
     public static IServiceCollection AddConfiguredHealthChecks(this IServiceCollection services)

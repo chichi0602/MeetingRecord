@@ -136,7 +136,7 @@ namespace MeetingRecord.Web
                 builder.Services.AddConfiguredLocalization();
                 builder.Services.AddConfiguredOptions(builder.Configuration);
                 builder.Services.AddConfiguredCors(builder.Configuration);
-                builder.Services.AddConfiguredRateLimiting();
+                builder.Services.AddConfiguredRateLimiting(builder.Configuration);
                 builder.Services.AddConfiguredHealthChecks();
                 builder.Services.AddConfiguredCache(builder.Configuration);
 
@@ -577,7 +577,6 @@ namespace MeetingRecord.Web
 
                 app.UseConfiguredLocalization();
                 app.UseConfiguredCors();
-                app.UseRateLimiter();
 
                 app.UseAntiforgery();
 
@@ -589,10 +588,12 @@ namespace MeetingRecord.Web
 
                 app.UseAuthentication();
                 app.UseAuthorization();
+                // 1.0.63：限流依使用者分開計算，要先知道「是誰」，所以排在驗證之後（以前排在驗證之前，只能全站共用一個桶）。
+                app.UseRateLimiter();
                 app.UseExceptionContextUser();
 
                 app.MapControllers()
-                    .RequireRateLimiting("api");
+                    .RequireRateLimiting(MeetingRecord.Web.Extensions.ServiceCollectionExtensions.ApiRateLimitPolicy);
                 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
                 {
                     Predicate = check => check.Tags.Contains("live")

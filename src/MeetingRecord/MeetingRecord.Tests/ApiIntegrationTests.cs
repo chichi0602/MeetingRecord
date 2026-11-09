@@ -8,10 +8,6 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -784,7 +780,7 @@ public sealed class ApiHostCollection
 {
 }
 
-public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
+public class ApiTestApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string rootPath = Path.Combine(
         Path.GetTempPath(),
@@ -827,27 +823,6 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
                 .ApplicationParts
                 .Add(new AssemblyPart(typeof(ContractProbeController).Assembly));
         });
-        builder.ConfigureTestServices(services =>
-        {
-            // 1.0.58：正式環境的 "api" 限流是全站共用一個桶、每分鐘 120 次。這個 factory 被
-            // ApiIntegrationTests（含授權矩陣的 60 則）共用，一分鐘內就會超過，之後的請求全部回 429 空 body，
-            // 看起來像一堆無關的測試壞掉。這裡把限流設定換成同名但幾乎不限的版本——只影響測試主機。
-            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IConfigureOptions<RateLimiterOptions>)).ToList())
-            {
-                services.Remove(descriptor);
-            }
-
-            services.AddRateLimiter(options =>
-            {
-                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-                options.AddFixedWindowLimiter("api", limiterOptions =>
-                {
-                    limiterOptions.PermitLimit = int.MaxValue;
-                    limiterOptions.Window = TimeSpan.FromMinutes(1);
-                    limiterOptions.QueueLimit = 0;
-                });
-            });
-        });
     }
 
     protected override void Dispose(bool disposing)
@@ -876,12 +851,16 @@ public sealed class ApiTestApplicationFactory : WebApplicationFactory<Program>
         }
     }
 
-    private Dictionary<string, string?> CreateSettings()
+    /// <remarks>子類別可以覆寫來調整個別設定（例如 <see cref="RateLimitTestApplicationFactory"/> 把限流調低）。</remarks>
+    protected virtual Dictionary<string, string?> CreateSettings()
     {
         return new Dictionary<string, string?>
         {
             ["NLog:BasePath"] = Path.Combine(rootPath, "Logs"),
             ["Security:ReturnExceptionDetails"] = "true",
+            // 1.0.63：限流依使用者計算；這個 factory 被整個 ApiIntegrationTests 共用、全部以 support 呼叫，放寬到不會被擋。
+            ["RateLimitSettings:PermitLimitPerUser"] = "100000",
+            ["RateLimitSettings:PermitLimitPerAnonymousIp"] = "100000",
             ["JwtSettings:Issuer"] = "MeetingRecord.Tests",
             ["JwtSettings:Audience"] = "MeetingRecord.Tests.Api",
             ["JwtSettings:SigningKey"] = "IntegrationTests-ChangeThisJwtSigningKey-AtLeast32Chars",

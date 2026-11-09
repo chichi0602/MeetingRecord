@@ -1,8 +1,8 @@
 ﻿# Web API 設計慣例
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：1.0.60
+- 現行系統版本：1.0.63
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/09
 
@@ -74,6 +74,11 @@ JWT access token 與 refresh token 由 `AuthController` 提供：
   另外每個 `[Authorize]` 都必須寫 `AuthenticationSchemes`（預設 scheme 是網頁 Cookie，沒寫會靜靜改用 Cookie 驗證）。白名單每一項都要寫理由，**不要為了讓測試變綠就把端點加進去**。
 - **授權矩陣測試（1.0.58）**：`ApiIntegrationTests.Authorization.cs` 對分類、提示詞、團隊、會議每支端點驗三件事：沒權杖 401；角色有該頁其他所有動作、唯獨缺這個動作時 403（並留 `PermissionDenied` 稽核）；角色只有這一個動作時成功。新增 Controller 時把端點加進 `GuardedEndpoints`，建測試帳號用 `CreateApiUserAsync`。
 - **例外：上傳分塊端點**（1.0.60）`UploadChunkController` 走網頁登入 Cookie 而不是 JWT，不帶 `[HasPermission]`（授權靠上傳工作階段擁有者），列在「只需登入」白名單，詳見 [檔案上傳機制](../features/檔案上傳機制.md) §3.0.1。
+
+## 限流（1.0.63）
+- 所有 Controller 經 `MapControllers().RequireRateLimiting("api")` 限流，**依使用者分開計算**：已登入依帳號（Cookie 的 Sid／JWT 的 NameIdentifier）、未登入依來源 IP；上限見 `RateLimitSettings`（[日誌與設定檔說明](../operations/日誌與設定檔說明.md) §4.3.0.0）。
+- 被擋回 **429**，body 維持 `ApiResult`，並帶 `Retry-After`。
+- 不該被限流的端點（例如上傳分塊）以 `[DisableRateLimiting]` 明確免除。
 
 ## 例外與驗證
 - `ApiValidationFilter` 會將 ModelState 錯誤轉成 `ApiResult<T>.Errors`。

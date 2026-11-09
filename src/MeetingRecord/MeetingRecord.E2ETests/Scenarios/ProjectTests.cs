@@ -146,6 +146,13 @@ public sealed class ProjectTests(E2EAppFixture app) : E2ETestBase(app)
         await ClickModalOkAsync(page);
         await Expect(Notice(page, "修改成功")).ToBeVisibleAsync();
 
+        // 1.0.65：存檔後暫存檔要刪掉。以前串流還開著就刪，Windows 上刪不掉，每存一次留一份（以大小認出這一則的檔）。
+        if (App.PendingUploadPath is { } pendingPath && Directory.Exists(pendingPath))
+        {
+            var leftovers = Directory.GetFiles(pendingPath).Where(x => new FileInfo(x).Length == 200 * 1024).ToList();
+            Assert.True(leftovers.Count == 0, $"存檔後暫存檔沒有刪掉：{string.Join("、", leftovers)}");
+        }
+
         await page.Locator(".project-view-summary-item").Filter(new() { HasText = "附件" }).GetByRole(AriaRole.Button).ClickAsync();
         var row = page.Locator(".project-view-attachment-row").Filter(new() { HasText = fileName });
         var downloaded = await DownloadAsync(page, () => RowAction(row, "下載").ClickAsync());

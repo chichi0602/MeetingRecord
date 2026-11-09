@@ -1348,8 +1348,7 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private static string PendingUploadTempDirectory
-        => Path.Combine(Path.GetTempPath(), "MeetingRecord", "pending-uploads");
+    private static string PendingUploadTempDirectory => PendingUploadTempFiles.DefaultDirectory;
 
     /// <summary>清掉待上傳清單，連同暫存檔。</summary>
     private void ClearPendingFiles()
@@ -1524,6 +1523,8 @@ public partial class ProjectViewView : IDisposable
             }
 
             // 附件已經讀完上傳完了，這時才可以重建 input。
+            // ⚠️ 先關串流再刪暫存檔（1.0.65）：串流還開著時 Windows 刪不掉，清單又已清空，每存一次就留一份在暫存資料夾。
+            DisposeUploadStreams();
             ClearPendingFiles();
             removedFileIds.Clear();
             attachmentDropZone?.Reset();
@@ -1553,10 +1554,17 @@ public partial class ProjectViewView : IDisposable
         }
         finally
         {
+            DisposeUploadStreams();
+        }
+
+        void DisposeUploadStreams()
+        {
             foreach (var uploadStream in uploadStreams)
             {
                 uploadStream.Dispose();
             }
+
+            uploadStreams.Clear();
         }
     }
 

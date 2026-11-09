@@ -26,6 +26,7 @@ using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Extensions;
 using MeetingRecord.Web.Filters;
 using MeetingRecord.Web.Localization;
+using MeetingRecord.Web.Uploads;
 using NLog;
 using NLog.Web;
 using System.Text;
@@ -557,6 +558,23 @@ namespace MeetingRecord.Web
                 }
 
                 exceptionContextAccessor.Clear();
+                #endregion
+
+                #region 清除專案附件暫存殘檔（1.0.65）
+                // 網站當掉／重啟時編輯中的暫存檔、1.0.64 以前存檔沒刪掉的殘檔。只刪 24 小時以前的（IIS 回收時舊行程可能還在用）。
+                try
+                {
+                    var deletedTempFiles = MeetingRecord.Web.Uploads.PendingUploadTempFiles.DeleteStale(
+                        MeetingRecord.Web.Uploads.PendingUploadTempFiles.DefaultDirectory, TimeSpan.FromHours(24), DateTime.UtcNow, logger);
+                    if (deletedTempFiles > 0)
+                    {
+                        logger.LogInformation("Deleted stale pending upload temp files at startup. Count={Count}", deletedTempFiles);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to delete stale pending upload temp files at startup.");
+                }
                 #endregion
 
                 #region 註冊中介軟體

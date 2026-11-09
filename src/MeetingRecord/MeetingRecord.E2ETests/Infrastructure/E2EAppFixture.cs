@@ -36,6 +36,12 @@ public sealed class E2EAppFixture : IAsyncLifetime
     /// <summary>測試產生的檔案（下載、上傳用的假音檔）放這裡。</summary>
     public string WorkPath => Path.Combine(rootPath, "work");
 
+    /// <summary>
+    /// 網站的專案附件暫存資料夾（1.0.65）。自己啟動網站時把它的 TMP／TEMP 指到 <c>rootPath/tmp</c>，才看得到也不會弄髒本機的 %TEMP%；
+    /// 對外部網站測（<c>E2E_BASE_URL</c>）時不知道在哪，為 null。
+    /// </summary>
+    public string? PendingUploadPath { get; private set; }
+
     public async Task InitializeAsync()
     {
         if (!E2ESwitch.Enabled)
@@ -134,6 +140,11 @@ public sealed class E2EAppFixture : IAsyncLifetime
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        var tempPath = Path.Combine(rootPath, "tmp");
+        Directory.CreateDirectory(tempPath);
+        info.Environment["TMP"] = tempPath;
+        info.Environment["TEMP"] = tempPath;
+        PendingUploadPath = Path.Combine(tempPath, "MeetingRecord", "pending-uploads");
         info.ArgumentList.Add(Path.Combine(appPath, "MeetingRecord.Web.dll"));
         foreach (var argument in BuildArguments(port))
         {

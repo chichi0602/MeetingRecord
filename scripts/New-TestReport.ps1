@@ -98,13 +98,19 @@ $today = Get-Date -Format "yyyy/MM/dd"
 $edgeVersion = try { (Get-Item "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe").VersionInfo.ProductVersion } catch { "未知" }
 $dotnetVersion = (dotnet --version).Trim()
 
+# 端對端結果再依情境編號分層：L4- 開頭是「即時與長時間」（1.0.66），其餘是 L3 對照。
+$isL4 = { param($r) $meta = $scenarioMeta[(Get-MethodKey $r.Name)]; $meta -and $meta.Scenario -like "L4-*" }
+$l4 = @($e2e | Where-Object { & $isL4 $_ })
+$l3 = @($e2e | Where-Object { -not (& $isL4 $_) })
+
 $counts = [ordered]@{
     "L1 單元／服務" = Count-Outcomes $l1
     "L2 API 整合"  = Count-Outcomes $l2
-    "L3 E2E 對照"  = Count-Outcomes $e2e
+    "L3 E2E 對照"  = Count-Outcomes $l3
+    "L4 即時與長時間" = Count-Outcomes $l4
 }
 $failedTotal = ($counts.Values | Measure-Object -Property Failed -Sum).Sum
-$conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～L3 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
+$conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～L4 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
 $kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } else { "M0 基準報告（只有 Server 版）" }
 
 $sb = [System.Text.StringBuilder]::new()
@@ -139,7 +145,6 @@ foreach ($key in $counts.Keys) {
     $c = $counts[$key]
     Line "| $key | $($c.Total) | $($c.Passed) | $($c.Failed) | $($c.Skipped) |"
 }
-Line "| L4 即時與長時間 | — | — | — | M0 範圍外 |"
 Line "| L5 非功能 | — | — | — | M0 範圍外 |"
 Line
 Line "## 3. E2E 對照矩陣"

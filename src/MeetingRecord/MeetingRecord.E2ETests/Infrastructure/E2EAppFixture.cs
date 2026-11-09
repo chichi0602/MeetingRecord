@@ -42,6 +42,9 @@ public sealed class E2EAppFixture : IAsyncLifetime
     /// </summary>
     public string? PendingUploadPath { get; private set; }
 
+    /// <summary>網站存會議影音檔的資料夾（1.0.66，L4 比對落地檔用）；對外部網站測時為 null。</summary>
+    public string? MeetingMediaPath { get; private set; }
+
     public async Task InitializeAsync()
     {
         if (!E2ESwitch.Enabled)
@@ -145,6 +148,7 @@ public sealed class E2EAppFixture : IAsyncLifetime
         info.Environment["TMP"] = tempPath;
         info.Environment["TEMP"] = tempPath;
         PendingUploadPath = Path.Combine(tempPath, "MeetingRecord", "pending-uploads");
+        MeetingMediaPath = Path.Combine(rootPath, "MeetingMediaPath");
         info.ArgumentList.Add(Path.Combine(appPath, "MeetingRecord.Web.dll"));
         foreach (var argument in BuildArguments(port))
         {

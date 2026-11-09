@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using System.Text.RegularExpressions;
 using MeetingRecord.E2ETests.Infrastructure;
 
 namespace MeetingRecord.E2ETests.Scenarios;
@@ -220,43 +219,6 @@ public sealed class MeetingTests(E2EAppFixture app) : E2ETestBase(app)
         await using (var db = App.CreateDbContext())
         {
             Assert.Equal(date, (await db.Meeting.AsNoTracking().SingleAsync(x => x.Title == title)).MeetingDate);
-        }
-    }
-
-    /// <summary>新增一筆帶影音檔的會議（走分塊上傳），回傳標題。</summary>
-    private async Task<string> AddMeetingWithMediaAsync(IPage page)
-    {
-        await GotoAsync(page, "/meetings", "會議標題");
-        var title = Unique("E2E 上傳會議");
-        var media = FakeMediaFile($"{title}.mp3");
-
-        await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
-        await page.GetByPlaceholder("請輸入會議標題").FillAsync(title);
-        await page.Locator(".ant-modal-wrap:visible input[type=file]").SetInputFilesAsync(media);
-        await Expect(page.GetByText("待上傳：")).ToBeVisibleAsync();
-        await ClickModalOkAsync(page);
-        await ConfirmAsync(page, "儲存並開始轉錄");
-        await Expect(Row(page, title)).ToBeVisibleAsync();
-        return title;
-    }
-
-    /// <summary>等某一列出現指定狀態文字；清單靠背景事件重載，保險起見每隔幾秒按一次「重新整理」。</summary>
-    private static async Task WaitForRowTextAsync(IPage page, string title, string text, int? column = null)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(90);
-        var target = column is null ? Row(page, title) : Row(page, title).Locator($"td:nth-child({column})");
-        while (!Regex.IsMatch(await target.InnerTextAsync(), Regex.Escape(text)))
-        {
-            if (DateTime.UtcNow > deadline)
-            {
-                throw new TimeoutException($"「{title}」等了 90 秒還沒出現「{text}」，目前內容：{await Row(page, title).InnerTextAsync()}");
-            }
-
-            await page.WaitForTimeoutAsync(2000);
-            if (await page.Locator(".ant-modal-wrap:visible").CountAsync() == 0)
-            {
-                await page.GetByRole(AriaRole.Button, new() { Name = "重新整理" }).ClickAsync();
-            }
         }
     }
 }

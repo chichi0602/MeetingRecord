@@ -192,5 +192,70 @@ public abstract class E2ETestBase : IAsyncLifetime
         return path;
     }
 
+    /// <summary>在會議紀錄頁開「新增」並填好標題、選好影音檔（還沒按確定），回傳標題與本機檔案路徑。</summary>
+    protected async Task<(string Title, string Media)> FillNewMeetingWithMediaAsync(IPage page, int size = 64 * 1024)
+    {
+        await GotoAsync(page, "/meetings", "會議標題");
+        var title = Unique("E2E 上傳會議");
+        var media = FakeMediaFile($"{title}.mp3", size);
+
+        await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
+        await page.GetByPlaceholder("請輸入會議標題").FillAsync(title);
+        await page.Locator(".ant-modal-wrap:visible input[type=file]").SetInputFilesAsync(media);
+        await Expect(page.GetByText("待上傳：")).ToBeVisibleAsync();
+        return (title, media);
+    }
+
+    /// <summary>按確定並在費用確認框按「儲存並開始轉錄」，等清單出現這一列（上傳在背景進行）。</summary>
+    protected static async Task SaveNewMeetingWithMediaAsync(IPage page, string title)
+    {
+        await ClickModalOkAsync(page);
+        await ConfirmAsync(page, "儲存並開始轉錄");
+        await Expect(Row(page, title)).ToBeVisibleAsync();
+    }
+
+    /// <summary>新增一筆帶影音檔的會議（走分塊上傳），回傳標題。</summary>
+    protected async Task<string> AddMeetingWithMediaAsync(IPage page)
+    {
+        var (title, _) = await FillNewMeetingWithMediaAsync(page);
+        await SaveNewMeetingWithMediaAsync(page, title);
+        return title;
+    }
+
+    /// <summary>等某一列出現指定狀態文字；清單靠背景事件重載，保險起見每隔幾秒按一次「重新整理」。</summary>
+    protected static async Task WaitForRowTextAsync(IPage page, string title, string text, int? column = null, int timeoutSeconds = 90)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+        var target = column is null ? Row(page, title) : Row(page, title).Locator($"td:nth-child({column})");
+        while (!Regex.IsMatch(await target.InnerTextAsync(), Regex.Escape(text)))
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException($"「{title}」等了 {timeoutSeconds} 秒還沒出現「{text}」，目前內容：{await Row(page, title).InnerTextAsync()}");
+            }
+
+            await page.WaitForTimeoutAsync(2000);
+            if (await page.Locator(".ant-modal-wrap:visible").CountAsync() == 0)
+            {
+                await page.GetByRole(AriaRole.Button, new() { Name = "重新整理" }).ClickAsync();
+            }
+        }
+    }
+
+    /// <summary>右下角背景工作面板裡，某場會議的那一列。</summary>
+    protected static ILocator JobPanelRow(IPage page, string meetingTitle)
+        => page.Locator(".job-progress-panel-row").Filter(new() { HasText = meetingTitle });
+
+    /// <summary>
+    /// 讓這個瀏覽器的每個上傳分塊晚 <paramref name="delay"/> 才送出（L4）：本機上傳太快，不放慢就看不到「上傳中」、也來不及按取消。
+    /// 只影響 <c>/api/v1/uploads/</c>，Blazor 連線不受影響。
+    /// </summary>
+    protected static Task ThrottleUploadsAsync(IPage page, TimeSpan delay)
+        => page.RouteAsync("**/api/v1/uploads/**", async route =>
+        {
+            await Task.Delay(delay);
+            await route.ContinueAsync();
+        });
+
     protected static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid().ToString("N")[..6]}";
 }

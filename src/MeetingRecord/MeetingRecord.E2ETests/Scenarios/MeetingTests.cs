@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using MeetingRecord.E2ETests.Infrastructure;
 
@@ -187,6 +188,39 @@ public sealed class MeetingTests(E2EAppFixture app) : E2ETestBase(app)
         await page.GotoAsync("/meetings");
 
         await Expect(page.GetByRole(AriaRole.Alert).Filter(new() { HasText = "你沒有權限存取此頁面" })).ToBeVisibleAsync();
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "MTG-10")]
+    [Trait("Title", "選好會議日期後在日期欄按 Enter 不會送出表單，日期有存進去")]
+    [Trait("Page", "會議紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task Meeting_EnterInMeetingDate_ShouldNotSubmit()
+    {
+        // 1.0.62 修正：以前在會議日期按 Enter 會直接送出、打的日期沒套用（M0 端對端測試發現）。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/meetings", "會議標題");
+        var title = Unique("E2E 會議日期Enter");
+        var date = DateTime.Today.AddDays(-3);
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        await page.GetByPlaceholder("請輸入會議標題").FillAsync(title);
+        await PickDateAsync(page, "會議日期", date);
+        await DateInput(page, "會議日期").PressAsync("Enter");
+        await page.WaitForTimeoutAsync(1000);
+
+        await Expect(page.Locator(".ant-modal-wrap:visible").Filter(new() { HasText = "會議日期" })).ToBeVisibleAsync();
+        await using (var db = App.CreateDbContext())
+        {
+            Assert.False(await db.Meeting.AnyAsync(x => x.Title == title), "按 Enter 不該送出表單");
+        }
+
+        await ClickModalOkAsync(page);
+        await Expect(Row(page, title)).ToBeVisibleAsync();
+        await using (var db = App.CreateDbContext())
+        {
+            Assert.Equal(date, (await db.Meeting.AsNoTracking().SingleAsync(x => x.Title == title)).MeetingDate);
+        }
     }
 
     /// <summary>新增一筆帶影音檔的會議（走分塊上傳），回傳標題。</summary>

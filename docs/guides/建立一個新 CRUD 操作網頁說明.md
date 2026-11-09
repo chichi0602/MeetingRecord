@@ -1,10 +1,10 @@
 ﻿# 以 `RoleViewView` 為藍本手動開發新 CRUD 頁面的計畫
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.0.62
 - 首次實作版本：—（未追溯，約 0.1.x 初始腳手架）
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/11/09
 
 > 目標：完整複刻 `RoleViewView` 的「新增、查詢、更新、刪除、過濾、排序、分頁、驗證、通知」行為，並保留同等結構（Page + View + Service + AdapterModel + Entity + 註冊 + 樣式）。
 
@@ -105,6 +105,8 @@
 
 7. **鍵盤操作**
    - Enter 送出、Esc 關閉，一律走 `FormKeyboardHelper.IsSubmit` / `IsCancel`（`Components/Commons/`）。
+   - 送出一律經 `FormSubmitGate`（1.0.62）：`OnOk` 用 `submitGate.RunAsync(SaveModalAsync)`、Enter 用 `submitGate.RunAsync(SaveModalAsync, FormSubmitGate.EnterSettleDelay)`，不要自己 `Task.Delay` 再呼叫存檔（等候不在防護裡會新增兩筆）。
+   - 表單裡的下拉與日期欄外層包 `<div @onkeydown:stopPropagation="true">`，否則在欄位裡按 Enter 會送出表單。新頁面要加進 `FormEnterGuardTests.CrudForms`。
    - ⚠️ **不要自己比對 `args.Key == "Enter"`**：那樣會漏掉 `IsComposing`，中文輸入法按 Enter 選字就會把對話框存檔關閉。理由見〈開發慣例與限制速查〉§6.8。
 
 ---

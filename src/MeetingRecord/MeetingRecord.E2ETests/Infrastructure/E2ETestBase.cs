@@ -127,6 +127,36 @@ public abstract class E2ETestBase : IAsyncLifetime
             .Filter(new() { Has = page.Locator("label", new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(label)}\s*$") }) })
             .Locator(".ant-select").First;
 
+    /// <summary>表單視窗裡標籤為 <paramref name="label"/> 的日期欄輸入框。</summary>
+    protected static ILocator DateInput(IPage page, string label)
+        => page.Locator(".ant-modal-wrap:visible .ant-form-item").Filter(new() { HasText = label }).Locator("input").First;
+
+    /// <summary>
+    /// 在表單視窗的日期欄點日曆選日期（AntDesign DatePicker）。不用打字：打進去的文字套件不一定解析得到，
+    /// 點日曆才穩定。日曆格的 title 是 zh-TW 格式（2026年10月25日）；不在這個月就按「下個月」往後翻。
+    /// ⚠️ 翻頁後日曆是非同步重畫的：一定要等表頭的年月變了再判斷，否則會多翻一頁、點到錯的日子。
+    /// </summary>
+    protected static async Task PickDateAsync(IPage page, string label, DateTime date)
+    {
+        var input = DateInput(page, label);
+        await input.ClickAsync();
+
+        var dropdown = page.Locator(".ant-picker-dropdown:not(.ant-picker-dropdown-hidden)");
+        var header = dropdown.Locator(".ant-picker-header-view").First;
+        await Expect(dropdown.Locator("td.ant-picker-cell-in-view").First).ToBeVisibleAsync();
+        var cell = dropdown.Locator($"td.ant-picker-cell-in-view[title=\"{date.Year}年{date.Month}月{date.Day}日\"], td.ant-picker-cell-in-view[title=\"{date:yyyy年MM月dd日}\"]").First;
+        for (var i = 0; i < 4 && await cell.CountAsync() == 0; i++)
+        {
+            var before = await header.InnerTextAsync();
+            var direction = date < DateTime.Today ? ".ant-picker-header-prev-btn" : ".ant-picker-header-next-btn";
+            await dropdown.Locator(direction).ClickAsync();
+            await Expect(header).Not.ToHaveTextAsync(before);
+        }
+
+        await cell.ClickAsync();
+        await Expect(input).ToHaveValueAsync(new Regex($"{date.Year}年0?{date.Month}月0?{date.Day}日"));
+    }
+
     /// <summary>按下確認框裡的按鈕（例如「刪除」「開始產生」）。</summary>
     /// <remarks>只找 AntDesign 確認框（.ant-modal-confirm），避免點到底下設定視窗裡同名的按鈕。</remarks>
     protected static async Task ConfirmAsync(IPage page, string okText)

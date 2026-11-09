@@ -171,6 +171,66 @@ public sealed class TodoTests(E2EAppFixture app) : E2ETestBase(app)
         await Expect(Row(page, E2ESeedData.SharedTodo).Locator(".ant-checkbox-disabled").First).ToBeVisibleAsync();
     }
 
+    [E2EFact]
+    [Trait("Scenario", "TDO-09")]
+    [Trait("Title", "選好截止日後在日期欄按 Enter 不會送出表單，日期有存進去")]
+    [Trait("Page", "待辦事項")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task Todo_EnterInDueDate_ShouldNotSubmit()
+    {
+        // 1.0.62 修正：以前在截止日按 Enter 會直接送出、打的日期沒套用（M0 端對端測試發現）。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/todos", "待辦事項");
+        var title = Unique("E2E 截止日Enter");
+        var due = DateTime.Today.AddDays(10);
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        await page.GetByPlaceholder("請輸入待辦標題").FillAsync(title);
+        await PickAsync(page, SelectByLabel(page, "所屬專案"), E2ESeedData.SharedProject);
+        await PickDateAsync(page, "截止日", due);
+        await DateInput(page, "截止日").PressAsync("Enter");
+        await page.WaitForTimeoutAsync(1000);
+
+        // 視窗還開著、沒有新增
+        await Expect(page.Locator(".ant-modal-wrap:visible").Filter(new() { HasText = "截止日" })).ToBeVisibleAsync();
+        await using (var db = App.CreateDbContext())
+        {
+            Assert.False(await db.Todo.AnyAsync(x => x.Title == title), "按 Enter 不該送出表單");
+        }
+
+        await ClickModalOkAsync(page);
+        await Expect(Notice(page, "新增成功")).ToBeVisibleAsync();
+        await using (var db = App.CreateDbContext())
+        {
+            Assert.Equal(due, (await db.Todo.AsNoTracking().SingleAsync(x => x.Title == title)).DueDate);
+        }
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "TDO-10")]
+    [Trait("Title", "按 Enter 送出後立刻再按「確定」只新增一筆")]
+    [Trait("Page", "待辦事項")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task Todo_EnterThenOk_ShouldCreateOnlyOne()
+    {
+        // 1.0.62 修正：Enter 送出前會等 200ms 回寫，以前等候不在存檔防護裡，這段期間按「確定」會新增兩筆。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/todos", "待辦事項");
+        var title = Unique("E2E 連按");
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        await PickAsync(page, SelectByLabel(page, "所屬專案"), E2ESeedData.SharedProject);
+        var titleInput = page.GetByPlaceholder("請輸入待辦標題");
+        await titleInput.FillAsync(title);
+        await titleInput.PressAsync("Enter");
+        await page.Locator(".ant-modal-wrap:visible .ant-modal-footer .ant-btn-primary").Last.ClickAsync(new() { NoWaitAfter = true, Timeout = 2000 }).ContinueWith(_ => { });
+        await Expect(Notice(page, "新增成功")).ToBeVisibleAsync();
+        await page.WaitForTimeoutAsync(1500);
+
+        await using var db = App.CreateDbContext();
+        Assert.Equal(1, await db.Todo.CountAsync(x => x.Title == title));
+    }
+
     /// <summary>在「E2E 共同專案」新增一筆待辦，回傳標題（搜尋框已填這個標題）。</summary>
     private async Task<string> CreateTodoAsync(IPage page, string prefix, string? exactTitle = null, DateTime? dueDate = null)
     {
@@ -195,31 +255,7 @@ public sealed class TodoTests(E2EAppFixture app) : E2ETestBase(app)
         return title;
     }
 
-    /// <summary>
-    /// 在待辦視窗的「截止日」輸入日期。⚠️ 點日曆上的日期、不按 Enter：1.0.60 時待辦的截止日沒有擋 Enter，
-    /// 在日期欄按 Enter 會直接送出表單、打的日期沒有套用（M0 發現的既有問題，見基準測試報告）。
-    /// </summary>
-    private static async Task SetDueDateAsync(IPage page, DateTime date)
-    {
-        var input = page.Locator(".ant-modal-wrap:visible .ant-form-item").Filter(new() { HasText = "截止日" }).Locator("input").First;
-        await input.ClickAsync();
-
-        // 日曆格的 title 是 zh-TW 格式（2026年10月25日）；不在這個月就按「下個月」往後翻。
-        // ⚠️ 翻頁後日曆是非同步重畫的：一定要等表頭的年月變了再判斷，否則會多翻一頁、點到錯的日子。
-        var dropdown = page.Locator(".ant-picker-dropdown:not(.ant-picker-dropdown-hidden)");
-        var header = dropdown.Locator(".ant-picker-header-view").First;
-        await Expect(dropdown.Locator("td.ant-picker-cell-in-view").First).ToBeVisibleAsync();
-        var cell = dropdown.Locator($"td.ant-picker-cell-in-view[title=\"{date.Year}年{date.Month}月{date.Day}日\"], td.ant-picker-cell-in-view[title=\"{date:yyyy年MM月dd日}\"]").First;
-        for (var i = 0; i < 4 && await cell.CountAsync() == 0; i++)
-        {
-            var before = await header.InnerTextAsync();
-            await dropdown.Locator(".ant-picker-header-next-btn").ClickAsync();
-            await Expect(header).Not.ToHaveTextAsync(before);
-        }
-
-        await cell.ClickAsync();
-        await Expect(input).ToHaveValueAsync(new System.Text.RegularExpressions.Regex($"{date.Year}年0?{date.Month}月0?{date.Day}日"));
-    }
+    private static Task SetDueDateAsync(IPage page, DateTime date) => PickDateAsync(page, "截止日", date);
 
     private static async Task SearchAsync(IPage page, string keyword)
     {

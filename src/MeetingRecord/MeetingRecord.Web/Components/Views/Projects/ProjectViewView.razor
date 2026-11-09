@@ -539,12 +539,14 @@ else
                         </FormItem>
 
                         <FormItem Label="狀態" Required>
-                            <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
-                                @foreach (var status in StatusOptions)
-                                {
-                                    <SelectOption Value="@status">@status</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
+                                    @foreach (var status in StatusOptions)
+                                    {
+                                        <SelectOption Value="@status">@status</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.Status" />
                         </FormItem>
 

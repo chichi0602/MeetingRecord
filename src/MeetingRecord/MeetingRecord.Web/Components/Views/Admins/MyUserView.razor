@@ -153,39 +153,45 @@ else
 
                         @* 角色＝能做什麼，團隊＝誰的資料（看得到哪些專案），兩者分開設定、互不影響。 *@
                         <FormItem Label="角色" Required>
-                            <Select TItem="RoleViewAdapterModel" TItemValue="int?"
-                                    DataSource="@roleViewAdapterModels"
-                                    @bind-Value="CurrentRecord.RoleViewId"
-                                    LabelName="@nameof(RoleViewAdapterModel.Name)"
-                                    ValueName="@nameof(RoleViewAdapterModel.Id)"
-                                    Placeholder="請選擇角色"
-                                    Style="width: 100%;" />
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="RoleViewAdapterModel" TItemValue="int?"
+                                        DataSource="@roleViewAdapterModels"
+                                        @bind-Value="CurrentRecord.RoleViewId"
+                                        LabelName="@nameof(RoleViewAdapterModel.Name)"
+                                        ValueName="@nameof(RoleViewAdapterModel.Id)"
+                                        Placeholder="請選擇角色"
+                                        Style="width: 100%;" />
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.RoleViewId" />
                         </FormItem>
 
                         <FormItem Label="額外角色（多角色，權限取聯集）">
-                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
-                                    Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
-                                    AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var r in roleViewAdapterModels)
-                                {
-                                    <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                        Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
+                                        Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
+                                        AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var r in roleViewAdapterModels)
+                                    {
+                                        <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                         </FormItem>
 
                         @* 跨整列：團隊多時半欄放不下。 *@
                         <FormItem Label="團隊" Class="form-modal-full">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
-                                    Placeholder="決定這個人看得到哪些專案：專案的主責或協作團隊有他所屬的團隊（管理者不受限）"
-                                    AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var t in availableTeams)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                        Values="CurrentRecord.TeamNames" OnSelectedItemsChanged="OnUserTeamsChanged"
+                                        Placeholder="決定這個人看得到哪些專案：專案的主責或協作團隊有他所屬的團隊（管理者不受限）"
+                                        AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var t in availableTeams)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Value="@t">@t</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                         </FormItem>
 
                         <FormItem>

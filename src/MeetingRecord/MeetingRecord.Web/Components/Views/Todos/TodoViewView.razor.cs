@@ -873,26 +873,16 @@ public partial class TodoViewView : IAsyncDisposable
         await ReloadAsync();
     }
 
-    /// <summary>存檔中（0.4.115）：擋重複送出——連按確定或連按 Enter 會建出兩筆待辦。</summary>
-    private bool isSaving;
+    /// <summary>
+    /// 表單送出閘門（1.0.62）：「確定」與 Enter 共用。0.4.115 起就有存檔防護，但 Enter 先等 200ms 才進防護，
+    /// 等候期間按「確定」或長按 Enter 仍會新增兩筆（M0 端對端測試發現）；現在等候也算在送出中。
+    /// </summary>
+    private readonly FormSubmitGate submitGate = new();
 
-    private async Task OnModalOKHandleAsync(MouseEventArgs args)
-    {
-        if (isSaving)
-        {
-            return;
-        }
+    /// <summary>存檔中（含 Enter 等候回寫）。</summary>
+    private bool isSaving => submitGate.IsBusy;
 
-        isSaving = true;
-        try
-        {
-            await SaveModalAsync();
-        }
-        finally
-        {
-            isSaving = false;
-        }
-    }
+    private Task OnModalOKHandleAsync(MouseEventArgs args) => submitGate.RunAsync(SaveModalAsync);
 
     private async Task SaveModalAsync()
     {
@@ -1003,10 +993,9 @@ public partial class TodoViewView : IAsyncDisposable
         // 也讓 Shift+Enter 落回瀏覽器原生的換行。直接比對 args.Key 會誤觸。
         if (FormKeyboardHelper.IsSubmit(args))
         {
-            // Task.Delay 不是可以省的：AntDesign Input 預設 change/blur 才回寫繫結值，
-            // Enter 送出時焦點還在欄位裡，不等就會拿到舊值。
-            await Task.Delay(200);
-            await OnModalOKHandleAsync(new MouseEventArgs());
+            // 等候不是可以省的：AntDesign Input 預設 change/blur 才回寫繫結值，Enter 送出時焦點還在欄位裡，不等就會拿到舊值。
+            // 等候也算在閘門裡（1.0.62）：以前先等再進防護，等候期間按「確定」或長按 Enter 會新增兩筆。
+            await submitGate.RunAsync(SaveModalAsync, FormSubmitGate.EnterSettleDelay);
         }
         else if (FormKeyboardHelper.IsCancel(args))
         {

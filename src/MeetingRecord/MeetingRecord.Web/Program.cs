@@ -70,11 +70,13 @@ namespace MeetingRecord.Web
                     NLog.Common.InternalLogger.LogLevel = NLog.LogLevel.Info;
                     NLog.Common.InternalLogger.LogFile = Path.Combine(nlogBasePath, $"{baseNamespace}-nlog-internal.log");
 
-                    // 設置變量到當前配置
-                    if (LogManager.Configuration is not null)
+                    // 設置變量到當前配置。⚠️ 只讀一次（1.0.62）：檢查完再讀第二次之間，另一台主機關閉時可能把
+                    // 全域的 NLog 設定清成 null（測試平行建立／釋放 WebApplicationFactory 時實測偶發 NullReferenceException）。
+                    var nlogConfiguration = LogManager.Configuration;
+                    if (nlogConfiguration is not null)
                     {
-                        LogManager.Configuration.Variables["BasePath"] = nlogBasePath;
-                        LogManager.Configuration.Variables["LogFilenamePrefix"] = $"{baseNamespace}-logfile";
+                        nlogConfiguration.Variables["BasePath"] = nlogBasePath;
+                        nlogConfiguration.Variables["LogFilenamePrefix"] = $"{baseNamespace}-logfile";
                     }
                 }
 

@@ -245,19 +245,23 @@ else
                         </FormItem>
 
                         <FormItem Label="會議日期">
-                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" Disabled="@IsFormLocked" AllowClear="true" Style="width: 100%;" />
+                            <div @onkeydown:stopPropagation="true">
+                                <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.MeetingDate" Disabled="@IsFormLocked" AllowClear="true" Style="width: 100%;" />
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.MeetingDate" />
                         </FormItem>
 
                         <FormItem Label="分類" Class="form-modal-full">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                    Placeholder="描述會議性質（不影響誰看得到）" AllowClear EnableSearch Disabled="@IsFormLocked" Style="width: 100%;">
-                                @foreach (var c in availableCategories)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                        Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                        Placeholder="描述會議性質（不影響誰看得到）" AllowClear EnableSearch Disabled="@IsFormLocked" Style="width: 100%;">
+                                    @foreach (var c in availableCategories)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">

@@ -375,20 +375,22 @@ else
                         <FormItem Label="所屬專案" Required>
                             @* 0.4.115：改用 SelectOption 子元素（和專案頁同寫法）。DataSource 繫結在選項晚到時，
                                會出現「有值卻顯示空白」。 *@
-                            <Select TItem="int"
-                                    TItemValue="int"
-                                    @bind-Value="CurrentRecord.ProjectId"
-                                    @bind-Value:after="OnFormProjectChangedAsync"
-                                    Placeholder="請選擇專案"
-                                    EnableSearch
-                                    Style="width: 100%;">
-                                <SelectOptions>
-                                    @foreach (var project in FormProjects)
-                                    {
-                                        <SelectOption TItem="int" TItemValue="int" Value="@project.Id" Label="@project.Title" />
-                                    }
-                                </SelectOptions>
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="int"
+                                        TItemValue="int"
+                                        @bind-Value="CurrentRecord.ProjectId"
+                                        @bind-Value:after="OnFormProjectChangedAsync"
+                                        Placeholder="請選擇專案"
+                                        EnableSearch
+                                        Style="width: 100%;">
+                                    <SelectOptions>
+                                        @foreach (var project in FormProjects)
+                                        {
+                                            <SelectOption TItem="int" TItemValue="int" Value="@project.Id" Label="@project.Title" />
+                                        }
+                                    </SelectOptions>
+                                </Select>
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.ProjectId" />
                         </FormItem>
 
@@ -400,20 +402,22 @@ else
                             }
                             else
                             {
-                                <Select TItem="int?"
-                                        TItemValue="int?"
-                                        @bind-Value="CurrentRecord.ParentTodoId"
-                                        Placeholder="不屬於任何待辦（獨立一筆）"
-                                        AllowClear
-                                        EnableSearch
-                                        Style="width: 100%;">
-                                    <SelectOptions>
-                                        @foreach (var parent in parentCandidates)
-                                        {
-                                            <SelectOption TItem="int?" TItemValue="int?" Value="@((int?)parent.Id)" Label="@parent.Title" />
-                                        }
-                                    </SelectOptions>
-                                </Select>
+                                <div @onkeydown:stopPropagation="true">
+                                    <Select TItem="int?"
+                                            TItemValue="int?"
+                                            @bind-Value="CurrentRecord.ParentTodoId"
+                                            Placeholder="不屬於任何待辦（獨立一筆）"
+                                            AllowClear
+                                            EnableSearch
+                                            Style="width: 100%;">
+                                        <SelectOptions>
+                                            @foreach (var parent in parentCandidates)
+                                            {
+                                                <SelectOption TItem="int?" TItemValue="int?" Value="@((int?)parent.Id)" Label="@parent.Title" />
+                                            }
+                                        </SelectOptions>
+                                    </Select>
+                                </div>
                             }
                         </FormItem>
 
@@ -423,7 +427,9 @@ else
                         </FormItem>
 
                         <FormItem Label="截止日">
-                            <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.DueDate" AllowClear="true" Style="width: 100%;" />
+                            <div @onkeydown:stopPropagation="true">
+                                <DatePicker TValue="DateTime?" @bind-Value="CurrentRecord.DueDate" AllowClear="true" Style="width: 100%;" />
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.DueDate" />
                         </FormItem>
 
@@ -438,22 +444,26 @@ else
                         }
 
                         <FormItem Label="優先度" Required>
-                            <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Priority" Style="width: 100%;">
-                                @foreach (var priority in PriorityOptions)
-                                {
-                                    <SelectOption Value="@priority">@priority</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Priority" Style="width: 100%;">
+                                    @foreach (var priority in PriorityOptions)
+                                    {
+                                        <SelectOption Value="@priority">@priority</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.Priority" />
                         </FormItem>
 
                         <FormItem Label="狀態" Required>
-                            <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
-                                @foreach (var status in StatusOptions)
-                                {
-                                    <SelectOption Value="@status">@status</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="string" TItemValue="string" @bind-Value="CurrentRecord.Status" Style="width: 100%;">
+                                    @foreach (var status in StatusOptions)
+                                    {
+                                        <SelectOption Value="@status">@status</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                             <ValidationMessage For="() => CurrentRecord.Status" />
                         </FormItem>
 

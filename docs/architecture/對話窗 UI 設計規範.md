@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.7
+- 文件版本：1.8
 - 文件狀態：已實作
-- 現行系統版本：1.0.48
+- 現行系統版本：1.0.62
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/10/19
+- 最後核對日期：2026/11/09
 
 ## 摘要
 
@@ -157,9 +157,10 @@
 
 - **`KeyboardEventArgs.IsComposing` 是唯一的輸入法判斷途徑。**`KeyboardEventArgs` 沒有 `KeyCode`，在 Blazor 端無法用「檢查 229」的老方法。
 - **Shift+Enter 在多行欄位會換行**：`IsSubmit` 回 false，瀏覽器的原生行為就會換行，不必另寫程式碼。
-- 表單對話窗把 `@onkeydown="OnModalKeyDownAsync"` 掛在 `EditForm` 上。⚠️ 送出前的 `await Task.Delay(200)` 不能省：AntDesign `Input` 預設在 change 或 blur 時才回寫繫結值，Enter 送出時焦點還在欄位裡，不等的話會拿到舊值。
+- 表單對話窗把 `@onkeydown="OnModalKeyDownAsync"` 掛在 `EditForm` 上。⚠️ 送出前要等一下（`FormSubmitGate.EnterSettleDelay`，200ms）：AntDesign `Input` 預設在 change 或 blur 時才回寫繫結值，Enter 送出時焦點還在欄位裡，不等的話會拿到舊值。⚠️ 等候必須在送出防護裡（1.0.62 起一律 `submitGate.RunAsync(SaveModalAsync, FormSubmitGate.EnterSettleDelay)`，「確定」走同一個閘門）——以前先等再進防護，等候期間按「確定」會新增兩筆。
 - AntDesign Modal 沒有開放 keydown 掛載點（`Keyboard` 參數只管 Esc），沒有 `EditForm` 的對話窗要自己包一層原生 `<div @onkeydown>` 來接。範例：`MainLayout.razor` 的變更密碼、`MeetingViewView.razor` 的 `.meeting-draft-request-form`、`TodoExtractionModal.razor` 的 `.todo-extract`。
 - 表單內「新增標籤」這類**按鈕級**的輸入區要加 `@onkeydown:stopPropagation="true"`，否則外層 `EditForm` 會把那一下 Enter 當成送出。範例：`ProjectViewView.razor` 的 `.project-view-tag-editor`。
+- 表單裡的**下拉（Select）與日期（DatePicker）**外層也一律包 `<div @onkeydown:stopPropagation="true">`（1.0.62 補齊八個 CRUD 表單）：日期欄按 Enter 是「套用打的日期」、下拉搜尋框按 Enter 是「選這一項」，不包會被當成送出、值還沒套用就存檔。`FormEnterGuardTests` 把關。
 
 ### 6.1 刻意不綁 Enter 的地方
 

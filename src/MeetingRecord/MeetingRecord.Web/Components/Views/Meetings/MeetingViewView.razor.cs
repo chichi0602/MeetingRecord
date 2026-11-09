@@ -635,8 +635,14 @@ public partial class MeetingViewView : IDisposable
         await ReloadAsync();
     }
 
-    /// <summary>存檔中（0.4.115）：擋重複送出。isUploading 只涵蓋上傳階段，新增那一步連按兩下會建出兩筆會議。</summary>
-    private bool isSaving;
+    /// <summary>
+    /// 表單送出閘門（1.0.62）：「確定」與 Enter 共用。0.4.115 起就有存檔防護（isUploading 只涵蓋上傳階段，
+    /// 新增那一步連按兩下會建出兩筆會議），但 Enter 先等 200ms 才進防護，等候期間按「確定」仍會新增兩筆；現在等候也算在送出中。
+    /// </summary>
+    private readonly FormSubmitGate submitGate = new();
+
+    /// <summary>存檔中（含 Enter 等候回寫）。</summary>
+    private bool isSaving => submitGate.IsBusy;
 
     /// <summary>
     /// 存檔中整張表單鎖住（1.0.25）：欄位、移除檔案、取消鈕、右上角關閉、Esc 都不能用。
@@ -644,23 +650,7 @@ public partial class MeetingViewView : IDisposable
     /// </summary>
     private bool IsFormLocked => isSaving;
 
-    private async Task OnModalOKHandleAsync(MouseEventArgs args)
-    {
-        if (isSaving)
-        {
-            return;
-        }
-
-        isSaving = true;
-        try
-        {
-            await SaveModalAsync();
-        }
-        finally
-        {
-            isSaving = false;
-        }
-    }
+    private Task OnModalOKHandleAsync(MouseEventArgs args) => submitGate.RunAsync(SaveModalAsync);
 
     private async Task SaveModalAsync()
     {
@@ -859,9 +849,9 @@ public partial class MeetingViewView : IDisposable
         // Shift+Enter 會落回瀏覽器原生的換行，而組字中的 Enter 被 IsComposing 擋掉。
         if (FormKeyboardHelper.IsSubmit(args))
         {
-            // AntDesign Input 預設 change/blur 才回寫，不等就會拿到舊值。
-            await Task.Delay(200);
-            await OnModalOKHandleAsync(new MouseEventArgs());
+            // 等候不是可以省的：AntDesign Input 預設 change/blur 才回寫繫結值，Enter 送出時焦點還在欄位裡，不等就會拿到舊值。
+            // 等候也算在閘門裡（1.0.62）：以前先等再進防護，等候期間按「確定」或長按 Enter 會新增兩筆。
+            await submitGate.RunAsync(SaveModalAsync, FormSubmitGate.EnterSettleDelay);
         }
         else if (FormKeyboardHelper.IsCancel(args))
         {

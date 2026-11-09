@@ -124,15 +124,17 @@ else
 
                         @* 成員＝看得到這個團隊主責或協作之專案的人。管理者不受限，不必加進來。 *@
                         <FormItem Label="成員" Class="form-modal-full">
-                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.MemberIds" OnSelectedItemsChanged="OnMembersChanged"
-                                    Placeholder="選擇這個團隊的成員"
-                                    AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var m in selectableMembers)
-                                {
-                                    <SelectOption TItemValue="int" TItem="int" Value="@m.Id">@m.Label</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                        Values="CurrentRecord.MemberIds" OnSelectedItemsChanged="OnMembersChanged"
+                                        Placeholder="選擇這個團隊的成員"
+                                        AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var m in selectableMembers)
+                                    {
+                                        <SelectOption TItemValue="int" TItem="int" Value="@m.Id">@m.Label</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">

@@ -63,8 +63,14 @@ public partial class ProjectViewView : IDisposable
     /// <summary>已因「生成結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
     private readonly HashSet<int> reloadedFinishedMeetingIds = [];
 
-    /// <summary>存檔中（0.4.114）：擋重複送出，也讓背景事件延後重新載入（不能和存檔同時用同一個 DbContext）。</summary>
-    private bool isSaving;
+    /// <summary>
+    /// 表單送出閘門（1.0.62）：「確定」與 Enter 共用。0.4.114 起就有存檔防護，但 Enter 先等 200ms 才進防護，
+    /// 等候期間按「確定」仍會新增兩筆（M0 端對端測試發現）；現在等候也算在送出中。
+    /// </summary>
+    private readonly FormSubmitGate submitGate = new();
+
+    /// <summary>存檔中（含 Enter 等候回寫）：擋重複送出，也讓背景事件延後重新載入（不能和存檔同時用同一個 DbContext）。</summary>
+    private bool isSaving => submitGate.IsBusy;
 
     /// <summary>附件讀進暫存檔中；讀完之前不能存檔。</summary>
     private bool isReadingFiles;
@@ -1371,14 +1377,11 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    private async Task OnModalOKHandleAsync(MouseEventArgs args)
-    {
-        // 防重複送出（0.4.114）：上傳大附件時再按一次確定、或連按兩下 Enter，會建出兩筆專案。
-        if (isSaving)
-        {
-            return;
-        }
+    // 防重複送出（0.4.114）：上傳大附件時再按一次確定、或連按兩下 Enter，會建出兩筆專案。1.0.62 起經 FormSubmitGate。
+    private Task OnModalOKHandleAsync(MouseEventArgs args) => submitGate.RunAsync(SubmitModalAsync);
 
+    private async Task SubmitModalAsync()
+    {
         if (isReadingFiles)
         {
             NotifyError("附件還在讀取中，請稍候再存檔。");
@@ -1386,15 +1389,15 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        isSaving = true;
         try
         {
             await SaveModalAsync();
         }
         finally
         {
-            isSaving = false;
-            if (pendingContextReload)
+            // 存檔期間背景事件要求的重新載入，存完補做。仍在閘門裡（isSaving 為 true），
+            // 這段期間又來的要求會再記一次，所以用迴圈收乾淨，不會留一筆沒人處理。
+            while (pendingContextReload)
             {
                 pendingContextReload = false;
                 await ReloadProjectContextAsync();
@@ -1617,10 +1620,9 @@ public partial class ProjectViewView : IDisposable
         // 也讓 Shift+Enter 落回瀏覽器原生的換行。直接比對 args.Key 會誤觸。
         if (FormKeyboardHelper.IsSubmit(args))
         {
-            // Task.Delay 不是可以省的：AntDesign Input 預設 change/blur 才回寫繫結值，
-            // Enter 送出時焦點還在欄位裡，不等就會拿到舊值。
-            await Task.Delay(200);
-            await OnModalOKHandleAsync(new MouseEventArgs());
+            // 等候不是可以省的：AntDesign Input 預設 change/blur 才回寫繫結值，Enter 送出時焦點還在欄位裡，不等就會拿到舊值。
+            // 等候也算在閘門裡（1.0.62）：以前先等再進防護，等候期間按「確定」或長按 Enter 會新增兩筆。
+            await submitGate.RunAsync(SubmitModalAsync, FormSubmitGate.EnterSettleDelay);
         }
         else if (FormKeyboardHelper.IsCancel(args))
         {

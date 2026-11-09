@@ -118,15 +118,17 @@ else
 
                         @* 分類＝「什麼資料」。負責團隊只是參考，不會帶進專案，也不影響誰看得到（0.4.102）。 *@
                         <FormItem Label="負責團隊（參考）" Class="form-modal-full">
-                            <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.TeamIds" OnSelectedItemsChanged="OnTeamsChanged"
-                                    Placeholder="通常由哪些團隊負責這類資料（只是參考，不影響誰看得到）"
-                                    AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var t in selectableTeams)
-                                {
-                                    <SelectOption TItemValue="int" TItem="int" Value="@t.Id" Label="@t.Name" />
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="int" TItemValue="int" Mode="SelectMode.Multiple"
+                                        Values="CurrentRecord.TeamIds" OnSelectedItemsChanged="OnTeamsChanged"
+                                        Placeholder="通常由哪些團隊負責這類資料（只是參考，不影響誰看得到）"
+                                        AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var t in selectableTeams)
+                                    {
+                                        <SelectOption TItemValue="int" TItem="int" Value="@t.Id" Label="@t.Name" />
+                                    }
+                                </Select>
+                            </div>
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">

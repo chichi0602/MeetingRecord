@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MeetingRecord.E2ETests.Infrastructure;
 
 namespace MeetingRecord.E2ETests.Scenarios;
@@ -97,6 +98,31 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
         await page.GetByPlaceholder("請輸入搜尋關鍵字").FillAsync("標準會議紀錄");
         await page.GetByRole(AriaRole.Button, new() { Name = "搜尋" }).ClickAsync();
         await Expect(Row(page, "標準會議紀錄")).ToBeVisibleAsync();
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "MD-06")]
+    [Trait("Title", "按 Enter 送出後立刻再按「確定」只新增一筆、不會跳名稱已存在")]
+    [Trait("Page", "分類清單")]
+    [Trait("Persona", "管理者")]
+    public async Task Category_EnterThenOk_ShouldCreateOnlyOne()
+    {
+        // 1.0.62 修正：分類表單以前完全沒有重複送出防護，第二次靠名稱不可重複擋下、跳「名稱已存在」。
+        var page = await LoginAsAsync(Seed.Admin);
+        await GotoAsync(page, "/categories", "名稱");
+        var name = Unique("E2E連按分類");
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        var nameInput = page.GetByPlaceholder("請輸入分類名稱");
+        await nameInput.FillAsync(name);
+        await nameInput.PressAsync("Enter");
+        await page.Locator(".ant-modal-wrap:visible .ant-modal-footer .ant-btn-primary").Last.ClickAsync(new() { NoWaitAfter = true, Timeout = 2000 }).ContinueWith(_ => { });
+        await Expect(Row(page, name)).ToBeVisibleAsync();
+        await page.WaitForTimeoutAsync(1500);
+
+        await Expect(page.Locator(".ant-notification-notice").Filter(new() { HasTextRegex = new System.Text.RegularExpressions.Regex("已存在|重複") })).ToHaveCountAsync(0);
+        await using var db = App.CreateDbContext();
+        Assert.Equal(1, await db.Category.CountAsync(x => x.Name == name));
     }
 
     [E2EFact]

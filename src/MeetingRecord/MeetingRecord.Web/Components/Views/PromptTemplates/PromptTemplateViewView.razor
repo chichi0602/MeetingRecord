@@ -163,14 +163,16 @@ else
                         </FormItem>
 
                         <FormItem Label="分類">
-                            <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                    Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
-                                    Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
-                                @foreach (var c in availableCategories)
-                                {
-                                    <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
-                                }
-                            </Select>
+                            <div @onkeydown:stopPropagation="true">
+                                <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
+                                        Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                        Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
+                                    @foreach (var c in availableCategories)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
+                                    }
+                                </Select>
+                            </div>
                         </FormItem>
 
                         <FormItem Label="描述" Class="form-modal-full">

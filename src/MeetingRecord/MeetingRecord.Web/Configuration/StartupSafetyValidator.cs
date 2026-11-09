@@ -51,6 +51,15 @@ public static class StartupSafetyValidator
             errors.Add("CacheSettings:RedisConnection 在 Production 使用 Redis provider 時不可留空。");
         }
 
+        // 端對端測試的假 AI（1.0.61）只在 E2E 環境註冊；Production 指到它代表設定檔抄錯了。
+        foreach (var key in new[] { "DefaultProvider", "TranscriptionProvider" })
+        {
+            if (string.Equals(configuration[$"{LlmSettings.SectionName}:{key}"]?.Trim(), "Fake", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add($"{LlmSettings.SectionName}:{key} 不可在 Production 指定端對端測試用的假供應商 Fake。");
+            }
+        }
+
         // LLM 設定：未指定 DefaultProvider 代表未啟用 LLM 功能，整段跳過，
         // 避免不使用 LLM 的部署因此無法上線。
         var llmDefaultProvider = configuration[$"{LlmSettings.SectionName}:DefaultProvider"];

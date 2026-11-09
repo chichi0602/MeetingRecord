@@ -165,8 +165,9 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 │   ├── operations/                 ← 啟動停止、維護、部署、設定檔、CI/CD
 │   ├── prd/                        ← 產品需求文件（PRD 主控台與各能力 PRD）
 │   ├── superpowers/                ← brainstorming 設計規格
+│   ├── testing/                    ← 測試報告（Run-E2E.ps1 產生）
 │   └── changelog/                  ← 變更紀錄
-├── scripts/                        ← Test-DocsEncoding.ps1、Backfill-AiUsageCost.mjs、樣板遺留腳本
+├── scripts/                        ← Run-E2E.ps1／New-TestReport.ps1（端對端測試與報告）、Test-DocsEncoding.ps1、Backfill-AiUsageCost.mjs、樣板遺留腳本
 └── src/MeetingRecord/
     ├── MeetingRecord.slnx              ← 方案檔（新版 .slnx 格式）
     ├── MeetingRecord.Web/              ← Blazor Server 宿主
@@ -334,6 +335,10 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ### 設計規格（superpowers）
 
 - [docs/superpowers/](docs/superpowers/README.md) — 以 brainstorming 流程產出的設計規格（會議記錄流程 Wireframe；樣板時期的分類/團隊頁面與紀錄權控規格已封存）。
+
+### 測試報告（testing）
+
+- [docs/testing/](docs/testing/README.md) — 端對端（Playwright）與各層測試報告；執行方式見 [測試指南](docs/guides/測試指南.md) §3.1。
 
 ### 變更紀錄（changelog）
 

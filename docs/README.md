@@ -1,8 +1,8 @@
 ﻿# 文件目錄索引
 
-- 文件版本：6.35
+- 文件版本：6.36
 - 文件狀態：維護中
-- 現行系統版本：1.0.56
+- 現行系統版本：1.0.61
 - 首次實作版本：0.2.8
 - 最後核對日期：2026/11/09
 
@@ -22,6 +22,7 @@
 | [`operations/`](operations/) | 部署、維運、設定檔、上線檢查、CI/CD | 啟動與停止、維護規範、部署安全清單、日誌與設定檔、CI-CD |
 | [`prd/`](prd/) | 產品需求文件（功能 PRD）| PRD 主控台、各能力 PRD |
 | [`superpowers/`](superpowers/) | brainstorming 設計流程產出的規格 | 會議記錄流程 Wireframe |
+| [`testing/`](testing/) | 測試報告（由腳本產生的執行結果） | WASM 遷移 M0 基準測試報告 |
 | [`changelog/`](changelog/) | 改版與變更紀錄 | 每次版本異動一篇 |
 
 > 每個子目錄都有自己的 `README.md` 作為該目錄索引；點上方分類連結即可進入並看到該目錄清單。
@@ -114,6 +115,9 @@
 - [會議記錄流程 Wireframe 設計規格](superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)
 - [分類清單 / 團隊清單管理頁面（階段一）](superpowers/specs/2026-06-22-category-team-pages-design.md)（已封存：樣板時期）
 - [紀錄分類/團隊標籤與團隊權控（階段二）](superpowers/specs/2026-06-22-record-tags-team-access-design.md)（已封存：樣板時期）
+
+### testing — 測試報告
+- [測試報告索引](testing/README.md)：`scripts/Run-E2E.ps1` 產生的端對端與各層測試報告（1.0.61 起）
 
 ### changelog — 變更紀錄
 - [Login 頁面改版紀錄](changelog/login-redesign.md)

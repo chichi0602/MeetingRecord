@@ -24,6 +24,20 @@ public sealed class StartupSafetyValidatorTests
         StartupSafetyValidator.Validate(configuration, "Development");
     }
 
+    [Theory]
+    [InlineData("DefaultProvider")]
+    [InlineData("TranscriptionProvider")]
+    public void Validate_Production_WithE2EFakeProvider_ShouldThrow(string key)
+    {
+        // 1.0.61：端對端測試的假 AI 只在 E2E 環境註冊；Production 指到它就擋下，不讓抄錯的設定上線。
+        var settings = BaseValidProductionConfig();
+        settings[$"LlmSettings:{key}"] = "Fake";
+
+        var exception = Assert.Throws<InvalidOperationException>(() => StartupSafetyValidator.Validate(Build(settings), "Production"));
+
+        Assert.Contains($"LlmSettings:{key} 不可在 Production 指定端對端測試用的假供應商 Fake", exception.Message);
+    }
+
     [Fact]
     public void Validate_Production_WithoutLlmSection_ShouldNotThrow()
     {

@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    端對端測試（1.0.61，WASM 遷移前置工作 M0）。以獨立行程啟動 MeetingRecord.Web，用 Playwright 驅動本機 Edge。
+    沒有設定環境變數 MEETINGRECORD_E2E=1 時全部 Skip，所以 CI 的 dotnet test 只會編譯、不會執行。
+    本機執行請用 scripts/Run-E2E.ps1（會先 publish Web、再跑測試並產生報告）。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.64.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <!-- 只參考做種子資料需要的專案；刻意不參考 Web：測試對象是一個跑起來的網站，之後同一套也要對 WASM 版跑。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\MeetingRecord.AccessDatas\MeetingRecord.AccessDatas.csproj" />
+    <ProjectReference Include="..\MeetingRecord.Business\MeetingRecord.Business.csproj" />
+    <ProjectReference Include="..\MeetingRecord.Models\MeetingRecord.Models.csproj" />
+    <ProjectReference Include="..\MeetingRecord.Share\MeetingRecord.Share.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Playwright" />
+    <Using Include="Microsoft.Playwright.Assertions" Static="true" />
+  </ItemGroup>
+
+</Project>

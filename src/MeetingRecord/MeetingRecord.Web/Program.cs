@@ -335,6 +335,11 @@ namespace MeetingRecord.Web
                 builder.Services.AddApplicationServices();
                 builder.Services.AddTranscriptionServices();
                 builder.Services.AddTextGenerationServices();
+                // 端對端測試（1.0.61）：只有 E2E 環境才換上假 AI，絕不打到付費 API。
+                if (builder.Environment.IsEnvironment(MeetingRecord.Web.Testing.E2EFakeAi.EnvironmentName))
+                {
+                    MeetingRecord.Web.Testing.E2EFakeAi.AddE2EFakeAi(builder.Services);
+                }
                 builder.Services.AddExchangeRateServices();
                 #endregion
 

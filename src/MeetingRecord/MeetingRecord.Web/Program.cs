@@ -88,6 +88,8 @@ namespace MeetingRecord.Web
                 #region 系統使用服務
                 // Add services to the container.
                 builder.Services.AddRazorComponents()
+                // 1.1.1（WASM 遷移 M1）：逐頁切換，WasmRoutes 裡的頁面改在瀏覽器執行。
+                .AddInteractiveWebAssemblyComponents()
                 .AddInteractiveServerComponents()
                 .AddHubOptions(hubOptions =>
                 {
@@ -641,7 +643,9 @@ namespace MeetingRecord.Web
                     Predicate = check => check.Tags.Contains("ready")
                 });
                 app.MapRazorComponents<App>()
-                    .AddInteractiveServerRenderMode();
+                    .AddInteractiveServerRenderMode()
+                    .AddInteractiveWebAssemblyRenderMode()
+                    .AddAdditionalAssemblies(typeof(MeetingRecord.Web.Client._Imports).Assembly);
                 #endregion
 
                 logger.LogInformation("Application startup completed. Listening for requests.");

@@ -6,5 +6,6 @@
   <Project Path="MeetingRecord.Models/MeetingRecord.Models.csproj" Id="e433e6ff-816c-4b7a-b3b2-e0adf521f243" />
   <Project Path="MeetingRecord.Share/MeetingRecord.Share.csproj" Id="910209cd-aa86-4120-82a5-755e5d61c837" />
   <Project Path="MeetingRecord.Tests/MeetingRecord.Tests.csproj" />
+  <Project Path="MeetingRecord.Web.Client/MeetingRecord.Web.Client.csproj" />
   <Project Path="MeetingRecord.Web/MeetingRecord.Web.csproj" />
 </Solution>

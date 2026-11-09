@@ -13,6 +13,7 @@
     <PackageReference Include="BlazorMaterialIcons" Version="0.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
       <PrivateAssets>all</PrivateAssets>
@@ -25,6 +26,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MeetingRecord.Business\MeetingRecord.Business.csproj" />
+    <!-- 1.1.1（WASM 遷移 M1）：宿主送出 WASM 前端的靜態檔，並把它的頁面加進路由。 -->
+    <ProjectReference Include="..\MeetingRecord.Web.Client\MeetingRecord.Web.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

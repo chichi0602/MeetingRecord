@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1 進行中）
-- 現行系統版本：1.1.0
+- 現行系統版本：1.1.1
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/09
 
@@ -426,7 +426,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 步驟 | 版本 | 狀態 |
 |------|------|------|
 | 伺服器端驗證基礎：policy scheme（Bearer→JWT，否則 Cookie）、Cookie 路徑 CSRF 標頭、統一讀使用者 Id、`/api` 回 401／403 JSON、`UserSessionService`、Session 與選單 API | 1.1.0 | ✅ 完成 |
-| 新增 `MeetingRecord.Web.Client`、WASM 空殼頁 `/wasm`、`ApiClient` 基底、自訂 `AuthenticationStateProvider` | 1.1.1 | 待做 |
+| 新增 `MeetingRecord.Web.Client`、WASM 空殼頁 `/wasm`、`ApiClient` 基底、自訂 `AuthenticationStateProvider`、逐頁切換（`WasmRoutes`） | 1.1.1 | ✅ 完成；Brotli 後 `_framework` 約 4.3 MB（全部 `.br` 合計，含三個語系檔，實際只下載其中一個），修剪警告 0；前端錯誤回報 API 延後（需依帳號限流） |
 | SignalR Hub 骨架（通知鈴未讀數） | 1.1.2 | 待做 |
 | 本機部署驗證、重估端點數、M1 報告 | 1.1.3 | 待做 |
 

@@ -1,0 +1,14 @@
+@page "/wasm"
+
+@* WASM 遷移 M1 的空殼頁（1.1.1）：證明 WASM 前端能登入、拿到依權限過濾的選單、顯示目前登入者。 *@
+<PageTitle>WASM 預覽</PageTitle>
+
+<div class="wasm-home">
+    <h1>WASM 預覽</h1>
+    <p>這一頁在瀏覽器裡執行（Blazor WebAssembly）。遷移期間其他頁面仍是原本的版本，從選單點過去會整頁載入。</p>
+    <AuthorizeView>
+        <Authorized>
+            <p>目前登入：<b class="wasm-home-user">@context.User.Identity?.Name</b></p>
+        </Authorized>
+    </AuthorizeView>
+</div>

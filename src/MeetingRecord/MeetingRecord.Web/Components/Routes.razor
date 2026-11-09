@@ -25,6 +25,20 @@
 
     private void ReloadPage() => NavigationManager.Refresh(forceReload: true);
 
+    /// <summary>
+    /// 1.1.1（WASM 遷移 M1）：要去的頁面已改在瀏覽器執行（WasmRoutes），交給伺服器整頁載入；
+    /// 這個 Router 只認得 Blazor Server 頁，不攔的話會顯示找不到頁面。
+    /// </summary>
+    private Task OnNavigateAsync(NavigationContext context)
+    {
+        if (MeetingRecord.Share.Helpers.WasmRoutes.IsWasm("/" + context.Path))
+        {
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true, replace: true);
+        }
+
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
@@ -34,7 +48,7 @@
 @* 0.4.122 起兩層錯誤邊界（移植自 NET10-Blazor-Starter）：內建 ErrorBoundary 不會記錄任何東西，
    LoggingErrorBoundary 會把例外記下來（進系統例外紀錄，來源「畫面」），並把錯誤追蹤碼顯示給使用者。 *@
 <ConfigProvider>
-    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)" OnNavigateAsync="OnNavigateAsync">
         <Found Context="routeData">
             <LoggingErrorBoundary>
                 <ChildContent>

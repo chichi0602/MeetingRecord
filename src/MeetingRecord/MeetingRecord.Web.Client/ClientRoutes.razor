@@ -1,0 +1,25 @@
+@inject NavigationManager NavigationManager
+
+@* WASM 端的路由（1.1.1）。遷移期間逐頁切換：不在 WasmRoutes 的路徑還是 Blazor Server 頁，整頁載入交給伺服器。 *@
+<ConfigProvider>
+    <Router AppAssembly="typeof(ClientRoutes).Assembly" OnNavigateAsync="OnNavigateAsync">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(WasmLayout)" />
+        </Found>
+    </Router>
+
+    <AntContainer />
+</ConfigProvider>
+
+@code {
+    private Task OnNavigateAsync(NavigationContext context)
+    {
+        // context.Path 是不含查詢字串的相對路徑；整頁載入時用 NavigationManager.Uri（已是目標網址）保留查詢字串。
+        if (!WasmRoutes.IsWasm("/" + context.Path))
+        {
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true, replace: true);
+        }
+
+        return Task.CompletedTask;
+    }
+}

@@ -1,0 +1,117 @@
+@inherits LayoutComponentBase
+@inject SessionService SessionService
+@inject NavigationManager NavigationManager
+
+@* WASM 端的版面（1.1.1，M1 空殼）：開頁先問 Session API，依結果導向（登入、登出原因、改密碼），
+   通過才畫選單。選單由伺服器依權限過濾好，這裡照著畫。完整外觀等 M2 搬 MainLayout 時再處理。 *@
+@if (session is null)
+{
+    <div class="wasm-loading">
+        @if (errorMessage is null)
+        {
+            <Spin Tip="載入中…" />
+        }
+        else
+        {
+            <div class="app-error-banner" role="alert">@errorMessage</div>
+        }
+    </div>
+}
+else
+{
+    <div class="wasm-page">
+        <aside class="wasm-sidebar">
+            <div class="wasm-brand">MeetingRecord</div>
+            <nav class="wasm-menu" aria-label="功能選單">
+                @foreach (var group in menu.GroupBy(x => x.Section ?? "功能選單"))
+                {
+                    <div class="wasm-menu-section">@group.Key</div>
+                    @RenderItems(group)
+                }
+            </nav>
+        </aside>
+
+        <main class="wasm-main">
+            <header class="wasm-topbar">
+                <span class="wasm-user">@session.Name</span>
+                @if (session.IsAdmin)
+                {
+                    <span class="wasm-badge">管理員</span>
+                }
+                <a class="wasm-logout" href="/Auths/Logout">登出</a>
+            </header>
+
+            <ErrorBoundary>
+                <ChildContent>@Body</ChildContent>
+                <ErrorContent>
+                    <div class="app-error-banner" role="alert">這個頁面發生未預期的錯誤，請重新整理頁面；若持續發生請聯絡系統管理員。</div>
+                </ErrorContent>
+            </ErrorBoundary>
+        </main>
+    </div>
+}
+
+@code {
+    private SessionDto? session;
+    private List<MenuItemDto> menu = [];
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await SessionService.GetAsync();
+        if (result.StatusCode == 401)
+        {
+            return; // ApiClient 已導到登入頁。
+        }
+
+        if (!result.Success || result.Data is not { } current)
+        {
+            // 刪除、停用、沒有角色：照 Blazor Server 頁的做法導到登出頁並帶原因。
+            if (result.Data?.Status is { } reason && reason != SessionStatuses.Active)
+            {
+                NavigationManager.NavigateTo($"/Auths/Logout?reason={Uri.EscapeDataString(reason)}", forceLoad: true, replace: true);
+                return;
+            }
+
+            errorMessage = $"無法取得登入狀態：{result.ErrorMessage ?? result.Message}";
+            return;
+        }
+
+        if (current.MustChangePassword)
+        {
+            NavigationManager.NavigateTo("/ChangePassword", forceLoad: true, replace: true);
+            return;
+        }
+
+        var menuResult = await SessionService.GetMenuAsync();
+        menu = menuResult.Data ?? [];
+        session = current;
+    }
+
+    private static RenderFragment RenderItems(IEnumerable<MenuItemDto> items) =>
+        @<ul>
+            @foreach (var item in items)
+            {
+                <li>
+                    @if (!string.IsNullOrWhiteSpace(item.Url))
+                    {
+                        <a href="@item.Url">
+                            <span class="material-icons-outlined" aria-hidden="true">@(item.Icon ?? "article")</span>
+                            <span>@item.Name</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="wasm-menu-group">
+                            <span class="material-icons-outlined" aria-hidden="true">@(item.Icon ?? "folder_open")</span>
+                            <span>@item.Name</span>
+                        </span>
+                    }
+                    @if (item.SubMenu.Count > 0)
+                    {
+                        @RenderItems(item.SubMenu)
+                    }
+                </li>
+            }
+        </ul>;
+}

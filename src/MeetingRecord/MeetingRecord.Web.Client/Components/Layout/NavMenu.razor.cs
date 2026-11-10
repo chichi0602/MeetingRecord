@@ -1,23 +1,27 @@
-using AntDesign;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Routing;
-using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.Sessions;
 
 namespace MeetingRecord.Web.Components.Layout;
 
+/// <summary>
+/// 側邊選單（1.1.5 起放在 WASM 專案，Blazor Server 頁與 WASM 頁共用同一份畫面）。
+/// 選單與系統名稱由外框（<c>AppShell</c>）傳入：Server 頁來自 <c>SidebarMenuService</c>，WASM 頁來自 <c>GET /api/v1/session/menu</c>，
+/// 兩邊用同一套權限過濾規則。以前這裡自己再載一次選單（與 MainLayout 重複）。
+/// </summary>
 public partial class NavMenu : ComponentBase, IDisposable
 {
     [Parameter]
     public bool IsSidebarCollapsed { get; set; }
 
-    [Inject]
-    private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
+    /// <summary>已依權限過濾好的選單。</summary>
+    [Parameter]
+    public IReadOnlyList<MenuItemDto> MenuItems { get; set; } = [];
 
-    [Inject]
-    private AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+    /// <summary>側邊欄顯示的系統名稱。以設定檔為單一來源，不寫死在標記裡。</summary>
+    [Parameter]
+    public string SystemName { get; set; } = string.Empty;
 
     [Inject]
     private ILogger<NavMenu> Logger { get; set; } = default!;
@@ -25,42 +29,28 @@ public partial class NavMenu : ComponentBase, IDisposable
     [Inject]
     private NavigationManager NavigationManager { get; set; } = default!;
 
-    [Inject]
-    private SidebarMenuService SidebarMenuService { get; set; } = default!;
-
-    [Inject]
-    private IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
-
-    /// <summary>側邊欄顯示的系統名稱。以設定檔為單一來源，不寫死在標記裡。</summary>
-    private string SystemName => SystemSettingsOptions.Value.SystemInformation.SystemName;
-
-    private IReadOnlyList<SidebarMenuItemModel> MenuItems { get; set; } = [];
+    private IReadOnlyList<MenuItemDto>? loadedMenuItems;
     private IReadOnlyList<SidebarMenuSection> Sections { get; set; } = [];
     private string? ActiveMenuPath { get; set; }
     private string[] OpenKeys { get; set; } = [];
     private string[] SelectedKeys { get; set; } = [];
     private bool previousSidebarCollapsed;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        Logger.LogDebug("Initializing navigation menu.");
-
-        var checkResult = await AuthenticationStateHelper.Check(AuthenticationStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            MenuItems = [];
-            return;
-        }
-
-        MenuItems = await SidebarMenuService.LoadAuthorizedMenuItemsAsync(AuthenticationStateHelper);
-        Sections = SidebarMenuSectionBuilder.Build(MenuItems);
-        UpdateActiveMenuPath();
-        SyncMenuStateFromRoute();
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 
     protected override void OnParametersSet()
     {
+        if (!ReferenceEquals(loadedMenuItems, MenuItems))
+        {
+            loadedMenuItems = MenuItems;
+            Sections = SidebarMenuSectionBuilder.Build(MenuItems);
+            UpdateActiveMenuPath();
+            SyncMenuStateFromRoute();
+        }
+
         if (previousSidebarCollapsed == IsSidebarCollapsed)
         {
             return;
@@ -163,7 +153,7 @@ public partial class NavMenu : ComponentBase, IDisposable
             || (ActiveMenuPath?.StartsWith($"{itemKey}-", StringComparison.Ordinal) ?? false);
     }
 
-    private static string GetMaterialIconKind(SidebarMenuItemModel item)
+    private static string GetMaterialIconKind(MenuItemDto item)
     {
         var icon = item.Icon?.Trim();
 
@@ -188,7 +178,7 @@ public partial class NavMenu : ComponentBase, IDisposable
         };
     }
 
-    private static bool TryFindActiveMenuPath(IReadOnlyList<SidebarMenuItemModel> items, string currentPath, string parentKey, out string? activePath)
+    private static bool TryFindActiveMenuPath(IReadOnlyList<MenuItemDto> items, string currentPath, string parentKey, out string? activePath)
     {
         for (var index = 0; index < items.Count; index++)
         {

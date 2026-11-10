@@ -1,3 +1,4 @@
+using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Web.Components.Layout;
 
 namespace MeetingRecord.Tests;
@@ -13,7 +14,7 @@ public sealed class SidebarMenuSectionTests
     [Fact]
     public void Build_ShouldGroupBySectionPreservingFirstAppearanceOrder()
     {
-        var items = new List<SidebarMenuItemModel>
+        var items = new List<MenuItemDto>
         {
             new() { Id = 61, Name = "會議紀錄", Section = "核心功能" },
             new() { Id = 21, Name = "專案項目", Section = "核心功能" },
@@ -35,7 +36,7 @@ public sealed class SidebarMenuSectionTests
     {
         // 選取狀態的鍵值是 root-{index}，index 必須是「在完整清單中的位置」，
         // 不是「在區塊內的位置」。分組後各自從 0 重編號會讓高亮與自動展開全部錯位。
-        var items = new List<SidebarMenuItemModel>
+        var items = new List<MenuItemDto>
         {
             new() { Id = 61, Name = "會議紀錄", Section = "核心功能" },
             new() { Id = 3, Name = "系統管理", Section = "功能選單" },
@@ -55,7 +56,7 @@ public sealed class SidebarMenuSectionTests
     [Fact]
     public void Build_ShouldPutUnlabelledItemsInDefaultSection()
     {
-        var items = new List<SidebarMenuItemModel>
+        var items = new List<MenuItemDto>
         {
             new() { Id = 1, Name = "沒標 section 的項目" },
             new() { Id = 2, Name = "空白 section", Section = "   " },
@@ -114,6 +115,34 @@ public sealed class SidebarMenuSectionTests
 
         Assert.Equal("功能選單", cloned.Section);
         Assert.Equal("使用者管理", Assert.Single(cloned.SubMenu).Name);
+    }
+
+    #endregion
+
+    #region 轉成共用的 MenuItemDto（1.1.5）
+
+    [Fact]
+    public void MenuItemMapping_ShouldKeepSectionAndChildrenRecursively()
+    {
+        // Server 頁與 WASM 頁的側邊欄畫的是同一份 MenuItemDto：漏掉 Section 會讓分區全部歸到預設區塊，漏掉子項第三層會不見。
+        var item = new SidebarMenuItemModel
+        {
+            Id = 3,
+            Name = "系統管理",
+            Icon = "admin",
+            Section = "功能選單",
+            SubMenu =
+            [
+                new() { Id = 35, Name = "帳號與權限", SubMenu = [new() { Id = 31, Name = "使用者管理", Url = "/myusers" }] },
+            ],
+        };
+
+        var dto = MenuItemMapping.ToDto(item);
+
+        Assert.Equal("功能選單", dto.Section);
+        Assert.Equal("admin", dto.Icon);
+        Assert.True(dto.HasChildren);
+        Assert.Equal("/myusers", dto.SubMenu[0].SubMenu[0].Url);
     }
 
     #endregion

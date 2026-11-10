@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- 1.1.5：找不到元件（少了 @using）時 Razor 只發 RZ10012 警告，元件標籤會被當成普通 HTML 原樣輸出、畫面整塊不見；升級成錯誤。 -->
+    <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
     <UserSecretsId>83f6d54f-9f34-4cd9-a626-d4c05c996e5d</UserSecretsId>
   </PropertyGroup>
 

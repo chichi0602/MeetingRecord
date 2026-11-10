@@ -8,10 +8,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
     <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <!-- 1.1.5：找不到元件（少了 @using）時 Razor 只發 RZ10012 警告，元件標籤會被當成普通 HTML 原樣輸出、畫面整塊不見；升級成錯誤。 -->
+    <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="AntDesign" Version="1.6.0" />
+    <PackageReference Include="BlazorMaterialIcons" Version="0.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.14" />

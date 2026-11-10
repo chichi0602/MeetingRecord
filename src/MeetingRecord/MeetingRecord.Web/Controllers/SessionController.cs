@@ -90,7 +90,7 @@ public sealed class SessionController : ControllerBase
         var items = await sidebarMenuService.LoadAuthorizedMenuItemsAsync(
             name => AuthenticationStateHelper.CanAccessPage(keys, user.IsAdmin, name),
             user.IsAdmin);
-        return Ok(ApiResult<List<MenuItemDto>>.SuccessResult(items.Select(ToDto).ToList()));
+        return Ok(ApiResult<List<MenuItemDto>>.SuccessResult(MenuItemMapping.ToDtos(items)));
     }
 
     private ObjectResult Blocked(string reason)
@@ -99,14 +99,4 @@ public sealed class SessionController : ControllerBase
         result.Data = new SessionDto { Status = reason };
         return StatusCode(StatusCodes.Status403Forbidden, result);
     }
-
-    private static MenuItemDto ToDto(SidebarMenuItemModel item) => new()
-    {
-        Id = item.Id,
-        Name = item.Name,
-        Icon = item.Icon,
-        Url = item.Url,
-        Section = item.Section,
-        SubMenu = item.SubMenu.Select(ToDto).ToList(),
-    };
 }

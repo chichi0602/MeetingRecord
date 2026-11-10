@@ -17,4 +17,7 @@ public class MenuItemDto
     public string? Section { get; set; }
 
     public List<MenuItemDto> SubMenu { get; set; } = [];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasChildren => SubMenu.Count > 0;
 }

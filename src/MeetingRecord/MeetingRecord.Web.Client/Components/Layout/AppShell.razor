@@ -1,0 +1,148 @@
+@* 全站共用的外框（1.1.5，WASM 遷移）：側邊欄、頂端列、使用者選單、變更密碼與關於。
+   Blazor Server 的 MainLayout 與 WASM 的 WasmLayout 都用它，外觀只有一份。資料與動作由外面傳入——
+   Server 端來自伺服器服務、WASM 端來自 API；通知鈴與進度面板用插槽放進來。 *@
+
+@* ⚠️ 擋掉「拖到頁面空白處」的預設行為：瀏覽器會直接導航去開那個檔案，
+   Blazor 的 circuit 跟著死，填到一半的表單整份不見。有了拖放區之後這會變成常見誤操作。
+   只設 preventDefault、不接 handler：接了的話 dragover 每幾十毫秒就往返伺服器一次。
+   拖放區本身不受影響——它的 input 是 drop 的實際目標，這裡攔的是沒命中任何 input 的那些。 *@
+<div class="page @(isSidebarCollapsed ? "sidebar-collapsed" : string.Empty)"
+     @ondragover:preventDefault="true"
+     @ondrop:preventDefault="true">
+    <div class="sidebar">
+        <NavMenu IsSidebarCollapsed="isSidebarCollapsed" MenuItems="MenuItems" SystemName="@SystemName" />
+    </div>
+
+    @* 收合鈕放在 .sidebar 外面而不是裡面：.sidebar 有 overflow: hidden，
+       擺在內部就沒辦法讓按鈕跨出邊界。定位靠 .page 上的 --sidebar-width。 *@
+    <button type="button"
+            class="sidebar-toggle-edge"
+            @onclick="ToggleSidebar"
+            aria-label="切換側邊欄"
+            aria-expanded="@(!isSidebarCollapsed)"
+            title="@(isSidebarCollapsed ? "展開側邊欄" : "收起側邊欄")">
+        <MaterialIcon Theme="@MaterialIcon.Themes.Outlined"
+                      Kind="@(isSidebarCollapsed ? "chevron_right" : "chevron_left")" />
+    </button>
+
+    <main>
+        <div class="top-row px-4">
+            <div class="top-row-title">@CurrentPageTitle</div>
+            <div class="top-row-status">
+                @* 1.0.44：站內通知。待辦的期限、負責人、狀態被改時，專案成員會收到。 *@
+                @NotificationContent
+                <div class="user-menu @(isUserMenuOpen ? "user-menu-open" : string.Empty)">
+                    <button type="button"
+                            class="user-menu-trigger"
+                            aria-label="使用者操作"
+                            aria-expanded="@isUserMenuOpen"
+                            aria-haspopup="menu"
+                            @onclick="ToggleUserMenu">
+                        <span class="user-menu-icon" aria-hidden="true">
+                            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="account_circle" />
+                        </span>
+                        <span class="user-menu-text">
+                            <span class="user-menu-name">@UserDisplayName</span>
+                            @if (IsAdmin)
+                            {
+                                <span class="user-menu-badge">管理員</span>
+                            }
+                        </span>
+                        <span class="user-menu-caret" aria-hidden="true">
+                            <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="expand_more" />
+                        </span>
+                    </button>
+
+                    <div class="user-menu-dropdown @(isUserMenuOpen ? "user-menu-dropdown-open" : string.Empty)"
+                         role="menu"
+                         aria-label="使用者操作">
+                        @if (ChangePasswordAsync is not null)
+                        {
+                            <button type="button" class="user-menu-item" role="menuitem" @onclick="OnChangePasswordClick">變更密碼</button>
+                        }
+                        @if (LoadAboutAsync is not null)
+                        {
+                            <button type="button" class="user-menu-item" role="menuitem" @onclick="OnAboutClick">關於</button>
+                        }
+                        <a class="user-menu-item" href="/Auths/Logout" role="menuitem">登出</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <article class="content px-4">
+            @ChildContent
+        </article>
+    </main>
+</div>
+
+<Modal Title="變更密碼"
+       Class="form-modal-compact"
+       @bind-Visible="@changePasswordVisible"
+       Keyboard="true"
+       OnOk="OnChangePasswordOkAsync"
+       OnCancel="OnChangePasswordCancelAsync"
+       OkText="@("確認變更")"
+       CancelText="@("取消")">
+    @if (IsSupportAccount)
+    {
+        <AntDesign.Alert Message="系統預設帳號 support 不允許變更密碼。" Type="@AntDesign.AlertType.Warning" ShowIcon="true" />
+    }
+    else
+    {
+        @* AntDesign Modal 沒有開放 keydown 掛載點（Keyboard 參數只管 Esc），
+           所以包一層原生 div 來接。密碼欄不會觸發輸入法，是最安全的 Enter 送出情境。 *@
+        <div @onkeydown="OnChangePasswordKeyDownAsync">
+            <AntDesign.Form TModel="ChangePasswordForm" Model="@changePasswordForm" Layout="FormLayout.Vertical">
+                <FormItem Label="目前密碼" Required>
+                    <InputPassword @bind-Value="changePasswordForm.CurrentPassword" Placeholder="請輸入目前密碼" />
+                </FormItem>
+                <FormItem Label="新密碼" Required>
+                    <InputPassword @bind-Value="changePasswordForm.NewPassword" Placeholder="請輸入新密碼（至少 6 個字元）" />
+                </FormItem>
+                <FormItem Label="確認新密碼" Required>
+                    <InputPassword @bind-Value="changePasswordForm.ConfirmPassword" Placeholder="請再次輸入新密碼" />
+                </FormItem>
+                @if (!string.IsNullOrEmpty(changePasswordErrorMessage))
+                {
+                    <AntDesign.Alert Message="@changePasswordErrorMessage" Type="@AntDesign.AlertType.Error" ShowIcon="true" />
+                }
+            </AntDesign.Form>
+        </div>
+    }
+</Modal>
+
+<Modal Title="關於"
+       Class="form-modal-compact"
+       @bind-Visible="@aboutVisible"
+       Keyboard="true"
+       Footer="null"
+       OnCancel="OnAboutCancel">
+    <dl class="about-list">
+        @foreach (var item in aboutItems)
+        {
+            <div class="about-row">
+                <dt class="about-term">@item.Key</dt>
+                <dd class="about-value">@item.Value</dd>
+            </div>
+        }
+    </dl>
+</Modal>
+
+@* 全站**唯一**的 FormModalHelper 掛載點。所有頁面的外框都是這個元件（Server 頁經 MainLayout、
+   WASM 頁經 WasmLayout），所以每一個對話框的外框樣式都從這裡來。
+
+   ⚠️ 不要在頁面裡再掛一個。0.4.69 之前這裡沒有 render 它，各頁面就自己補了 8 個，
+   結果同一段 <style> 在 DOM 裡出現 9 次；0.4.82 把那 8 個移除、只留這一個。 *@
+<FormModalHelper />
+
+@* 常駐於所有頁面的浮層：Server 頁放上傳、轉錄與會議紀錄生成的進度面板（離開來源頁面也要看得到）。
+   ⚠️ 0.4.84 曾把進度面板與 blazor-error-ui 誤刪，到 1.0.25 才補回；LayoutMountTests 釘住 MainLayout 有傳進來、這裡有放插槽。
+   WASM 頁的進度面板等 M3 再接。 *@
+@OverlayContent
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">關閉</span>
+</div>

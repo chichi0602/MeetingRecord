@@ -12,8 +12,7 @@ public sealed partial class FontUsageTests
     public void Stylesheets_ShouldOnlyUseFontVariables()
     {
         var web = FindWebProject();
-        var stylesheets = Directory
-            .EnumerateFiles(Path.Combine(web, "Components"), "*.css", SearchOption.AllDirectories)
+        var stylesheets = ComponentSourceRoots.EnumerateFiles("*.css")
             .Append(Path.Combine(web, "wwwroot", "app.css"));
 
         var offenders = stylesheets

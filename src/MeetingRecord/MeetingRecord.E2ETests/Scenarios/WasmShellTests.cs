@@ -37,12 +37,16 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
         await Expect(serverLinks.First).ToBeAttachedAsync();
         var expected = await HrefsAsync(serverLinks);
 
+        // 1.1.5 起兩邊用同一份 NavMenu（共用外框 AppShell），用同一個選擇器比對。
         await page.GotoAsync("/wasm");
-        var wasmLinks = page.Locator("nav.wasm-menu a[href]");
-        await Expect(wasmLinks.First).ToBeVisibleAsync();
+        var wasmLinks = page.Locator(".sidebar a[href]:not(.navbar-brand)");
+        await Expect(wasmLinks.First).ToBeAttachedAsync();
         var actual = await HrefsAsync(wasmLinks);
 
         Assert.Equal(expected, actual);
+        // 外框與 Server 頁同一份（AppShell）：頂端列的頁面標題、使用者選單上的名字都在。
+        await Expect(page.Locator(".top-row-title")).ToBeVisibleAsync();
+        await Expect(page.Locator(".user-menu-name")).ToHaveTextAsync(user.Name.Length > 0 ? user.Name : user.Account);
         await Expect(page.Locator(".wasm-home-user")).ToHaveTextAsync(user.Name.Length > 0 ? user.Name : user.Account);
     }
 

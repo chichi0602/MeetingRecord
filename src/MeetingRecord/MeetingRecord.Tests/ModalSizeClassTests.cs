@@ -102,9 +102,7 @@ public sealed class ModalSizeClassTests
 
     private static IEnumerable<ModalTag> EnumerateModals()
     {
-        var componentsRoot = ResolveComponentsRoot();
-
-        foreach (var file in Directory.EnumerateFiles(componentsRoot, "*.razor", SearchOption.AllDirectories))
+        foreach (var file in ComponentSourceRoots.EnumerateFiles("*.razor"))
         {
             var fileName = Path.GetFileName(file);
             if (ExcludedFiles.Contains(fileName))
@@ -181,24 +179,6 @@ public sealed class ModalSizeClassTests
         var valueEnd = tag.IndexOf('"', valueStart);
 
         return valueEnd < 0 ? null : tag[valueStart..valueEnd];
-    }
-
-    private static string ResolveComponentsRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "MeetingRecord.Web", "Components");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("找不到 MeetingRecord.Web/Components。");
     }
 
     private sealed record ModalTag(string Location, string? ClassValue, bool HasWidth);

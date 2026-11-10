@@ -83,20 +83,5 @@ public sealed class RazorMarkupTests
         => text.AsSpan(0, index).Count('\n') + 1;
 
     private static IEnumerable<string> EnumerateRazorFiles()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "MeetingRecord.Web", "Components");
-            if (Directory.Exists(candidate))
-            {
-                return Directory.EnumerateFiles(candidate, "*.razor", SearchOption.AllDirectories);
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("找不到 MeetingRecord.Web/Components。");
-    }
+        => ComponentSourceRoots.EnumerateFiles("*.razor");
 }

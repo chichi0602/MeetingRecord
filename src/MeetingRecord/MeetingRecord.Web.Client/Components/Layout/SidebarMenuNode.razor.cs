@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
+using MeetingRecord.Dtos.Sessions;
 namespace MeetingRecord.Web.Components.Layout;
 
 public partial class SidebarMenuNode : ComponentBase
 {
     [Parameter, EditorRequired]
-    public SidebarMenuItemModel Item { get; set; } = default!;
+    public MenuItemDto Item { get; set; } = default!;
 
     [Parameter]
     public int Level { get; set; }

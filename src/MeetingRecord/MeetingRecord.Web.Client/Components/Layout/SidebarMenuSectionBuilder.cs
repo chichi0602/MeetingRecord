@@ -1,3 +1,5 @@
+using MeetingRecord.Dtos.Sessions;
+
 namespace MeetingRecord.Web.Components.Layout;
 
 /// <summary>側邊欄的一個區塊。</summary>
@@ -7,7 +9,7 @@ public sealed record SidebarMenuSection(string Name, IReadOnlyList<SidebarMenuEn
 /// 區塊中的一個項目。<see cref="Index"/> 是該項在<b>完整</b>選單清單中的原始索引，
 /// 不是它在區塊內的位置。
 /// </summary>
-public sealed record SidebarMenuEntry(int Index, SidebarMenuItemModel Item);
+public sealed record SidebarMenuEntry(int Index, MenuItemDto Item);
 
 /// <summary>
 /// 把頂層選單項目依 <c>Section</c> 分組。抽成純函式以便單元測試——
@@ -26,7 +28,7 @@ public static class SidebarMenuSectionBuilder
     /// 遞迴算出來的結果一致。若分組後各區塊各自從 0 重新編號，
     /// 高亮與自動展開會全部錯位。
     /// </summary>
-    public static IReadOnlyList<SidebarMenuSection> Build(IReadOnlyList<SidebarMenuItemModel> items)
+    public static IReadOnlyList<SidebarMenuSection> Build(IReadOnlyList<MenuItemDto> items)
     {
         ArgumentNullException.ThrowIfNull(items);
 

@@ -16,8 +16,7 @@ public sealed partial class HoverTipUsageTests
     [Fact]
     public void Components_ShouldNotUseAntDesignTooltip()
     {
-        var offenders = Directory
-            .EnumerateFiles(Path.Combine(FindWebProject(), "Components"), "*.razor", SearchOption.AllDirectories)
+        var offenders = ComponentSourceRoots.EnumerateFiles("*.razor")
             .Where(path => AntTooltipPattern().IsMatch(RazorCommentPattern().Replace(File.ReadAllText(path), string.Empty)))
             .Select(Path.GetFileName)
             .ToList();
@@ -32,8 +31,7 @@ public sealed partial class HoverTipUsageTests
     {
         // 可排序欄位的表頭內建「按一下依遞增排序」提示，用的也是 AntDesign Tooltip，同樣會卡住（1.0.38 使用者回報）。
         // 1.6.0 只有欄位層級的開關，所以每個 Sortable 都要配一個 ShowSorterTooltip="false"。
-        var offenders = Directory
-            .EnumerateFiles(Path.Combine(FindWebProject(), "Components"), "*.razor", SearchOption.AllDirectories)
+        var offenders = ComponentSourceRoots.EnumerateFiles("*.razor")
             .Select(path => (Name: Path.GetFileName(path), Markup: RazorCommentPattern().Replace(File.ReadAllText(path), string.Empty)))
             .Where(file => BareSortablePattern().Matches(file.Markup).Count
                            != file.Markup.Split("ShowSorterTooltip=\"false\"").Length - 1)

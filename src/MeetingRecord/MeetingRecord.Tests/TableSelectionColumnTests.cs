@@ -26,9 +26,7 @@ public sealed partial class TableSelectionColumnTests
     public void SelectionColumn_ShouldNotBeToggledByData()
     {
         var offenders = new List<string>();
-        var components = Path.Combine(FindWebProject(), "Components");
-
-        foreach (var razorPath in Directory.EnumerateFiles(components, "*.razor", SearchOption.AllDirectories))
+        foreach (var razorPath in ComponentSourceRoots.EnumerateFiles("*.razor"))
         {
             var markup = RazorCommentPattern().Replace(File.ReadAllText(razorPath), string.Empty);
             foreach (Match selection in SelectionTagPattern().Matches(markup))
@@ -110,21 +108,4 @@ public sealed partial class TableSelectionColumnTests
 
     [GeneratedRegex(@"@\*.*?\*@", RegexOptions.Singleline)]
     private static partial Regex RazorCommentPattern();
-
-    private static string FindWebProject()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "MeetingRecord.Web");
-            if (File.Exists(Path.Combine(candidate, "Components", "App.razor")))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("找不到 MeetingRecord.Web 專案目錄。");
-    }
 }

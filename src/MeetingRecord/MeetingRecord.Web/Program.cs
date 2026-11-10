@@ -106,6 +106,8 @@ namespace MeetingRecord.Web
                     options.Filters.Add<ApiExceptionFilterAttribute>();
                     // 1.1.0：Cookie 驗證的寫入請求要帶防偽標頭（WASM 前端打 API 的 CSRF 防護）。
                     options.Filters.Add<CookieApiCsrfFilter>();
+                    // 1.1.4：須改密碼的帳號，除了例外端點，API 一律 403。
+                    options.Filters.Add<MustChangePasswordFilter>();
                 });
                 builder.Services.Configure<ApiBehaviorOptions>(options =>
                 {

@@ -128,6 +128,17 @@ public class MyUserServiceLogin
                 Logger.LogInformation("Password hash upgraded to PBKDF2 for UserId={UserId}.", item.Id);
             }
 
+            // 1.1.4（WASM 遷移）：仍是預設密碼就記下「須改密碼」。API 只讀這個標記擋人——判斷「是不是預設密碼」要驗一次雜湊，
+            // 放進每次 API 呼叫太慢；這裡手上有明碼，只多一次字串比較。support 帳號不能在網頁改密碼，不標記（比照 MyUserService）。
+            if (!item.MustChangePassword
+                && password == MagicObjectHelper.NeedChangePassword
+                && !string.Equals(item.Account, MagicObjectHelper.開發者帳號, StringComparison.OrdinalIgnoreCase))
+            {
+                item.MustChangePassword = true;
+                changed = true;
+                Logger.LogInformation("Marked user as must-change-password because the default password was used. UserId={UserId}", item.Id);
+            }
+
             if (item.AccessFailedCount != 0 || item.LockoutEndUtc is not null)
             {
                 item.AccessFailedCount = 0;

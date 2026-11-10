@@ -15,6 +15,43 @@ namespace MeetingRecord.Tests;
 public sealed class MyUserServiceLoginTests
 {
     [Fact]
+    public async Task LoginAsync_WithDefaultPassword_ShouldMarkMustChangePassword()
+    {
+        // 1.1.4：仍是預設密碼就記下標記，API 的 MustChangePasswordFilter 只讀這個標記。
+        await using var fixture = await LoginFixture.CreateAsync();
+        var created = await fixture.AddUserAsync("newbie", MagicObjectHelper.NeedChangePassword, legacy: false);
+
+        var (error, user) = await fixture.CreateService().LoginAsync("newbie", MagicObjectHelper.NeedChangePassword);
+
+        Assert.Equal(string.Empty, error);
+        Assert.NotNull(user);
+        Assert.True((await fixture.Context.MyUser.AsNoTracking().SingleAsync(x => x.Id == created.Id)).MustChangePassword);
+    }
+
+    [Fact]
+    public async Task LoginAsync_SupportAccount_WithDefaultPassword_ShouldNotBeMarked()
+    {
+        // support 不能在網頁改密碼，標了就永遠被 API 擋下。
+        await using var fixture = await LoginFixture.CreateAsync();
+        var created = await fixture.AddUserAsync(MagicObjectHelper.開發者帳號, MagicObjectHelper.NeedChangePassword, legacy: false);
+
+        await fixture.CreateService().LoginAsync(MagicObjectHelper.開發者帳號, MagicObjectHelper.NeedChangePassword);
+
+        Assert.False((await fixture.Context.MyUser.AsNoTracking().SingleAsync(x => x.Id == created.Id)).MustChangePassword);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithOwnPassword_ShouldNotBeMarked()
+    {
+        await using var fixture = await LoginFixture.CreateAsync();
+        var created = await fixture.AddUserAsync("carol", "secret-password", legacy: false);
+
+        await fixture.CreateService().LoginAsync("carol", "secret-password");
+
+        Assert.False((await fixture.Context.MyUser.AsNoTracking().SingleAsync(x => x.Id == created.Id)).MustChangePassword);
+    }
+
+    [Fact]
     public async Task LoginAsync_WithNewFormatHash_AndCorrectPassword_ShouldSucceed()
     {
         await using var fixture = await LoginFixture.CreateAsync();

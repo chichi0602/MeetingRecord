@@ -6,6 +6,7 @@ using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Components.Layout;
+using MeetingRecord.Web.Filters;
 
 namespace MeetingRecord.Web.Controllers;
 
@@ -20,6 +21,7 @@ namespace MeetingRecord.Web.Controllers;
 [Route("api/v1/session")]
 [ApiController]
 [Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]
+[AllowWhenMustChangePassword] // 須改密碼的人也要能問狀態，前端才知道該導去改密碼頁（1.1.4）。
 public sealed class SessionController : ControllerBase
 {
     private readonly UserSessionService userSessionService;

@@ -1,7 +1,7 @@
 // 分塊上傳（1.0.59）：影音檔與專案附件改用 HTTP 一塊一塊送，不再經 Blazor 連線（SignalR）。
 // 原本經連線串流上傳，IIS 上 127 MB 的檔案約 11 秒就斷線，還會拖垮整條連線。
 //
-// 由 C# 的 BrowserFileUploader 呼叫：start() 只登記並啟動送檔迴圈就回來（不讓 C# 等整個檔案傳完，
+// 由 C# 呼叫（1.1.23 起是 WASM 端的 MeetingUploadManager／ProjectAttachmentUploader；以前是 Server 頁的 BrowserFileUploader）：start() 只登記並啟動送檔迴圈就回來（不讓 C# 等整個檔案傳完，
 // JS interop 預設 1 分鐘逾時）。伺服器端把收到的分塊接成一個 Stream 交給既有服務層讀，
 // 所以「傳完了沒、成功還是失敗」由服務層決定；這裡只在送不下去時回呼 OnFailed。
 //
@@ -122,7 +122,7 @@ window.meetingRecordChunkUpload = (function () {
         },
 
         // 1.1.6（WASM 遷移）：上傳進行中關分頁或重新整理時，請瀏覽器跳出「確定要離開嗎？」。
-        // 由伺服器端在第一個上傳開始時打開、最後一個結束時關掉（BrowserFileUploader）。
+        // 由第一個上傳開始時打開、最後一個結束時關掉（1.1.23 起是 WASM 端的 MeetingUploadManager）。
         setLeaveGuard: function (active) {
             if (active) {
                 window.addEventListener('beforeunload', warnBeforeUnload);

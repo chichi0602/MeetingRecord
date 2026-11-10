@@ -33,6 +33,9 @@ builder.Services.AddScoped<TodoApi>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.IAiChatSource, AiChatApi>();
 builder.Services.AddScoped<MeetingApi>();
 builder.Services.AddScoped<UploadApi>();
+builder.Services.AddScoped<ProjectApi>();
+builder.Services.AddScoped<TodoExtractionApi>();
+builder.Services.AddScoped<MeetingRecord.Web.Client.Uploads.ProjectAttachmentUploader>();
 
 // 1.1.23：會議影音檔上傳由整個前端共用一份（WASM 的 Scoped 就是整個分頁），換 WASM 頁不中斷。
 builder.Services.AddScoped<MeetingRecord.Web.Client.Uploads.MeetingUploadManager>();

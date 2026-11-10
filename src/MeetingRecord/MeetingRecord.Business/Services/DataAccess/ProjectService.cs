@@ -17,7 +17,8 @@ namespace MeetingRecord.Business.Services.DataAccess;
 
 public class ProjectService
 {
-    public const long MaxUploadFileSize = 1024L * 1024L * 1024L;
+    /// <summary>附件單檔上限（1.1.26 起單一來源在 Share 的 <c>ProjectRules</c>，WASM 專案頁也用）。</summary>
+    public const long MaxUploadFileSize = MeetingRecord.Share.Helpers.ProjectRules.MaxAttachmentFileSize;
 
     private readonly BackendDBContext context;
     private readonly string projectFileRootPath;

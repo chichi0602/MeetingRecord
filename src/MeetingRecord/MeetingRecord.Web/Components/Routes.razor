@@ -3,54 +3,17 @@
 @using Microsoft.AspNetCore.Components.Routing
 @implements IDisposable
 @inject NavigationManager NavigationManager
-@inject MeetingRecord.Web.Uploads.BrowserFileUploader BrowserFileUploader
-@inject ModalService ModalService
 
 @code {
     /// <summary>浮層（對話窗、通知）的錯誤邊界；換頁時復原，讓對話窗與通知重新可用。</summary>
     private LoggingErrorBoundary? overlayBoundary;
 
-    private IDisposable? locationChangingRegistration;
+    // 1.1.6～1.1.25 這裡攔「Server 頁上傳中往 WASM 頁」的導覽；1.1.26 起會議與專案頁都在 WASM，Server 頁不再上傳檔案，
+    // 改由 WASM 端的 ClientRoutes 攔「上傳中往 Server 頁」（BrowserFileUploader 一併移除）。
 
     protected override void OnInitialized()
     {
         NavigationManager.LocationChanged += OnLocationChanged;
-        locationChangingRegistration = NavigationManager.RegisterLocationChangingHandler(OnLocationChangingAsync);
-    }
-
-    /// <summary>
-    /// 1.1.6（WASM 遷移）：往 WASM 頁是整頁載入，這條連線一斷，還在上傳的影音檔或附件就中斷了。
-    /// Server 頁之間切換不會斷（同一條連線），所以只攔往 WASM 頁、而且有上傳進行中的導覽。
-    /// </summary>
-    private async ValueTask OnLocationChangingAsync(LocationChangingContext context)
-    {
-        if (BrowserFileUploader.ActiveUploadCount == 0)
-        {
-            return;
-        }
-
-        var path = "/" + NavigationManager.ToBaseRelativePath(context.TargetLocation).Split('?', '#')[0];
-        if (!MeetingRecord.Share.Helpers.WasmRoutes.IsWasm(path))
-        {
-            return;
-        }
-
-        var leave = await ModalService.ConfirmAsync(new ConfirmOptions
-        {
-            Title = "上傳還在進行",
-            Content = "影音檔或附件還在上傳，離開這頁會中斷上傳。確定要離開嗎？",
-            OkText = "離開",
-            CancelText = "留下",
-        });
-
-        if (!leave)
-        {
-            context.PreventNavigation();
-            return;
-        }
-
-        // 已確認要離開：拿掉 beforeunload，免得接著整頁載入時瀏覽器再問一次。
-        await BrowserFileUploader.ReleaseLeaveGuardAsync();
     }
 
     protected override void OnParametersSet()
@@ -82,7 +45,6 @@
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
-        locationChangingRegistration?.Dispose();
     }
 }
 

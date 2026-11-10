@@ -1,13 +1,13 @@
 using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using MeetingRecord.Web.Components.Commons;
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.TodoExtraction;
-using MeetingRecord.Models.AdapterModel;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.Todos;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Components.Commons;
 
-namespace MeetingRecord.Web.Components.Views.Projects;
+namespace MeetingRecord.Web.Client.Pages.Projects;
 
 /// <summary>
 /// 「AI 抽出待辦」的確認視窗。
@@ -20,10 +20,7 @@ namespace MeetingRecord.Web.Components.Views.Projects;
 public partial class TodoExtractionModal : ComponentBase
 {
     [Inject]
-    private TodoExtractionService ExtractionService { get; set; } = default!;
-
-    [Inject]
-    private TodoService TodoService { get; set; } = default!;
+    private TodoExtractionApi ExtractionApi { get; set; } = default!;
 
     [Inject]
     private ILogger<TodoExtractionModal> Logger { get; set; } = default!;
@@ -73,13 +70,13 @@ public partial class TodoExtractionModal : ComponentBase
 
         public DateTime? DueDate { get; set; }
 
-        public string Priority { get; set; } = TodoAdapterModel.PriorityOptions[1];
+        public string Priority { get; set; } = TodoRules.PriorityOptions[1];
 
         /// <summary>
         /// AI 判斷這條就是本專案既有的那筆待辦（1.0.44）。後來的會議又講到同一件事、期限或負責人改了，
         /// 預設更新既有那筆，不另外新增一筆。
         /// </summary>
-        public OpenTodoSummary? Matched { get; init; }
+        public OpenTodoSummaryDto? Matched { get; init; }
 
         /// <summary>有對應時：true＝更新既有（預設），false＝另外新增。</summary>
         public bool UpdateExisting { get; set; }
@@ -90,7 +87,7 @@ public partial class TodoExtractionModal : ComponentBase
         /// AI 判斷這條是某筆既有待辦的一部分（1.0.45）。例如換提示詞重新產生會議紀錄後再抽一次，
         /// 新的提示詞把「完成報表」拆成「整理資料／畫統計圖」——預設掛成它的子項目，清單才不會散成好幾筆。
         /// </summary>
-        public OpenTodoSummary? Parent { get; init; }
+        public OpenTodoSummaryDto? Parent { get; init; }
 
         /// <summary>有主待辦時：true＝加為子項目（預設），false＝另外新增成獨立待辦。</summary>
         public bool AsSubtask { get; set; }
@@ -137,7 +134,7 @@ public partial class TodoExtractionModal : ComponentBase
     /// <summary>少了這道旗標，連按兩次取消會疊出兩個確認視窗。</summary>
     private bool isDiscardConfirming;
 
-    private static IReadOnlyList<string> PriorityOptions => TodoAdapterModel.PriorityOptions;
+    private static IReadOnlyList<string> PriorityOptions => TodoRules.PriorityOptions;
 
     private bool isExtracting;
     private bool isSaving;
@@ -194,15 +191,19 @@ public partial class TodoExtractionModal : ComponentBase
 
         try
         {
-            var existingTitles = await ExtractionService.GetExistingTitlesAsync(MeetingId);
+            // 伺服器一次做完：先前已加入過的標題、本專案未完成的待辦（同一份送給 AI 比對，1.0.44）、抽取結果。
+            var result = await ExtractionApi.ExtractAsync(MeetingId);
+            if (!result.Success || result.Data is not { } data)
+            {
+                Logger.LogWarning("Failed to extract todos. MeetingId={MeetingId}, Message={Message}", MeetingId, ApiClient.ErrorText(result));
+                errorMessage = ApiClient.ErrorText(result);
+                return;
+            }
 
-            // 1.0.44：先查好本專案未完成的待辦，同一份送給 AI 比對、也用在畫面的「對應既有」。
-            var openTodos = await ExtractionService.GetOpenTodosAsync(MeetingId);
-            var openById = openTodos.ToDictionary(x => x.Id);
+            var existingTitles = data.ExistingTitles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var openById = data.OpenTodos.ToDictionary(x => x.Id);
 
-            var extracted = await ExtractionService.ExtractAsync(MeetingId, openTodos: openTodos);
-
-            foreach (var item in extracted)
+            foreach (var item in data.Items)
             {
                 var matched = item.MatchedTodoId is { } id && openById.TryGetValue(id, out var summary) ? summary : null;
                 var parent = item.ParentTodoId is { } pid && openById.TryGetValue(pid, out var parentSummary) ? parentSummary : null;
@@ -238,20 +239,6 @@ public partial class TodoExtractionModal : ComponentBase
                     ? $"這場會議先前已加入 {existingTitles.Count} 條待辦，其中 {duplicateCount} 條與這次抽出的重複，已標示「已加入過」並預設不勾選。"
                     : $"這場會議先前已加入 {existingTitles.Count} 條待辦，這次抽出的內容沒有重複。";
             }
-        }
-        catch (Exception ex)
-        {
-            // 已達用量上限是預期中的狀況，記 Warning、不進系統例外紀錄（1.0.29）。
-            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
-            {
-                Logger.LogWarning("Todo extraction blocked by AI quota. MeetingId={MeetingId}", MeetingId);
-            }
-            else
-            {
-                Logger.LogError(ex, "Failed to extract todos. MeetingId={MeetingId}", MeetingId);
-            }
-
-            errorMessage = ex.Message;
         }
         finally
         {
@@ -308,12 +295,12 @@ public partial class TodoExtractionModal : ComponentBase
                 // 1.0.44：更新既有——只改期限與負責人，異動紀錄記下來源會議並通知專案成員。
                 if (candidate.IsUpdating)
                 {
-                    var update = await TodoService.ApplyExtractedUpdateAsync(
-                        candidate.Matched!.Id,
-                        candidate.DueDate,
-                        string.IsNullOrWhiteSpace(candidate.Owner) ? null : candidate.Owner.Trim(),
-                        MeetingId,
-                        MeetingTitle);
+                    var update = await ExtractionApi.ApplyUpdateAsync(candidate.Matched!.Id, new ExtractedTodoUpdateRequestDto
+                    {
+                        MeetingId = MeetingId,
+                        DueDate = candidate.DueDate,
+                        Owner = string.IsNullOrWhiteSpace(candidate.Owner) ? null : candidate.Owner.Trim(),
+                    });
 
                     if (update.Success)
                     {
@@ -322,7 +309,7 @@ public partial class TodoExtractionModal : ComponentBase
                     }
                     else
                     {
-                        failures.Add($"「{candidate.Matched.Title}」：{update.Message}");
+                        failures.Add($"「{candidate.Matched.Title}」：{ApiClient.ErrorText(update)}");
                     }
 
                     continue;
@@ -334,30 +321,21 @@ public partial class TodoExtractionModal : ComponentBase
                     continue;
                 }
 
-                var model = TodoExtractionService.ToAdapterModel(
-                    new ExtractedTodo(
-                        candidate.Title.Trim(),
-                        candidate.Description,
-                        string.IsNullOrWhiteSpace(candidate.Owner) ? null : candidate.Owner.Trim(),
-                        candidate.DueDate,
-                        candidate.Priority),
-                    ProjectId,
-                    MeetingId);
+                var title = candidate.Title.Trim();
 
                 // 1.0.45：加為子項目——掛到 AI 判斷的那筆主待辦底下（服務層會再檢查只分一層、同專案）。
-                if (candidate.IsAddingSubtask)
+                // 稽核來源（via=AiExtract）由伺服器記。
+                var result = await ExtractionApi.AddAsync(new ExtractedTodoAddRequestDto
                 {
-                    model.ParentTodoId = candidate.Parent!.Id;
-                }
-
-                var check = await TodoService.BeforeAddCheckAsync(model);
-                if (!check.Success)
-                {
-                    failures.Add($"「{model.Title}」：{check.Message}");
-                    continue;
-                }
-
-                var result = await TodoService.AddAsync(model, AuditVia.AiExtract);
+                    ProjectId = ProjectId,
+                    MeetingId = MeetingId,
+                    Title = title,
+                    Description = candidate.Description,
+                    Owner = string.IsNullOrWhiteSpace(candidate.Owner) ? null : candidate.Owner.Trim(),
+                    DueDate = candidate.DueDate,
+                    Priority = candidate.Priority,
+                    ParentTodoId = candidate.IsAddingSubtask ? candidate.Parent!.Id : null,
+                });
                 if (result.Success)
                 {
                     added++;
@@ -367,7 +345,7 @@ public partial class TodoExtractionModal : ComponentBase
                 }
                 else
                 {
-                    failures.Add($"「{model.Title}」：{result.Message}");
+                    failures.Add($"「{title}」：{ApiClient.ErrorText(result)}");
                 }
             }
 

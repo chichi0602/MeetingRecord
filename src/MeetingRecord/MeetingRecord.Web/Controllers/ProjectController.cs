@@ -34,7 +34,8 @@ public class ProjectController(
     ILogger<ProjectController> logger,
     ProjectService projectService,
     ProjectAccessService projectAccessService,
-    ProjectAttachmentUploads attachmentUploads) : ControllerBase
+    ProjectAttachmentUploads attachmentUploads,
+    CategoryService categoryService) : ControllerBase
 {
     private const string NotFoundMessage = "找不到 ID 為 {0} 的專案";
 
@@ -233,6 +234,18 @@ public class ProjectController(
 
         return Ok(ApiResult.SuccessResult("已記錄。"));
     }
+
+    /// <summary>啟用中的分類名稱（篩選與表單用，1.1.26）；不借用分類頁或會議頁的權限。</summary>
+    [HttpGet("categories/enabled")]
+    [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<List<string>>>> EnabledCategories()
+        => Ok(ApiResult<List<string>>.SuccessResult(await categoryService.GetAllEnabledNamesAsync()));
+
+    /// <summary>專案選擇器的團隊篩選選項（全部啟用中的團隊，1.1.26，同 Server 頁）；只要檢視權限。</summary>
+    [HttpGet("teams/filter")]
+    [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<List<TeamOptionDto>>>> FilterTeams()
+        => Ok(ApiResult<List<TeamOptionDto>>.SuccessResult(ToOptions(await projectService.GetSelectableCollaboratorTeamsAsync())));
 
     /// <summary>主責團隊選項：管理者看全部啟用中的團隊，一般使用者只看自己所屬的。</summary>
     [HttpGet("teams/primary")]

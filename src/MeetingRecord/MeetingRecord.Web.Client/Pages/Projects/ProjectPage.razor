@@ -1,6 +1,12 @@
-@using MeetingRecord.Share.Helpers
-@using MeetingRecord.Business.Services.DataAccess
+@page "/projects"
+@using MeetingRecord.Dtos.Models
+@using MeetingRecord.Dtos.Projects
 @using MeetingRecord.Share.Enums
+
+@* 專案項目（1.1.26 搬到 WASM，原 Server 的 ProjectViewView）：畫面、文字、按鈕、確認框全部照舊；
+   資料走 ProjectApi／TodoExtractionApi，附件走 ProjectAttachmentUploader，生成進度來自 api/v1/jobs＋推播。 *@
+<PageTitle>專案項目</PageTitle>
+
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -14,18 +20,18 @@ else
         <div class="project-view-picker">
           <div class="project-view-picker-left">
             <span class="project-view-field-label">專案</span>
-            <Select TItem="ProjectAdapterModel"
+            <Select TItem="ProjectSelectorItem"
                     TItemValue="int"
                     Value="@selectedProjectId"
                     ValueChanged="OnProjectSelectedAsync"
-                    DataSource="@FilteredProjects"
-                    LabelName="@nameof(ProjectAdapterModel.SelectorLabel)"
-                    ValueName="@nameof(ProjectAdapterModel.Id)"
+                    DataSource="@selectorItems"
+                    LabelName="@nameof(ProjectSelectorItem.SelectorLabel)"
+                    ValueName="@nameof(ProjectSelectorItem.Id)"
                     Placeholder="請選擇專案"
                     EnableSearch
                     Class="project-view-project-select" />
 
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Create))
+            @if (CanCreate)
             {
                 <HoverTip Title="新增專案">
                     <Button Type="ButtonType.Default"
@@ -34,7 +40,7 @@ else
                     </Button>
                 </HoverTip>
             }
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+            @if (CanEdit)
             {
                 <HoverTip Title="編輯專案">
                     <Button Type="ButtonType.Default"
@@ -45,7 +51,7 @@ else
                 </HoverTip>
             }
             @* 1.0.52：刪除專案只限負責人；負責人是一般使用者（沒有刪除權限）也能刪，所以這裡看「編輯」，按鈕本身再看是不是負責人。 *@
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+            @if (CanEdit)
             {
                 <HoverTip Title="刪除專案">
                     <Button Type="ButtonType.Default" Class="project-view-icon-button-danger"
@@ -129,7 +135,7 @@ else
                 <div class="project-view-archived">
                     <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="inventory_2" />
                     <span>這個專案已完成（封存）@(IsReadOnlyProject ? "，目前是唯讀：可以檢視、下載 PDF、AI 問答，不能產生會議紀錄、抽出待辦或移除會議。" : "。你是管理者，仍可修改。")</span>
-                    @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit))
+                    @if (CanEdit)
                     {
                         <Button Size="ButtonSize.Small" Loading="@isReopening" OnClick="OnReopenAsync">
                             <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="unarchive" /><span>重新開啟</span></span>
@@ -160,7 +166,7 @@ else
                 <div class="project-view-summary-item">
                     <span class="project-view-summary-key">分類</span>
                     <span class="project-view-summary-value">
-                        @(SelectedProject.Categories.Count == 0 ? "—" : string.Join("、", SelectedProject.Categories))
+                        @(SelectedProject.Categories is not { Count: > 0 } categories ? "—" : string.Join("、", categories))
                     </span>
                 </div>
                 <div class="project-view-summary-item">
@@ -199,7 +205,7 @@ else
                 </div>
             </div>
 
-            @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit) && !IsReadOnlyProject)
+            @if (CanEdit && !IsReadOnlyProject)
             {
                 @* tabindex＋@ref：會議紀錄視窗按「產生會議紀錄」時聚焦這裡，讓瀏覽器把區塊捲進畫面（1.0.48）。 *@
                 <div class="project-view-ai-panel" tabindex="-1" @ref="aiPanelElement">
@@ -211,12 +217,12 @@ else
                     <div class="project-view-ai-controls">
                         <div class="project-view-ai-field project-view-ai-field-grow">
                             <span class="project-view-field-label">選擇逐字稿</span>
-                            <Select TItem="MeetingAdapterModel"
+                            <Select TItem="ProjectTranscriptOptionDto"
                                     TItemValue="int"
                                     @bind-Value="selectedTranscriptId"
                                     DataSource="@selectableTranscripts"
-                                    LabelName="@nameof(MeetingAdapterModel.Title)"
-                                    ValueName="@nameof(MeetingAdapterModel.Id)"
+                                    LabelName="@nameof(ProjectTranscriptOptionDto.Title)"
+                                    ValueName="@nameof(ProjectTranscriptOptionDto.Id)"
                                     ItemDisabled="IsTranscriptDisabled"
                                     Placeholder="請選擇逐字稿"
                                     EnableSearch
@@ -229,7 +235,7 @@ else
                                 </ItemTemplate>
                             </Select>
                             <span class="project-view-hint">
-                                共 @selectableTranscripts.Count 份逐字稿，@selectableTranscripts.Count(x => x.IsUnassigned) 份未歸屬；已被其他專案取用的無法選取。
+                                共 @selectableTranscripts.Count 份逐字稿，@selectableTranscripts.Count(x => x.ProjectId is null) 份未歸屬；已被其他專案取用的無法選取。
                             </span>
                         </div>
 
@@ -308,7 +314,7 @@ else
                                ActionText="從專案移除所選" Icon="link_off"
                                OnAction="OnBatchDetachAsync" OnClear="@(() => selectedMeetings = [])" />
             <div class="project-view-table-wrap">
-                <Table TItem="MeetingAdapterModel"
+                <Table TItem="MeetingDto"
                        Class="project-view-table"
                        DataSource="@projectMeetings"
                        RowKey="x => x.Id"
@@ -327,17 +333,18 @@ else
                         @(context.DraftPromptTemplateName ?? "—")
                     </Column>
                     <Column TData="string" Title="狀態">
-                        <span class="project-view-status @DraftStatusCssClass(context.DraftStatus)">@context.DraftStatusText</span>
                         @{
-                            var draftProgress = GetLiveDraftProgress(context.Id);
+                            var draftStatus = (DraftStatus)context.DraftStatus;
+                            var draftProgress = GetLiveDraftProgress(IdOf(context));
                         }
+                        <span class="project-view-status @DraftStatusCssClass(draftStatus)">@DraftStatusText.Describe(draftStatus)</span>
                         @if (draftProgress is not null)
                         {
-                            <HoverTip Title="@DescribeDraftPhase(draftProgress)">
+                            <HoverTip Title="@draftProgress.PhaseText">
                                 <span class="project-view-status-percent">@draftProgress.Percent%</span>
                             </HoverTip>
                         }
-                        @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
+                        @if (draftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
                         {
                             <HoverTip Title="@context.DraftError">
                                 <span class="project-view-error-hint">
@@ -359,7 +366,7 @@ else
                                                       OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
                                 </SpaceItem>
                             }
-                            @if (context.HasDraft && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export))
+                            @if (context.HasDraft && CanExport)
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="@(exportingMeetingId == context.Id ? "匯出中…" : "匯出 PDF")" Icon="download"
@@ -370,7 +377,7 @@ else
                             @* 這顆鈕真正做的事是「新增待辦」，所以權限鍵是待辦事項而不是專案項目。
                                HasDraft 與同列的「檢視會議紀錄」一致——沒有草稿就沒有東西可抽。 *@
                             @if (context.HasDraft
-                                 && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create)
+                                 && CanCreateTodo
                                  && !IsReadOnlyProject)
                             {
                                 <SpaceItem>
@@ -401,9 +408,10 @@ else
         }
     </div>
 
+    @* 單向 Visible（1.1.19）：AntDesign 會在 OnOk 之前先送 VisibleChanged(false)，用 @bind-Visible 的話伺服器擋下時視窗已經關了。 *@
     <Modal Title="@modalTitle"
            Class="form-modal-large"
-           @bind-Visible="@modalVisible"
+           Visible="@modalVisible"
            Keyboard="true"
            ConfirmLoading="@(isSaving || isReadingFiles)"
            OnOk="OnModalOKHandleAsync"
@@ -414,7 +422,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="ProjectAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="ProjectFormModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="標題" Required>
                             <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入專案標題" />
@@ -432,7 +440,7 @@ else
                                         AllowClear EnableSearch Style="width: 100%;">
                                     @foreach (var candidate in ownerCandidates)
                                     {
-                                        <SelectOption TItemValue="int?" TItem="int?" Value="@((int?)candidate.Id)" Label="@candidate.Label" />
+                                        <SelectOption TItemValue="int?" TItem="int?" Value="@((int?)candidate.Id)" Label="@OwnerLabel(candidate)" />
                                     }
                                 </Select>
                             </div>
@@ -733,9 +741,9 @@ else
                  Scope="@aiChatScope"
                  TargetId="@aiChatTargetId"
                  Title="@aiChatTitle"
-                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export)"
-                 CanEdit="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)"
-                 CanDelete="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete)" />
+                 CanExport="@CanExport"
+                 CanEdit="@CanEdit"
+                 CanDelete="@CanDelete" />
 
     <TodoExtractionModal @bind-Visible="todoExtractVisible"
                          MeetingId="@todoExtractMeetingId"

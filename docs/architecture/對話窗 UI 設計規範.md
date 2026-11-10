@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.17
+- 文件版本：1.18
 - 文件狀態：已實作
-- 現行系統版本：1.1.23
+- 現行系統版本：1.1.26
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/10
 
@@ -97,11 +97,11 @@
 
 > ⚠️ **WASM 頁有「確定」鈕的視窗一律單向繫結 `Visible="@..."`，不要用 `@bind-Visible`**（1.1.19）：AntDesign 1.6 按「確定」時會先送出 `VisibleChanged(false)` 才呼叫 `OnOk`，雙向繫結下伺服器擋下（400／409）時視窗已經關了，處理器裡設回 true 也打不開，使用者填的內容跟著不見。開關由頁面自己決定：存檔成功、取消（含 Esc 與點遮罩，都會走 `OnCancel`）才關。`ModalVisibleBindingTests` 會擋。存檔成功時**先關窗**再通知與重新載入，免得重新載入的幾趟 API 期間視窗還蓋在畫面上。
 
-| 專案附件 | `Views/Projects/ProjectViewView.razor` | `form-modal-standard` |
-| 抽出待辦 | `Views/Projects/TodoExtractionModal.razor` | `form-modal-standard` |
+| 專案附件 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-standard` |
+| 抽出待辦 | `Web.Client/Pages/Projects/TodoExtractionModal.razor`（1.1.26 起） | `form-modal-standard` |
 | 用量明細（唯讀，1.0.31） | `Views/AiManagement/TokenUsageView.razor` | `form-modal-standard` |
 | 角色維護 | `Web.Client/Pages/Admins/RoleViewPage.razor`（1.1.11 起 WASM） | `form-modal-large` |
-| 專案維護 | `Views/Projects/ProjectViewView.razor` | `form-modal-large` |
+| 專案維護 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-large` |
 | AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
 | 稽核明細（唯讀，1.0.32） | `Views/Admins/AuditLogView.razor` | `form-modal-large` |
 | 會議紀錄維護（含影音上傳） | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `meeting-view-modal` |
@@ -162,7 +162,7 @@
 - **Shift+Enter 在多行欄位會換行**：`IsSubmit` 回 false，瀏覽器的原生行為就會換行，不必另寫程式碼。
 - 表單對話窗把 `@onkeydown="OnModalKeyDownAsync"` 掛在 `EditForm` 上。⚠️ 送出前要等一下（`FormSubmitGate.EnterSettleDelay`，200ms）：AntDesign `Input` 預設在 change 或 blur 時才回寫繫結值，Enter 送出時焦點還在欄位裡，不等的話會拿到舊值。⚠️ 等候必須在送出防護裡（1.0.62 起一律 `submitGate.RunAsync(SaveModalAsync, FormSubmitGate.EnterSettleDelay)`，「確定」走同一個閘門）——以前先等再進防護，等候期間按「確定」會新增兩筆。
 - AntDesign Modal 沒有開放 keydown 掛載點（`Keyboard` 參數只管 Esc），沒有 `EditForm` 的對話窗要自己包一層原生 `<div @onkeydown>` 來接。範例：`MainLayout.razor` 的變更密碼、`MeetingViewView.razor` 的 `.meeting-draft-request-form`、`TodoExtractionModal.razor` 的 `.todo-extract`。
-- 表單內「新增標籤」這類**按鈕級**的輸入區要加 `@onkeydown:stopPropagation="true"`，否則外層 `EditForm` 會把那一下 Enter 當成送出。範例：`ProjectViewView.razor` 的 `.project-view-tag-editor`。
+- 表單內「新增標籤」這類**按鈕級**的輸入區要加 `@onkeydown:stopPropagation="true"`，否則外層 `EditForm` 會把那一下 Enter 當成送出。範例：`ProjectPage.razor` 的 `.project-view-tag-editor`。
 - 表單裡的**下拉（Select）與日期（DatePicker）**外層也一律包 `<div @onkeydown:stopPropagation="true">`（1.0.62 補齊八個 CRUD 表單）：日期欄按 Enter 是「套用打的日期」、下拉搜尋框按 Enter 是「選這一項」，不包會被當成送出、值還沒套用就存檔。`FormEnterGuardTests` 把關。
 
 ### 6.1 刻意不綁 Enter 的地方
@@ -171,7 +171,7 @@
 |---|---|
 | 所有 `ConfirmAsync` 確認框 | 確認框本來就是為付費與破壞性動作加的關卡；如果綁了 Enter，送出表單那一下 Enter 還沒放開，確認框就被按掉了 |
 | 編修視窗的左欄 textarea | 那是在改一份多段落的長文件，不是輸入一句話就送出 |
-| 多值輸入的「新增」鈕（`ProjectViewView` 常用名詞、常用與會人員） | 中文輸入法用 Enter 確認候選字，綁在按鈕上一定會誤觸 |
+| 多值輸入的「新增」鈕（`ProjectPage` 常用名詞、常用與會人員） | 中文輸入法用 Enter 確認候選字，綁在按鈕上一定會誤觸 |
 | 登入頁 | 靜態 SSR 的原生表單，Enter 本來就能送出，而且天生不受輸入法影響 |
 
 ### 6.2 AI 問答的 Enter 送出
@@ -277,8 +277,8 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 |---|---|---|---|
 | 上傳影音檔（存檔後自動轉錄） | `MeetingPage.OnModalOKHandleAsync`（1.1.23 起 WASM） | 確認上傳並開始轉錄（會產生費用） | 已有音檔時套（舊音檔與逐字稿會被刪除） |
 | 執行／重新轉錄 | `MeetingPage` | 確認執行轉錄／確認重新轉錄（會產生費用） | 已有逐字稿時套 |
-| 產生會議紀錄（會議頁對話窗、專案頁「AI 轉會議紀錄」） | `MeetingPage`、`ProjectViewView` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
-| 抽出待辦 | `ProjectViewView`（開窗**之前**的按鈕上） | 確認抽出待辦（會產生費用） | **永不**套（只產生候選） |
+| 產生會議紀錄（會議頁對話窗、專案頁「AI 轉會議紀錄」） | `MeetingPage`、`ProjectPage` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
+| 抽出待辦 | `ProjectPage`（開窗**之前**的按鈕上） | 確認抽出待辦（會產生費用） | **永不**套（只產生候選） |
 | AI 問答：修改提問後重新產生答案 | `AiChatModal` | 確認重新產生答案（會產生費用） | 套（會覆蓋原本的回答） |
 | AI 問答：送出新問題 | `AiChatModal.OnAskAsync` | — | 刻意不確認，這是唯一沒有確認框的付費入口 |
 | AI 日誌分析（0.4.121） | `LogViewerView.OnAiAnalyzeAsync`（開窗**之前**） | 確認執行 AI 日誌分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |

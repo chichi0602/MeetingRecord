@@ -60,6 +60,10 @@ public sealed class ProjectMeetingApiTests(AiChatTestApplicationFactory factory)
             Assert.Equal(HttpStatusCode.NotFound, foreignDraft.StatusCode);
         }
 
+        // 可選逐字稿要帶會議紀錄狀態（1.1.26）：畫面據此提醒「重新產生將覆蓋既有會議紀錄」、決定能不能送出。
+        var transcripts = await GetAsync<List<MeetingRecord.Dtos.Projects.ProjectTranscriptOptionDto>>(client, $"{baseUrl}/transcripts/selectable");
+        Assert.Contains(transcripts, x => x.Id == world.MeetingId && x.HasDraft && x.DraftStatus == (int)MeetingRecord.Share.Enums.DraftStatus.Completed);
+
         using (var hiddenProject = await client.GetAsync($"/api/v1/Project/{other.ProjectId}/meetings"))
         {
             Assert.Equal(HttpStatusCode.NotFound, hiddenProject.StatusCode);
@@ -188,6 +192,7 @@ public sealed class ProjectMeetingApiTests(AiChatTestApplicationFactory factory)
         {
             Title = $"會議-{suffix}", ProjectId = project.Id, CreatedByUserId = userId,
             DraftContent = "決議：下週上線。", DraftStatus = MeetingRecord.Share.Enums.DraftStatus.Completed,
+            TranscriptionStatus = MeetingRecord.Share.Enums.TranscriptionStatus.Completed,
         };
         db.Meeting.Add(meeting);
         await db.SaveChangesAsync();

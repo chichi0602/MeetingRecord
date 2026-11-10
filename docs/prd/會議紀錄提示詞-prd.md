@@ -1,8 +1,8 @@
 ﻿# 會議紀錄提示詞 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：1.1.9
+- 現行系統版本：1.1.26
 - 首次實作版本：0.4.26
 - 最後核對日期：2026/11/10
 
@@ -87,7 +87,7 @@
 
 「啟用狀態」欄的膠囊在有 `PermissionActions.Edit` 時是一顆按鈕，點下去經 `ConfirmAsync` 二次確認後呼叫 `PromptTemplateService.SetEnabledAsync(id, isEnabled)`（0.4.98 以前套團隊權控，0.4.99 起不套）。
 
-- **啟用不套 `Danger`、停用才套**——啟用不是破壞性動作（比照 `ProjectViewView` 的「確認重新產生」）。
+- **啟用不套 `Danger`、停用才套**——啟用不是破壞性動作（比照專案頁 `ProjectPage` 的「確認重新產生」）。
 - 沒有 Edit 權限時**渲染回純 `<span>`**，不是 `<button disabled>`：disabled 的按鈕不可 focus，掛在上面的 `aria-label` 狀態說明就讀不到了。
 - 可見文字講**狀態**（啟用／停用）、`aria-label` 與 `title` 講**動作**（「{名稱} 目前為啟用，點擊改為停用」）。把「啟用」直接當按鈕的可及名稱會被讀成命令，語意與實際相反。
 - `SetEnabledAsync` 刻意**不用 `AsNoTracking()`**（本類其他讀取一律用），因為要靠變更追蹤把欄位寫回去；加上去會變成「沒寫入卻回傳成功」。

@@ -1,8 +1,8 @@
 ﻿# AI 問答 PRD
 
-- 文件版本：1.10
+- 文件版本：1.11
 - 文件狀態：已實作
-- 現行系統版本：1.1.23
+- 現行系統版本：1.1.26
 - 首次實作版本：0.4.51
 - 最後核對日期：2026/11/10
 
@@ -100,7 +100,7 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 
 ### 資料流
 
-- UI：`ProjectViewView`／`MeetingPage`（1.1.23 起 WASM 頁）→ `AiChatModal` →（注入）`AiChatService` → `AiChatStore`（檔案）＋ `BackendDBContext`（讀會議與附件清單）＋ `ITextGenerationProvider`。Blazor Server 直接呼叫服務。1.1.21 起另有 Web API（`api/v1/ai-chat/{project|meeting}/{targetId}/...`，給 WASM 頁用，規則同一份 `AiChatService`；提問與重新產生是串流），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- UI：`ProjectPage`（1.1.26 起 WASM 頁）／`MeetingPage`（1.1.23 起 WASM 頁）→ `AiChatModal` →（注入）`AiChatService` → `AiChatStore`（檔案）＋ `BackendDBContext`（讀會議與附件清單）＋ `ITextGenerationProvider`。Blazor Server 直接呼叫服務。1.1.21 起另有 Web API（`api/v1/ai-chat/{project|meeting}/{targetId}/...`，給 WASM 頁用，規則同一份 `AiChatService`；提問與重新產生是串流），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 - 模型：複用會議紀錄生成同一個 `ITextGenerationProvider`（依 `LlmSettings.DefaultProvider` 挑選，目前是 Azure OpenAI），沒有第二條到 Azure OpenAI 的路徑。同步互動，沒有佇列與背景 worker。串流回呼 `onDelta` 傳增量文字，UI 以 `InvokeAsync` 切回 UI 執行緒。
 - 系統提示詞要求全程繁體中文（台灣用語）、只根據參考資料回答、找不到就說明、盡量指出出處。
 
@@ -236,8 +236,8 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 - `src/MeetingRecord/MeetingRecord.Business/Services/TodoExtraction/TodoExtractionService.cs`（`ExtractAsync`、`GetExistingTitlesAsync`）、`TodoExtractionParser.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（`ProjectAccessService.GetAsync`；`ProjectAccess.CanViewProject`、`ProjectAccess.CanViewMeeting`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/AiChatModal.razor`、`AiChatModal.razor.cs`（1.1.22 起在 Web.Client；`OnAskAsync`、`OnRegenerateAsync`、`OnDeleteConversationAsync`、`OnAttachmentsSelectedAsync`、`OnCopyAsync`、`OnCancelAsync`）、`AiChatModal.razor.css`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/TodoExtractionModal.razor`、`TodoExtractionModal.razor.cs`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor`、`ProjectViewView.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Projects/TodoExtractionModal.razor`、`TodoExtractionModal.razor.cs`（1.1.26 起在 Web.Client，經 `TodoExtractionApi`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Projects/ProjectPage.razor`、`ProjectPage.razor.cs`（1.1.26 起 WASM 頁；`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Meetings/MeetingPage.razor`、`MeetingPage.razor.cs`（會議頁入口，1.1.23 起 WASM 頁，視窗資料來源是 `AiChatApi`）
 - `src/MeetingRecord/MeetingRecord.Web/wwwroot/js/chat-attach.js`（貼上與拖放）、`wwwroot/js/clipboard.js`（`copyText`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/FormModalHelper.razor`（`.ai-chat-modal` 固定高度）

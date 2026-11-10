@@ -4,14 +4,8 @@ namespace MeetingRecord.Models.AdapterModel;
 
 public class ProjectAdapterModel : ICloneable, IValidatableObject
 {
-    public static readonly IReadOnlyList<string> StatusOptions =
-    [
-        "未開始",
-        "進行中",
-        "已完成",
-        "暫緩",
-        "等待"
-    ];
+    /// <summary>狀態選項（1.1.26 起單一來源在 Share 的 <c>ProjectRules</c>，WASM 專案頁也用）。</summary>
+    public static readonly IReadOnlyList<string> StatusOptions = MeetingRecord.Share.Helpers.ProjectRules.StatusOptions;
 
     /// <summary>
     /// 已完成＝封存（1.0.46）：預設不在專案選單與待辦清單出現，一般使用者唯讀（管理者不受限），

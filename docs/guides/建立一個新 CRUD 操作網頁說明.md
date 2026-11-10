@@ -1,8 +1,8 @@
 ﻿# 以 `RoleViewView` 為藍本手動開發新 CRUD 頁面的計畫
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.1.11
+- 現行系統版本：1.1.26
 - 首次實作版本：—（未追溯，約 0.1.x 初始腳手架）
 - 最後核對日期：2026/11/10
 
@@ -129,7 +129,7 @@
     2. `MeetingRecord.Business/Services/Other/RolePermissionService.cs` 的 `GetRoleListPermissionAllName()` 把常數放進對應群組，角色管理頁的權限矩陣才勾得到。
     3. `MeetingRecord.Web/Datas/Menu.json` 新增選單項目，給一個**全檔唯一**的 `id`。
     4. `MeetingRecord.Web/Components/Layout/SidebarMenuService.cs` 的 `MenuPermissionMap` 加上 `[id] = MagicObjectHelper.角色_Xxx`。
-    5. View 的 `OnInitializedAsync` 以 `AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_Xxx)` 守門（可參考 `ProjectViewView.razor.cs`；WASM 頁改用 `PermissionView.CanAccessPage`，見 `Web.Client/Pages/Categories/CategoryPage.razor.cs`）。
+    5. View 的 `OnInitializedAsync` 以 `AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_Xxx)` 守門（可參考 Server 頁的稽核頁面；WASM 頁改用 `PermissionView.CanAccessPage`，見 `Web.Client/Pages/Categories/CategoryPage.razor.cs`）。
 11. 本機驗證（新增/查詢/修改/刪除/過濾/排序/分頁/驗證提示）。
 
 ---

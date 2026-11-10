@@ -50,7 +50,7 @@ public static class FormDirtyHelper
     /// 簽章刻意是 <c>string?</c> 而不是 <c>object?</c>：<c>IBrowserFile</c> 身上帶著 Stream，
     /// 直接丟進序列化器得到的東西與使用者選了哪個檔案無關，**所有檔案都會長得一樣**，
     /// 於是「換了一個檔案」永遠判不出來。用 string 逼呼叫端自己講清楚要比什麼
-    /// （檔名＋大小就夠了，見 <c>ProjectViewView.DescribePendingFiles()</c>）。
+    /// （檔名＋大小就夠了，見 <c>ProjectPage.DescribePendingFiles()</c>）。
     /// </para>
     ///
     /// <para>

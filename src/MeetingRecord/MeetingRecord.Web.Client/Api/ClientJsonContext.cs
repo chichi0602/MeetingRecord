@@ -8,6 +8,7 @@ using MeetingRecord.Dtos.Jobs;
 using MeetingRecord.Dtos.Meetings;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Dtos.Notifications;
+using MeetingRecord.Dtos.Projects;
 using MeetingRecord.Dtos.Roles;
 using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Dtos.Systems;
@@ -95,4 +96,16 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(UploadFailRequestDto))]
 [JsonSerializable(typeof(ApiResult<UploadSessionDto>), TypeInfoPropertyName = "UploadSessionResult")]
 [JsonSerializable(typeof(ApiResult<UploadStatusDto>), TypeInfoPropertyName = "UploadStatusResult")]
+[JsonSerializable(typeof(ApiResult<List<ProjectDto>>), TypeInfoPropertyName = "ProjectListResult")]
+[JsonSerializable(typeof(ApiResult<ProjectDto>), TypeInfoPropertyName = "ProjectResult")]
+[JsonSerializable(typeof(ProjectFormDto))]
+[JsonSerializable(typeof(ApiResult<ProjectSaveResultDto>), TypeInfoPropertyName = "ProjectSaveResult")]
+[JsonSerializable(typeof(LastSelectedProjectDto))]
+[JsonSerializable(typeof(ApiResult<LastSelectedProjectDto>), TypeInfoPropertyName = "LastSelectedProjectResult")]
+[JsonSerializable(typeof(ApiResult<List<ProjectOwnerCandidateDto>>), TypeInfoPropertyName = "ProjectOwnerCandidatesResult")]
+[JsonSerializable(typeof(ApiResult<List<MeetingDto>>), TypeInfoPropertyName = "MeetingListResult")]
+[JsonSerializable(typeof(ApiResult<List<ProjectTranscriptOptionDto>>), TypeInfoPropertyName = "ProjectTranscriptOptionsResult")]
+[JsonSerializable(typeof(ApiResult<TodoExtractionResultDto>), TypeInfoPropertyName = "TodoExtractionResult")]
+[JsonSerializable(typeof(ExtractedTodoAddRequestDto))]
+[JsonSerializable(typeof(ExtractedTodoUpdateRequestDto))]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

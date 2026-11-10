@@ -13,4 +13,13 @@ public class ProjectTranscriptOptionDto
     public int? ProjectId { get; set; }
 
     public string? ProjectTitle { get; set; }
+
+    /// <summary>已經有會議紀錄（1.1.26）：選它來產生會覆蓋既有內容，畫面要照實提醒。</summary>
+    public bool HasDraft { get; set; }
+
+    /// <summary>會議紀錄狀態，值同 Share 的 <c>DraftStatus</c>。</summary>
+    public int DraftStatus { get; set; }
+
+    /// <summary>可以產生（或重新產生）：有逐字稿、沒有在產生。</summary>
+    public bool CanGenerateDraft { get; set; }
 }

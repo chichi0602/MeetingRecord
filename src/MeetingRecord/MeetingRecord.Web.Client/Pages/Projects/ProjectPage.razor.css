@@ -362,7 +362,7 @@
 
 /* 名單欄位：輸入框 ＋ 新增鈕，底下是可移除的標籤。
    刻意不用 AntDesign 的 SelectMode.Tags——那個搜尋輸入框在中文輸入法下會殘留組字內容，
-   理由寫在 ProjectViewView.razor 對應欄位的註解裡。 */
+   理由寫在 ProjectPage.razor 對應欄位的註解裡。 */
 .project-view-tag-editor {
     display: flex;
     flex-direction: column;

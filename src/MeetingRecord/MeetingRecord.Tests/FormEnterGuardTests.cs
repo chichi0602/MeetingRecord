@@ -21,7 +21,7 @@ public sealed partial class FormEnterGuardTests
     [
         "MeetingRecord.Web.Client/Pages/Todos/TodoPage",
         "MeetingRecord.Web.Client/Pages/Meetings/MeetingPage",
-        "MeetingRecord.Web/Components/Views/Projects/ProjectViewView",
+        "MeetingRecord.Web.Client/Pages/Projects/ProjectPage",
         "MeetingRecord.Web.Client/Pages/Categories/CategoryPage",
         "MeetingRecord.Web.Client/Pages/Teams/TeamPage",
         "MeetingRecord.Web.Client/Pages/PromptTemplates/PromptTemplatePage",

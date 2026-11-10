@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.30
+- 文件版本：1.31
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1、M2 完成，IIS 測試機驗證待補，M3 進行中）
-- 現行系統版本：1.1.25
+- 現行系統版本：1.1.26
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/10
 
@@ -484,7 +484,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 會議頁面 `/meetings`（含 WASM 端上傳） | 1.1.23 | ✅ 完成；`MeetingPage` 走 `MeetingApi`、進度讀 `api/v1/jobs`＋推播；上傳由整個前端共用（`MeetingUploadManager`，換 WASM 頁不中斷、往舊版頁先確認、新端點 `POST api/v1/uploads/{id}/fail`）；端對端發現並修正所有 WASM 頁斷網時整頁變錯誤畫面（`ApiClient` 改回失敗結果）、推播第一次連不上就不再重試；MTG 照過，L4-05／07／08 依 WASM 行為改寫、L4-06 允許進頁面被 App 自己導向登入頁打斷，新增 L4-09、L4-10、AI-04 |
 | 專案（一）API：專案本身、表單、附件、團隊、負責人 | 1.1.24 | ✅ 完成；`ProjectController` 改走 `ProjectService`（最後一個 Repository 刪除），既有五支只加欄位、相容規則照舊、同名改成允許；新端點：選擇器、上次選的專案、團隊與負責人選項、表單整筆存檔（含附件）、附件下載；專案附件上傳 `api/v1/uploads/project-attachments`（暫存檔）；授權矩陣加 10 支＋任一動作 4 支 |
 | 專案（二）API：專案底下的會議、移出、會議紀錄與 PDF、待辦抽取 | 1.1.25 | ✅ 完成；`ProjectMeetingController`（12 支，只看專案項目權限、會議要屬於該專案）、`TodoExtractionController`（3 支，待辦事項新增）；服務層補「封存專案不能抽待辦」；授權矩陣加 7 支，PDF 與 AI 在假 AI／PDF 主機的 L2 驗 |
-| 專案頁面 `/projects`（含待辦抽取視窗） | 1.1.26 | 待做 |
+| 專案頁面 `/projects`（含待辦抽取視窗） | 1.1.26 | ✅ 完成；`ProjectPage`、`TodoExtractionModal` 搬到 Web.Client，附件經 `ProjectAttachmentUploader`；伺服器補可選逐字稿的會議紀錄狀態、專案頁自己的分類與團隊篩選選項；`BrowserFileUploader` 與 Server 端上傳攔截移除；PRJ、AI 系列照過，L4-05／08 改用使用說明頁 |
 | M3 里程碑報告 | 1.1.27 | 待做 |
 
 ## 十一、下一步

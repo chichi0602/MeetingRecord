@@ -42,7 +42,7 @@ public partial class FileDropZone : ComponentBase
 
     /// <summary>
     /// 底下那個 <c>&lt;input type="file"&gt;</c>（1.0.59）。分塊上傳由瀏覽器直接從它取檔，
-    /// 呼叫端把它交給 <c>BrowserFileUploader.OpenAsync</c>。還沒算繪出來時是 null。
+    /// 呼叫端把它交給 <c>chunk-upload.js</c>（1.1.23 起經 <c>MeetingUploadManager</c>／<c>ProjectAttachmentUploader</c>）。還沒算繪出來時是 null。
     /// </summary>
     public ElementReference? InputElement => inputFile?.Element;
 

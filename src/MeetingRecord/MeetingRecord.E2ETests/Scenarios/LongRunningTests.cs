@@ -155,11 +155,12 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     [E2EFact]
     [Trait("Scenario", "L4-05")]
     [Trait("Title", "斷網 10 秒後自動重連，頁面沒有重新載入、仍可操作")]
-    [Trait("Page", "專案項目")]
+    [Trait("Page", "使用說明")]
     [Trait("Persona", "主責團隊成員")]
     public async Task OfflineTenSeconds_ShouldReconnectWithoutReload()
     {
-        // 1.1.23 會議頁搬到 WASM（沒有 Blazor Server 連線），這則改在還是 Blazor Server 的專案頁驗；WASM 頁的斷網見 L4-10。
+        // 1.1.23 會議頁搬到 WASM（沒有 Blazor Server 連線），這則改在還是 Blazor Server 的頁面驗（1.1.26 專案頁也搬了，改用使用說明頁，M4 才搬）；
+        // WASM 頁的斷網見 L4-10。
         var page = await LoginAsAsync(Seed.Owner);
 
         // ⚠️ 瀏覽器的離線模擬不會切斷已經建立的 WebSocket（Blazor 照樣連著）：Blazor 連線改經 Playwright 轉接，斷網時自己切斷。
@@ -170,7 +171,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
             socket.ConnectToServer();
             blazorSocket = socket;
         });
-        await GotoAsync(page, "/projects", "專案");
+        await GotoAsync(page, "/help", "問 AI 助理");
         await page.EvaluateAsync("() => window.__e2eMarker = 'L4-05'");
 
         await page.Context.SetOfflineAsync(true);
@@ -183,8 +184,11 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
 
         await Expect(reconnect).ToBeHiddenAsync(new() { Timeout = 60_000 });
         Assert.Equal("L4-05", await page.EvaluateAsync<string?>("() => window.__e2eMarker ?? null"));
-        await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
-        await Expect(page.GetByPlaceholder("請輸入專案標題")).ToBeVisibleAsync();
+        // 仍可操作：輸入問題後「發問」要變成可按（文字框的值經 Blazor 連線回寫，連線沒恢復就不會啟用）。
+        var question = page.GetByPlaceholder("輸入操作上的問題", new() { Exact = false });
+        await question.FillAsync("斷線後還能操作嗎？");
+        await question.DispatchEventAsync("change");
+        await Expect(ToolbarButton(page, "發問")).ToBeEnabledAsync();
     }
 
     [E2EFact]
@@ -242,7 +246,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     public async Task LeavingDuringUpload_ShouldAskFirst()
     {
         // 1.1.6（WASM 遷移）：兩種頁面之間切換是整頁載入，上傳會中斷，所以離開前要先問。
-        // 1.1.23 會議頁搬到 WASM：上傳改由整個前端共用，WASM 頁之間切換不中斷（見 L4-09），要問的是往還沒遷移的舊版頁。
+        // 1.1.23 會議頁搬到 WASM：上傳改由整個前端共用，WASM 頁之間切換不中斷（見 L4-09），要問的是往還沒遷移的舊版頁（1.1.26 起用使用說明頁）。
         var page = await LoginAsAsync(Seed.Owner);
         var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
         await ThrottleUploadsAsync(page, TimeSpan.FromSeconds(3));
@@ -256,7 +260,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         Assert.True(await BeforeUnloadBlockedAsync(page), "上傳中關分頁沒有提醒");
 
         // 切到舊版頁：系統的確認框，選留下就不離開。
-        await page.EvaluateAsync("() => Blazor.navigateTo('/projects')");
+        await page.EvaluateAsync("() => Blazor.navigateTo('/help')");
         await Expect(page.Locator(".ant-modal-confirm").GetByText("上傳還在進行")).ToBeVisibleAsync();
         await ConfirmAsync(page, "留下");
         await Expect(page).ToHaveURLAsync(new Regex("/meetings$"));

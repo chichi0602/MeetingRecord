@@ -100,6 +100,8 @@ public sealed partial class ApiIntegrationTests
         ["Project.SaveLastSelected"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         ["Project.CreateForm"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Create),
         ["Project.UpdateForm"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
+        ["Project.EnabledCategories"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["Project.FilterTeams"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         // 1.1.25：專案頁裡的會議（路由 api/v1/Project/{projectId}/…），只看專案項目權限。PDF、產生會議紀錄要假 AI／PDF，在 ProjectMeetingApiTests 驗。
         ["ProjectMeeting.Meetings"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         ["ProjectMeeting.Meeting"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
@@ -479,6 +481,8 @@ public sealed partial class ApiIntegrationTests
             "Delete" => client.DeleteAsync($"{baseUrl}/{targetId}"),
             "Selectable" => client.GetAsync($"{baseUrl}/selectable?includeArchived=true"),
             "LastSelected" => client.GetAsync($"{baseUrl}/last-selected"),
+            "EnabledCategories" => client.GetAsync($"{baseUrl}/categories/enabled"),
+            "FilterTeams" => client.GetAsync($"{baseUrl}/teams/filter"),
             "SaveLastSelected" => client.PutAsJsonAsync($"{baseUrl}/last-selected", new LastSelectedProjectDto { ProjectId = targetId }),
             "CreateForm" => client.PostAsJsonAsync($"{baseUrl}/form", Form(0)),
             "UpdateForm" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/form", Form(targetId)),

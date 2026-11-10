@@ -547,7 +547,7 @@
     flex: 1;
 }
 
-/* Material Icon 預設 24px，不指定會比按鈕文字大一截（同 ProjectViewView 的做法）。 */
+/* Material Icon 預設 24px，不指定會比按鈕文字大一截（同 ProjectPage 的做法）。 */
 .ai-chat-send {
     display: inline-flex;
     align-items: center;

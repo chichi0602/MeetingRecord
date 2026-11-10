@@ -1,8 +1,8 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.25
+- 文件版本：4.26
 - 文件狀態：已實作
-- 現行系統版本：1.1.25
+- 現行系統版本：1.1.26
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
 - 最後核對日期：2026/11/10
 
@@ -67,7 +67,7 @@
   - 提示詞：每筆未完成待辦標上「主項目／子項目」（`OpenTodoSummary.IsSubtask`），請模型為候選另回 `parentTodoId`——候選是某筆既有待辦的一部分或子步驟時回那筆的 Id（只能是主項目），與 `matchedTodoId` 互斥，不確定回 null。`TodoExtractionParser.Parse(raw, validTodoIds, validParentIds)` 只收送出去的主項目 Id，多條候選可以掛同一個主待辦，兩個都給時以 `matchedTodoId` 為準。
   - 確認視窗：有主待辦的候選顯示「屬於：〈主待辦〉（來自〈會議〉）」與下拉「加為子項目（預設）｜另外新增」；儲存時帶 `ParentTodoId` 新增，主待辦的異動紀錄記「子項目」新增與來源會議。按鈕文字如「加入 3 條待辦（含 2 條子項目）」「加入 2 條（含 1 條子項目）、更新 1 條」。
   - 未做：同一次抽出**同時建立新的主待辦與它的子項目**（AI 只能掛到既有待辦）——先建好主待辦，再抽一次或手動新增子項目。子項目規則見 [待辦事項 PRD](待辦事項-prd.md)。
-- AI 問答（**0.4.51 起**）：工具列一顆「AI 問答」就整個專案提問，讀本專案**所有會議紀錄與附件**（PDF／docx／txt／md／csv；掃描檔與其他格式會列為「無法讀取」）；`歷史會議紀錄` 每列一顆就單一會議提問，讀該會議的**會議紀錄與逐字稿**。多輪對話、回答邊生成邊顯示，**對話歷史存在檔案系統**。視窗滿版（0.4.94 起 96vw × 96vh，訊息氣泡最寬 960px 以維持行寬好讀）。**0.4.95 起可以附加圖片與檔案**（迴紋針、Ctrl+V 貼上、拖放；圖片 png/jpg/gif/webp ≤ 10 MB、文件 pdf/docx/txt/md/csv ≤ 20 MB、一次最多 5 個）：文件擷取文字後排在參考資料最前面，圖片隨訊息送給模型；最近 6 輪提問的附件在追問時會一起再送。附件存在對話檔旁的 `<對話 Id>.files/`，刪對話時一併刪除。細節見 [changelog](../changelog/2026-09-22-AI問答附加圖片與檔案.md)（0.4.60 起，一段對話一個 `.jsonl`，根目錄 `SystemSettings.ExternalFileSystem.AiChatPath`）——對話文字不需要被查詢或索引，放資料庫只會讓它膨脹，原本的 `AiChatMessage` 資料表已移除。同專案／會議底下所有人共用同一段對話。兩顆按鈕**本身**不加額外動作權限（能進本頁就能開視窗、提問、開新對話、附加檔案、複製，與「會議紀錄與逐字稿」的唯讀檢視一致）；**視窗內**的動作則依本頁的動作權限控管（**0.4.109 起**）：重新命名對話、編輯訊息、重新產生答案需 `專案項目:edit`，刪除對話與「清空這段對話」需 `專案項目:delete`，下載整段／單則 PDF 需 `專案項目:export`——由 `ProjectViewView` 以 `AuthenticationStateHelper.CheckAccessAction` 算好後傳入 `AiChatModal` 的 `CanEdit`／`CanDelete`／`CanExport`，沒有權限就不顯示按鈕，改名／編輯／重新產生／刪除的處理函式開頭也會再檢查一次。同列的「抽出待辦」需 `待辦事項:create`（見上；守門在按鈕，`TodoExtractionModal` 本身不檢查動作權限）。完整規格見 [AI 問答 PRD](AI問答-prd.md)。**0.4.70 起**：AI 回答改以 Markdown 渲染（先前整塊原文直接顯示，畫面上滿是 `##` 與 `**`）；每則訊息可**複製**（Markdown 原文）與**修改**（需 `edit`）——「儲存」只更正文字不呼叫模型，使用者提問另有「重新產生答案」會重跑 AI 並覆蓋原答案（**會產生費用，跳二次確認**）；整段對話與單則訊息都可**下載 PDF**（沿用「匯出」動作權限）。刪除仍只做整段（「清空這段對話」，0.4.70 起補上二次確認，需 `delete`）。訊息以「第幾則」定位，對話檔格式不變。**0.4.79 起**：視窗左側多一欄**對話清單**，一個專案／會議底下可以有**多段對話**，可「開新對話」、切換、改名（需 `edit`）、刪除（需 `delete`）其中一段；標題預設取第一句提問（超過 20 字截斷），使用者可改名。清單與對話一樣是**所有人共用**，每一列標示是誰開的。舊的單檔對話會自動轉成第一段，使用者無感。匯出 PDF 匯出的是**目前這一段**，檔名帶上對話標題以免同一天匯出兩段撞名。
+- AI 問答（**0.4.51 起**）：工具列一顆「AI 問答」就整個專案提問，讀本專案**所有會議紀錄與附件**（PDF／docx／txt／md／csv；掃描檔與其他格式會列為「無法讀取」）；`歷史會議紀錄` 每列一顆就單一會議提問，讀該會議的**會議紀錄與逐字稿**。多輪對話、回答邊生成邊顯示，**對話歷史存在檔案系統**。視窗滿版（0.4.94 起 96vw × 96vh，訊息氣泡最寬 960px 以維持行寬好讀）。**0.4.95 起可以附加圖片與檔案**（迴紋針、Ctrl+V 貼上、拖放；圖片 png/jpg/gif/webp ≤ 10 MB、文件 pdf/docx/txt/md/csv ≤ 20 MB、一次最多 5 個）：文件擷取文字後排在參考資料最前面，圖片隨訊息送給模型；最近 6 輪提問的附件在追問時會一起再送。附件存在對話檔旁的 `<對話 Id>.files/`，刪對話時一併刪除。細節見 [changelog](../changelog/2026-09-22-AI問答附加圖片與檔案.md)（0.4.60 起，一段對話一個 `.jsonl`，根目錄 `SystemSettings.ExternalFileSystem.AiChatPath`）——對話文字不需要被查詢或索引，放資料庫只會讓它膨脹，原本的 `AiChatMessage` 資料表已移除。同專案／會議底下所有人共用同一段對話。兩顆按鈕**本身**不加額外動作權限（能進本頁就能開視窗、提問、開新對話、附加檔案、複製，與「會議紀錄與逐字稿」的唯讀檢視一致）；**視窗內**的動作則依本頁的動作權限控管（**0.4.109 起**）：重新命名對話、編輯訊息、重新產生答案需 `專案項目:edit`，刪除對話與「清空這段對話」需 `專案項目:delete`，下載整段／單則 PDF 需 `專案項目:export`——由 `ProjectPage`（1.1.26 起 WASM 頁，改用 `PermissionView.Can`；以前是 `ProjectViewView` 的 `AuthenticationStateHelper.CheckAccessAction`） 算好後傳入 `AiChatModal` 的 `CanEdit`／`CanDelete`／`CanExport`，沒有權限就不顯示按鈕，改名／編輯／重新產生／刪除的處理函式開頭也會再檢查一次。同列的「抽出待辦」需 `待辦事項:create`（見上；守門在按鈕，`TodoExtractionModal` 本身不檢查動作權限）。完整規格見 [AI 問答 PRD](AI問答-prd.md)。**0.4.70 起**：AI 回答改以 Markdown 渲染（先前整塊原文直接顯示，畫面上滿是 `##` 與 `**`）；每則訊息可**複製**（Markdown 原文）與**修改**（需 `edit`）——「儲存」只更正文字不呼叫模型，使用者提問另有「重新產生答案」會重跑 AI 並覆蓋原答案（**會產生費用，跳二次確認**）；整段對話與單則訊息都可**下載 PDF**（沿用「匯出」動作權限）。刪除仍只做整段（「清空這段對話」，0.4.70 起補上二次確認，需 `delete`）。訊息以「第幾則」定位，對話檔格式不變。**0.4.79 起**：視窗左側多一欄**對話清單**，一個專案／會議底下可以有**多段對話**，可「開新對話」、切換、改名（需 `edit`）、刪除（需 `delete`）其中一段；標題預設取第一句提問（超過 20 字截斷），使用者可改名。清單與對話一樣是**所有人共用**，每一列標示是誰開的。舊的單檔對話會自動轉成第一段，使用者無感。匯出 PDF 匯出的是**目前這一段**，檔名帶上對話標題以免同一天匯出兩段撞名。
 
 ### 已完成＝封存（1.0.46）
 
@@ -88,7 +88,7 @@
 
 ## 四、內部系統運作
 
-- 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectService`（1.1.24 起與 UI 同一套規則，`ProjectRepository` 已刪除；回 `ApiResult`）。畫面用的表單、附件、選項端點見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- 資料流：1.1.26 起是 WASM 頁 `Web.Client/Pages/Projects/ProjectPage` → `ProjectApi`／`TodoExtractionApi` → `ProjectController`／`ProjectMeetingController`／`TodoExtractionController` → `ProjectService`／`MeetingService`／`TodoService` → `BackendDBContext`（以前是 Server 的 `ProjectViewView` 直接呼叫服務）。REST API 走 `ProjectController` → `ProjectService`（1.1.24 起與 UI 同一套規則，`ProjectRepository` 已刪除；回 `ApiResult`）。畫面用的表單、附件、選項端點見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 - 1.1.24 起 API 同名改成允許（以前 409），與畫面一致；畫面要用的表單整筆存檔（含附件）、選擇器、上次選的專案、團隊與負責人選項、附件下載都有 API，給專案頁搬到 WASM（1.1.26）用。
 - 1.1.25 起專案頁「歷史會議」區塊與「抽出待辦」視窗的動作也都有 API（`ProjectMeetingController`、`TodoExtractionController`），權限照本頁（專案項目；抽待辦要待辦事項新增）。**已完成（封存）專案的會議不能再抽待辦，服務層也擋**（以前只有畫面把按鈕藏起來）。
 - 讀取：清單 `GetAsync(DataRequest)` 使用 `AsNoTracking`；單筆 `GetAsync(int)` 以 `Include(x => x.Files)` 帶附件。
@@ -175,7 +175,7 @@
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Projects/ProjectPage.razor`（`@page "/projects"`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor`（`<AiChatModal>` 的 `CanEdit`／`CanDelete`／`CanExport`、「抽出待辦」鈕的 `待辦事項:create` 守門）、`ProjectViewView.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起；`<AiChatModal>` 的 `CanEdit`／`CanDelete`／`CanExport`、「抽出待辦」鈕的 `待辦事項:create` 守門）、`ProjectPage.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/AiChatModal.razor.cs`（`CanEdit`／`CanDelete`／`CanExport` 參數；1.1.22 起在 Web.Client）、`TodoExtractionModal.razor.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs`（`ProjectService`；`GetSelectableAsync(includeArchived)`，1.0.46）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`、`Matches`，1.0.46）、`src/MeetingRecord/MeetingRecord.Share/Enums/ProjectScope.cs`、`src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/ProjectScopeSwitch.razor`（1.1.17 起在 Web.Client）

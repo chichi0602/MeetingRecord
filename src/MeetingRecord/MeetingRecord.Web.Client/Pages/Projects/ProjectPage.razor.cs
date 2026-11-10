@@ -1,58 +1,61 @@
 using AntDesign;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.Extensions.Options;
-using Microsoft.JSInterop;
-using MeetingRecord.Business.Services.AiChat;
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.Export;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Business.Services.TextGeneration;
-using MeetingRecord.Models.AdapterModel;
-using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Dtos.Jobs;
+using MeetingRecord.Dtos.Meetings;
+using MeetingRecord.Dtos.Models;
+using MeetingRecord.Dtos.Projects;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
-using MeetingRecord.Web.Services;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
+using MeetingRecord.Web.Client.Uploads;
 using MeetingRecord.Web.Components.Commons;
-using MeetingRecord.Web.Uploads;
+using MeetingRecord.Web.Services;
 
-namespace MeetingRecord.Web.Components.Views.Projects;
+namespace MeetingRecord.Web.Client.Pages.Projects;
 
-public partial class ProjectViewView : IDisposable
+/// <summary>專案下拉的一個選項（已完成的加註，1.0.46）。用 record：每次重算時內容相同就視為同一項。</summary>
+public sealed record ProjectSelectorItem(int Id, string SelectorLabel);
+
+/// <summary>
+/// 專案項目（1.1.26 搬到 WASM，原 Server 的 <c>ProjectViewView</c>）：畫面、文字、確認框、通知全部照舊。
+/// <list type="bullet">
+/// <item>資料走 <see cref="ProjectApi"/>（規則都在伺服器的 ProjectService、MeetingService）；按鈕依 <see cref="PermissionView"/>，
+/// 能不能刪專案、換負責人、改團隊由 API 依呼叫者算好（<see cref="ProjectDto.IsProjectOwner"/> 等旗標），會議的上傳者看 <see cref="MeetingDto.IsUploader"/>。</item>
+/// <item>附件選好就由 <see cref="ProjectAttachmentUploader"/> 傳到伺服器暫存檔，存檔時帶上傳編號。</item>
+/// <item>會議紀錄生成進度讀 <c>api/v1/jobs</c>，有推播（<see cref="IJobProgressSource"/>）就重查；工作結束才重新載入。</item>
+/// </list>
+/// </summary>
+public partial class ProjectPage : IDisposable
 {
-    private readonly ILogger<ProjectViewView> logger;
-    private readonly ProjectService projectService;
-    private readonly MeetingService meetingService;
-    private readonly PromptTemplateService promptTemplateService;
-    private readonly ModalService modalService;
-    private readonly MessageService messageService;
-    private readonly NotificationService notificationService;
-    private readonly FileDownloadInterop fileDownloadInterop;
-    private readonly IMeetingDraftProgressNotifier draftProgressNotifier;
-    private readonly IPdfRenderer pdfRenderer;
+    [Inject] private ILogger<ProjectPage> logger { get; set; } = default!;
 
-    /// <summary>PDF 的 MIME，讓瀏覽器認得下載下來的是什麼。</summary>
-    private const string PdfContentType = "application/pdf";
+    [Inject] private ProjectApi ProjectApi { get; set; } = default!;
 
-    private const string TranscriptContentType = "text/plain;charset=utf-8";
 
-    [Inject]
-    private ClipboardInterop clipboardInterop { get; set; } = default!;
+    [Inject] private IJobProgressSource JobProgressSource { get; set; } = default!;
 
-    /// <summary>分塊上傳（1.0.59）：附件改由瀏覽器以 HTTP 一塊一塊送，不再經 Blazor 連線。</summary>
-    [Inject]
-    private BrowserFileUploader browserFileUploader { get; set; } = default!;
+    [Inject] private ProjectAttachmentUploader AttachmentUploader { get; set; } = default!;
 
-    [Inject]
-    private TodoService TodoService { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
 
-    [Inject]
-    private CurrentUserService CurrentUserService { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
 
-    [Inject]
-    private IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
+    [Inject] private SessionService SessionService { get; set; } = default!;
+
+    [Inject] private ModalService modalService { get; set; } = default!;
+
+    [Inject] private MessageService messageService { get; set; } = default!;
+
+    [Inject] private NotificationService notificationService { get; set; } = default!;
+
+    [Inject] private ClipboardInterop clipboardInterop { get; set; } = default!;
+
+    [Inject] private FileDownloadInterop fileDownloadInterop { get; set; } = default!;
 
     /// <summary>正在匯出的會議 Id；用來顯示 loading 並擋重複點擊。</summary>
     private int? exportingMeetingId;
@@ -63,30 +66,38 @@ public partial class ProjectViewView : IDisposable
     /// <summary>已因「生成結束」重新載入過的會議 Id，避免同一筆重複觸發重載。</summary>
     private readonly HashSet<int> reloadedFinishedMeetingIds = [];
 
+    /// <summary>目前看得到的會議紀錄生成工作（依會議編號）；只有進行中的會顯示在列上。</summary>
+    private Dictionary<int, BackgroundJobDto> draftJobs = [];
+
+    private IDisposable? jobSubscription;
+
     /// <summary>
     /// 表單送出閘門（1.0.62）：「確定」與 Enter 共用。0.4.114 起就有存檔防護，但 Enter 先等 200ms 才進防護，
     /// 等候期間按「確定」仍會新增兩筆（M0 端對端測試發現）；現在等候也算在送出中。
     /// </summary>
     private readonly FormSubmitGate submitGate = new();
 
-    /// <summary>存檔中（含 Enter 等候回寫）：擋重複送出，也讓背景事件延後重新載入（不能和存檔同時用同一個 DbContext）。</summary>
+    /// <summary>存檔中（含 Enter 等候回寫）：擋重複送出，也讓背景事件延後重新載入。</summary>
     private bool isSaving => submitGate.IsBusy;
 
-    /// <summary>附件讀進暫存檔中；讀完之前不能存檔。</summary>
+    /// <summary>附件上傳到伺服器暫存檔中；傳完之前不能存檔。</summary>
     private bool isReadingFiles;
 
     /// <summary>存檔期間背景事件要求的重新載入，存完再做。</summary>
     private bool pendingContextReload;
 
     /// <summary>編輯時原本的主責團隊；就算不是自己的團隊、使用者暫時換掉，也要留在選項裡能改回來。</summary>
-    private ProjectService.TeamOption? originalPrimaryOption;
+    private TeamOptionDto? originalPrimaryOption;
 
-    private List<ProjectAdapterModel> projects = [];
+    private List<ProjectDto> projects = [];
     private int selectedProjectId;
 
-    private List<MeetingAdapterModel> selectableTranscripts = [];
-    private List<MeetingAdapterModel> projectMeetings = [];
-    private List<PromptTemplateAdapterModel> promptTemplates = [];
+    /// <summary>專案下拉的選項（篩選後）。資料或篩選一變就由 <see cref="RefreshSelectorItems"/> 重算。</summary>
+    private List<ProjectSelectorItem> selectorItems = [];
+
+    private List<ProjectTranscriptOptionDto> selectableTranscripts = [];
+    private List<MeetingDto> projectMeetings = [];
+    private List<MeetingPromptOptionDto> promptTemplates = [];
 
     private int selectedTranscriptId;
     private int selectedPromptTemplateId;
@@ -111,18 +122,17 @@ public partial class ProjectViewView : IDisposable
         => AvailableParticipants.Count == 0 ? "此專案尚未設定與會人員" : "勾選本次到場的人";
 
     /// <summary>
-    /// 產生會議紀錄的費用說明。刻意不講「幾次 API 呼叫」：逐字稿在磁碟上不在 adapter model，
-    /// 每次點按都讀一次檔只為了算數字，而 TranscriptChunker 優先在段落邊界斷句，
+    /// 產生會議紀錄的費用說明。刻意不講「幾次 API 呼叫」：逐字稿較長時會先分段，
     /// ceil(字數/上限) 只是下界——講錯數字比不講更糟。
     /// </summary>
     private const string DraftCostNotice =
         "產生會議紀錄會呼叫 Azure OpenAI 文字生成服務並產生費用：逐字稿較長時會先分段摘要再合併，段數越多費用越高。";
 
     /// <summary>目前選到的逐字稿。</summary>
-    private MeetingAdapterModel? SelectedTranscript
+    private ProjectTranscriptOptionDto? SelectedTranscript
         => selectableTranscripts.FirstOrDefault(x => x.Id == selectedTranscriptId);
 
-    /// <summary>選到的逐字稿目前可否送出生成（已入列或生成中就不行，避免重複計費）。</summary>
+    /// <summary>選到的逐字稿目前可否送出生成（已入列或生成中就不行，避免重複計費；伺服器也會擋）。</summary>
     private bool CanSubmitDraft
         => selectedTranscriptId > 0
         && selectedPromptTemplateId > 0
@@ -132,14 +142,17 @@ public partial class ProjectViewView : IDisposable
 
     /// <summary>
     /// 附件的拖拉區。⚠️ Reset() 只能在「確定不再需要那些 IBrowserFile 之後」呼叫——
-    /// 它會重建底下的 input，太早呼叫會讓待上傳的檔案讀不出來（見 FileDropZone 的註解）。
+    /// 它會重建底下的 input，太早呼叫會讓還在上傳的檔案讀不出來（見 FileDropZone 的註解）。
     /// </summary>
     private FileDropZone? attachmentDropZone;
     private readonly HashSet<int> removedFileIds = [];
 
     private string modalTitle = "專案維護";
     private bool modalVisible;
-    private ProjectAdapterModel CurrentRecord = new();
+    private ProjectFormModel CurrentRecord = new();
+
+    /// <summary>編輯中的專案的權限旗標（由 API 依呼叫者算好）；新增時是 null。</summary>
+    private ProjectDto? editingProject;
 
     /// <summary>開啟表單當下的快照。null 代表還沒開過（見 <see cref="FormDirtyHelper.IsDirty"/> 的 null 語意）。</summary>
     private string? formSnapshot;
@@ -160,8 +173,8 @@ public partial class ProjectViewView : IDisposable
     private bool draftCanExport;
     private bool isSavingDraft;
 
-    /// <summary>目前視窗對應的會議。匯出 PDF 需要整個 model，不只是 Id。</summary>
-    private MeetingAdapterModel? draftMeeting;
+    /// <summary>目前視窗對應的會議。</summary>
+    private MeetingDto? draftMeeting;
 
     private bool draftCanGenerate;
 
@@ -175,7 +188,7 @@ public partial class ProjectViewView : IDisposable
     private int draftMeetingId;
 
     /// <summary>目前選取專案的附件。由 <see cref="ReloadProjectContextAsync"/> 載入。</summary>
-    private List<ProjectFileAdapterModel> projectFiles = [];
+    private List<ProjectFileDto> projectFiles = [];
     private bool attachmentModalVisible;
 
     /// <summary>正在下載的附件 Id；用來顯示 loading 並擋重複點擊。</summary>
@@ -185,9 +198,6 @@ public partial class ProjectViewView : IDisposable
     private AiChatScope aiChatScope = AiChatScope.Project;
     private int aiChatTargetId;
     private string aiChatTitle = "AI 問答";
-
-    /// <summary>對象名稱（不含「AI 問答 - 」前綴），匯出 PDF 的表頭與檔名要用。</summary>
-    private string aiChatTargetName = string.Empty;
 
     private bool todoExtractVisible;
     private int todoExtractMeetingId;
@@ -213,19 +223,19 @@ public partial class ProjectViewView : IDisposable
         set => CurrentRecord.CompletionPercentage = (int)Math.Round(value);
     }
 
-    private ProjectAdapterModel? SelectedProject => projects.FirstOrDefault(x => x.Id == selectedProjectId);
+    private ProjectDto? SelectedProject => projects.FirstOrDefault(x => x.Id == selectedProjectId);
 
     /// <summary>「主責團隊」選項（0.4.102）：管理者全部，一般使用者只有自己所屬的。開表單時才載入。</summary>
-    private List<ProjectService.TeamOption> primaryTeamOptions = [];
+    private List<TeamOptionDto> primaryTeamOptions = [];
 
     /// <summary>「協作團隊」選項：全部啟用中的團隊。</summary>
-    private List<ProjectService.TeamOption> collaboratorTeamOptions = [];
+    private List<TeamOptionDto> collaboratorTeamOptions = [];
 
     /// <summary>
     /// 主責下拉實際顯示的選項。編輯時專案原本的主責可能不是自己的團隊（自己是協作），
     /// 不補進來的話下拉會顯示空白，看起來像沒有主責。
     /// </summary>
-    private IEnumerable<ProjectService.TeamOption> PrimaryTeamOptions
+    private IEnumerable<TeamOptionDto> PrimaryTeamOptions
         => originalPrimaryOption is { } original && primaryTeamOptions.All(x => x.Id != original.Id)
             ? [.. primaryTeamOptions, original]
             : primaryTeamOptions;
@@ -243,7 +253,26 @@ public partial class ProjectViewView : IDisposable
     private List<string> statusFilters = [];
 
     /// <summary>團隊篩選的選項：全部啟用中的團隊。</summary>
-    private List<ProjectService.TeamOption> filterTeamOptions = [];
+    private List<TeamOptionDto> filterTeamOptions = [];
+
+    /// <summary>目前登入者（新增專案時負責人預設帶自己）。</summary>
+    private int currentUserId;
+
+    private bool CanCreate => PermissionView.Can(MagicObjectHelper.角色_專案項目, PermissionActions.Create);
+
+    private bool CanEdit => PermissionView.Can(MagicObjectHelper.角色_專案項目, PermissionActions.Edit);
+
+    private bool CanExport => PermissionView.Can(MagicObjectHelper.角色_專案項目, PermissionActions.Export);
+
+    private bool CanDelete => PermissionView.Can(MagicObjectHelper.角色_專案項目, PermissionActions.Delete);
+
+    /// <summary>「抽出待辦」真正做的事是新增待辦，所以看待辦事項的新增權限。</summary>
+    private bool CanCreateTodo => PermissionView.Can(MagicObjectHelper.角色_待辦事項, PermissionActions.Create);
+
+    /// <summary>DTO 的 Id 是 <c>int?</c>（新增時沒有）；清單上的一定有值。</summary>
+    private static int IdOf(MeetingDto meeting) => meeting.Id ?? 0;
+
+    private static int IdOf(ProjectDto project) => project.Id ?? 0;
 
     #region 已完成＝封存（1.0.46）
 
@@ -253,31 +282,27 @@ public partial class ProjectViewView : IDisposable
     private bool isReopening;
 
     /// <summary>封存且不是管理者：唯讀。管理者不受限（全站慣例），但提示條照樣顯示。</summary>
-    private bool IsReadOnlyProject => SelectedProject?.IsArchived == true && !AuthenticationStateHelper.CheckIsAdmin();
-
-    [Inject]
-    private ProjectAccessService ProjectAccessService { get; set; } = default!;
-
-    /// <summary>目前使用者的存取範圍（1.0.47），只用來決定按鈕與欄位；服務層另外把關。</summary>
-    private ProjectAccess? access;
+    private bool IsReadOnlyProject => SelectedProject?.IsArchived == true && !PermissionView.IsAdmin;
 
     /// <summary>刪除專案：專案負責人（與管理者），已完成的要先重新開啟（1.0.52，原本是主責團隊成員）。</summary>
     private bool CanDeleteSelectedProject
-        => SelectedProject is { } project && access?.IsProjectOwner(project.Id) == true && !IsReadOnlyProject;
+        => SelectedProject is { IsProjectOwner: true } && !IsReadOnlyProject;
 
     /// <summary>負責人下拉的候選人（1.0.52）：表單上目前選的主責＋協作團隊裡啟用中的帳號。</summary>
-    private IReadOnlyList<ProjectOwnerCandidate> ownerCandidates = [];
+    private IReadOnlyList<ProjectOwnerCandidateDto> ownerCandidates = [];
 
     /// <summary>換負責人：新增時可選；修改時限主責團隊成員、目前的負責人、管理者（1.0.52）。</summary>
-    private bool CanChangeOwner => isNewRecordMode || (access is not null && ProjectOwnerRules.CanChangeOwner(access, CurrentRecord.Id));
+    private bool CanChangeOwner => isNewRecordMode || editingProject?.CanChangeOwner == true;
 
     /// <summary>附件的「移除」只有專案負責人看得到（1.0.52）。</summary>
-    private bool CanRemoveFiles => access?.IsProjectOwner(CurrentRecord.Id) == true;
+    private bool CanRemoveFiles => editingProject?.IsProjectOwner == true;
+
+    private static string OwnerLabel(ProjectOwnerCandidateDto candidate) => $"{candidate.Name}（{candidate.Account}）";
 
     /// <summary>摘要列的負責人：對到帳號時顯示姓名；升級前手打、對不到人的顯示「未指定（原：XXX）」。</summary>
-    private static string DescribeOwner(ProjectAdapterModel project)
+    private static string DescribeOwner(ProjectDto project)
         => project.OwnerUserId is not null
-            ? project.Owner
+            ? project.Owner ?? string.Empty
             : string.IsNullOrWhiteSpace(project.Owner) ? "未指定" : $"未指定（原：{project.Owner}）";
 
     /// <summary>
@@ -286,7 +311,7 @@ public partial class ProjectViewView : IDisposable
     /// </summary>
     private async Task ReloadOwnerCandidatesAsync()
     {
-        ownerCandidates = await projectService.GetOwnerCandidatesAsync(CurrentRecord.PrimaryTeamId, CurrentRecord.CollaboratorTeamIds);
+        ownerCandidates = (await ProjectApi.GetOwnerCandidatesAsync(CurrentRecord.PrimaryTeamId, CurrentRecord.CollaboratorTeamIds)).Data ?? [];
         if (!CanChangeOwner)
         {
             return;
@@ -297,41 +322,38 @@ public partial class ProjectViewView : IDisposable
             CurrentRecord.OwnerUserId = null;
         }
 
-        if (isNewRecordMode && CurrentRecord.OwnerUserId is null && access is { UserId: > 0 } && ownerCandidates.Any(x => x.Id == access.UserId))
+        if (isNewRecordMode && CurrentRecord.OwnerUserId is null && currentUserId > 0 && ownerCandidates.Any(x => x.Id == currentUserId))
         {
-            CurrentRecord.OwnerUserId = access.UserId;
+            CurrentRecord.OwnerUserId = currentUserId;
         }
     }
 
     /// <summary>專案表單的團隊欄位：新增時可選；修改時只有主責團隊成員（與管理者）能改（1.0.47）。</summary>
-    private bool CanEditTeams => isNewRecordMode || access?.CanManageProject(CurrentRecord.Id) == true;
+    private bool CanEditTeams => isNewRecordMode || editingProject?.CanManageTeams == true;
 
     /// <summary>從專案移除只限上傳者與管理者（1.0.47）；移除後只剩上傳者看得到。</summary>
-    private bool CanDetach(MeetingAdapterModel meeting)
-        => access?.IsMeetingOwner(meeting.CreatedByUserId) == true
+    private bool CanDetach(MeetingDto meeting)
+        => meeting.IsUploader
             && !IsReadOnlyProject
-            && (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
-                || AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete));
+            && (CanEdit || CanDelete);
 
     /// <summary>
     /// 有專案「編輯」或「刪除」權限才顯示歷史會議的勾選欄（同 CanDetach 的權限部分；上傳者與封存在列上用 Disabled 擋）。
     /// ⚠️ 1.0.59：只看權限，**不可以看資料**（原本是「有任何一列能刪才顯示」）。AntDesign 1.6 的 Selection 在勾選欄
-    /// 一下有一下沒有時，清掉列上的 Selection 會丟 NullReferenceException，連線斷掉、finalizer 再丟一次就拖垮整個伺服器行程
-    /// （正式機的「重新連線」與網站重啟）。不能刪的列靠 Disabled 擋；TableSelectionColumnTests 會擋回頭路。
-    /// 切換專案時歷史會議整批換掉，原本的寫法每換一次專案就可能讓勾選欄消失又出現。
+    /// 一下有一下沒有時，清掉列上的 Selection 會丟 NullReferenceException。不能刪的列靠 Disabled 擋；TableSelectionColumnTests 會擋回頭路。
     /// </summary>
     private bool ShowDetachSelection
-        => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
-            || AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Delete);
+        => PermissionView.Can(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
+            || PermissionView.Can(MagicObjectHelper.角色_專案項目, PermissionActions.Delete);
 
     /// <summary>狀態細篩只列目前檢視範圍內的狀態（例如「使用中」就不列「已完成」）。</summary>
     private IEnumerable<string> ScopeStatusOptions
-        => StatusOptions.Where(s => ProjectArchiveRules.Matches(s, projectScope));
+        => StatusOptions.Where(s => ProjectScopeRules.Matches(s, projectScope));
 
     private Task OnProjectScopeChangedAsync(ProjectScope scope)
     {
         projectScope = scope;
-        statusFilters = statusFilters.Where(s => ProjectArchiveRules.Matches(s, scope)).ToList();
+        statusFilters = statusFilters.Where(s => ProjectScopeRules.Matches(s, scope)).ToList();
         return KeepSelectionInFilterAsync();
     }
 
@@ -360,19 +382,19 @@ public partial class ProjectViewView : IDisposable
         isReopening = true;
         try
         {
-            var model = project.Clone();
-            model.Status = ProjectAdapterModel.StatusOptions[1];
-            model.UpdatedAt = DateTime.Now;
+            // 整筆覆寫：其他欄位照原樣送回（附件不動）。
+            var form = ToFormDto(ProjectFormModel.From(project));
+            form.Status = ProjectRules.StatusOptions[1];
 
-            var result = await projectService.UpdateAsync(model);
+            var result = await ProjectApi.UpdateAsync(form);
             if (!result.Success)
             {
-                NotifyError(result.Message);
+                NotifyError(ApiClient.ErrorText(result));
                 return;
             }
 
             NotifySuccess($"「{project.Title}」已重新開啟。");
-            projects = await projectService.GetSelectableAsync(includeArchived: true);
+            await LoadProjectsAsync();
             await KeepSelectionInFilterAsync();
         }
         finally
@@ -383,143 +405,118 @@ public partial class ProjectViewView : IDisposable
 
     #endregion
 
-    private IEnumerable<ProjectAdapterModel> FilteredProjects
+    private IEnumerable<ProjectDto> FilteredProjects
         => projects.Where(p =>
-            ProjectArchiveRules.Matches(p.Status, projectScope)
+            ProjectScopeRules.Matches(p.Status, projectScope)
             && (teamFilters.Count == 0
                 || (p.PrimaryTeamId is { } primary && teamFilters.Contains(primary))
-                || p.CollaboratorTeamIds.Any(teamFilters.Contains))
+                || (p.CollaboratorTeamIds ?? []).Any(teamFilters.Contains))
             && (categoryFilters.Count == 0
-                || p.Categories.Any(c => categoryFilters.Contains(c, StringComparer.OrdinalIgnoreCase)))
+                || (p.Categories ?? []).Any(c => categoryFilters.Contains(c, StringComparer.OrdinalIgnoreCase)))
             && (statusFilters.Count == 0 || statusFilters.Contains(p.Status)));
 
-    [Inject]
-    private CategoryService CategoryService { get; set; } = default!;
+    /// <summary>重算專案下拉的選項（資料或篩選改變之後）。</summary>
+    private void RefreshSelectorItems()
+        => selectorItems = FilteredProjects
+            .Select(p => new ProjectSelectorItem(IdOf(p), p.IsArchived ? $"{p.Title}（已完成）" : p.Title))
+            .ToList();
 
-    private IReadOnlyList<string> StatusOptions => ProjectAdapterModel.StatusOptions;
-
-    [Inject]
-    public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    public AuthenticationStateProvider authStateProvider { get; set; } = default!;
-
-    [Inject]
-    public NavigationManager NavigationManager { get; set; } = default!;
-
-    [Inject]
-    public IAuditLogService AuditLogService { get; set; } = default!;
-
-    public ProjectViewView(
-        ILogger<ProjectViewView> logger,
-        ProjectService projectService,
-        MeetingService meetingService,
-        PromptTemplateService promptTemplateService,
-        ModalService modalService,
-        MessageService messageService,
-        NotificationService notificationService,
-        FileDownloadInterop fileDownloadInterop,
-        IMeetingDraftProgressNotifier draftProgressNotifier,
-        IPdfRenderer pdfRenderer)
-    {
-        this.logger = logger;
-        this.projectService = projectService;
-        this.meetingService = meetingService;
-        this.promptTemplateService = promptTemplateService;
-        this.modalService = modalService;
-        this.messageService = messageService;
-        this.notificationService = notificationService;
-        this.fileDownloadInterop = fileDownloadInterop;
-        this.draftProgressNotifier = draftProgressNotifier;
-        this.pdfRenderer = pdfRenderer;
-    }
+    private static IReadOnlyList<string> StatusOptions => ProjectRules.StatusOptions;
 
     protected override async Task OnInitializedAsync()
     {
-        logger.LogInformation("Initializing project management view.");
-        var checkResult = await AuthenticationStateHelper.Check(authStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            logger.LogWarning("Project management view initialization stopped because authentication check failed.");
-            return;
-        }
-
-        // 用葉節點鍵而非群組鍵：工具列與操作鈕都是用 角色_專案項目 判斷，
-        // 頁面守門卻用群組鍵會讓兩者不一致（MeetingViewView 用的就是葉節點鍵）。
-        // 0.4.33 起「專案管理」群組已從選單移除，更沒有理由用群組鍵。
-        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_專案項目) == false)
+        logger.LogInformation("Initializing project management page.");
+        await PermissionView.LoadAsync();
+        if (!PermissionView.CanAccessPage(MagicObjectHelper.角色_專案項目))
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/projects");
-            logger.LogWarning("Project management view denied because current user has not this role permission.");
+            await PageAccessApi.RecordPageDeniedAsync("/projects");
+            logger.LogWarning("Project page denied because current user has not this role permission.");
             return;
         }
 
-        draftProgressNotifier.Changed += OnDraftProgressChanged;
+        currentUserId = (await SessionService.GetAsync()).Data?.UserId ?? 0;
+        jobSubscription = JobProgressSource.Subscribe(OnJobsChangedAsync);
 
-        availableCategories = await CategoryService.GetAllEnabledNamesAsync();
-        filterTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync();
+        // 分類借會議頁的端點、篩選用的團隊借表單的端點：沒有那些權限時清單是空的，只少了篩選選項。
+        availableCategories = (await ProjectApi.GetEnabledCategoriesAsync()).Data ?? [];
+        filterTeamOptions = (await ProjectApi.GetFilterTeamsAsync()).Data ?? [];
 
         // 1.0.51：預設選上次選的專案。已刪除、看不到或不在「使用中」的，ReloadAsync 會照舊退回第一筆。
-        selectedProjectId = await projectService.GetLastSelectedProjectIdAsync() ?? 0;
+        selectedProjectId = (await ProjectApi.GetLastSelectedAsync()).Data?.ProjectId ?? 0;
+        await RefreshJobsAsync();
         await ReloadAsync();
     }
 
     /// <summary>
-    /// 草稿生成進度變動時更新「狀態」欄。
-    ///
-    /// <para>
-    /// 由背景執行緒引發，必須切回 UI 執行緒。進行中只重繪（百分比來自記憶體，不必查庫）；
+    /// 會議紀錄生成進度有變動：重查進度。進行中只重繪（百分比來自進度清單，不必查庫）；
     /// 只有工作結束時才重新載入，讓狀態欄從「生成中」翻成資料庫裡的「已完成／失敗」。
-    /// </para>
     /// </summary>
-    private void OnDraftProgressChanged()
-        => _ = InvokeAsync(async () =>
+    private Task OnJobsChangedAsync() => InvokeAsync(async () =>
+    {
+        if (disposed)
         {
-            // 已完成的項目會留在通知器裡直到使用者關閉，所以要記下已處理過的 Id，
-            // 否則之後每一次進度變動都會再重新載入一次。
-            var finishedIds = draftProgressNotifier
-                .GetSnapshot()
-                .Where(x => x.Phase is MeetingDraftPhase.Completed or MeetingDraftPhase.Failed)
-                .Select(x => x.MeetingId)
-                .ToList();
+            return;
+        }
 
-            // 同一份逐字稿重新產生時，它會先回到進行中——要從「已處理」移除，第二次完成才會再重新載入（0.4.114）。
-            reloadedFinishedMeetingIds.RemoveWhere(id => !finishedIds.Contains(id));
-
-            // 用 Count 而非 Any——Any 會短路，漏掉同時完成的其他筆。
-            var newlyFinishedCount = finishedIds.Count(reloadedFinishedMeetingIds.Add);
-
-            if (newlyFinishedCount > 0)
+        if (await RefreshJobsAsync())
+        {
+            // 存檔中先記下，存完再載（同 Server 頁）。
+            if (isSaving)
             {
-                // 存檔中不能同時用頁面的 DbContext 查詢（會拋「第二個操作已在此內容上啟動」），存完再載。
-                if (isSaving)
-                {
-                    pendingContextReload = true;
-                }
-                else
-                {
-                    await ReloadProjectContextAsync();
-                }
+                pendingContextReload = true;
             }
+            else
+            {
+                await ReloadProjectContextAsync();
+            }
+        }
 
-            StateHasChanged();
-        });
+        StateHasChanged();
+    });
+
+    /// <summary>
+    /// 重查生成工作，回傳有沒有「這一頁還沒為它重載過」的工作剛結束。
+    /// 已完成的項目會留在清單裡直到使用者關閉，所以要記下已處理過的 Id，否則之後每一次推播都會再重新載入一次。
+    /// </summary>
+    private async Task<bool> RefreshJobsAsync()
+    {
+        var draft = (await JobProgressSource.GetJobsAsync()).Where(x => x.Kind == BackgroundJobKinds.Draft).ToList();
+        draftJobs = draft.GroupBy(x => x.MeetingId).ToDictionary(g => g.Key, g => g.First());
+
+        var finishedIds = draft.Where(x => x.IsCompleted || x.IsFailed).Select(x => x.MeetingId).ToList();
+
+        // 同一份逐字稿重新產生時，它會先回到進行中——要從「已處理」移除，第二次完成才會再重新載入（0.4.114）。
+        reloadedFinishedMeetingIds.RemoveWhere(id => !finishedIds.Contains(id));
+
+        // 用 Count 而非 Any——Any 會短路，漏掉同時完成的其他筆。
+        return finishedIds.Count(reloadedFinishedMeetingIds.Add) > 0;
+    }
 
     #region 載入
 
+    private async Task LoadProjectsAsync()
+    {
+        var result = await ProjectApi.GetSelectableAsync(includeArchived: true);
+        if (!result.Success)
+        {
+            NotifyError($"讀取專案失敗：{ApiClient.ErrorText(result)}");
+        }
+
+        projects = result.Data ?? [];
+        RefreshSelectorItems();
+    }
+
     public async Task ReloadAsync()
     {
-        // 每次重新載入都更新存取範圍（1.0.47）：剛建立的專案自己就是主責，要能馬上改團隊、刪除。
-        access = await ProjectAccessService.GetAsync();
-        projects = await projectService.GetSelectableAsync(includeArchived: true);
+        // 每次重新載入都更新權限旗標（1.0.47）：剛建立的專案自己就是主責，要能馬上改團隊、刪除。
+        await LoadProjectsAsync();
 
         // 選取的專案被刪掉、已不可存取、或被目前的篩選排除時，退回篩選結果的第一筆（0.4.114 起看篩選結果，
         // 不然下拉框裡沒有那個值而顯示空白，摘要卻還是那個專案）。
-        var filtered = FilteredProjects.ToList();
-        if (filtered.All(x => x.Id != selectedProjectId))
+        if (selectorItems.All(x => x.Id != selectedProjectId))
         {
-            selectedProjectId = filtered.FirstOrDefault()?.Id ?? 0;
+            selectedProjectId = selectorItems.FirstOrDefault()?.Id ?? 0;
             // 名冊、逐字稿選擇是專案私有的，換專案一定要清掉。
             selectedTranscriptId = 0;
             selectedAttendees = [];
@@ -530,7 +527,7 @@ public partial class ProjectViewView : IDisposable
         StateHasChanged();
     }
 
-    /// <summary>重新載入目前專案底下的資料（歷史會議紀錄、可選逐字稿與提示詞）。</summary>
+    /// <summary>重新載入目前專案底下的資料（附件、歷史會議紀錄、可選逐字稿與提示詞）。</summary>
     private async Task ReloadProjectContextAsync()
     {
         if (selectedProjectId <= 0)
@@ -542,17 +539,24 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        // 附件另外撈：專案選擇器用的 GetSelectableAsync 沒有 Include(x => x.Files)，
-        // 而畫面一次只顯示一個專案，替全部專案都撈附件並不划算。
-        projectFiles = (await projectService.GetAsync(selectedProjectId)).Files;
+        var projectId = selectedProjectId;
 
-        projectMeetings = await meetingService.GetByProjectAsync(selectedProjectId);
+        // 附件另外撈：專案選擇器的清單不帶附件，而畫面一次只顯示一個專案。
+        projectFiles = (await ProjectApi.GetAsync(projectId)).Data?.Files ?? [];
+
+        var meetings = await ProjectApi.GetMeetingsAsync(projectId);
+        if (!meetings.Success)
+        {
+            NotifyError($"讀取會議紀錄失敗：{ApiClient.ErrorText(meetings)}");
+        }
+
+        projectMeetings = meetings.Data ?? [];
 
         // 1.0.53：生成進度會在背景重新載入，勾選依 Id 對回新的列；換專案時 Id 都不同，自然清空。
         var selectedMeetingIds = selectedMeetings.Select(x => x.Id).ToHashSet();
         selectedMeetings = projectMeetings.Where(x => selectedMeetingIds.Contains(x.Id) && CanDetach(x)).ToList();
-        selectableTranscripts = await meetingService.GetSelectableTranscriptsAsync();
-        promptTemplates = await promptTemplateService.GetEnabledSelectableAsync();
+        selectableTranscripts = (await ProjectApi.GetSelectableTranscriptsAsync(projectId)).Data ?? [];
+        promptTemplates = (await ProjectApi.GetPromptTemplatesAsync(projectId)).Data ?? [];
 
         // 選過的逐字稿若已不在可選清單（例如被別的專案取走），清掉避免送出無效請求。
         if (selectableTranscripts.All(x => x.Id != selectedTranscriptId))
@@ -581,7 +585,11 @@ public partial class ProjectViewView : IDisposable
         logger.LogInformation("Project selection changed. ProjectId={ProjectId}", projectId);
 
         // 1.0.51：記在帳號上，下次進頁面預設選它。只記使用者自己選的，不記「退回第一筆」。
-        await projectService.SaveLastSelectedProjectAsync(projectId);
+        if (projectId > 0)
+        {
+            await ProjectApi.SaveLastSelectedAsync(projectId);
+        }
+
         await ReloadProjectContextAsync();
         StateHasChanged();
     }
@@ -590,8 +598,7 @@ public partial class ProjectViewView : IDisposable
     /// 把輸入框的內容加進名單。
     ///
     /// ⚠️ 刻意用「輸入框 ＋ 按鈕」而不是 AntDesign 的 SelectMode.Tags：那個元件的搜尋輸入框
-    /// 在 Blazor Server ＋ 中文輸入法下會把組字中途的注音留在欄位裡（0.4.71 實測，症狀是
-    /// 「艾ㄑ－艾琪」這種殘留）。普通 Input 走 change 事件、不逐鍵回傳，量測確認正常。
+    /// 在中文輸入法下會把組字中途的注音留在欄位裡（0.4.71 實測，症狀是「艾ㄑ－艾琪」這種殘留）。
     /// </summary>
     private void OnAddGlossaryTerm() => AddTo(CurrentRecord.GlossaryTerms, ref glossaryTermDraft);
 
@@ -628,12 +635,12 @@ public partial class ProjectViewView : IDisposable
     #region AI 轉會議紀錄
 
     /// <summary>已被其他專案取用的逐字稿不可選；屬於本專案的可以重選以更換提示詞重新產生。</summary>
-    private bool IsTranscriptDisabled(MeetingAdapterModel transcript)
+    private bool IsTranscriptDisabled(ProjectTranscriptOptionDto transcript)
     {
         return transcript.ProjectId is not null && transcript.ProjectId != selectedProjectId;
     }
 
-    private string DescribeTranscriptOwnership(MeetingAdapterModel transcript)
+    private string DescribeTranscriptOwnership(ProjectTranscriptOptionDto transcript)
     {
         if (transcript.ProjectId is null)
         {
@@ -671,7 +678,7 @@ public partial class ProjectViewView : IDisposable
 
         var situation = willOverwrite
             ? "這份逐字稿已經產生過會議紀錄，重新產生會覆蓋既有內容（包含人工編修過的部分），且無法復原。"
-            : transcript?.DraftStatus switch
+            : (DraftStatus?)transcript?.DraftStatus switch
             {
                 DraftStatus.Failed => "上次產生失敗，這會重新跑一次完整的生成。",
                 DraftStatus.Cancelled => "上次產生已取消，這會從頭重跑，不會接續上次的進度。",
@@ -708,15 +715,16 @@ public partial class ProjectViewView : IDisposable
                 selectedProjectId,
                 selectedPromptTemplateId);
 
-            var result = await meetingService.RequestDraftAsync(
-                selectedTranscriptId,
-                selectedProjectId,
-                selectedPromptTemplateId,
-                selectedAttendees);
+            var result = await ProjectApi.RequestDraftAsync(selectedProjectId, selectedTranscriptId, new MeetingDraftRequestDto
+            {
+                PromptTemplateId = selectedPromptTemplateId,
+                ProjectId = selectedProjectId,
+                Attendees = selectedAttendees,
+            });
 
             if (!result.Success)
             {
-                NotifyError(result.Message);
+                NotifyError(ApiClient.ErrorText(result));
                 return;
             }
 
@@ -735,29 +743,32 @@ public partial class ProjectViewView : IDisposable
     /// 這一頁的會議一律已歸屬本專案，所以編修給得起，PDF 也帶得到專案名稱。
     /// 列上那顆「匯出 PDF」刻意保留（使用者明確要求外層可以直接點），視窗裡再放一顆。
     /// </summary>
-    private async Task OnOpenDraftModalAsync(MeetingAdapterModel meeting)
+    private async Task OnOpenDraftModalAsync(MeetingDto meeting)
     {
-        draftMeeting = meeting;
-        draftMeetingId = meeting.Id;
-        draftModalTitle = $"會議紀錄 - {meeting.Title}";
-        draftContent = meeting.DraftContent;
+        // 清單不帶會議紀錄全文（太大），開視窗時才取單筆。
+        var detail = await ProjectApi.GetMeetingAsync(selectedProjectId, IdOf(meeting));
+        if (!detail.Success || detail.Data is not { } current)
+        {
+            NotifyError(ApiClient.ErrorText(detail));
+            return;
+        }
+
+        draftMeeting = current;
+        draftMeetingId = IdOf(current);
+        draftModalTitle = $"會議紀錄 - {current.Title}";
+        draftContent = current.DraftContent;
         draftCanEdit = false;
 
-        draftCanSwitchToEdit = meeting.HasDraft
-            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
-            && !IsReadOnlyProject;
+        draftCanSwitchToEdit = current.HasDraft && CanEdit && !IsReadOnlyProject;
 
         // 這是專案頁：匯出權限看專案項目，與同一列的匯出鈕一致（0.4.109 前誤用會議紀錄的鍵）。
-        var canExport = AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Export);
-        draftCanExport = meeting.HasDraft && canExport;
+        draftCanExport = current.HasDraft && CanExport;
 
-        draftTranscript = meeting.HasTranscript ? await meetingService.ReadTranscriptAsync(meeting.Id) : null;
-        draftCanCopyTranscript = canExport;
+        draftTranscript = current.HasTranscript ? (await ProjectApi.GetTranscriptAsync(selectedProjectId, draftMeetingId)).Data?.Text : null;
+        draftCanCopyTranscript = CanExport;
 
         // 1.0.48：和上方 AI 區塊同一組條件（專案項目 edit、專案不是唯讀）；生成中、沒有逐字稿時不出現。
-        draftCanGenerate = meeting.CanGenerateDraft
-            && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)
-            && !IsReadOnlyProject;
+        draftCanGenerate = current.CanGenerateDraft && CanEdit && !IsReadOnlyProject;
 
         draftModalVisible = true;
     }
@@ -774,7 +785,7 @@ public partial class ProjectViewView : IDisposable
         }
 
         draftModalVisible = false;
-        selectedTranscriptId = draftMeeting.Id;
+        selectedTranscriptId = IdOf(draftMeeting);
         StateHasChanged();
 
         try
@@ -801,7 +812,7 @@ public partial class ProjectViewView : IDisposable
         draftModalTitle = $"會議紀錄 - {draftMeeting?.Title}";
     }
 
-    /// <summary>逐字稿「複製全文」：給使用者貼到外部 AI 問答（1.0.40 加回逐字稿的原因）。</summary>
+    /// <summary>逐字稿「複製全文」：給使用者貼到外部 AI 問答（1.0.40 加回逐字稿的原因）。稽核由伺服器寫。</summary>
     private async Task OnCopyTranscriptAsync()
     {
         if (draftMeeting is null || string.IsNullOrEmpty(draftTranscript))
@@ -815,14 +826,11 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        await AuditLogService.WriteForCurrentUserAsync(
-            AuditActions.MeetingTranscriptCopy, targetType: "Meeting", targetId: draftMeeting.Id.ToString(),
-            detail: $"chars={draftTranscript.Length}; page=Project");
-
+        await ProjectApi.TranscriptCopiedAsync(selectedProjectId, IdOf(draftMeeting));
         _ = messageService.SuccessAsync("已複製逐字稿。");
     }
 
-    /// <summary>逐字稿「下載 .txt」：UTF-8 含 BOM，Windows 記事本直接開也不亂碼。</summary>
+    /// <summary>逐字稿「下載 .txt」：伺服器產生（UTF-8 含 BOM，記事本直接開也不亂碼）並寫稽核。</summary>
     private async Task OnDownloadTranscriptAsync()
     {
         if (draftMeeting is null || string.IsNullOrEmpty(draftTranscript))
@@ -830,36 +838,24 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        try
+        var download = await ProjectApi.DownloadTranscriptAsync(selectedProjectId, IdOf(draftMeeting));
+        if (!download.Success || download.Content is null)
         {
-            var fileName = MeetingDocumentExporter.BuildTranscriptFileName(draftMeeting);
-            var bytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
-                .GetPreamble()
-                .Concat(System.Text.Encoding.UTF8.GetBytes(draftTranscript))
-                .ToArray();
-
-            await fileDownloadInterop.SaveBytesAsync(fileName, bytes, TranscriptContentType);
-            await AuditLogService.WriteForCurrentUserAsync(
-                AuditActions.MeetingTranscriptDownload, targetType: "Meeting", targetId: draftMeeting.Id.ToString(),
-                detail: $"file={fileName}; bytes={bytes.Length}; page=Project");
-
-            NotifySuccess($"已下載「{fileName}」。");
+            NotifyError($"下載逐字稿失敗：{download.Error}");
+            return;
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to download meeting transcript. MeetingId={MeetingId}", draftMeeting.Id);
-            NotifyError($"下載逐字稿失敗：{ex.Message}");
-        }
+
+        await fileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+        NotifySuccess($"已下載「{download.FileName}」。");
     }
 
-    /// <summary>把會議紀錄匯出成 Markdown 檔並直接推給瀏覽器下載（檔案不落地）。</summary>
     /// <summary>
-    /// 把會議紀錄匯出成 PDF 並直接推給瀏覽器下載（檔案不落地）。
-    /// PDF 由無頭瀏覽器列印產生，會啟動外部程序，通常數秒，因此要擋重複點擊。
+    /// 把會議紀錄匯出成 PDF 並推給瀏覽器下載（伺服器以無頭瀏覽器列印，表頭帶專案名稱）。
+    /// 通常數秒，因此要擋重複點擊。<paramref name="content"/> 有值時用它（編修中、還沒存的內容）。
     /// </summary>
-    private async Task OnExportDraftAsync(MeetingAdapterModel meeting)
+    private async Task ExportDraftAsync(MeetingDto meeting, string? content)
     {
-        if (!meeting.HasDraft || exportingMeetingId is not null)
+        if (exportingMeetingId is not null)
         {
             return;
         }
@@ -869,27 +865,16 @@ public partial class ProjectViewView : IDisposable
 
         try
         {
-            var fileName = MeetingDocumentExporter.BuildFileName(meeting);
-            var html = MeetingDocumentExporter.BuildHtml(meeting, SelectedProject?.Title);
-            var pdf = await pdfRenderer.RenderAsync(html);
+            var download = await ProjectApi.DownloadDraftPdfAsync(selectedProjectId, IdOf(meeting), content);
+            if (!download.Success || download.Content is null)
+            {
+                NotifyError($"匯出 PDF 失敗：{download.Error}");
+                return;
+            }
 
-            await fileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-            await AuditLogService.WriteForCurrentUserAsync(
-                AuditActions.MeetingExportPdf, targetType: "Meeting", targetId: meeting.Id.ToString(),
-                detail: $"file={fileName}; bytes={pdf.Length}; page=Project");
-
-            logger.LogInformation(
-                "Meeting draft exported as pdf. MeetingId={MeetingId}, FileName={FileName}, Bytes={Bytes}",
-                meeting.Id,
-                fileName,
-                pdf.Length);
-
-            NotifySuccess($"已下載「{fileName}」。");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to export meeting draft. MeetingId={MeetingId}", meeting.Id);
-            NotifyError($"匯出 PDF 失敗：{ex.Message}");
+            await fileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+            logger.LogInformation("Meeting draft exported as pdf. MeetingId={MeetingId}, FileName={FileName}", meeting.Id, download.FileName);
+            NotifySuccess($"已下載「{download.FileName}」。");
         }
         finally
         {
@@ -897,6 +882,17 @@ public partial class ProjectViewView : IDisposable
             StateHasChanged();
         }
     }
+
+    private Task OnExportDraftAsync(MeetingDto meeting)
+        => meeting.HasDraft ? ExportDraftAsync(meeting, content: null) : Task.CompletedTask;
+
+    /// <summary>
+    /// 編修視窗裡的「下載 PDF」。
+    /// ⚠️ 送的是**視窗裡當下的內容**：使用者改了字、還沒儲存就按下載時，資料庫裡是舊版本，
+    /// 產出來的 PDF 會與畫面不符而且看不出來。伺服器只拿它產這一次 PDF，不回寫。
+    /// </summary>
+    private Task OnExportCurrentDraftAsync(string content)
+        => draftMeeting is null ? Task.CompletedTask : ExportDraftAsync(draftMeeting, content);
 
     /// <summary>
     /// 把目前專案的所有待辦匯出成 PDF 總覽（1.0.54，看進度用）。唯讀動作：已完成（封存）的專案也能匯出。
@@ -913,34 +909,16 @@ public partial class ProjectViewView : IDisposable
 
         try
         {
-            var exportedAt = DateTime.Now;
-            var todos = await TodoService.GetForProjectAsync(project.Id);
-            var html = ProjectTodoReportExporter.BuildHtml(new ProjectTodoReportRequest(
-                SystemSettingsOptions.Value.SystemInformation.SystemVersion,
-                CurrentUserService.CurrentUser.Account,
-                exportedAt,
-                project,
-                todos));
-            var pdf = await pdfRenderer.RenderAsync(html);
-            var fileName = ProjectTodoReportExporter.BuildFileName(project, exportedAt);
+            var download = await ProjectApi.DownloadTodosPdfAsync(IdOf(project));
+            if (!download.Success || download.Content is null)
+            {
+                NotifyError($"匯出 PDF 失敗：{download.Error}");
+                return;
+            }
 
-            await fileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-            await AuditLogService.WriteForCurrentUserAsync(
-                AuditActions.ProjectTodoExportPdf, targetType: "Project", targetId: project.Id.ToString(),
-                detail: $"file={fileName}; todos={todos.Count}; bytes={pdf.Length}");
-
-            logger.LogInformation(
-                "Project todos exported as pdf. ProjectId={ProjectId}, Todos={Todos}, Bytes={Bytes}",
-                project.Id,
-                todos.Count,
-                pdf.Length);
-
-            NotifySuccess($"已下載「{fileName}」。");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to export project todos. ProjectId={ProjectId}", project.Id);
-            NotifyError($"匯出 PDF 失敗：{ex.Message}");
+            await fileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+            logger.LogInformation("Project todos exported as pdf. ProjectId={ProjectId}, FileName={FileName}", project.Id, download.FileName);
+            NotifySuccess($"已下載「{download.FileName}」。");
         }
         finally
         {
@@ -954,11 +932,11 @@ public partial class ProjectViewView : IDisposable
         isSavingDraft = true;
         try
         {
-            var result = await meetingService.UpdateDraftAsync(draftMeetingId, content);
+            var result = await ProjectApi.UpdateDraftAsync(selectedProjectId, draftMeetingId, content);
             if (!result.Success)
             {
                 // 存檔失敗時視窗留著，使用者的編修還在裡面。
-                NotifyError(result.Message);
+                NotifyError(ApiClient.ErrorText(result));
                 return;
             }
 
@@ -978,38 +956,10 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    /// <summary>
-    /// 編修視窗裡的「下載 PDF」。
-    ///
-    /// <para>
-    /// ⚠️ 拿的是**視窗裡當下的內容**而不是 <c>draftMeeting.DraftContent</c>：
-    /// 使用者改了字、還沒儲存就按下載時，後者是資料庫裡的舊版本，
-    /// 產出來的 PDF 會與畫面不符而且看不出來。複本只服務這一次匯出，不回寫清單。
-    /// </para>
-    /// </summary>
-    private Task OnExportCurrentDraftAsync(string content)
-    {
-        if (draftMeeting is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        var snapshot = draftMeeting.Clone();
-        snapshot.DraftContent = content;
-
-        return OnExportDraftAsync(snapshot);
-    }
-
-    /// <summary>
-    /// 把這筆會議紀錄從專案移除（解除歸屬並清掉草稿），讓逐字稿可以重新指定到正確的專案。
-    ///
-    /// 會刪掉 AI 產生的草稿且無法復原，所以一定先跳確認；但**影音檔與逐字稿會保留**，
-    /// 這也是它與「會議紀錄」頁那個整筆刪除最大的差別，確認文案要講清楚。
-    /// </summary>
     #region 多選從專案移除（1.0.53）
 
     /// <summary>歷史會議紀錄清單勾選的列；換專案、重新載入專案脈絡時清掉。</summary>
-    private IEnumerable<MeetingAdapterModel> selectedMeetings = [];
+    private IEnumerable<MeetingDto> selectedMeetings = [];
 
     private bool isBatchDetaching;
 
@@ -1043,8 +993,8 @@ public partial class ProjectViewView : IDisposable
         {
             var result = await BatchRunner.RunAsync(items, x => x.Title, async x =>
             {
-                var r = await meetingService.DetachFromProjectAsync(x.Id, project.Id);
-                return r.Success ? null : r.Message;
+                var r = await ProjectApi.DetachAsync(IdOf(project), IdOf(x));
+                return r.Success ? null : ApiClient.ErrorText(r);
             });
             logger.LogInformation("Batch detach completed. ProjectId={ProjectId}, Succeeded={Succeeded}, Failed={Failed}", project.Id, result.Succeeded, result.Failures.Count);
             BatchResultNotifier.Notify(notificationService, result, "從專案移除");
@@ -1060,7 +1010,13 @@ public partial class ProjectViewView : IDisposable
 
     #endregion
 
-    private async Task OnDetachMeetingAsync(MeetingAdapterModel meeting)
+    /// <summary>
+    /// 把這筆會議紀錄從專案移除（解除歸屬並清掉草稿），讓逐字稿可以重新指定到正確的專案。
+    ///
+    /// 會刪掉 AI 產生的草稿且無法復原，所以一定先跳確認；但**影音檔與逐字稿會保留**，
+    /// 這也是它與「會議紀錄」頁那個整筆刪除最大的差別，確認文案要講清楚。
+    /// </summary>
+    private async Task OnDetachMeetingAsync(MeetingDto meeting)
     {
         if (detachingMeetingId is not null || SelectedProject is null)
         {
@@ -1084,24 +1040,19 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        detachingMeetingId = meeting.Id;
+        detachingMeetingId = IdOf(meeting);
 
         try
         {
-            var result = await meetingService.DetachFromProjectAsync(meeting.Id, SelectedProject.Id);
+            var result = await ProjectApi.DetachAsync(IdOf(SelectedProject), IdOf(meeting));
             if (!result.Success)
             {
-                NotifyError(result.Message);
+                NotifyError(ApiClient.ErrorText(result));
                 return;
             }
 
             NotifySuccess($"已將「{meeting.Title}」從專案移除。");
             await ReloadProjectContextAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Detaching meeting from project failed. MeetingId={MeetingId}", meeting.Id);
-            NotifyError($"移除失敗：{ex.Message}");
         }
         finally
         {
@@ -1109,7 +1060,6 @@ public partial class ProjectViewView : IDisposable
             StateHasChanged();
         }
     }
-
 
     #endregion
 
@@ -1122,11 +1072,19 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
+        var detail = await ProjectApi.GetAsync(IdOf(SelectedProject));
+        if (!detail.Success || detail.Data is not { } project)
+        {
+            NotifyError(ApiClient.ErrorText(detail));
+            return;
+        }
+
         isNewRecordMode = false;
         modalTitle = "修改專案";
-        CurrentRecord = await projectService.GetAsync(SelectedProject.Id);
+        editingProject = project;
+        CurrentRecord = ProjectFormModel.From(project);
         originalPrimaryOption = CurrentRecord.PrimaryTeamId is { } primaryId
-            ? new ProjectService.TeamOption(primaryId, CurrentRecord.PrimaryTeamName)
+            ? new TeamOptionDto { Id = primaryId, Name = CurrentRecord.PrimaryTeamName }
             : null;
         await LoadTeamOptionsAsync(CurrentRecord.CollaboratorTeamIds);
         await ReloadOwnerCandidatesAsync();
@@ -1146,14 +1104,6 @@ public partial class ProjectViewView : IDisposable
 
         var project = SelectedProject;
         logger.LogInformation("Delete project requested. ProjectId={ProjectId}, Title={Title}", project.Id, project.Title);
-
-        var beforeDeleteCheckResult = await projectService.BeforeDeleteCheckAsync(project);
-        if (!beforeDeleteCheckResult.Success)
-        {
-            logger.LogWarning("Project delete pre-check failed. ProjectId={ProjectId}, Message={Message}", project.Id, beforeDeleteCheckResult.Message);
-            NotifyError(beforeDeleteCheckResult.Message);
-            return;
-        }
 
         // 待辦是 Cascade（隨專案刪除），會議是 SetNull（只解除歸屬）——兩件事都要先講清楚（0.4.114）。
         var content = $"確定要刪除「{project.Title}」嗎？此操作無法復原。專案底下的待辦事項會一併刪除"
@@ -1175,12 +1125,11 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        var deleteResult = await projectService.DeleteAsync(project.Id);
+        var deleteResult = await ProjectApi.DeleteAsync(IdOf(project));
         if (!deleteResult.Success)
         {
             // 0.4.114 以前不看結果，失敗也顯示「刪除成功」。
-            logger.LogWarning("Project delete failed. ProjectId={ProjectId}, Message={Message}", project.Id, deleteResult.Message);
-            NotifyError(deleteResult.Message);
+            NotifyError(ApiClient.ErrorText(deleteResult));
             return;
         }
 
@@ -1195,9 +1144,9 @@ public partial class ProjectViewView : IDisposable
     {
         await LoadTeamOptionsAsync();
 
-        CurrentRecord = new ProjectAdapterModel
+        CurrentRecord = new ProjectFormModel
         {
-            Status = StatusOptions.First(),
+            Status = StatusOptions[0],
             CompletionPercentage = 0,
             Files = [],
             // 主責不預設（0.4.114）：一定要自己選，沒選由 [Required] 驗證擋下。以前預設帶第一個團隊
@@ -1205,6 +1154,7 @@ public partial class ProjectViewView : IDisposable
             PrimaryTeamId = null,
         };
 
+        editingProject = null;
         originalPrimaryOption = null;
         ownerCandidates = [];
         ClearPendingFiles();
@@ -1217,8 +1167,7 @@ public partial class ProjectViewView : IDisposable
     }
 
     /// <summary>能不能建立團隊：主責下拉空的時候，決定提示「去團隊清單新增」還是「聯絡管理者」（1.0.26）。</summary>
-    private bool CanCreateTeam => AuthenticationStateHelper.CheckAccessAction(
-        MagicObjectHelper.角色_團隊清單, PermissionActions.Create);
+    private bool CanCreateTeam => PermissionView.Can(MagicObjectHelper.角色_團隊清單, PermissionActions.Create);
 
     /// <summary>使用者在另一個頁籤建好團隊後，不必關掉填到一半的表單就能選到它。</summary>
     private async Task ReloadTeamOptionsAsync()
@@ -1229,9 +1178,9 @@ public partial class ProjectViewView : IDisposable
 
     private async Task LoadTeamOptionsAsync(IEnumerable<int>? existingCollaboratorIds = null)
     {
-        primaryTeamOptions = await projectService.GetSelectablePrimaryTeamsAsync();
-        collaboratorTeamOptions = await projectService.GetSelectableCollaboratorTeamsAsync(existingCollaboratorIds);
-        availableCategories = await CategoryService.GetAllEnabledNamesAsync();
+        primaryTeamOptions = (await ProjectApi.GetPrimaryTeamsAsync()).Data ?? [];
+        collaboratorTeamOptions = (await ProjectApi.GetCollaboratorTeamsAsync(existingCollaboratorIds ?? [])).Data ?? [];
+        availableCategories = (await ProjectApi.GetEnabledCategoriesAsync()).Data ?? availableCategories;
     }
 
     private async Task OnCollaboratorTeamsChanged(IEnumerable<int> values)
@@ -1266,41 +1215,39 @@ public partial class ProjectViewView : IDisposable
     /// <summary>目前選的專案被篩掉時，切到篩選結果的第一筆；篩選結果是空的就清掉選取，畫面顯示空狀態提示。</summary>
     private async Task KeepSelectionInFilterAsync()
     {
-        var filtered = FilteredProjects.ToList();
-        if (filtered.All(x => x.Id != selectedProjectId))
+        RefreshSelectorItems();
+        if (selectorItems.All(x => x.Id != selectedProjectId))
         {
-            await OnProjectSelectedAsync(filtered.Count > 0 ? filtered[0].Id : 0);
+            await OnProjectSelectedAsync(selectorItems.Count > 0 ? selectorItems[0].Id : 0);
         }
     }
 
     /// <summary>
-    /// 選檔當下就把內容讀進伺服器暫存檔（0.4.114）。
-    /// Blazor 的 InputFile 每次 change 都會清掉前一批檔案的參照（blazor.web.js 的 _blazorFilesById），
-    /// 重建 input（Reset）也會讓舊元素上的檔案失效——所以「分兩次挑檔」或「移除其中一個」之後，
-    /// 先前挑的檔案在存檔時就讀不到了。讀進暫存檔之後與瀏覽器端的 input 無關。
+    /// 選檔當下就把內容傳到伺服器暫存檔（0.4.114 起的做法；1.1.26 起經 API 分塊上傳）。
+    /// 傳完之後與瀏覽器端的 input 無關，「分兩次挑檔」或「移除其中一個」都不影響先前挑的檔案。
     /// </summary>
     private async Task OnProjectFilesSelectedAsync(InputFileChangeEventArgs args)
     {
         isReadingFiles = true;
-        await InvokeAsync(StateHasChanged);
+        StateHasChanged();
         try
         {
-            await ReadSelectedFilesAsync(args);
+            await UploadSelectedFilesAsync(args);
         }
         finally
         {
             isReadingFiles = false;
-            await InvokeAsync(StateHasChanged);
+            StateHasChanged();
         }
     }
 
-    private async Task ReadSelectedFilesAsync(InputFileChangeEventArgs args)
+    private async Task UploadSelectedFilesAsync(InputFileChangeEventArgs args)
     {
         var files = args.GetMultipleFiles(1000);
         for (var fileIndex = 0; fileIndex < files.Count; fileIndex++)
         {
             var file = files[fileIndex];
-            if (file.Size > ProjectService.MaxUploadFileSize)
+            if (file.Size > ProjectRules.MaxAttachmentFileSize)
             {
                 _ = notificationService.Open(new NotificationConfig
                 {
@@ -1312,31 +1259,18 @@ public partial class ProjectViewView : IDisposable
                 continue;
             }
 
-            var tempPath = Path.Combine(PendingUploadTempDirectory, $"{Guid.NewGuid():N}.tmp");
-            try
+            // 位元組由瀏覽器以 HTTP 分塊送（chunk-upload.js）。fileIndex 對應 input.files 的順序。
+            if (attachmentDropZone?.InputElement is not { } input)
             {
-                // 1.0.59：位元組改由瀏覽器以 HTTP 分塊送（chunk-upload.js），不再經 Blazor 連線——
-                // 以前經連線串流，IIS 上大檔約十幾秒就斷線並拖垮整條連線。fileIndex 對應 input.files 的順序。
-                if (attachmentDropZone?.InputElement is not { } input)
-                {
-                    throw new InvalidOperationException("找不到檔案選取區。");
-                }
-
-                Directory.CreateDirectory(PendingUploadTempDirectory);
-                await using (var upload = await browserFileUploader.OpenAsync(input, fileIndex, file.Name, file.Size))
-                await using (var target = File.Create(tempPath))
-                {
-                    await upload.Stream.CopyToAsync(target);
-                }
+                NotifyError($"{file.Name} 讀取失敗，請重新選擇。");
+                continue;
             }
-            catch (Exception ex)
+
+            var (uploadId, error) = await AttachmentUploader.UploadAsync(input, fileIndex, file);
+            if (uploadId is null)
             {
-                TryDeleteTempFile(tempPath);
-                logger.LogError(ex, "Failed to read selected project file. FileName={FileName}", file.Name);
-                // 瀏覽器端放棄（登入失效、重試用完）時講明原因（1.0.67），使用者才知道要重新登入還是重選。
-                NotifyError(ex is UploadInterruptedException interrupted
-                    ? $"{file.Name} 上傳失敗：{interrupted.Message}"
-                    : $"{file.Name} 讀取失敗，請重新選擇。");
+                logger.LogWarning("Failed to upload selected project file. FileName={FileName}, Error={Error}", file.Name, error);
+                NotifyError(error ?? $"{file.Name} 讀取失敗，請重新選擇。");
                 continue;
             }
 
@@ -1345,39 +1279,13 @@ public partial class ProjectViewView : IDisposable
                 Id = Guid.NewGuid(),
                 Name = file.Name,
                 Size = file.Size,
-                ContentType = file.ContentType,
-                TempPath = tempPath,
+                UploadId = uploadId.Value,
             });
         }
     }
 
-    private static string PendingUploadTempDirectory => PendingUploadTempFiles.DefaultDirectory;
-
-    /// <summary>清掉待上傳清單，連同暫存檔。</summary>
-    private void ClearPendingFiles()
-    {
-        foreach (var file in pendingUploadFiles)
-        {
-            TryDeleteTempFile(file.TempPath);
-        }
-
-        pendingUploadFiles.Clear();
-    }
-
-    private void TryDeleteTempFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to delete pending upload temp file. Path={Path}", path);
-        }
-    }
+    /// <summary>清掉待上傳清單（伺服器上沒用到的暫存檔會過期清掉）。</summary>
+    private void ClearPendingFiles() => pendingUploadFiles.Clear();
 
     // 防重複送出（0.4.114）：上傳大附件時再按一次確定、或連按兩下 Enter，會建出兩筆專案。1.0.62 起經 FormSubmitGate。
     private Task OnModalOKHandleAsync(MouseEventArgs args) => submitGate.RunAsync(SubmitModalAsync);
@@ -1387,7 +1295,6 @@ public partial class ProjectViewView : IDisposable
         if (isReadingFiles)
         {
             NotifyError("附件還在讀取中，請稍候再存檔。");
-            modalVisible = true;
             return;
         }
 
@@ -1409,12 +1316,14 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
+    /// <summary>
+    /// 存檔。視窗是單向 Visible（1.1.19）：被擋下時什麼都不用做，視窗本來就還開著；成功才關。
+    /// </summary>
     private async Task SaveModalAsync()
     {
         if (LocalEditContext?.Validate() == false)
         {
-            IEnumerable<string> allErrors = LocalEditContext.GetValidationMessages();
-            foreach (var error in allErrors)
+            foreach (var error in LocalEditContext.GetValidationMessages())
             {
                 logger.LogWarning("Project form validation failed. Error={Error}", error);
                 _ = notificationService.Open(new NotificationConfig
@@ -1427,162 +1336,122 @@ public partial class ProjectViewView : IDisposable
                 });
             }
 
-            modalVisible = true;
             return;
         }
 
-        var uploadInputs = new List<ProjectUploadFileInput>();
-        var uploadStreams = new List<Stream>();
+        var form = ToFormDto(CurrentRecord);
+        form.UploadIds = pendingUploadFiles.Select(x => x.UploadId).ToList();
+        form.RemovedFileIds = [.. removedFileIds];
 
-        try
+        ApiResult<ProjectSaveResultDto> actionResult;
+
+        if (isNewRecordMode)
         {
-            foreach (var pendingUploadFile in pendingUploadFiles)
+            actionResult = await ProjectApi.CreateAsync(form);
+            logger.LogInformation("Project create submitted. Title={Title}", CurrentRecord.Title);
+        }
+        else
+        {
+            // 1.0.46：改成「已完成」就是封存，先講清楚後果再存。
+            var archiving = CurrentRecord.IsArchived && projects.FirstOrDefault(x => x.Id == CurrentRecord.Id)?.IsArchived == false;
+            if (archiving)
             {
-                var stream = File.OpenRead(pendingUploadFile.TempPath);
-                uploadStreams.Add(stream);
-                uploadInputs.Add(new ProjectUploadFileInput
+                var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
                 {
-                    FileName = pendingUploadFile.Name,
-                    ContentType = pendingUploadFile.ContentType,
-                    FileSize = pendingUploadFile.Size,
-                    Content = stream
+                    Title = "確認把專案標為已完成（封存）",
+                    Content = "標為已完成後，這個專案會從「使用中」清單與其他頁的專案選單消失；"
+                        + "一般使用者只能檢視、下載 PDF、AI 問答，不能再產生會議紀錄、抽出或修改待辦。"
+                        + "之後隨時可以按「重新開啟」恢復。確定要標為已完成嗎？",
+                    OkText = "標為已完成",
+                    CancelText = "取消",
+                    MaskClosable = false,
                 });
-            }
 
-            VerifyRecordResult actionResult;
-
-            if (isNewRecordMode)
-            {
-                var beforeAddCheckResult = await projectService.BeforeAddCheckAsync(CurrentRecord, uploadInputs);
-                if (!beforeAddCheckResult.Success)
+                if (!confirmed)
                 {
-                    logger.LogWarning("Project create pre-check failed. Title={Title}, Message={Message}", CurrentRecord.Title, beforeAddCheckResult.Message);
-                    NotifyError(beforeAddCheckResult.Message);
-                    modalVisible = true;
                     return;
                 }
 
-                CurrentRecord.CreatedAt = DateTime.Now;
-                CurrentRecord.UpdatedAt = DateTime.Now;
-
-                actionResult = await projectService.AddAsync(CurrentRecord, uploadInputs);
-                logger.LogInformation("Project create submitted. Title={Title}", CurrentRecord.Title);
-            }
-            else
-            {
-                var beforeUpdateCheckResult = await projectService.BeforeUpdateCheckAsync(CurrentRecord, uploadInputs);
-                if (!beforeUpdateCheckResult.Success)
-                {
-                    logger.LogWarning("Project update pre-check failed. ProjectId={ProjectId}, Message={Message}", CurrentRecord.Id, beforeUpdateCheckResult.Message);
-                    NotifyError(beforeUpdateCheckResult.Message);
-                    modalVisible = true;
-                    return;
-                }
-
-                // 1.0.46：改成「已完成」就是封存，先講清楚後果再存。
-                var archiving = CurrentRecord.IsArchived && projects.FirstOrDefault(x => x.Id == CurrentRecord.Id)?.IsArchived == false;
-                if (archiving)
-                {
-                    var confirmed = await modalService.ConfirmAsync(new ConfirmOptions
-                    {
-                        Title = "確認把專案標為已完成（封存）",
-                        Content = "標為已完成後，這個專案會從「使用中」清單與其他頁的專案選單消失；"
-                            + "一般使用者只能檢視、下載 PDF、AI 問答，不能再產生會議紀錄、抽出或修改待辦。"
-                            + "之後隨時可以按「重新開啟」恢復。確定要標為已完成嗎？",
-                        OkText = "標為已完成",
-                        CancelText = "取消",
-                        MaskClosable = false,
-                    });
-
-                    if (!confirmed)
-                    {
-                        modalVisible = true;
-                        return;
-                    }
-
-                    // 存完之後還要看得到它：切到「全部」，不然它從使用中消失，看起來像被刪掉。
-                    projectScope = ProjectScope.All;
-                }
-
-                CurrentRecord.UpdatedAt = DateTime.Now;
-                actionResult = await projectService.UpdateAsync(CurrentRecord, uploadInputs, removedFileIds);
-                logger.LogInformation("Project update submitted. ProjectId={ProjectId}, Title={Title}", CurrentRecord.Id, CurrentRecord.Title);
+                // 存完之後還要看得到它：切到「全部」，不然它從使用中消失，看起來像被刪掉。
+                projectScope = ProjectScope.All;
             }
 
-            if (!actionResult.Success)
+            actionResult = await ProjectApi.UpdateAsync(form);
+            logger.LogInformation("Project update submitted. ProjectId={ProjectId}, Title={Title}", CurrentRecord.Id, CurrentRecord.Title);
+        }
+
+        if (!actionResult.Success)
+        {
+            // 新增時專案已經建好、只有附件失敗（0.4.114）：切成修改模式，重送就是修改這一筆而不是再建一筆。
+            if (isNewRecordMode && actionResult.Data is { ProjectId: > 0 } saved)
             {
-                // 新增時專案已經建好、只有附件失敗（0.4.114）：切成編輯模式，重送就是修改這一筆而不是再建一筆。
-                if (isNewRecordMode && CurrentRecord.Id > 0)
-                {
-                    isNewRecordMode = false;
-                    modalTitle = "修改專案";
-                    selectedProjectId = CurrentRecord.Id;
-                    await ReloadAsync();
-                }
-
-                NotifyError(actionResult.Message);
-                modalVisible = true;
-                return;
-            }
-
-            // 附件已經讀完上傳完了，這時才可以重建 input。
-            // ⚠️ 先關串流再刪暫存檔（1.0.65）：串流還開著時 Windows 刪不掉，清單又已清空，每存一次就留一份在暫存資料夾。
-            DisposeUploadStreams();
-            ClearPendingFiles();
-            removedFileIds.Clear();
-            attachmentDropZone?.Reset();
-
-            NotifySuccess(isNewRecordMode ? "新增成功" : "修改成功");
-
-            if (isNewRecordMode)
-            {
-                _ = messageService.SuccessAsync("新增成功");
-                // 新增後把選取切到剛建立的專案，使用者才不用自己再選一次。用 Id 而不是標題（可以同名，0.4.114）；
-                // 篩選先清掉，否則新專案不符合篩選時會被退回別的專案。
-                teamFilters = [];
-                categoryFilters = [];
-                statusFilters = [];
-                selectedProjectId = CurrentRecord.Id;
-                selectedTranscriptId = 0;
-                selectedAttendees = [];
-                await ReloadAsync();
-                await projectService.SaveLastSelectedProjectAsync(CurrentRecord.Id);
-            }
-            else
-            {
+                isNewRecordMode = false;
+                modalTitle = "修改專案";
+                CurrentRecord.Id = saved.ProjectId;
+                selectedProjectId = saved.ProjectId;
+                editingProject = (await ProjectApi.GetAsync(saved.ProjectId)).Data;
                 await ReloadAsync();
             }
 
-            modalVisible = false;
-        }
-        finally
-        {
-            DisposeUploadStreams();
+            NotifyError(ApiClient.ErrorText(actionResult));
+            return;
         }
 
-        void DisposeUploadStreams()
-        {
-            foreach (var uploadStream in uploadStreams)
-            {
-                uploadStream.Dispose();
-            }
+        var savedId = actionResult.Data?.ProjectId ?? CurrentRecord.Id;
 
-            uploadStreams.Clear();
+        // 附件已經存進專案了，這時才可以重建 input。
+        ClearPendingFiles();
+        removedFileIds.Clear();
+        attachmentDropZone?.Reset();
+
+        NotifySuccess(isNewRecordMode ? "新增成功" : "修改成功");
+
+        if (isNewRecordMode)
+        {
+            _ = messageService.SuccessAsync("新增成功");
+            // 新增後把選取切到剛建立的專案，使用者才不用自己再選一次。用 Id 而不是標題（可以同名，0.4.114）；
+            // 篩選先清掉，否則新專案不符合篩選時會被退回別的專案。
+            teamFilters = [];
+            categoryFilters = [];
+            statusFilters = [];
+            selectedProjectId = savedId;
+            selectedTranscriptId = 0;
+            selectedAttendees = [];
+            await ReloadAsync();
+            await ProjectApi.SaveLastSelectedAsync(savedId);
         }
+        else
+        {
+            await ReloadAsync();
+        }
+
+        modalVisible = false;
+        formSnapshot = null;
     }
 
+    /// <summary>表單 → 存檔 DTO（整筆覆寫；附件另外帶）。</summary>
+    private static ProjectFormDto ToFormDto(ProjectFormModel record) => new()
+    {
+        Id = record.Id,
+        Title = record.Title,
+        StartDate = record.StartDate,
+        EndDate = record.EndDate,
+        Status = record.Status,
+        CompletionPercentage = record.CompletionPercentage,
+        OwnerUserId = record.OwnerUserId,
+        PrimaryTeamId = record.PrimaryTeamId,
+        CollaboratorTeamIds = [.. record.CollaboratorTeamIds],
+        Categories = [.. record.Categories],
+        GlossaryTerms = [.. record.GlossaryTerms],
+        Participants = [.. record.Participants],
+    };
+
     /// <summary>
-    /// 待上傳附件的識別。
-    ///
-    /// <para>
-    /// ⚠️ 不能把 <see cref="IBrowserFile"/> 本身交給 <see cref="FormDirtyHelper.Capture"/>——
-    /// 它身上帶著 Stream，序列化出來的東西與使用者選了哪個檔案無關。檔名＋大小才是識別。
-    /// </para>
+    /// 待上傳附件的識別（檔名＋大小）。
     ///
     /// <para>
     /// ⚠️ <c>removedFileIds</c> 刻意**不**比：<c>RemoveExistingFile</c> 在把 Id 加進去的同時
     /// 也會從 <c>CurrentRecord.Files</c> 移除，而 <c>Files</c> 已經在 model 快照裡了。
-    /// 再比一次是重複，不是漏掉。
     /// </para>
     /// </summary>
     private string DescribePendingFiles()
@@ -1611,8 +1480,7 @@ public partial class ProjectViewView : IDisposable
 
             if (!discard)
             {
-                // ⚠️ @bind-Visible 是雙向的，AntDesign 已經把視窗關掉了；不重開會失去整張表單。
-                modalVisible = true;
+                // 單向 Visible：視窗本來就還開著。
                 return;
             }
         }
@@ -1652,7 +1520,6 @@ public partial class ProjectViewView : IDisposable
         if (file is not null)
         {
             pendingUploadFiles.Remove(file);
-            TryDeleteTempFile(file.TempPath);
 
             // 移除之後重建 input，「拖錯 → 移除 → 再拖同一個」才會再觸發 change。
             attachmentDropZone?.Reset();
@@ -1687,24 +1554,9 @@ public partial class ProjectViewView : IDisposable
         return $"{start} – {end}";
     }
 
-    /// <summary>
-    /// 取這一列目前的即時生成進度；沒有進行中的工作時回傳 null（狀態欄就只顯示徽章）。
-    /// 資料來自記憶體中的通知器，不查資料庫。
-    /// </summary>
-    private MeetingDraftProgressItem? GetLiveDraftProgress(int meetingId)
-    {
-        var item = draftProgressNotifier.Find(meetingId);
-        return item is { IsRunning: true } ? item : null;
-    }
-
-    private static string DescribeDraftPhase(MeetingDraftProgressItem item) => item.Phase switch
-    {
-        MeetingDraftPhase.Queued => "排隊中",
-        MeetingDraftPhase.Preparing => "讀取逐字稿與提示詞",
-        MeetingDraftPhase.Summarizing => $"分段摘要中（第 {item.CompletedChunks}/{item.TotalChunks} 段）",
-        MeetingDraftPhase.Generating => $"產生會議紀錄中（已產生 {item.GeneratedCharacters} 字）",
-        _ => string.Empty,
-    };
+    /// <summary>取這一列目前進行中的生成；沒有就回 null（狀態欄只顯示徽章）。</summary>
+    private BackgroundJobDto? GetLiveDraftProgress(int meetingId)
+        => draftJobs.TryGetValue(meetingId, out var job) && job.IsRunning ? job : null;
 
     private static string DraftStatusCssClass(DraftStatus status) => status switch
     {
@@ -1726,44 +1578,29 @@ public partial class ProjectViewView : IDisposable
         }
 
         aiChatScope = AiChatScope.Project;
-        aiChatTargetId = SelectedProject.Id;
+        aiChatTargetId = IdOf(SelectedProject);
         aiChatTitle = $"AI 問答 - {SelectedProject.Title}";
-        aiChatTargetName = SelectedProject.Title;
         aiChatVisible = true;
     }
 
     /// <summary>就單一會議提問：讀該會議的會議紀錄與逐字稿。</summary>
-    private void OpenMeetingChat(MeetingAdapterModel meeting)
+    private void OpenMeetingChat(MeetingDto meeting)
     {
         aiChatScope = AiChatScope.Meeting;
-        aiChatTargetId = meeting.Id;
+        aiChatTargetId = IdOf(meeting);
         aiChatTitle = $"AI 問答 - {meeting.Title}";
-        aiChatTargetName = meeting.Title;
         aiChatVisible = true;
     }
 
-
-    /// <summary>
-    /// 從這場會議的會議紀錄抽出待辦。
-    ///
-    /// 抽出來的東西一律進確認視窗讓使用者挑與改，不直接落庫——
-    /// 模型會把人名聽錯、把討論當成行動項目，直接寫進去反而更難收拾。
-    /// </summary>
     /// <summary>
     /// 開啟抽出待辦視窗。
     ///
     /// <para>
     /// 確認必須放在這顆按鈕、不能放進 <c>TodoExtractionModal</c>：那支的
-    /// <c>OnParametersSetAsync</c> 一開啟就直接呼叫 <c>ExtractAsync</c>，
-    /// Modal 顯示出來的那一刻 API 已經打出去了。
-    /// </para>
-    ///
-    /// <para>
-    /// 這個方法一定要是 <c>async Task</c>：原本是 <c>void</c>，在 void 裡 await 確認
-    /// 等於 fire-and-forget，Modal 會照開照計費。
+    /// <c>OnParametersSetAsync</c> 一開啟就直接呼叫抽取 API，Modal 顯示出來的那一刻 API 已經打出去了。
     /// </para>
     /// </summary>
-    private async Task OpenTodoExtractionAsync(MeetingAdapterModel meeting)
+    private async Task OpenTodoExtractionAsync(MeetingDto meeting)
     {
         // 不套 Danger：抽出來的只是候選項目，勾選並儲存後才真的建立待辦，
         // 沒有任何東西會被覆蓋或刪除。
@@ -1784,7 +1621,7 @@ public partial class ProjectViewView : IDisposable
             return;
         }
 
-        todoExtractMeetingId = meeting.Id;
+        todoExtractMeetingId = IdOf(meeting);
         todoExtractMeetingTitle = meeting.Title;
         todoExtractVisible = true;
     }
@@ -1793,21 +1630,8 @@ public partial class ProjectViewView : IDisposable
 
     private void OnAttachmentModalCancel() => attachmentModalVisible = false;
 
-    /// <summary>
-    /// 下載專案附件。
-    ///
-    /// <para>
-    /// 走 <see cref="FileDownloadInterop"/> 而非 <c>&lt;a href&gt;</c>：所有 API controller 都是
-    /// JWT Bearer 驗證，瀏覽器導航帶的是 Cookie，連結一定 401。0.4.43 之前這裡指向的
-    /// <c>/api/project-files/{id}/download</c> 端點其實**從來沒有存在過**，所以是 404。
-    /// </para>
-    ///
-    /// <para>
-    /// <c>GetFileDownloadAsync</c> 只依 Id 查、不做專案層權控。這與 0.4.39 的現況一致
-    /// （專案項目已無列級權控，有頁面權限就看得到所有專案），且 Id 只可能來自已載入的清單。
-    /// </para>
-    /// </summary>
-    private async Task OnDownloadProjectFileAsync(ProjectFileAdapterModel file)
+    /// <summary>下載專案附件（伺服器寫稽核）。</summary>
+    private async Task OnDownloadProjectFileAsync(ProjectFileDto file)
     {
         if (downloadingFileId is not null)
         {
@@ -1819,29 +1643,19 @@ public partial class ProjectViewView : IDisposable
 
         try
         {
-            var download = await projectService.GetFileDownloadAsync(file.Id);
-            if (download is null)
+            var download = await ProjectApi.DownloadFileAsync(file.Id);
+            if (!download.Success || download.Content is null)
             {
-                logger.LogWarning("Project file download failed because the file is missing. ProjectFileId={ProjectFileId}", file.Id);
-                NotifyError($"找不到「{file.OriginalFileName}」的實體檔案，可能已被移除。");
+                logger.LogWarning("Project file download failed. ProjectFileId={ProjectFileId}, StatusCode={StatusCode}", file.Id, download.StatusCode);
+                NotifyError(download.StatusCode == 404
+                    ? $"找不到「{file.OriginalFileName}」的實體檔案，可能已被移除。"
+                    : $"下載「{file.OriginalFileName}」失敗：{download.Error}");
                 return;
             }
 
-            // GetFileDownloadAsync 回傳的是開著的 FileStream，一定要收掉。
-            await using var content = download.Content;
-            await fileDownloadInterop.SaveStreamAsync(download.DownloadFileName, content, download.ContentType);
-
-            logger.LogInformation(
-                "Project file downloaded. ProjectFileId={ProjectFileId}, FileName={FileName}",
-                file.Id,
-                download.DownloadFileName);
-
-            NotifySuccess($"已下載「{download.DownloadFileName}」。");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Project file download failed. ProjectFileId={ProjectFileId}", file.Id);
-            NotifyError($"下載「{file.OriginalFileName}」失敗：{ex.Message}");
+            await fileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+            logger.LogInformation("Project file downloaded. ProjectFileId={ProjectFileId}, FileName={FileName}", file.Id, download.FileName);
+            NotifySuccess($"已下載「{download.FileName}」。");
         }
         finally
         {
@@ -1850,10 +1664,7 @@ public partial class ProjectViewView : IDisposable
         }
     }
 
-    /// <summary>
-    /// 檔案大小格式化。實作已於 0.4.54 抽到 <see cref="FileSizeFormatter"/>——
-    /// 儀表板的「音檔總容量」要用同一套規則，兩邊各留一份遲早會不一致。
-    /// </summary>
+    /// <summary>檔案大小格式化（與儀表板同一套規則，見 <see cref="FileSizeFormatter"/>）。</summary>
     private static string FormatFileSize(long fileSize) => FileSizeFormatter.Describe(fileSize);
 
     private void NotifySuccess(string description)
@@ -1880,13 +1691,16 @@ public partial class ProjectViewView : IDisposable
 
     #endregion
 
+    /// <summary>元件已釋放：推播到達時使用者可能已經離開這一頁。</summary>
+    private bool disposed;
+
     public void Dispose()
     {
-        draftProgressNotifier.Changed -= OnDraftProgressChanged;
-        ClearPendingFiles();
+        disposed = true;
+        jobSubscription?.Dispose();
     }
 
-    /// <summary>待上傳附件：內容已讀進伺服器暫存檔（0.4.114），不再持有瀏覽器端的 IBrowserFile。</summary>
+    /// <summary>待上傳附件：已經傳到伺服器暫存檔，存檔時帶 <see cref="UploadId"/>。</summary>
     private sealed class PendingUploadFileItem
     {
         public Guid Id { get; set; }
@@ -1895,8 +1709,6 @@ public partial class ProjectViewView : IDisposable
 
         public long Size { get; set; }
 
-        public string ContentType { get; set; } = string.Empty;
-
-        public string TempPath { get; set; } = string.Empty;
+        public Guid UploadId { get; set; }
     }
 }

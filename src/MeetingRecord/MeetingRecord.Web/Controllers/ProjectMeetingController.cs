@@ -79,7 +79,17 @@ public sealed class ProjectMeetingController(
     {
         var items = await meetingService.GetSelectableTranscriptsAsync();
         return Ok(ApiResult<List<ProjectTranscriptOptionDto>>.SuccessResult(items
-            .Select(x => new ProjectTranscriptOptionDto { Id = x.Id, Title = x.Title, MeetingDate = x.MeetingDate, ProjectId = x.ProjectId, ProjectTitle = x.ProjectTitle })
+            .Select(x => new ProjectTranscriptOptionDto
+            {
+                Id = x.Id,
+                Title = x.Title,
+                MeetingDate = x.MeetingDate,
+                ProjectId = x.ProjectId,
+                ProjectTitle = x.ProjectTitle,
+                HasDraft = x.HasDraft,
+                DraftStatus = (int)x.DraftStatus,
+                CanGenerateDraft = x.CanGenerateDraft,
+            })
             .ToList()));
     }
 

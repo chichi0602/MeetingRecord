@@ -11,6 +11,10 @@ public sealed class UploadApi(ApiClient api)
     public Task<ApiResult<UploadSessionDto>> CreateAsync(UploadSessionRequestDto request)
         => api.PostAsync(BaseUrl, request, ClientJsonContext.Default.UploadSessionRequestDto, ClientJsonContext.Default.UploadSessionResult);
 
+    /// <summary>專案附件（1.1.26）：先傳到伺服器的暫存檔，存專案時帶上傳編號。</summary>
+    public Task<ApiResult<UploadSessionDto>> CreateProjectAttachmentAsync(UploadSessionRequestDto request)
+        => api.PostAsync($"{BaseUrl}/project-attachments", request, ClientJsonContext.Default.UploadSessionRequestDto, ClientJsonContext.Default.UploadSessionResult);
+
     public Task<ApiResult<UploadStatusDto>> GetStatusAsync(Guid uploadId)
         => api.GetAsync($"{BaseUrl}/{uploadId}", ClientJsonContext.Default.UploadStatusResult);
 

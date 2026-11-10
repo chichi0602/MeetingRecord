@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.27
+- 文件版本：1.28
 - 文件狀態：已實作
-- 現行系統版本：1.1.24
+- 現行系統版本：1.1.25
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -58,6 +58,10 @@
 **會議紀錄**（1.1.20，`MeetingController` 改走 `MeetingService`）：既有五支路由、權限、回應形狀不變，`MeetingDto` 只多帶欄位（`projectId`、`projectTitle`、`createdByUserId`、`hasMedia`、`hasTranscript`、`canRetryTranscription`、`draftStatus`、`draftError`、`draftPromptTemplateName`、`draftCompletedAt`、`hasDraft`、`canGenerateDraft`、`isUploader`、`canDelete`；`draftContent` 只有 `GET {id}` 帶），`MeetingCreateUpdateDto` 多了 `categoryNames`（有帶就以它為準，比照提示詞）。`POST search` 照舊。**外部行為變更**：`PUT` 對已完成（封存）專案的會議改為 400（與畫面一致，管理者除外）。畫面用的新端點：`POST list`（分類篩選、畫面欄位排序，view）、`GET {id}/linked-todos`（edit）、`POST {id}/retranscribe`（edit）、`POST {id}/draft`（產生會議紀錄，edit，會花 AI 費用）、`PUT {id}/draft`（修改全文，edit）、`PUT {id}/project`（歸屬專案，edit）、`GET {id}/transcript`（view）、`GET {id}/transcript/file`（.txt 含 BOM，export，寫稽核）、`POST {id}/transcript/copied`（瀏覽器複製後寫稽核，export）、`POST {id}/draft/pdf`（可帶還沒存的內容，export，寫稽核）、`GET projects/selectable`（附與會人員名冊）、`GET prompt-templates/selectable`、`GET categories/enabled`（後三支 view，不借用其他頁的權限）。看不到的會議一律 404；服務層擋下回 400，新端點訊息放 `errorMessage`。
 
 **專案項目**（1.1.24，`ProjectController` 改走 `ProjectService`，`ProjectRepository` 已刪除）：既有五支路由、權限、回應形狀不變，相容規則照舊（新增沒帶主責用自己 Id 最小的團隊、只帶負責人姓名時找同名帳號、對不到仍建立並留下姓名；修改時沒帶的團隊與負責人保留，名詞、名冊、分類沒帶或空的也保留）；**同名改成允許**（以前 409）。`ProjectDto` 只多帶欄位：`primaryTeamName`、`collaboratorTeamNames`、`isArchived`、`files`（只有單筆帶）、呼叫者的 `isProjectOwner`／`canManageTeams`／`canChangeOwner`。畫面用的新端點：`GET selectable?includeArchived=`（View）、`GET`／`PUT last-selected`（View）、`GET teams/primary`、`GET teams/collaborator?include=`、`GET owner-candidates?primaryTeamId=&collaboratorTeamIds=`（Create 或 Edit 任一）、`POST form`（Create）與 `PUT {id}/form`（Edit）——整筆覆寫、日期可留空、帶 `uploadIds`（附件，見四之一）與 `removedFileIds`（只限專案負責人），新增時專案已建立但附件存不進去回 400 也帶 `projectId`——以及 `GET files/{fileId}`（View，附件下載，稽核 `via=Api`）。
+
+**專案頁裡的會議**（1.1.25，`ProjectMeetingController`，路由 `api/v1/Project/{projectId}/…`，**只看專案項目權限**，不借用會議紀錄頁）：`GET meetings`（View，不帶會議紀錄全文）、`GET meetings/{meetingId}`（View，含全文）、`GET transcripts/selectable`、`GET prompt-templates/selectable`（View）、`POST meetings/{meetingId}/draft`（Edit，產生會議紀錄並歸屬到這個專案，會花 AI 費用）、`PUT meetings/{meetingId}/draft`（Edit）、`DELETE meetings/{meetingId}`（Edit 或 Delete 任一，從專案移除，只限上傳者）、`GET meetings/{meetingId}/transcript`（View）、`GET …/transcript/file`、`POST …/transcript/copied`、`POST …/draft/pdf`（表頭帶專案名稱）、`GET todos/pdf`（Export）。會議不屬於這個專案一律 404（產生會議紀錄例外：可挑還沒歸屬的逐字稿）；稽核摘要 `page=Project; via=Api`。
+
+**待辦抽取**（1.1.25，`TodoExtractionController`，`api/v1/todo-extraction`，都要「待辦事項」Create，同 Server 專案頁）：`POST meetings/{meetingId}`（抽出候選，會花 AI 費用；回 `items`、`existingTitles`、`openTodos`；已完成的專案、沒有會議紀錄回 400 與原因）、`POST todos`（加為新待辦，可帶 `parentTodoId`，稽核 `via=AiExtract`）、`PUT todos/{todoId}`（用候選更新既有待辦的期限與負責人）。
 
 **AI 問答**（1.1.21，`AiChatController`，路由 `api/v1/ai-chat/{project|meeting}/{targetId}`）：`GET conversations`、`POST conversations`（開新對話，回 Id）、`PUT conversations/{id}/title`（edit）、`DELETE conversations/{id}`（delete）、`GET conversations/{id}/messages`、`PUT conversations/{id}/messages/{index}`（edit；帶原本的角色與內容，對不上回 409）、`POST conversations/{id}/ask`（multipart：`question`＋0～5 個 `files`，**串流**）、`POST conversations/{id}/messages/{index}/regenerate`（edit，**串流**）、`GET conversations/{id}/attachments/{storedName}`（`download=true` 寫稽核）、`POST conversations/{id}/pdf`（export；`messageIndex` 有值＝單則，沒值＝整段，內容由伺服器讀）。權限依範圍（`AiChatPermissionAttribute`：專案看專案項目，會議看會議紀錄或專案項目），未註明者要 view。**串流格式**：`application/x-ndjson`，每行一筆 `AiChatStreamEventDto`——零到多筆 `delta`（新產生的文字），最後一筆 `done`（附完整結果）或 `error`（附原因）；在第一段文字產生之前就失敗（看不到 404、附件不合規定或額度用完 400）照一般 API 回應。服務層的錯誤原文放 `errorMessage`。
 

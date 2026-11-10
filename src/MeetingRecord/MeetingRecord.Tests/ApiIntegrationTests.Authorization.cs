@@ -100,7 +100,18 @@ public sealed partial class ApiIntegrationTests
         ["Project.SaveLastSelected"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         ["Project.CreateForm"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Create),
         ["Project.UpdateForm"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
+        // 1.1.25：專案頁裡的會議（路由 api/v1/Project/{projectId}/…），只看專案項目權限。PDF、產生會議紀錄要假 AI／PDF，在 ProjectMeetingApiTests 驗。
+        ["ProjectMeeting.Meetings"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["ProjectMeeting.Meeting"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["ProjectMeeting.SelectableTranscripts"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["ProjectMeeting.SelectablePromptTemplates"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["ProjectMeeting.UpdateDraft"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
+        ["ProjectMeeting.Transcript"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["ProjectMeeting.TranscriptCopied"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Export),
     };
+
+    /// <summary>專案會議授權測試：種子會議 → 它的專案。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> SeededProjectMeetings = new();
 
     /// <summary>專案授權測試：種子團隊或專案 → (呼叫者, 主責團隊)。新增要指定負責人帳號，修改要帶原本的主責團隊。</summary>
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (int UserId, int TeamId)> SeededProjects = new();
@@ -332,6 +343,18 @@ public sealed partial class ApiIntegrationTests
             return await SeedProjectAsync(action, userId);
         }
 
+        if (controller == "ProjectMeeting")
+        {
+            var projectId = await SeedProjectAsync("GetById", userId);
+            using var meetingScope = factory.Services.CreateScope();
+            var meetingDb = meetingScope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var meeting = new Meeting { Title = $"專案會議-{Guid.NewGuid():N}", ProjectId = projectId, CreatedByUserId = userId, DraftContent = "授權測試" };
+            meetingDb.Meeting.Add(meeting);
+            await meetingDb.SaveChangesAsync();
+            SeededProjectMeetings[meeting.Id] = projectId;
+            return meeting.Id;
+        }
+
         if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories"
             or "List" or "SelectableProjects" or "SelectablePromptTemplates")
         {
@@ -476,6 +499,23 @@ public sealed partial class ApiIntegrationTests
         if (controller == "Project")
         {
             return SendProjectEndpointAsync(client, action, targetId, suffix);
+        }
+
+        if (controller == "ProjectMeeting")
+        {
+            // 沒權杖的 401 案例沒有種子：專案 1 也只會在權限那一關就被擋下。
+            var projectUrl = $"/api/v1/Project/{SeededProjectMeetings.GetValueOrDefault(targetId, 1)}";
+            return action switch
+            {
+                "Meetings" => client.GetAsync($"{projectUrl}/meetings"),
+                "Meeting" => client.GetAsync($"{projectUrl}/meetings/{targetId}"),
+                "SelectableTranscripts" => client.GetAsync($"{projectUrl}/transcripts/selectable"),
+                "SelectablePromptTemplates" => client.GetAsync($"{projectUrl}/prompt-templates/selectable"),
+                "UpdateDraft" => client.PutAsJsonAsync($"{projectUrl}/meetings/{targetId}/draft", new { content = "授權測試" }),
+                "Transcript" => client.GetAsync($"{projectUrl}/meetings/{targetId}/transcript"),
+                "TranscriptCopied" => client.PostAsync($"{projectUrl}/meetings/{targetId}/transcript/copied", content: null),
+                _ => throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null),
+            };
         }
 
         return action switch

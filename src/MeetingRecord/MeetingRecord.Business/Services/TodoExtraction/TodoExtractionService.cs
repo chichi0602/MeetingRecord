@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Models.AdapterModel;
@@ -84,9 +85,16 @@ public class TodoExtractionService
             .FirstOrDefaultAsync(cancellationToken);
 
         // 看不到的會議當成不存在（0.4.99）：這支會花錢呼叫 AI，也會把會議內容送出去。
-        if (meeting is null || !(await projectAccess.GetAsync()).CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
+        var access = await projectAccess.GetAsync();
+        if (meeting is null || !access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
         {
             throw new InvalidOperationException($"找不到 Id 為 {meetingId} 的會議紀錄，可能已被刪除。");
+        }
+
+        // 1.1.25：已完成（封存）的專案唯讀，不能再花錢抽待辦（以前只有畫面把按鈕藏起來，API 直接呼叫擋不住）。管理者不受限。
+        if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+        {
+            throw new InvalidOperationException(archivedError);
         }
 
         if (string.IsNullOrWhiteSpace(meeting.DraftContent))

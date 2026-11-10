@@ -1,8 +1,8 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.24
+- 文件版本：4.25
 - 文件狀態：已實作
-- 現行系統版本：1.1.24
+- 現行系統版本：1.1.25
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
 - 最後核對日期：2026/11/10
 
@@ -90,6 +90,7 @@
 
 - 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectService`（1.1.24 起與 UI 同一套規則，`ProjectRepository` 已刪除；回 `ApiResult`）。畫面用的表單、附件、選項端點見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 - 1.1.24 起 API 同名改成允許（以前 409），與畫面一致；畫面要用的表單整筆存檔（含附件）、選擇器、上次選的專案、團隊與負責人選項、附件下載都有 API，給專案頁搬到 WASM（1.1.26）用。
+- 1.1.25 起專案頁「歷史會議」區塊與「抽出待辦」視窗的動作也都有 API（`ProjectMeetingController`、`TodoExtractionController`），權限照本頁（專案項目；抽待辦要待辦事項新增）。**已完成（封存）專案的會議不能再抽待辦，服務層也擋**（以前只有畫面把按鈕藏起來）。
 - 讀取：清單 `GetAsync(DataRequest)` 使用 `AsNoTracking`；單筆 `GetAsync(int)` 以 `Include(x => x.Files)` 帶附件。
 - 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單。
 - AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。 **0.4.71 起多一個選填的 `attendees` 參數**（插在 `promptTemplateId` 之後、`CancellationToken` 之前），清洗後以快照寫入 `Meeting.DraftAttendees`，上限 50 人。刻意**不檢查勾選的人是否真的在名冊內**——UI 只提供名冊選項，加檢查只會製造「別人改了名冊就整筆退回」的假失敗。實際的提示詞組裝見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)。

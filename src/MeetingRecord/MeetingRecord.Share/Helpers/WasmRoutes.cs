@@ -18,6 +18,7 @@ public static class WasmRoutes
         "/prompttemplates", // 1.1.9 提示詞清單
         "/myusers", // 1.1.10 使用者管理
         "/roleviews", // 1.1.11 角色管理
+        "/dashboard", // 1.1.12 儀表板
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

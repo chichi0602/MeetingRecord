@@ -1,4 +1,5 @@
 using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;

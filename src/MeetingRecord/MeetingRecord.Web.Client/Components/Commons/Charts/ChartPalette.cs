@@ -1,4 +1,4 @@
-using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Dtos.Dashboards;
 
 namespace MeetingRecord.Web.Components.Commons.Charts;
 

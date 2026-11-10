@@ -4,7 +4,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Models.Systems;
 using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.AiUsage;

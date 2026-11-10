@@ -1,4 +1,7 @@
-namespace MeetingRecord.Business.Services.Dashboard;
+using System.Text.Json.Serialization;
+
+// 1.1.12（WASM 遷移）：從 Business/Services/Dashboard 搬來，儀表板 API 與 WASM 頁、圖表元件共用同一份型別。
+namespace MeetingRecord.Dtos.Dashboards;
 
 /// <summary>圓餅圖的一個切片，或長條圖的一列。</summary>
 /// <param name="Label">顯示名稱。</param>
@@ -27,6 +30,7 @@ public sealed record ChartSlice(
     string? Display = null)
 {
     /// <summary>圖表上要印的文字。</summary>
+    [JsonIgnore]
     public string DisplayText => Display ?? Value.ToString();
 }
 
@@ -99,6 +103,7 @@ public sealed record PromptTemplateSummary(
 public sealed record StorageSummary(long MediaBytes, long TranscriptBytes, long AttachmentBytes)
 {
     /// <summary>三項相加。數字卡的「儲存空間」直接顯示這個值，確保卡片與細分同源。</summary>
+    [JsonIgnore]
     public long TotalBytes => MediaBytes + TranscriptBytes + AttachmentBytes;
 }
 

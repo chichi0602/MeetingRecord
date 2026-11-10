@@ -39,6 +39,7 @@ public sealed class ApiAuthorizationConventionTests
         ["NotificationController.MarkRead"] = "只標呼叫者自己的通知為已讀，別人的不動（1.1.6）",
         ["NotificationController.MarkAllRead"] = "只標呼叫者自己的全部通知為已讀（1.1.6）",
         ["NotificationController.GetUnreadCount"] = "只回呼叫者自己的未讀通知數（1.1.2，WASM 前端收到推播後重查）",
+        ["DashboardController.Get"] = "儀表板的全公司彙總數字（1.1.12），0.4.97 起登入即可看、不放明細；看不到的專案名稱由服務改成「其他專案」",
         ["SessionController.GetMenu"] = "回傳依呼叫者自己權限過濾好的側邊選單（1.1.0），規則與網頁側邊欄相同",
         ["UploadChunkController.PutChunk"] = "分塊上傳只收位元組（1.0.59）：授權靠「上傳工作階段的擁有者＝目前使用者」，工作階段由網頁在通過權限與資料範圍檢查後才建立",
     };

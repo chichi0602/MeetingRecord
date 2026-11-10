@@ -1,33 +1,25 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using MeetingRecord.Business.Services.Dashboard;
-using MeetingRecord.Business.Services.Other;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.Dashboards;
+using MeetingRecord.Web.Client.Api;
 
-namespace MeetingRecord.Web.Components.Views.Dashboards;
+namespace MeetingRecord.Web.Client.Pages.Dashboards;
 
 /// <summary>
-/// 儀表板。所有數字都取自既有欄位，本頁不寫入任何資料。
+/// 儀表板（1.1.12 從 Blazor Server 的 DashboardView 搬到 WASM）。所有數字都取自既有欄位，本頁不寫入任何資料；
+/// 資料改走 <see cref="DashboardApi"/>，看不到的專案名稱由伺服器改成「其他專案」。
 /// </summary>
-public partial class DashboardView : ComponentBase
+public partial class DashboardPage : ComponentBase
 {
     /// <summary>超過這個比例就把失敗率標紅——偶爾一兩次失敗是常態，持續高失敗才需要注意。</summary>
     private const double FailureRateWarningThreshold = 20d;
 
     [Inject]
-    private DashboardService DashboardService { get; set; } = default!;
+    private DashboardApi DashboardApi { get; set; } = default!;
 
     [Inject]
-    private ILogger<DashboardView> Logger { get; set; } = default!;
-
-    [Inject]
-    public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    public AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
-
-    [Inject]
-    public NavigationManager NavigationManager { get; set; } = default!;
+    private ILogger<DashboardPage> Logger { get; set; } = default!;
 
     private DashboardSummary? summary;
     private bool isLoading;
@@ -37,16 +29,7 @@ public partial class DashboardView : ComponentBase
 
     protected override async Task OnInitializedAsync()
     {
-        Logger.LogInformation("Initializing dashboard view.");
-
-        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            Logger.LogWarning("Dashboard initialization stopped because authentication check failed.");
-            return;
-        }
-
-        // 0.4.97 起登入即可看，不檢查頁面權限：儀表板只放全公司的彙總數字，不含任何明細。
+        // 登入狀態由 WasmLayout 先處理過。0.4.97 起登入即可看，不檢查頁面權限：儀表板只放全公司的彙總數字，不含任何明細。
         await ReloadAsync();
     }
 
@@ -62,11 +45,15 @@ public partial class DashboardView : ComponentBase
 
         try
         {
-            summary = await DashboardService.GetSummaryAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Loading dashboard summary failed.");
+            var result = await DashboardApi.GetAsync();
+            if (result.Success)
+            {
+                summary = result.Data;
+            }
+            else
+            {
+                Logger.LogWarning("Loading dashboard summary failed. Status={Status}, Message={Message}", result.StatusCode, result.ErrorMessage ?? result.Message);
+            }
         }
         finally
         {

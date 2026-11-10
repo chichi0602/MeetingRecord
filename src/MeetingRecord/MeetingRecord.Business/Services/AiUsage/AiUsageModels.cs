@@ -1,4 +1,4 @@
-using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.AiUsage;
@@ -7,7 +7,7 @@ namespace MeetingRecord.Business.Services.AiUsage;
 /// 「Token 用量」頁上方「本月概況」的資料（1.0.30 前名為「AI 用量分析」，當時是整頁的資料）。
 ///
 /// <para>
-/// 圖表型別一律沿用 <see cref="MeetingRecord.Business.Services.Dashboard"/> 的
+/// 圖表型別一律沿用 <see cref="MeetingRecord.Dtos.Dashboards"/> 的
 /// <see cref="ChartSlice"/>／<see cref="TrendPoint"/>／<see cref="StatCardItem"/>——
 /// 造一套平行型別只會逼所有圖表元件各支援兩種輸入。
 /// </para>

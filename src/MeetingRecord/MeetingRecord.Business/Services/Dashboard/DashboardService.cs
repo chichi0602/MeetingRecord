@@ -11,6 +11,8 @@ using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 
+using MeetingRecord.Dtos.Dashboards;
+
 namespace MeetingRecord.Business.Services.Dashboard;
 
 /// <summary>

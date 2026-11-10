@@ -1,10 +1,10 @@
 ﻿# 儀表板 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.0.47
+- 現行系統版本：1.1.12
 - 首次實作版本：0.4.54
-- 最後核對日期：2026/10/19
+- 最後核對日期：2026/11/10
 
 ## 一、目標與範圍
 
@@ -23,7 +23,8 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/dashboard`（`Components/Pages/Dashboards/DashboardPage.razor`，掛 `MainLayout`，內容在 `DashboardView`） |
+| UI 路由 | `/dashboard`（1.1.12 起是 WASM 頁 `Web.Client/Pages/Dashboards/DashboardPage`，掛 `WasmLayout`） |
+| API | `GET /api/v1/dashboard`（1.1.12，只需登入，回 `ApiResult<DashboardSummary>`） |
 | REST API | 無 |
 | 選單路徑 | 核心功能區第一項：儀表板（`Menu.json` id=11，icon `space_dashboard`，`section: "核心功能"`） |
 | 權限鍵 | **無**。id 11 列在 `SidebarMenuService.PublicMenuIds`，登入即可看；不在 `MenuPermissionMap`、`RolePermissionService` 權限矩陣，`MagicObjectHelper` 也沒有 `角色_儀表板` 常數（0.4.97 移除） |
@@ -75,7 +76,7 @@
 
 ## 四、內部系統運作
 
-- 資料流：`DashboardPage.razor` → `DashboardView` → `DashboardService.GetSummaryAsync()`（Scoped）→ `BackendDBContext` 與檔案系統。沒有 API、沒有快取。
+- 資料流（1.1.12 起）：WASM 頁 `DashboardPage` → `DashboardApi` → `DashboardController` → `DashboardService.GetSummaryAsync()`（Scoped）→ `BackendDBContext` 與檔案系統。沒有快取。看不到的專案名稱以 API 呼叫者自己的資料範圍判斷。以前是 Blazor Server 的 `DashboardView` 直接注入服務。
 - **一次投影、記憶體分組**：`Meeting`、`Project`、`Todo`、`PromptTemplate` 各撈一次需要的純量欄位（`MeetingFact`／`ProjectFact`／`TodoFact`／`PromptTemplateFact`，全部 `AsNoTracking()`），再於記憶體分組計算，而不是十幾條各自的 `GroupBy` 查詢。專案附件容量用 `ProjectFile.FileSize` 的 `SumAsync`。
 - **平均耗時在記憶體算**：SQLite／EF Core 無法對 `TimeSpan` 做 `AVG`，取回 `TranscriptionStartedAt`／`CompletedAt` 與 `DraftStartedAt`／`CompletedAt` 有頭有尾的區間後由 `DashboardMetrics.AverageDuration` 平均。資料量成長後要改在 SQL 端用 `julianday` 相減。
 - **轉錄失敗率**：`DashboardMetrics.CalculateFailureRate`，分母為「完成＋失敗」，兩者皆 0 回 null。
@@ -145,11 +146,11 @@
 
 ### 程式
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Dashboards/DashboardPage.razor`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Dashboards/DashboardView.razor`、`DashboardView.razor.cs`（`OnInitializedAsync` 只做登入檢查、`ReloadAsync`、`FormatPercent`）、`DashboardView.razor.css`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Dashboards/DashboardPage.razor`、`.razor.cs`（`ReloadAsync`、`FormatPercent`）、`.razor.css`（1.1.12 起在 WASM 執行）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Api/DashboardApi.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/DashboardController.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Dashboard/DashboardService.cs`（`GetSummaryAsync`、`BuildCards`、`BuildTodoOverview`、`BuildProjectOverview`、`BuildMeetingHours`、`BuildPerformance`、`BuildPromptTemplates`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Dashboard/DashboardMetrics.cs`、`DashboardModels.cs`（`DashboardSummary`、`StatCardItem`、`ChartSlice`、`StorageSummary` 等）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Commons/Charts/`（`StatCard`、`PieChart`、`BarChart`、`LineChart`、`ChartPalette`）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Dashboard/DashboardMetrics.cs`；資料型別 `src/MeetingRecord/MeetingRecord.Dtos/Dashboards/DashboardModels.cs`（1.1.12 從 Business 搬來：`DashboardSummary`、`StatCardItem`、`ChartSlice`、`StorageSummary` 等）；圓餅幾何 `src/MeetingRecord/MeetingRecord.Share/Helpers/ChartGeometry.cs`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/Charts/`（`StatCard`、`PieChart`、`BarChart`、`LineChart`、`ChartPalette`；1.1.12 起在 Client，命名空間不變，仍是 Server 頁的 Token 用量、資料庫用量、日誌等級也用）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/FileSizeFormatter.cs`、`DirectorySizeCalculator.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatStore.cs`（`CountQuestions`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`PublicMenuIds`、`FilterAuthorizedMenuItems`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 11）

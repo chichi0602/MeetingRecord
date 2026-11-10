@@ -1,4 +1,4 @@
-@using MeetingRecord.Business.Services.Dashboard
+@using MeetingRecord.Dtos.Dashboards
 
 <div class="pie-chart">
     <div class="pie-chart-title">@Title</div>
@@ -20,7 +20,7 @@
                 {
                     var sweep = slice.Value * 360d / Total;
                     var color = ChartPalette.Resolve(slice.Tone, neutralIndex);
-                    var path = DashboardMetrics.BuildArcPath(50, 50, 45, startAngle, sweep);
+                    var path = ChartGeometry.BuildArcPath(50, 50, 45, startAngle, sweep);
 
                     <path d="@path" fill="@color">
                         <title>@slice.Label：@slice.DisplayText</title>

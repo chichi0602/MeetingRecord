@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;

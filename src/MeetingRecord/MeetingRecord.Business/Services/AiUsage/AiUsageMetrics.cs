@@ -1,5 +1,6 @@
 using System.Globalization;
 using MeetingRecord.Business.Services.Dashboard;
+using MeetingRecord.Dtos.Dashboards;
 
 namespace MeetingRecord.Business.Services.AiUsage;
 

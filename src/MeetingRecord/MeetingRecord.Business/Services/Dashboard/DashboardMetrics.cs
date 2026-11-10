@@ -1,5 +1,8 @@
 using System.Globalization;
 
+using MeetingRecord.Dtos.Dashboards;
+using MeetingRecord.Share.Helpers;
+
 namespace MeetingRecord.Business.Services.Dashboard;
 
 /// <summary>
@@ -125,25 +128,7 @@ public static class DashboardMetrics
         double radius,
         double startDegrees,
         double sweepDegrees)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
-
-        // 用 >= 359.999 而不是 == 360：角度是累加出來的浮點數，不會剛好等於 360。
-        if (sweepDegrees >= 359.999)
-        {
-            var top = FormatPoint(centerX, centerY - radius);
-            var bottom = FormatPoint(centerX, centerY + radius);
-            var r = Format(radius);
-
-            return $"M {top} A {r} {r} 0 1 1 {bottom} A {r} {r} 0 1 1 {top}";
-        }
-
-        var start = PointOnCircle(centerX, centerY, radius, startDegrees);
-        var end = PointOnCircle(centerX, centerY, radius, startDegrees + sweepDegrees);
-        var largeArc = sweepDegrees > 180 ? 1 : 0;
-
-        return $"M {FormatPoint(centerX, centerY)} L {start} A {Format(radius)} {Format(radius)} 0 {largeArc} 1 {end} Z";
-    }
+        => ChartGeometry.BuildArcPath(centerX, centerY, radius, startDegrees, sweepDegrees); // 1.1.12：搬到 Share，WASM 的圓餅圖也要用
 
     /// <summary>耗時的顯示文字。沒有資料時回「—」，不要回「0 秒」——那會被誤讀成「非常快」。</summary>
     public static string DescribeDuration(TimeSpan? duration)
@@ -191,19 +176,4 @@ public static class DashboardMetrics
 
         return ticks.Count == 0 ? null : TimeSpan.FromTicks((long)ticks.Average());
     }
-
-    private static string PointOnCircle(double centerX, double centerY, double radius, double degrees)
-    {
-        // -90 度是為了讓 0 度落在正上方（一般人讀圓餅圖的起點），而不是數學慣例的正右方。
-        var radians = (degrees - 90) * Math.PI / 180;
-
-        return FormatPoint(
-            centerX + (radius * Math.Cos(radians)),
-            centerY + (radius * Math.Sin(radians)));
-    }
-
-    private static string FormatPoint(double x, double y) => $"{Format(x)} {Format(y)}";
-
-    /// <summary>SVG 的數值一律用不變文化格式——遇到以逗號當小數點的地區會產生無效路徑。</summary>
-    private static string Format(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 }

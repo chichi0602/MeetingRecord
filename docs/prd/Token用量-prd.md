@@ -1,10 +1,10 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.4
+- 文件版本：2.5
 - 文件狀態：已實作
-- 現行系統版本：1.0.53
+- 現行系統版本：1.1.12
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/10/20
+- 最後核對日期：2026/11/10
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -160,7 +160,7 @@
 - **篩選**：`AiUsageFilter(From, ToExclusive, Feature, UserId, Model, Outcome)`。頁面把結束日轉成「隔天零時」當上界，結束日當天才不會被切掉。私有的 `ApplyFilter` **只比對整數、字串與日期欄位**，金額欄位不進 SQL。頁面另存一份 `appliedFilter`，按查詢才更新。
 - 「要不要換算、怎麼加總、怎麼格式化」集中在私有的 `CostView`，所有顯示點（卡片、曲線、分佈、合計、每日、分組、明細、明細窗）共用；單列換算走 `AiUsageExchange.ToTargetCurrency`（用該列自己的匯率），沒有匯率的列不換算、計入「未計入」。「未計入」＝顯示金額算不出來，且是成功呼叫或有原幣金額（失敗且沒金額的本來就沒用量，不算）。
 - 每日以 `DateOnly.FromDateTime(OccurredAt)` 直接取日期，**不套 `ToLocalTime()`**（SQLite 讀回 `Kind` 為 Unspecified，套了會整批位移 8 小時）。
-- 圖表元件共用 `Components/Commons/Charts/`（`StatCard`、`LineChart`、`PieChart`、`BarChart`）；`ChartSlice.Value` 以「分」負責幾何（`AiUsageMetrics.ToChartCents`），文字另由 `Display` 給。
+- 圖表元件共用 `Components/Commons/Charts/`（1.1.12 起在 `Web.Client`，資料型別在 `Dtos/Dashboards`；`StatCard`、`LineChart`、`PieChart`、`BarChart`）；`ChartSlice.Value` 以「分」負責幾何（`AiUsageMetrics.ToChartCents`），文字另由 `Display` 給。
 - 查詢、重新整理、刪除與清除 → `ReloadAsync` 重算整頁（概況、上限、範圍統計、明細目前頁）；翻頁或排序 → 只重載明細。
 
 ### 匯出

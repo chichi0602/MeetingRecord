@@ -32,6 +32,12 @@ public sealed class ApiAuthorizationConventionTests
     {
         ["AuthController.Me"] = "回傳呼叫者自己的帳號資料，任何登入者都可以看自己",
         ["SessionController.Get"] = "回傳呼叫者自己的登入狀態與權限鍵（1.1.0，WASM 前端決定導向用）；權限判斷仍在各 API 的 [HasPermission]",
+        ["AccountController.ChangePassword"] = "只變更呼叫者自己的密碼，須驗目前密碼（1.1.6，規則同 Server 頁使用者選單的對話窗）",
+        ["SystemController.GetAbout"] = "「關於」對話窗的系統名稱、版本、環境（1.1.6），Server 頁本來就讓所有登入者看得到",
+        ["AuditController.PageDenied"] = "WASM 頁擋下呼叫者自己時寫「頁面拒絕存取」稽核（1.1.6），只收單純路徑",
+        ["NotificationController.GetRecent"] = "只回呼叫者自己的最近通知（1.1.6，WASM 頁通知鈴）",
+        ["NotificationController.MarkRead"] = "只標呼叫者自己的通知為已讀，別人的不動（1.1.6）",
+        ["NotificationController.MarkAllRead"] = "只標呼叫者自己的全部通知為已讀（1.1.6）",
         ["NotificationController.GetUnreadCount"] = "只回呼叫者自己的未讀通知數（1.1.2，WASM 前端收到推播後重查）",
         ["SessionController.GetMenu"] = "回傳依呼叫者自己權限過濾好的側邊選單（1.1.0），規則與網頁側邊欄相同",
         ["UploadChunkController.PutChunk"] = "分塊上傳只收位元組（1.0.59）：授權靠「上傳工作階段的擁有者＝目前使用者」，工作階段由網頁在通過權限與資料範圍檢查後才建立",

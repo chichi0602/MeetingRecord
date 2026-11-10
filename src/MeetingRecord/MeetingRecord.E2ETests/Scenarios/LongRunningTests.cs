@@ -223,6 +223,47 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         Assert.Null(meeting.MediaRelativePath);
     }
 
+    [E2EFact]
+    [Trait("Scenario", "L4-08")]
+    [Trait("Title", "上傳中要切到 WASM 頁或關分頁會先確認；選留下上傳照常完成")]
+    [Trait("Page", "會議紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task LeavingDuringUpload_ShouldAskFirst()
+    {
+        // 1.1.6（WASM 遷移）：往 WASM 頁是整頁載入，舊版頁面的連線一斷上傳就中斷，所以離開前要先問。
+        var page = await LoginAsAsync(Seed.Owner);
+        var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
+        await ThrottleUploadsAsync(page, TimeSpan.FromSeconds(3));
+        Assert.False(await BeforeUnloadBlockedAsync(page), "還沒上傳就攔了關分頁");
+
+        await SaveNewMeetingWithMediaAsync(page, title);
+        await Expect(JobPanelRow(page, title)).ToContainTextAsync("上傳中");
+
+        // 關分頁、重新整理：beforeunload 被攔下（瀏覽器會問「確定要離開嗎？」）。
+        // 用事件驗而不真的關頁：Playwright 觸發關頁後會中斷攔截中的上傳請求。
+        Assert.True(await BeforeUnloadBlockedAsync(page), "上傳中關分頁沒有提醒");
+
+        // 切到 WASM 頁：系統的確認框，選留下就不離開。
+        await page.EvaluateAsync("() => Blazor.navigateTo('/wasm')");
+        await Expect(page.Locator(".ant-modal-confirm").GetByText("上傳還在進行")).ToBeVisibleAsync();
+        await ConfirmAsync(page, "留下");
+        await Expect(page).ToHaveURLAsync(new Regex("/meetings$"));
+
+        await Expect(Notice(page, "影音檔已上傳")).ToBeVisibleAsync(new() { Timeout = UploadTimeout });
+
+        // 上傳結束就解除提醒，之後關分頁不會再問。
+        var released = DateTime.UtcNow.AddSeconds(10);
+        while (await BeforeUnloadBlockedAsync(page))
+        {
+            Assert.True(DateTime.UtcNow < released, "上傳完成後關分頁還在提醒");
+            await page.WaitForTimeoutAsync(200);
+        }
+    }
+
+    /// <summary>送一個可取消的 beforeunload 事件，看有沒有被攔下（也就是瀏覽器會不會問「確定要離開嗎？」）。</summary>
+    private static Task<bool> BeforeUnloadBlockedAsync(IPage page)
+        => page.EvaluateAsync<bool>("() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; }");
+
     /// <summary>從資料庫找到這場會議存在伺服器上的影音檔，比對大小與 SHA-256。</summary>
     private async Task AssertStoredMediaMatchesAsync(string title, string original)
     {

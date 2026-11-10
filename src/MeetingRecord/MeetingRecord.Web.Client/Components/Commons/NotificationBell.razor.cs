@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Components;
-using MeetingRecord.AccessDatas.Models;
-using MeetingRecord.Business.Services.Notifications;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.Notifications;
 
 namespace MeetingRecord.Web.Components.Commons;
 
@@ -9,12 +9,12 @@ namespace MeetingRecord.Web.Components.Commons;
 ///
 /// <para>
 /// 使用者問「有人改了期限，一起負責那項專案的人要怎麼知道」：待辦被改時 <c>TodoChangeRecorder</c>
-/// 寫通知給專案成員，並透過 <see cref="IUserNotificationNotifier"/> 廣播；這裡收到名單含自己才重新查。
+/// 寫通知給專案成員並廣播「誰有新通知」；這裡收到自己的變動才重新查。
 /// </para>
 ///
 /// <para>
-/// ⚠️ 查詢一律自開短命的 scope（比照 <c>BackgroundJobProgressPanel</c>）：事件是別人存檔時觸發的，
-/// 拿頁面那個 DbContext 查會和頁面正在跑的查詢撞在一起。
+/// 1.1.6（WASM 遷移）起鈴鐺放在 WASM 專案、兩種頁面共用：資料經 <see cref="INotificationSource"/> 取得——
+/// Server 頁直接用伺服器服務，WASM 頁打 API 並靠推播通道得知變動。
 /// </para>
 /// </summary>
 public partial class NotificationBell : ComponentBase, IDisposable
@@ -22,10 +22,7 @@ public partial class NotificationBell : ComponentBase, IDisposable
     private const int RecentCount = 20;
 
     [Inject]
-    private IServiceScopeFactory ScopeFactory { get; set; } = default!;
-
-    [Inject]
-    private IUserNotificationNotifier Notifier { get; set; } = default!;
+    private INotificationSource Source { get; set; } = default!;
 
     [Inject]
     private NavigationManager NavigationManager { get; set; } = default!;
@@ -39,29 +36,24 @@ public partial class NotificationBell : ComponentBase, IDisposable
 
     private int loadedUserId;
     private int unreadCount;
-    private List<UserNotification> items = [];
+    private IReadOnlyList<NotificationDto> items = [];
     private bool isOpen;
     private bool disposed;
-
-    protected override void OnInitialized() => Notifier.Changed += OnNotified;
+    private IDisposable? subscription;
 
     protected override async Task OnParametersSetAsync()
     {
         if (UserId > 0 && UserId != loadedUserId)
         {
             loadedUserId = UserId;
+            subscription?.Dispose();
+            subscription = Source.Subscribe(UserId, OnChangedAsync);
             await RefreshAsync();
         }
     }
 
-    private void OnNotified(IReadOnlyCollection<int> userIds)
-    {
-        if (loadedUserId <= 0 || !userIds.Contains(loadedUserId))
-        {
-            return;
-        }
-
-        _ = InvokeAsync(async () =>
+    private Task OnChangedAsync()
+        => InvokeAsync(async () =>
         {
             if (disposed)
             {
@@ -71,20 +63,17 @@ public partial class NotificationBell : ComponentBase, IDisposable
             await RefreshAsync();
             StateHasChanged();
         });
-    }
 
     private async Task RefreshAsync()
     {
         try
         {
-            using var scope = ScopeFactory.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<UserNotificationService>();
-            unreadCount = await service.GetUnreadCountAsync(loadedUserId);
+            unreadCount = await Source.GetUnreadCountAsync(loadedUserId);
 
             // 下拉沒打開時只要紅點數字，清單等打開再查。
             if (isOpen)
             {
-                items = await service.GetRecentAsync(loadedUserId, RecentCount);
+                items = await Source.GetRecentAsync(loadedUserId, RecentCount);
             }
         }
         catch (Exception ex)
@@ -105,11 +94,11 @@ public partial class NotificationBell : ComponentBase, IDisposable
 
     private void Close() => isOpen = false;
 
-    private async Task OpenAsync(UserNotification item)
+    private async Task OpenAsync(NotificationDto item)
     {
         if (item.ReadAt is null)
         {
-            await WithServiceAsync(service => service.MarkReadAsync(loadedUserId, item.Id));
+            await WithSourceAsync(source => source.MarkReadAsync(loadedUserId, item.Id));
         }
 
         isOpen = false;
@@ -121,16 +110,15 @@ public partial class NotificationBell : ComponentBase, IDisposable
 
     private async Task MarkAllReadAsync()
     {
-        await WithServiceAsync(service => service.MarkAllReadAsync(loadedUserId));
+        await WithSourceAsync(source => source.MarkAllReadAsync(loadedUserId));
         await RefreshAsync();
     }
 
-    private async Task WithServiceAsync(Func<UserNotificationService, Task> action)
+    private async Task WithSourceAsync(Func<INotificationSource, Task> action)
     {
         try
         {
-            using var scope = ScopeFactory.CreateScope();
-            await action(scope.ServiceProvider.GetRequiredService<UserNotificationService>());
+            await action(Source);
         }
         catch (Exception ex)
         {
@@ -151,7 +139,7 @@ public partial class NotificationBell : ComponentBase, IDisposable
     public void Dispose()
     {
         disposed = true;
-        Notifier.Changed -= OnNotified;
+        subscription?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

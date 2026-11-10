@@ -1,13 +1,12 @@
 @inherits LayoutComponentBase
-@implements IAsyncDisposable
 @inject SessionService SessionService
-@inject NotificationApi NotificationApi
-@inject AppHubConnection HubConnection
+@inject AccountApi AccountApi
+@inject SystemApi SystemApi
 @inject NavigationManager NavigationManager
 
 @* WASM 端的版面：開頁先問 Session API，依結果導向（登入、登出原因、改密碼），通過才畫外框。
-   1.1.5 起外框用共用的 AppShell，與 Blazor Server 頁的 MainLayout 同一份外觀；這裡供應 API 來的資料。
-   變更密碼與關於在 1.1.6 接上 API 前先不提供（AppShell 遇到 null 就不顯示那個選單項）。 *@
+   外框用共用的 AppShell（1.1.5），與 Blazor Server 頁的 MainLayout 同一份外觀；這裡供應 API 來的資料：
+   選單與使用者來自 Session、通知鈴的資料來源是 ApiNotificationSource、變更密碼與關於打 API（1.1.6）。 *@
 @if (session is null)
 {
     <div class="wasm-loading">
@@ -24,16 +23,14 @@
 else
 {
     <AppShell MenuItems="menu"
-              SystemName="@SystemName"
+              SystemName="@session.SystemName"
               UserDisplayName="@(string.IsNullOrWhiteSpace(session.Name) ? session.Account : session.Name)"
               IsAdmin="session.IsAdmin"
-              IsSupportAccount="session.IsSupportAccount">
+              IsSupportAccount="session.IsSupportAccount"
+              ChangePasswordAsync="ChangePasswordAsync"
+              LoadAboutAsync="LoadAboutAsync">
         <NotificationContent>
-            @* 1.1.2：未讀通知數，伺服器推播「通知有變動」就重查。通知清單在 1.1.6 搬通知鈴時接上。 *@
-            <span class="wasm-unread" data-count="@unreadCount" aria-label="@($"通知，{unreadCount} 則未讀")">
-                <span class="material-icons-outlined" aria-hidden="true">notifications</span>
-                <span>@unreadCount</span>
-            </span>
+            <NotificationBell UserId="@session.UserId" />
         </NotificationContent>
         <ChildContent>
             <ErrorBoundary>
@@ -50,10 +47,6 @@ else
     private SessionDto? session;
     private List<MenuItemDto> menu = [];
     private string? errorMessage;
-    private int unreadCount;
-
-    /// <summary>系統名稱。1.1.6 改由「關於」API 提供；這版先用與設定檔相同的預設名稱。</summary>
-    private const string SystemName = "AI 會議記錄小助手";
 
     protected override async Task OnInitializedAsync()
     {
@@ -85,33 +78,18 @@ else
         var menuResult = await SessionService.GetMenuAsync();
         menu = menuResult.Data ?? [];
         session = current;
-
-        // 先查一次未讀數再接推播；推播或重連後都重查（斷線期間可能漏掉推播）。
-        await RefreshUnreadCountAsync();
-        HubConnection.NotificationsChanged += OnNotificationsChangedAsync;
-        HubConnection.Reconnected += OnNotificationsChangedAsync;
-        await HubConnection.StartAsync();
     }
 
-    private async Task RefreshUnreadCountAsync()
+    /// <summary>AppShell 已檢查過輸入；伺服器會再檢查一次（至少 6 字、support 不可改、目前密碼要對）。成功回 null。</summary>
+    private async Task<string?> ChangePasswordAsync(string currentPassword, string newPassword)
     {
-        var result = await NotificationApi.GetUnreadCountAsync();
-        if (result.Success)
-        {
-            unreadCount = result.Data;
-        }
+        var result = await AccountApi.ChangePasswordAsync(currentPassword, newPassword);
+        return result.Success ? null : result.ErrorMessage ?? result.Message;
     }
 
-    private async Task OnNotificationsChangedAsync()
+    private async Task<IReadOnlyList<KeyValuePair<string, string>>> LoadAboutAsync()
     {
-        await RefreshUnreadCountAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        HubConnection.NotificationsChanged -= OnNotificationsChangedAsync;
-        HubConnection.Reconnected -= OnNotificationsChangedAsync;
-        return ValueTask.CompletedTask;
+        var result = await SystemApi.GetAboutAsync();
+        return result.Data is { } about ? AboutItems.From(about) : [new("系統資訊", "目前無法取得，請稍後再試。")];
     }
 }

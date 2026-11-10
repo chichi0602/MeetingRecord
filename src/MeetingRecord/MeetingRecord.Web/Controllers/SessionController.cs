@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
+using Microsoft.Extensions.Options;
 using MeetingRecord.Dtos.Sessions;
+using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Components.Layout;
@@ -28,13 +30,16 @@ public sealed class SessionController : ControllerBase
     private readonly IPermissionChecker permissionChecker;
     private readonly SidebarMenuService sidebarMenuService;
     private readonly IConfiguration configuration;
+    private readonly IOptions<SystemSettings> systemSettings;
 
     public SessionController(
         UserSessionService userSessionService,
         IPermissionChecker permissionChecker,
         SidebarMenuService sidebarMenuService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IOptions<SystemSettings> systemSettings)
     {
+        this.systemSettings = systemSettings;
         this.userSessionService = userSessionService;
         this.permissionChecker = permissionChecker;
         this.sidebarMenuService = sidebarMenuService;
@@ -66,6 +71,7 @@ public sealed class SessionController : ControllerBase
             IsAdmin = user.IsAdmin,
             MustChangePassword = evaluation.MustChangePassword,
             IsSupportAccount = string.Equals(user.Account, supportAccount, StringComparison.Ordinal),
+            SystemName = systemSettings.Value.SystemInformation.SystemName,
             PermissionKeys = (await permissionChecker.GetEffectivePermissionKeysAsync(user.Id)).Order(StringComparer.Ordinal).ToList(),
         }));
     }

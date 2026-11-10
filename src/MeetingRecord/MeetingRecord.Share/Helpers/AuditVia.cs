@@ -10,6 +10,9 @@ public static class AuditVia
     public const string Api = "Api";
     public const string Blazor = "Blazor";
 
+    /// <summary>WASM 前端（1.1.6）：頁面在瀏覽器執行，經 API 寫稽核。</summary>
+    public const string Wasm = "Wasm";
+
     /// <summary>AI 抽出待辦後批次加入（1.0.34）。</summary>
     public const string AiExtract = "AiExtract";
 }

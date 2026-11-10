@@ -118,9 +118,8 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
         // 負責人開著 WASM 頁（收推播的一方）。
         var owner = await LoginAsAsync(Seed.Owner);
         await owner.GotoAsync("/wasm");
-        var unread = owner.Locator(".wasm-unread");
-        await Expect(unread).ToBeVisibleAsync();
-        var before = int.Parse(await unread.GetAttributeAsync("data-count") ?? "0");
+        await Expect(owner.Locator(".notification-bell-trigger")).ToBeVisibleAsync();
+        var before = await UnreadAsync(owner);
 
         // 協作成員在 Server 待辦頁改狀態（與 NTF-01 同樣的步驟），會寫通知給負責人。
         var collaborator = await LoginAsAsync(Seed.Collaborator);
@@ -134,7 +133,7 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
 
         // 負責人那邊不重新整理，數字自己變多。
         var deadline = DateTime.UtcNow.AddSeconds(20);
-        while (int.Parse(await unread.GetAttributeAsync("data-count") ?? "0") <= before)
+        while (await UnreadAsync(owner) <= before)
         {
             Assert.True(DateTime.UtcNow < deadline, $"等了 20 秒未讀數還是 {before}，推播沒有到");
             await owner.WaitForTimeoutAsync(200);
@@ -197,6 +196,79 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
         {
             lock (sockets) { return sockets.Any(url => url.Contains("/hubs/app", StringComparison.Ordinal)); }
         }
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "WASM-07")]
+    [Trait("Title", "WASM 頁的通知鈴：看得到通知清單、全部標為已讀後歸零")]
+    [Trait("Page", "WASM 預覽")]
+    [Trait("Persona", "檢視者")]
+    public async Task WasmNotificationBell_ShouldListAndMarkAllRead()
+    {
+        var marker = Unique("E2E 鈴鐺通知");
+        await using (var db = App.CreateDbContext())
+        {
+            db.UserNotification.AddRange(
+                new UserNotification { UserId = Seed.Viewer.Id, Message = $"{marker} 甲", CreatedAt = DateTime.Now.AddMinutes(-1) },
+                new UserNotification { UserId = Seed.Viewer.Id, Message = $"{marker} 乙", CreatedAt = DateTime.Now });
+            await db.SaveChangesAsync();
+        }
+
+        var page = await LoginAsAsync(Seed.Viewer);
+        await page.GotoAsync("/wasm");
+        var trigger = page.Locator(".notification-bell-trigger");
+        await Expect(trigger).ToHaveAttributeAsync("aria-label", new Regex(@"^通知，\d+ 則未讀$"));
+        Assert.True(await UnreadAsync(page) >= 2);
+
+        await trigger.ClickAsync();
+        var panel = page.GetByRole(AriaRole.Dialog, new() { Name = "通知" });
+        await Expect(panel.Locator(".notification-bell-message").Filter(new() { HasText = $"{marker} 甲" })).ToBeVisibleAsync();
+        await Expect(panel.Locator(".notification-bell-message").Filter(new() { HasText = $"{marker} 乙" })).ToBeVisibleAsync();
+
+        await panel.GetByRole(AriaRole.Button, new() { Name = "全部標為已讀" }).ClickAsync();
+        await Expect(trigger).ToHaveAttributeAsync("aria-label", "通知");
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "WASM-08")]
+    [Trait("Title", "WASM 頁的使用者選單：變更密碼會檢查輸入、改到一半取消要確認；關於顯示目前版本")]
+    [Trait("Page", "WASM 預覽")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task WasmUserMenu_ChangePasswordAndAbout()
+    {
+        var page = await LoginAsAsync(Seed.Owner);
+        await page.GotoAsync("/wasm");
+        await Expect(page.Locator(".wasm-home-user")).ToBeVisibleAsync();
+
+        // 變更密碼：新密碼太短，前端就擋下來並說明。
+        await page.GetByRole(AriaRole.Button, new() { Name = "使用者操作" }).ClickAsync();
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "變更密碼" }).ClickAsync();
+        await page.GetByPlaceholder("請輸入目前密碼").FillAsync(Seed.Owner.Password);
+        await page.GetByPlaceholder("請輸入新密碼（至少 6 個字元）").FillAsync("123");
+        await page.GetByPlaceholder("請再次輸入新密碼").FillAsync("123");
+        await ClickModalOkAsync(page);
+        await Expect(page.GetByText("新密碼至少需要 6 個字元。")).ToBeVisibleAsync();
+
+        // 打過字再取消要先確認（FormDirtyHelper 在 WASM 也正常）。
+        await page.Locator(".ant-modal-wrap:visible .ant-modal-footer .ant-btn").Filter(new() { HasTextRegex = new Regex(@"^\s*取\s*消\s*$") }).ClickAsync();
+        await Expect(page.Locator(".ant-modal-confirm").GetByText("放棄編修")).ToBeVisibleAsync();
+        await ConfirmAsync(page, "放棄");
+        await Expect(page.GetByPlaceholder("請輸入目前密碼")).ToBeHiddenAsync();
+
+        // 關於：版本與伺服器設定一致。
+        var about = await page.APIRequest.GetAsync("/api/v1/system/about");
+        var version = (await about.JsonAsync())!.Value.GetProperty("data").GetProperty("systemVersion").GetString()!;
+        await page.GetByRole(AriaRole.Button, new() { Name = "使用者操作" }).ClickAsync();
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "關於" }).ClickAsync();
+        await Expect(page.Locator(".about-row").Filter(new() { HasText = "系統版本" })).ToContainTextAsync(version);
+    }
+
+    /// <summary>通知鈴按鈕的可及名稱是「通知，N 則未讀」，沒有未讀時只有「通知」。</summary>
+    private static async Task<int> UnreadAsync(IPage page)
+    {
+        var label = await page.Locator(".notification-bell-trigger").GetAttributeAsync("aria-label") ?? string.Empty;
+        var match = Regex.Match(label, @"(\d+) 則未讀");
+        return match.Success ? int.Parse(match.Groups[1].Value) : 0;
     }
 
     private static async Task<List<string>> HrefsAsync(ILocator links)

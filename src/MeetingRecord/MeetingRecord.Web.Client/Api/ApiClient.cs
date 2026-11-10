@@ -27,6 +27,20 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
         return await ReadAsync(response, typeInfo, cancellationToken);
     }
 
+    /// <summary>不帶內容的 POST（例如「全部標為已讀」）。</summary>
+    public async Task<ApiResult<T>> PostAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsync(url, content: null, cancellationToken);
+        return await ReadAsync(response, typeInfo, cancellationToken);
+    }
+
+    /// <summary>帶 JSON 內容的 POST；內容與回應都走原始碼產生器（<see cref="ClientJsonContext"/>）。</summary>
+    public async Task<ApiResult<T>> PostAsync<TBody, T>(string url, TBody body, JsonTypeInfo<TBody> bodyType, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(url, body, bodyType, cancellationToken);
+        return await ReadAsync(response, typeInfo, cancellationToken);
+    }
+
     private async Task<ApiResult<T>> ReadAsync<T>(HttpResponseMessage response, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)

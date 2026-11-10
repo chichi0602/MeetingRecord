@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -47,10 +46,7 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
     private IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
 
     [Inject]
-    private IWebHostEnvironment WebHostEnvironment { get; set; } = default!;
-
-    [Inject]
-    private SystemStartupState SystemStartupState { get; set; } = default!;
+    private SystemAboutProvider SystemAboutProvider { get; set; } = default!;
 
     [Inject]
     private BrowserErrorReporter BrowserErrorReporter { get; set; } = default!;
@@ -142,24 +138,9 @@ public partial class MainLayout : LayoutComponentBase, IDisposable
         return result.Success ? null : result.Message ?? "變更密碼失敗，請稍後再試。";
     }
 
-    /// <summary>「關於」的內容，開啟當下才算：已運作時間 Blazor Server 不會自動刷新已渲染的值。</summary>
+    /// <summary>「關於」的內容，開啟當下才算（已運作時間要即時）；與 WASM 頁共用同一份資料與排版（1.1.6）。</summary>
     private Task<IReadOnlyList<KeyValuePair<string, string>>> LoadAboutAsync()
-    {
-        var systemInformation = SystemSettingsOptions.Value.SystemInformation;
-        var uptime = DateTimeOffset.Now - SystemStartupState.StartedAt;
-
-        IReadOnlyList<KeyValuePair<string, string>> items =
-        [
-            new("系統名稱", systemInformation.SystemName),
-            new("系統描述", systemInformation.SystemDescription),
-            new("系統版本", systemInformation.SystemVersion),
-            new("執行環境", WebHostEnvironment.EnvironmentName),
-            new(".NET 版本", RuntimeInformation.FrameworkDescription),
-            new("啟動時間", SystemStartupState.StartedAt.ToString("yyyy/MM/dd HH:mm:ss")),
-            new("已運作時間", uptime.ToString(@"dd\.hh\:mm\:ss")),
-        ];
-        return Task.FromResult(items);
-    }
+        => Task.FromResult(AboutItems.From(SystemAboutProvider.Get()));
 
     public void Dispose()
     {

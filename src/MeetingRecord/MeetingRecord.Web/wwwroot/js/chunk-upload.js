@@ -7,6 +7,11 @@
 //
 // 伺服器回 404／409 表示那一頭已經不要了（存完、被拒絕、被取消、逾時），安靜收手即可。
 window.meetingRecordChunkUpload = (function () {
+    function warnBeforeUnload(event) {
+        event.preventDefault();
+        event.returnValue = '';
+    }
+
     const headerName = "X-MeetingRecord-Upload";
     const retryDelays = [1000, 3000, 9000];
     const active = new Map();
@@ -114,6 +119,16 @@ window.meetingRecordChunkUpload = (function () {
             const state = { aborted: false, controller: new AbortController() };
             active.set(uploadId, state);
             run(file, uploadId, chunkSize, dotnetRef, state);
+        },
+
+        // 1.1.6（WASM 遷移）：上傳進行中關分頁或重新整理時，請瀏覽器跳出「確定要離開嗎？」。
+        // 由伺服器端在第一個上傳開始時打開、最後一個結束時關掉（BrowserFileUploader）。
+        setLeaveGuard: function (active) {
+            if (active) {
+                window.addEventListener('beforeunload', warnBeforeUnload);
+            } else {
+                window.removeEventListener('beforeunload', warnBeforeUnload);
+            }
         },
 
         abort: function (uploadId) {

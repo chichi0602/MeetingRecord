@@ -65,6 +65,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddSingleton<SystemStartupState>();
+        // 1.1.6：「關於」的內容，Server 頁 MainLayout 與 GET /api/v1/system/about 共用。
+        services.AddScoped<SystemAboutProvider>();
         services.AddScoped<ISystemHealthService, SystemHealthService>();
 
         // 監控與診斷（0.4.120，移植自 NET10-Blazor-Starter）。LogLevelRuntimeState 是可變的 Singleton，
@@ -162,6 +164,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Business.Services.Notifications.UserNotificationService>();
         // 1.1.2（WASM 遷移 M1）：把「誰有新通知」轉送到 AppHub，WASM 前端靠它即時更新未讀數。
         services.AddHostedService<MeetingRecord.Web.Hubs.HubNotificationBridge>();
+        // 1.1.6：通知鈴（放在 WASM 專案、兩種頁面共用）在 Server 頁的資料來源。
+        services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, MeetingRecord.Web.Notifications.ServerNotificationSource>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();

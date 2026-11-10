@@ -26,6 +26,9 @@ public class SessionDto
     /// <summary>系統預設的維護帳號（不能在網頁改密碼）。</summary>
     public bool IsSupportAccount { get; set; }
 
+    /// <summary>系統名稱（側邊欄標題，1.1.6）；以設定檔為單一來源。</summary>
+    public string SystemName { get; set; } = string.Empty;
+
     /// <summary>有效權限鍵（多角色聯集）；管理者為空集合、一律視為全部通過。</summary>
     public List<string> PermissionKeys { get; set; } = [];
 }

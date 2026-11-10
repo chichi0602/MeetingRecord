@@ -24,11 +24,19 @@ public sealed class BrowserFileUploader
 {
     private const string StartFunction = "meetingRecordChunkUpload.start";
     private const string AbortFunction = "meetingRecordChunkUpload.abort";
+    private const string LeaveGuardFunction = "meetingRecordChunkUpload.setLeaveGuard";
 
     private readonly IJSRuntime jsRuntime;
     private readonly AuthenticationStateProvider authenticationStateProvider;
     private readonly ChunkedUploadStore store;
     private readonly ILogger<BrowserFileUploader> logger;
+    private int activeUploads;
+
+    /// <summary>
+    /// 這條連線上還在進行的上傳數（1.1.6，WASM 遷移）。遷移期間往 WASM 頁是整頁載入，連線一斷上傳就中斷；
+    /// <c>Routes.razor</c> 依這個數字在離開前跳確認，關分頁或重新整理則由瀏覽器的 beforeunload 提醒。
+    /// </summary>
+    public int ActiveUploadCount => Volatile.Read(ref activeUploads);
 
     public BrowserFileUploader(
         IJSRuntime jsRuntime,
@@ -58,7 +66,11 @@ public sealed class BrowserFileUploader
         var session = store.Create(userId, fileSize);
         var callback = new BrowserUploadCallback(session, logger);
         var reference = DotNetObjectReference.Create(callback);
-        var upload = new BrowserFileUpload(session, reference, jsRuntime, logger);
+        var upload = new BrowserFileUpload(session, reference, jsRuntime, logger, OnUploadEndedAsync);
+        if (Interlocked.Increment(ref activeUploads) == 1)
+        {
+            await SetLeaveGuardAsync(true);
+        }
 
         try
         {
@@ -82,6 +94,30 @@ public sealed class BrowserFileUploader
         return upload;
     }
 
+    /// <summary>使用者已確認要離開（例如往 WASM 頁）：先拿掉瀏覽器的 beforeunload 提醒，免得接著再跳一次瀏覽器內建的確認。</summary>
+    public Task ReleaseLeaveGuardAsync() => SetLeaveGuardAsync(false);
+
+    private async Task OnUploadEndedAsync()
+    {
+        if (Interlocked.Decrement(ref activeUploads) == 0)
+        {
+            await SetLeaveGuardAsync(false);
+        }
+    }
+
+    private async Task SetLeaveGuardAsync(bool active)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(LeaveGuardFunction, active);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+            // 連線已斷（頁面已離開）就沒有提醒可設；少了提醒不影響上傳本身。
+            logger.LogDebug(ex, "Setting the upload leave guard skipped. Active={Active}", active);
+        }
+    }
+
     internal static string AbortFunctionName => AbortFunction;
 }
 
@@ -92,17 +128,21 @@ public sealed class BrowserFileUpload : IAsyncDisposable
     private readonly DotNetObjectReference<BrowserUploadCallback> reference;
     private readonly IJSRuntime jsRuntime;
     private readonly ILogger logger;
+    private readonly Func<Task> onEnded;
+    private int disposed;
 
     internal BrowserFileUpload(
         ChunkedUploadSession session,
         DotNetObjectReference<BrowserUploadCallback> reference,
         IJSRuntime jsRuntime,
-        ILogger logger)
+        ILogger logger,
+        Func<Task> onEnded)
     {
         this.session = session;
         this.reference = reference;
         this.jsRuntime = jsRuntime;
         this.logger = logger;
+        this.onEnded = onEnded;
     }
 
     /// <summary>交給服務層讀的串流。</summary>
@@ -110,6 +150,11 @@ public sealed class BrowserFileUpload : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref disposed, 1) == 1)
+        {
+            return;
+        }
+
         await session.DisposeAsync();
 
         try
@@ -123,6 +168,7 @@ public sealed class BrowserFileUpload : IAsyncDisposable
         }
 
         reference.Dispose();
+        await onEnded();
     }
 }
 

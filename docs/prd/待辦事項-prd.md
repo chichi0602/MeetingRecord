@@ -1,8 +1,8 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.18
+- 文件版本：1.19
 - 文件狀態：已實作
-- 現行系統版本：1.1.18
+- 現行系統版本：1.1.19
 - 首次實作版本：0.4.32
 - 最後核對日期：2026/11/10
 
@@ -77,7 +77,7 @@
 面板裡的四顆狀態膠囊（待辦／進行中／已完成／逾期）從純顯示改成可點的 `<button>`，
 點下去把**下面的小清單**篩成「這個人 ＋ 這個狀態」。左邊的主清單、膠囊自己的數字與完成度進度條都不動。
 
-實作是純記憶體的檢視層篩選（`Components/Views/Todos/TodoOwnerFilter.cs`），**服務層完全不動**：
+實作是純記憶體的檢視層篩選（1.1.19 起 `Web.Client/Pages/Todos/TodoOwnerFilter.cs`），**服務層完全不動**：
 `GetByOwnerAsync` 本來就刻意不分頁（單人量級小），所以在記憶體篩的成本可忽略。
 
 | 議題 | 結論 |
@@ -166,7 +166,7 @@
 
 專案的「負責人」1.0.52 起是帳號（規則見 [專案項目 PRD](專案項目-prd.md)），**刪除待辦只限該專案的負責人與管理者**；新增、修改、勾完成、新增子項目照舊，同專案的人依角色都能做。
 
-- 畫面：「刪除」按鈕只在**是專案負責人**＋有 `待辦事項:edit`＋專案不是唯讀時出現（`TodoViewView.CanDelete`）。負責人是「一般使用者」角色（沒有 `delete`）也能刪；不是負責人的「主管」有 `delete` 也看不到按鈕。
+- 畫面：「刪除」按鈕只在**是專案負責人**＋有 `待辦事項:edit`＋專案不是唯讀時出現（1.1.19 起由 API 依呼叫者算好放在 `TodoDto.CanDelete`，頁面照著顯示）。負責人是「一般使用者」角色（沒有 `delete`）也能刪；不是負責人的「主管」有 `delete` 也看不到按鈕。
 - 服務層：`TodoService.DeleteAsync`（1.1.18 起 API 也走這裡）先擋封存，再用 `ProjectAccess.IsProjectOwner(todo.ProjectId)` 擋，訊息「只有專案負責人可以刪除待辦。」（`ProjectOwnerRules.DeleteTodoMessage`）。API `DELETE api/Todo/{id}` 因此改要求 `待辦事項:edit`（以前是 `delete`），被擋回 400 `ValidationError`。
 - 刪主待辦照舊連同子項目一起刪；子項目本身也一樣只有負責人能刪。
 - 升級前對不到帳號、還沒有負責人的專案，待辦只有管理者能刪。
@@ -201,7 +201,8 @@
 
 ## 五、內部系統運作
 
-- 資料流：`TodoPage.razor` → `TodoViewView` → `TodoService` → `BackendDBContext.Todo`。REST API 走 `TodoController` → 同一個 `TodoService`（1.1.18 起；以前是 `TodoRepository`，兩套規則並存），回 `ApiResult`；畫面用的清單樹、負責人面板、異動紀錄等另有端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- 資料流（1.1.19 起）：WASM 頁 `TodoPage` → `TodoApi` → `TodoController` → `TodoService` → `BackendDBContext.Todo`；以前是 Blazor Server 的 `TodoViewView` 直接注入服務。REST API 走 `TodoController` → 同一個 `TodoService`（1.1.18 起；以前是 `TodoRepository`，兩套規則並存），回 `ApiResult`；畫面用的清單樹、負責人面板、異動紀錄等另有端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- **1.1.19 起清單預設排序真的生效**：表格在沒有排序時也會回報某一欄、方向為「無」，以前照樣送出排序欄位，服務層因此跳過預設排序（有截止日的在前、越早到期越前面）又沒有方向可排，分頁順序不固定；現在沒有方向就不送排序欄位。
 - 讀取：清單與單筆都 `Include(Project)` 與 `Include(Meeting)` 以取得關聯名稱；`ProjectTitle`／`MeetingTitle` 由 AutoMapper 的 `ForMember` 自導覽屬性帶出。
 - 0.4.66 起 `TodoService` 不再注入 `IRecordAccessScopeProvider`——四處列級權控（清單、單筆、勾選完成、修改前置檢查）與 `DashboardService.BuildTodoQuery` 的團隊過濾全部移除。
 - 前置檢查：新增與修改都會驗證所屬專案存在（0.4.66 起不再檢查團隊可見範圍）。
@@ -219,13 +220,13 @@
 
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Todo.cs`（`Todo`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoService.cs`（`TodoService`：`AddAsync`、`UpdateAsync`、`SetCompletedAsync`、`DeleteAsync`、`BeforeAddCheckAsync`、`BeforeUpdateCheckAsync`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoViewView.razor`、`TodoViewView.razor.cs`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoPage.razor`、`TodoPage.razor.cs`（1.1.19 起是 WASM 頁，原 `TodoViewView`）；`src/MeetingRecord/MeetingRecord.Web.Client/Api/TodoApi.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoChangeRecorder.cs`（`StageAsync`、`Publish`，1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Notifications/UserNotificationService.cs`、`UserNotificationNotifier.cs`；`MeetingRecord.Web/BackgroundServices/NotificationRetentionBackgroundService.cs`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoHierarchyRules.cs`（`ValidateAsync`、`MoveChildrenAsync`，1.0.45）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/ProjectScopeSwitch.razor`（1.0.46；1.1.17 起在 Web.Client）
 - 測試：`TodoChangeAndNotificationTests`（35 條：1.0.44 的 15 條＋1.0.45 子項目 11 條＋1.0.46 封存 8 條＋1.0.52 `DeleteTodo_OnlyProjectOwnerOrAdmin_WebAndApi`）、`TodoServiceTests`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）、`TodoBatchSelection.cs`；逾期與截止日顯示規則 `src/MeetingRecord/MeetingRecord.Share/Helpers/TodoRules.cs`（1.1.19 從 `TodoAdapterModel` 抽出，伺服器與 WASM 共用）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

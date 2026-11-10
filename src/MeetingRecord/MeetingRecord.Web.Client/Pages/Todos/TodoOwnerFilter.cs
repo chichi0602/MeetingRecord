@@ -1,7 +1,8 @@
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Models.AdapterModel;
+using MeetingRecord.Dtos.Models;
+using MeetingRecord.Dtos.Todos;
+using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Web.Components.Views.Todos;
+namespace MeetingRecord.Web.Client.Pages.Todos;
 
 /// <summary>
 /// 負責人面板的膠囊篩選條件。
@@ -9,7 +10,7 @@ namespace MeetingRecord.Web.Components.Views.Todos;
 /// <para>
 /// ⚠️ 刻意用 enum 而不是 <c>string?</c> 存狀態值：<b>「逾期」不是 <c>Status</c> 的值</b>，
 /// 它是 <c>DueDate</c> 加上「未完成」算出來的衍生條件。用字串就得塞一個不在
-/// <c>TodoAdapterModel.StatusOptions</c> 裡的魔術字串，而 <c>todo.Status == filter</c>
+/// <c>TodoRules.StatusOptions</c> 裡的魔術字串，而 <c>todo.Status == filter</c>
 /// 這種比對會**安靜地**永遠不成立——沒有例外、沒有紅字，只有一個永遠空的清單。
 /// </para>
 /// </summary>
@@ -51,16 +52,16 @@ public static class TodoOwnerFilter
     /// 套用篩選。<paramref name="todos"/> 是某一位負責人的全部待辦
     /// （<c>GetByOwnerAsync</c> 刻意不分頁，單人量級不需要），所以在記憶體篩成本可忽略。
     /// </summary>
-    public static IReadOnlyList<TodoAdapterModel> Apply(
-        IReadOnlyList<TodoAdapterModel> todos,
+    public static IReadOnlyList<TodoDto> Apply(
+        IReadOnlyList<TodoDto> todos,
         OwnerTodoFilter filter)
     {
         ArgumentNullException.ThrowIfNull(todos);
 
         return filter switch
         {
-            OwnerTodoFilter.Pending => Where(todos, x => x.Status == TodoAdapterModel.StatusOptions[0]),
-            OwnerTodoFilter.InProgress => Where(todos, x => x.Status == TodoAdapterModel.StatusOptions[1]),
+            OwnerTodoFilter.Pending => Where(todos, x => x.Status == TodoRules.StatusOptions[0]),
+            OwnerTodoFilter.InProgress => Where(todos, x => x.Status == TodoRules.StatusOptions[1]),
 
             // 用 IsCompleted 而不是比對字串：完成與否的唯一權威在 model 上。
             OwnerTodoFilter.Completed => Where(todos, x => x.IsCompleted),
@@ -86,7 +87,7 @@ public static class TodoOwnerFilter
     /// 典型情境：篩了逾期，然後把最後一筆逾期的改成已完成。
     /// </para>
     /// </summary>
-    public static OwnerTodoFilter Clamp(TodoOwnerSummary? summary, OwnerTodoFilter filter)
+    public static OwnerTodoFilter Clamp(TodoOwnerSummaryDto? summary, OwnerTodoFilter filter)
     {
         if (filter == OwnerTodoFilter.All)
         {
@@ -102,7 +103,7 @@ public static class TodoOwnerFilter
     }
 
     /// <summary>某個篩選條件在統計裡對應的筆數。膠囊上顯示的就是這個數字。</summary>
-    public static int CountOf(TodoOwnerSummary summary, OwnerTodoFilter filter)
+    public static int CountOf(TodoOwnerSummaryDto summary, OwnerTodoFilter filter)
     {
         ArgumentNullException.ThrowIfNull(summary);
 
@@ -119,15 +120,15 @@ public static class TodoOwnerFilter
     /// <summary>篩選條件的顯示文字（篩選列與 aria 說明共用，避免兩處各寫一份）。</summary>
     public static string Describe(OwnerTodoFilter filter) => filter switch
     {
-        OwnerTodoFilter.Pending => TodoAdapterModel.StatusOptions[0],
-        OwnerTodoFilter.InProgress => TodoAdapterModel.StatusOptions[1],
-        OwnerTodoFilter.Completed => TodoAdapterModel.StatusOptions[2],
+        OwnerTodoFilter.Pending => TodoRules.StatusOptions[0],
+        OwnerTodoFilter.InProgress => TodoRules.StatusOptions[1],
+        OwnerTodoFilter.Completed => TodoRules.StatusOptions[2],
         OwnerTodoFilter.Overdue => "逾期",
         _ => "全部",
     };
 
-    private static IReadOnlyList<TodoAdapterModel> Where(
-        IReadOnlyList<TodoAdapterModel> todos,
-        Func<TodoAdapterModel, bool> predicate)
+    private static IReadOnlyList<TodoDto> Where(
+        IReadOnlyList<TodoDto> todos,
+        Func<TodoDto, bool> predicate)
         => todos.Where(predicate).ToList();
 }

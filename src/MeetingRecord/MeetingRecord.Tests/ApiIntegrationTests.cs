@@ -860,6 +860,7 @@ public class ApiTestApplicationFactory : WebApplicationFactory<Program>
             ["Security:ReturnExceptionDetails"] = "true",
             // 1.0.63：限流依使用者計算；這個 factory 被整個 ApiIntegrationTests 共用、全部以 support 呼叫，放寬到不會被擋。
             ["RateLimitSettings:PermitLimitPerUser"] = "100000",
+            ["RateLimitSettings:PermitLimitPerWebUser"] = "100000",
             ["RateLimitSettings:PermitLimitPerAnonymousIp"] = "100000",
             ["JwtSettings:Issuer"] = "MeetingRecord.Tests",
             ["JwtSettings:Audience"] = "MeetingRecord.Tests.Api",

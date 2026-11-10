@@ -67,6 +67,16 @@ public class TodoChangeDto
     public string? SourceMeetingTitle { get; set; }
 
     public string? Note { get; set; }
+
+    /// <summary>欄位名稱（例如「截止日」），1.1.19 起由伺服器組好。</summary>
+    public string FieldText { get; set; } = string.Empty;
+
+    /// <summary>從哪裡改的（例如「從〈週會〉抽出」）。</summary>
+    public string ViaText { get; set; } = string.Empty;
+
+    public string OldValueText { get; set; } = string.Empty;
+
+    public string NewValueText { get; set; } = string.Empty;
 }
 
 /// <summary>待辦頁可選的專案（篩選與表單用，<c>GET api/v1/Todo/projects/selectable</c>）。</summary>

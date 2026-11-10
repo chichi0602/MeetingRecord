@@ -1,6 +1,6 @@
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Models.AdapterModel;
-using MeetingRecord.Web.Components.Views.Todos;
+using MeetingRecord.Dtos.Models;
+using MeetingRecord.Dtos.Todos;
+using MeetingRecord.Web.Client.Pages.Todos;
 
 namespace MeetingRecord.Tests;
 
@@ -10,7 +10,7 @@ namespace MeetingRecord.Tests;
 /// <para>
 /// 膠囊上的數字與點下去看到的清單是**兩份各自獨立的實作**：
 /// 數字來自 <c>TodoService.GetOwnerSummariesAsync</c>（在查詢端數），
-/// 清單來自 <see cref="TodoOwnerFilter.Apply"/>（用 <c>TodoAdapterModel.IsOverdue</c>）。
+/// 清單來自 <see cref="TodoOwnerFilter.Apply"/>（用 <c>TodoDto.IsOverdue</c>）。
 /// 兩邊對不上，使用者就會看到「逾期 3」點下去只有 2 筆——這種錯不會丟例外，
 /// 只會讓人覺得數字有問題。所以逾期那條規則在這裡測得特別細。
 /// </para>
@@ -46,9 +46,9 @@ public sealed class TodoOwnerFilterTests
     [Fact]
     public void Apply_Overdue_ShouldExcludeCompleted_EvenWhenDueDateIsPast()
     {
-        // ⚠️ 這是整組最重要的一條。「已完成」永遠不算逾期（TodoAdapterModel.IsOverdue 的定義），
+        // ⚠️ 這是整組最重要的一條。「已完成」永遠不算逾期（TodoDto.IsOverdue 的定義），
         // 否則已經做完的事會一直出現在逾期清單裡，而膠囊上的數字又不含它們——兩邊就對不上了。
-        var todos = new List<TodoAdapterModel>
+        var todos = new List<TodoDto>
         {
             Todo("做完但早就過期", "已完成", DateTime.Today.AddDays(-10)),
             Todo("真的逾期", "進行中", DateTime.Today.AddDays(-1)),
@@ -63,7 +63,7 @@ public sealed class TodoOwnerFilterTests
     public void Apply_Overdue_ShouldExcludeDueToday()
     {
         // 判準是 DueDate < Today，今天到期還沒逾期。
-        var todos = new List<TodoAdapterModel> { Todo("今天到期", "待辦", DateTime.Today) };
+        var todos = new List<TodoDto> { Todo("今天到期", "待辦", DateTime.Today) };
 
         Assert.Empty(TodoOwnerFilter.Apply(todos, OwnerTodoFilter.Overdue));
     }
@@ -71,7 +71,7 @@ public sealed class TodoOwnerFilterTests
     [Fact]
     public void Apply_Overdue_ShouldExcludeNullDueDate()
     {
-        var todos = new List<TodoAdapterModel> { Todo("沒有截止日", "待辦", dueDate: null) };
+        var todos = new List<TodoDto> { Todo("沒有截止日", "待辦", dueDate: null) };
 
         Assert.Empty(TodoOwnerFilter.Apply(todos, OwnerTodoFilter.Overdue));
     }
@@ -127,14 +127,14 @@ public sealed class TodoOwnerFilterTests
 
     #region 測試資料
 
-    private static TodoAdapterModel Todo(string title, string status, DateTime? dueDate) => new()
+    private static TodoDto Todo(string title, string status, DateTime? dueDate) => new()
     {
         Title = title,
         Status = status,
         DueDate = dueDate,
     };
 
-    private static List<TodoAdapterModel> BuildSample() =>
+    private static List<TodoDto> BuildSample() =>
     [
         Todo("尚未開始", "待辦", null),
         Todo("做到一半", "進行中", null),
@@ -142,8 +142,15 @@ public sealed class TodoOwnerFilterTests
         Todo("逾期未完成", "進行中", DateTime.Today.AddDays(-3)),
     ];
 
-    private static TodoOwnerSummary Summary(int completed, int inProgress, int pending, int overdue)
-        => new("王小明", completed + inProgress + pending, completed, inProgress, pending, overdue);
+    private static TodoOwnerSummaryDto Summary(int completed, int inProgress, int pending, int overdue) => new()
+    {
+        Owner = "王小明",
+        Total = completed + inProgress + pending,
+        Completed = completed,
+        InProgress = inProgress,
+        Pending = pending,
+        Overdue = overdue,
+    };
 
     #endregion
 }

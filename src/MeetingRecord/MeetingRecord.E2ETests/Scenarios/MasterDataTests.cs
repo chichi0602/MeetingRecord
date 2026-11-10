@@ -137,6 +137,33 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
     }
 
     [E2EFact]
+    [Trait("Scenario", "MD-09")]
+    [Trait("Title", "儲存被伺服器擋下時（名稱重複），表單視窗留著、填的內容還在")]
+    [Trait("Page", "分類清單")]
+    [Trait("Persona", "管理者")]
+    public async Task Category_DuplicateName_ShouldKeepTheForm()
+    {
+        // 1.1.19：AntDesign 按「確定」時會先關窗再呼叫存檔；WASM 頁以前雙向繫結，被擋下時視窗已經關了、輸入跟著不見。
+        var page = await LoginAsAsync(Seed.Admin);
+        await GotoAsync(page, "/categories", "名稱");
+        var name = Unique("E2E重複分類");
+        await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
+        await page.GetByPlaceholder("請輸入分類名稱").FillAsync(name);
+        await ClickModalOkAsync(page);
+        await Expect(Row(page, name)).ToBeVisibleAsync();
+
+        await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
+        await page.GetByPlaceholder("請輸入分類名稱").FillAsync(name.ToUpperInvariant());
+        await ClickModalOkAsync(page);
+
+        await Expect(Notice(page, "分類名稱已存在，無法新增。")).ToBeVisibleAsync();
+        await page.WaitForTimeoutAsync(800);
+        var input = page.Locator(".ant-modal-wrap:visible").GetByPlaceholder("請輸入分類名稱");
+        await Expect(input).ToBeVisibleAsync();
+        await Expect(input).ToHaveValueAsync(name.ToUpperInvariant());
+    }
+
+    [E2EFact]
     [Trait("Scenario", "MD-08")]
     [Trait("Title", "提示詞新增單一內建範本（重複會擋）、修改時選分類、未知變數只提醒不阻擋")]
     [Trait("Page", "提示詞清單")]

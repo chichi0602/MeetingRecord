@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.13
+- 文件版本：1.15
 - 文件狀態：已實作
-- 現行系統版本：1.1.11
+- 現行系統版本：1.1.19
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/10
 
@@ -93,7 +93,10 @@
 | 歸屬到專案 | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
 | 使用者維護 | `Web.Client/Pages/Admins/MyUserPage.razor`（1.1.10 起 WASM） | `form-modal-standard` |
 | 提示詞範本維護 | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（1.1.9 起 WASM） | `form-modal-standard` |
-| 待辦維護、待辦詳情 | `Views/Todos/TodoViewView.razor` | `form-modal-standard` |
+| 待辦維護、待辦詳情 | `Web.Client/Pages/Todos/TodoPage.razor`（1.1.19 起 WASM） | `form-modal-standard` |
+
+> ⚠️ **WASM 頁有「確定」鈕的視窗一律單向繫結 `Visible="@..."`，不要用 `@bind-Visible`**（1.1.19）：AntDesign 1.6 按「確定」時會先送出 `VisibleChanged(false)` 才呼叫 `OnOk`，雙向繫結下伺服器擋下（400／409）時視窗已經關了，處理器裡設回 true 也打不開，使用者填的內容跟著不見。開關由頁面自己決定：存檔成功、取消（含 Esc 與點遮罩，都會走 `OnCancel`）才關。`ModalVisibleBindingTests` 會擋。存檔成功時**先關窗**再通知與重新載入，免得重新載入的幾趟 API 期間視窗還蓋在畫面上。
+
 | 專案附件 | `Views/Projects/ProjectViewView.razor` | `form-modal-standard` |
 | 抽出待辦 | `Views/Projects/TodoExtractionModal.razor` | `form-modal-standard` |
 | 用量明細（唯讀，1.0.31） | `Views/AiManagement/TokenUsageView.razor` | `form-modal-standard` |

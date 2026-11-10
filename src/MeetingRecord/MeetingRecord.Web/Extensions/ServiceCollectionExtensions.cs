@@ -427,9 +427,11 @@ public static class ServiceCollectionExtensions
             options.AddPolicy(ApiRateLimitPolicy, context =>
             {
                 var key = ResolveRateLimitPartitionKey(context);
-                var permitLimit = key.StartsWith("user:", StringComparison.Ordinal)
-                    ? settings.PermitLimitPerUser
-                    : settings.PermitLimitPerAnonymousIp;
+                var permitLimit = key.StartsWith("web:", StringComparison.Ordinal)
+                    ? settings.PermitLimitPerWebUser
+                    : key.StartsWith("user:", StringComparison.Ordinal)
+                        ? settings.PermitLimitPerUser
+                        : settings.PermitLimitPerAnonymousIp;
                 return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = permitLimit,
@@ -460,7 +462,8 @@ public static class ServiceCollectionExtensions
     public const string ApiRateLimitPolicy = "api";
 
     /// <summary>
-    /// 限流的分區鍵：已登入 → <c>user:{帳號 Id}</c>；未登入 → <c>ip:{來源 IP}</c>。
+    /// 限流的分區鍵：帶 JWT 的已登入請求 → <c>user:{帳號 Id}</c>；靠登入 Cookie 的已登入請求（網頁本身，1.1.19）→ <c>web:{帳號 Id}</c>；
+    /// 未登入 → <c>ip:{來源 IP}</c>。網頁與外部程式各算各的，額度也不同（<see cref="RateLimitSettings"/>）。
     /// 網頁登入 Cookie 的帳號 Id 放在 Sid、JWT 放在 NameIdentifier（與 <c>RecordAccessScopeProvider</c> 同樣兩個都看）。
     /// 來源 IP 在 <c>UseConfiguredForwardedHeaders</c> 之後已換成反向代理前的真實 IP。
     /// </summary>
@@ -473,7 +476,9 @@ public static class ServiceCollectionExtensions
                 ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (int.TryParse(id, out var userId) && userId > 0)
             {
-                return $"user:{userId}";
+                // 與 API 的 policy scheme 同一條判斷：帶 Bearer 走 JWT（外部程式），否則是網頁的登入 Cookie。
+                var isBearer = context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+                return isBearer ? $"user:{userId}" : $"web:{userId}";
             }
         }
 

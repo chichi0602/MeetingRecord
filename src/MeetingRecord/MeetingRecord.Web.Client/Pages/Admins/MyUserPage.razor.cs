@@ -361,7 +361,7 @@ namespace MeetingRecord.Web.Client.Pages.Admins
 
                 if (!discard)
                 {
-                    // ⚠️ @bind-Visible 是雙向的，AntDesign 在呼叫這個 handler 之前就已經把視窗關掉了，要重新打開。
+                    // 開關由本頁決定（1.1.19 起視窗是單向繫結）：按「繼續編修」就維持開著。
                     modalVisible = true;
                     return;
                 }

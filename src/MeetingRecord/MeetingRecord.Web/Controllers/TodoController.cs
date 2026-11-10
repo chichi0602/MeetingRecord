@@ -252,6 +252,10 @@ public class TodoController(
             SourceMeetingId = x.SourceMeetingId,
             SourceMeetingTitle = x.SourceMeetingTitle,
             Note = x.Note,
+            FieldText = TodoChangeFields.Describe(x.Field),
+            ViaText = TodoChangeFields.DescribeVia(x.Via, x.SourceMeetingTitle),
+            OldValueText = TodoChangeRecorder.DisplayValue(x.Field, x.OldValue),
+            NewValueText = TodoChangeRecorder.DisplayValue(x.Field, x.NewValue),
         }).ToList()));
     }
 

@@ -9,6 +9,7 @@ using MeetingRecord.Dtos.Notifications;
 using MeetingRecord.Dtos.Roles;
 using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Dtos.Systems;
+using MeetingRecord.Dtos.Todos;
 using MeetingRecord.Dtos.Users;
 
 namespace MeetingRecord.Web.Client.Api;
@@ -58,4 +59,14 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(OwnPasswordRequestDto))]
 [JsonSerializable(typeof(ApiResult<PasswordStatusDto>), TypeInfoPropertyName = "PasswordStatusResult")]
 [JsonSerializable(typeof(ApiResult<List<BackgroundJobDto>>), TypeInfoPropertyName = "BackgroundJobsResult")]
+[JsonSerializable(typeof(TodoTreeRequestDto))]
+[JsonSerializable(typeof(TodoCreateUpdateDto))]
+[JsonSerializable(typeof(TodoCompletedRequestDto))]
+[JsonSerializable(typeof(ApiResult<PagedResult<TodoDto>>), TypeInfoPropertyName = "TodoPageResult")]
+[JsonSerializable(typeof(ApiResult<TodoDto>), TypeInfoPropertyName = "TodoResult")]
+[JsonSerializable(typeof(ApiResult<List<TodoDto>>), TypeInfoPropertyName = "TodoListResult")]
+[JsonSerializable(typeof(ApiResult<List<TodoOwnerSummaryDto>>), TypeInfoPropertyName = "TodoOwnersResult")]
+[JsonSerializable(typeof(ApiResult<List<TodoChangeDto>>), TypeInfoPropertyName = "TodoChangesResult")]
+[JsonSerializable(typeof(ApiResult<List<TodoParentOptionDto>>), TypeInfoPropertyName = "TodoParentOptionsResult")]
+[JsonSerializable(typeof(ApiResult<List<TodoProjectOptionDto>>), TypeInfoPropertyName = "TodoProjectOptionsResult")]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

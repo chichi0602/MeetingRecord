@@ -1,6 +1,6 @@
-using MeetingRecord.Models.AdapterModel;
+using MeetingRecord.Dtos.Models;
 
-namespace MeetingRecord.Web.Components.Views.Todos;
+namespace MeetingRecord.Web.Client.Pages.Todos;
 
 /// <summary>
 /// 待辦清單的多選刪除（1.0.53）。主待辦與它的子項目可能同時被勾選：刪主待辦時資料庫 Cascade 會連子項目一起刪，
@@ -8,7 +8,7 @@ namespace MeetingRecord.Web.Components.Views.Todos;
 /// </summary>
 public static class TodoBatchSelection
 {
-    public static IReadOnlyList<TodoAdapterModel> ExcludeChildrenOfSelectedParents(IEnumerable<TodoAdapterModel> selected)
+    public static IReadOnlyList<TodoDto> ExcludeChildrenOfSelectedParents(IEnumerable<TodoDto> selected)
     {
         var items = selected.DistinctBy(x => x.Id).ToList();
         var selectedIds = items.Select(x => x.Id).ToHashSet();
@@ -16,6 +16,6 @@ public static class TodoBatchSelection
     }
 
     /// <summary>這一頁所有列（主待辦＋展開的子項目），勾選依 Id 對回新資料時用。</summary>
-    public static IEnumerable<TodoAdapterModel> Flatten(IEnumerable<TodoAdapterModel> rows)
+    public static IEnumerable<TodoDto> Flatten(IEnumerable<TodoDto> rows)
         => rows.SelectMany(x => (x.Children ?? []).Prepend(x));
 }

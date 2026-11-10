@@ -1,5 +1,10 @@
+@page "/todos"
+@using MeetingRecord.Dtos.Models
 @using MeetingRecord.Share.Helpers
-@using MeetingRecord.Business.Services.DataAccess
+
+@* 待辦事項（1.1.19 搬到 WASM）：畫面、文字、按鈕全部照舊；資料走 TodoApi，按鈕依 PermissionView。 *@
+<PageTitle>待辦事項</PageTitle>
+
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -17,7 +22,7 @@ else
             @* 左邊放「新增／重新整理」、右邊放過濾與搜尋，與其他清單頁一致
                （會議紀錄、提示詞範本、使用者、團隊都是這個排法，待辦原本是唯一相反的）。 *@
             <div class="todo-view-toolbar-left">
-                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create))
+                @if (CanCreate)
                 {
                     <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
@@ -65,12 +70,8 @@ else
                 @* 寬度用 Style 而不是 class：class 傳給 AntDesign 元件時不會帶 scoped CSS 的 scope 屬性，
                    .todo-view-search-input 那種寫法會被編成 [b-xxx] 而永遠選不到（原本的 220px 從來沒生效）。 *@
                 <Input @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="搜尋關鍵字" Style="width: 160px;" />
-                <HoverTip Title="搜尋">
-                    <Button Type="ButtonType.Default"
-                            OnClick="@(async () => await OnSearchAsync())">
-                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
-                    </Button>
-                </HoverTip>
+                @* 「清空搜尋」放在搜尋鈕前面（1.1.19，與其他清單頁一致）：這一組貼齊右緣，它出現時若加在最後會把搜尋鈕往左推。
+                   WASM 頁重繪是即時的——貼上關鍵字後直接按搜尋，按下去的瞬間輸入框才把值寫回、這顆鈕才出現，滑鼠放開時已經不在搜尋鈕上。 *@
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <HoverTip Title="清空搜尋">
@@ -80,6 +81,12 @@ else
                         </Button>
                     </HoverTip>
                 }
+                <HoverTip Title="搜尋">
+                    <Button Type="ButtonType.Default"
+                            OnClick="@(async () => await OnSearchAsync())">
+                        <span class="btn-icon-label"><MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="search" /><span>搜尋</span></span>
+                    </Button>
+                </HoverTip>
             </div>
         </div>
 
@@ -98,7 +105,7 @@ else
                                OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
             <div class="todo-view-table-wrap @(ShowSelection ? "todo-view-has-selection" : string.Empty)">
             <Table @ref="table"
-                   TItem="TodoAdapterModel"
+                   TItem="TodoDto"
                    Class="todo-view-table"
                    ScrollX="966px"
                    RemoteDataSource="true"
@@ -119,10 +126,10 @@ else
                 }
                 <Column TData="bool" Title="完成" Width="48">
                     <Checkbox Checked="@context.IsCompleted"
-                              Disabled="@(!AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit) || IsReadOnly(context))"
+                              Disabled="@(!CanEdit || IsReadOnly(context))"
                               CheckedChanged="@(EventCallback.Factory.Create<bool>(this, value => OnCompletedChangedAsync(context, value)))" />
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Title)" Title="待辦事項" Sortable ShowSorterTooltip="false">
+                <Column TData="string" DataIndex="@nameof(TodoDto.Title)" Title="待辦事項" Sortable ShowSorterTooltip="false">
                     @* 只顯示大綱（單行省略），完整內容靠右邊那顆 icon 開唯讀視窗。
                        ellipsis 要生效，文字必須是有寬度約束的 flex 子項——純 inline span 上的
                        text-overflow 不會有任何作用，所以外面這層 flex 容器是必要的。 *@
@@ -144,7 +151,7 @@ else
                 @* 專案名與會議標題都可能很長，一律單行省略、游標移上去看完整名稱（0.4.92）。
                    欄寬收窄之前它們就已經會溢出——溢出的文字會壓到隔壁欄，看起來像「平台— 手動新增」
                    黏成一串，只是 0.4.91 之前多半被橫向捲動蓋掉了。 *@
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.ProjectTitle)" Title="所屬專案" Sortable ShowSorterTooltip="false" Width="120">
+                <Column TData="string" DataIndex="@nameof(TodoDto.ProjectTitle)" Title="所屬專案" Sortable ShowSorterTooltip="false" Width="120">
                     <span class="todo-view-ellipsis" title="@context.ProjectTitle">@context.ProjectTitle</span>
                 </Column>
                 <Column TData="string" Title="來源會議紀錄" Width="104">
@@ -160,10 +167,10 @@ else
                         </span>
                     }
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Owner)" Title="負責人" Sortable ShowSorterTooltip="false" Width="80">
+                <Column TData="string" DataIndex="@nameof(TodoDto.Owner)" Title="負責人" Sortable ShowSorterTooltip="false" Width="80">
                     @(string.IsNullOrWhiteSpace(context.Owner) ? "未指定" : context.Owner)
                 </Column>
-                <Column TData="DateTime?" DataIndex="@nameof(TodoAdapterModel.DueDate)" Title="截止日" Sortable ShowSorterTooltip="false" Width="160">
+                <Column TData="DateTime?" DataIndex="@nameof(TodoDto.DueDate)" Title="截止日" Sortable ShowSorterTooltip="false" Width="160">
                     @* 日期與逾期天數各自 nowrap：整塊「逾期 N 天」最差只會掉到第二行，不會斷在「逾期 1」「天」中間。 *@
                     <span class="todo-view-due">
                         <span class="@(context.IsOverdue ? "todo-view-overdue" : string.Empty)">@context.DueDateOnlyText</span>
@@ -180,10 +187,10 @@ else
                         }
                     </span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Priority)" Title="優先度" Sortable ShowSorterTooltip="false" Width="78">
+                <Column TData="string" DataIndex="@nameof(TodoDto.Priority)" Title="優先度" Sortable ShowSorterTooltip="false" Width="78">
                     <span class="todo-view-pill @PriorityCssClass(context.Priority)">@context.Priority</span>
                 </Column>
-                <Column TData="string" DataIndex="@nameof(TodoAdapterModel.Status)" Title="狀態" Sortable ShowSorterTooltip="false" Width="76">
+                <Column TData="string" DataIndex="@nameof(TodoDto.Status)" Title="狀態" Sortable ShowSorterTooltip="false" Width="76">
                     <span class="todo-view-pill @StatusCssClass(context.Status)">@context.Status</span>
                 </Column>
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作" Width="144">
@@ -191,17 +198,17 @@ else
                         @* 1.0.44：誰在什麼時候把什麼改了——看得到這筆待辦就看得到，不需要修改權限。 *@
                         <SpaceItem>
                             <CrudActionButton Title="異動紀錄" Icon="history"
-                                              OnClick="@(async () => await OpenChangesAsync(context.Id, context.Title))" />
+                                              OnClick="@(async () => await OpenChangesAsync(context.Id ?? 0, context.Title))" />
                         </SpaceItem>
                         @* 1.0.45：只分一層，所以只有主層（不是子項目）的待辦才有這顆。 *@
-                        @if (!context.IsSubtask && AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Create) && !IsReadOnly(context))
+                        @if (!context.IsSubtask && CanCreate && !IsReadOnly(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="新增子項目" Icon="playlist_add"
                                                   OnClick="@(async () => await OnAddSubtaskAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_待辦事項, PermissionActions.Edit) && !IsReadOnly(context))
+                        @if (CanEdit && !IsReadOnly(context))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="修改" Icon="edit"
@@ -354,7 +361,9 @@ else
 
     <Modal Title="@modalTitle"
            Class="form-modal-standard"
-           @bind-Visible="@modalVisible"
+           @* 單向繫結（1.1.19）：AntDesign 按「確定」時會先送出「關閉」再呼叫 OnOk，用 @bind-Visible 的話伺服器擋下（400）時視窗已經關了、
+              填的內容也跟著不見。開關一律由這一頁決定：存檔成功、取消（含 Esc 與點遮罩）才關。 *@
+           Visible="@modalVisible"
            Keyboard="true"
            ConfirmLoading="@isSaving"
            OnOk="OnModalOKHandleAsync"
@@ -365,7 +374,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="TodoAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="TodoDto" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="待辦標題" Required>
                             <Input @bind-Value="CurrentRecord.Title" Placeholder="請輸入待辦標題" />
@@ -520,13 +529,13 @@ else
                     <div class="todo-view-change-head">
                         <span class="todo-view-change-time">@change.ChangedAt.ToString("yyyy/MM/dd HH:mm")</span>
                         <span class="todo-view-change-who">@(change.ChangedByName ?? "有人")</span>
-                        <span class="todo-view-change-via">@TodoChangeFields.DescribeVia(change.Via, change.SourceMeetingTitle)</span>
+                        <span class="todo-view-change-via">@change.ViaText</span>
                     </div>
                     <div class="todo-view-change-body">
-                        <span class="todo-view-change-field">@TodoChangeFields.Describe(change.Field)</span>
-                        <span class="todo-view-change-old">@TodoChangeRecorder.DisplayValue(change.Field, change.OldValue)</span>
+                        <span class="todo-view-change-field">@change.FieldText</span>
+                        <span class="todo-view-change-old">@change.OldValueText</span>
                         <span class="todo-view-change-arrow">→</span>
-                        <span class="todo-view-change-new">@TodoChangeRecorder.DisplayValue(change.Field, change.NewValue)</span>
+                        <span class="todo-view-change-new">@change.NewValueText</span>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(change.Note))
                     {

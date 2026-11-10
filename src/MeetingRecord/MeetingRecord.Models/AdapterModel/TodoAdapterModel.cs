@@ -1,17 +1,18 @@
 using System.ComponentModel.DataAnnotations;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Models.AdapterModel;
 
 public class TodoAdapterModel : ICloneable
 {
-    /// <summary>狀態選項。順序即畫面下拉的順序，第一項為新增時的預設值。</summary>
-    public static readonly IReadOnlyList<string> StatusOptions = ["待辦", "進行中", "已完成"];
+    /// <summary>狀態選項（1.1.19 起定義在 Share 的 <see cref="TodoRules"/>，WASM 頁共用）。</summary>
+    public static readonly IReadOnlyList<string> StatusOptions = TodoRules.StatusOptions;
 
     /// <summary>優先度選項。索引 1（中）為新增時的預設值。</summary>
-    public static readonly IReadOnlyList<string> PriorityOptions = ["低", "中", "高"];
+    public static readonly IReadOnlyList<string> PriorityOptions = TodoRules.PriorityOptions;
 
     /// <summary>代表「已完成」的狀態值。勾選完成與各處判斷都以此為準。</summary>
-    public const string CompletedStatus = "已完成";
+    public const string CompletedStatus = TodoRules.CompletedStatus;
 
     public int Id { get; set; }
 
@@ -94,36 +95,22 @@ public class TodoAdapterModel : ICloneable
 
     #region 顯示用計算屬性
 
+    // 規則在 Share 的 TodoRules（1.1.19），WASM 頁的 TodoDto 用同一份。
+
     /// <summary>是否已完成</summary>
-    public bool IsCompleted => string.Equals(Status, CompletedStatus, StringComparison.Ordinal);
+    public bool IsCompleted => TodoRules.IsCompleted(Status);
 
     /// <summary>已逾期（有截止日、尚未完成、且截止日早於今天）</summary>
-    public bool IsOverdue =>
-        DueDate.HasValue
-        && !IsCompleted
-        && DueDate.Value.Date < DateTime.Today;
+    public bool IsOverdue => TodoRules.IsOverdue(DueDate, Status);
 
     /// <summary>逾期天數（未逾期時為 0）</summary>
-    public int OverdueDays => IsOverdue ? (DateTime.Today - DueDate!.Value.Date).Days : 0;
+    public int OverdueDays => TodoRules.OverdueDays(DueDate, Status);
 
-    /// <summary>只有截止日本身的顯示文字（不含逾期天數）。清單的截止日欄用它，逾期另外拆成一個標記，避免長字串斷在半路。</summary>
-    public string DueDateOnlyText => DueDate.HasValue ? DueDate.Value.ToString("yyyy/MM/dd") : "未指定";
+    /// <summary>只有截止日本身的顯示文字（不含逾期天數）。</summary>
+    public string DueDateOnlyText => TodoRules.DueDateOnlyText(DueDate);
 
-    /// <summary>截止日顯示文字，逾期時附上天數。窄版面（右側面板）用這個單一字串。</summary>
-    public string DueDateText
-    {
-        get
-        {
-            if (!DueDate.HasValue)
-            {
-                return "未指定";
-            }
-
-            var text = DueDate.Value.ToString("yyyy/MM/dd");
-            // 刻意不用全形括號：那兩個字元很寬，在窄欄位裡會把字串推到換行。
-            return IsOverdue ? $"{text} 逾期 {OverdueDays} 天" : text;
-        }
-    }
+    /// <summary>截止日顯示文字，逾期時附上天數。</summary>
+    public string DueDateText => TodoRules.DueDateText(DueDate, Status);
 
     /// <summary>來源顯示文字。手動新增的待辦沒有來源會議紀錄。</summary>
     public string SourceText => string.IsNullOrWhiteSpace(MeetingTitle) ? "— 手動新增" : MeetingTitle;

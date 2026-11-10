@@ -1,6 +1,6 @@
 using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Web.Components.Views.Todos;
+namespace MeetingRecord.Web.Client.Pages.Todos;
 
 /// <summary>
 /// 一次版面量測的結果（0.4.86）。全部由 <c>wwwroot/js/todo-auto-fit.js</c> 量出來。

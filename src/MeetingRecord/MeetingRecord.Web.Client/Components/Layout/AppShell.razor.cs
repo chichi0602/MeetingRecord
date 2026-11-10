@@ -231,7 +231,7 @@ public partial class AppShell : ComponentBase, IDisposable
 
             if (!discard)
             {
-                // ⚠️ @bind-Visible 是雙向的，AntDesign 已經把視窗關掉了；不重開會失去已填的內容。
+                // 開關由本頁決定（1.1.19 起視窗是單向繫結）：按「繼續編修」就維持開著。
                 changePasswordVisible = true;
                 return;
             }

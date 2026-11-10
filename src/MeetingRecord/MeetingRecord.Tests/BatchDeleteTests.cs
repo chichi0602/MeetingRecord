@@ -1,6 +1,6 @@
-using MeetingRecord.Models.AdapterModel;
+using MeetingRecord.Dtos.Models;
 using MeetingRecord.Web.Components.Commons;
-using MeetingRecord.Web.Components.Views.Todos;
+using MeetingRecord.Web.Client.Pages.Todos;
 
 namespace MeetingRecord.Tests;
 
@@ -52,9 +52,9 @@ public sealed class BatchDeleteTests
     [Fact]
     public void Todo_ExcludeChildrenOfSelectedParents()
     {
-        var parent = new TodoAdapterModel { Id = 1, Title = "主" };
-        var child = new TodoAdapterModel { Id = 2, Title = "子", ParentTodoId = 1 };
-        var orphanChild = new TodoAdapterModel { Id = 3, Title = "別人的子項目", ParentTodoId = 9 };
+        var parent = new TodoDto { Id = 1, Title = "主" };
+        var child = new TodoDto { Id = 2, Title = "子", ParentTodoId = 1 };
+        var orphanChild = new TodoDto { Id = 3, Title = "別人的子項目", ParentTodoId = 9 };
 
         var items = TodoBatchSelection.ExcludeChildrenOfSelectedParents([child, parent, orphanChild, parent]);
 
@@ -64,9 +64,9 @@ public sealed class BatchDeleteTests
     [Fact]
     public void Todo_Flatten_IncludesExpandedChildren()
     {
-        var rows = new List<TodoAdapterModel>
+        var rows = new List<TodoDto>
         {
-            new() { Id = 1, Children = [new TodoAdapterModel { Id = 2, ParentTodoId = 1 }] },
+            new() { Id = 1, Children = [new TodoDto { Id = 2, ParentTodoId = 1 }] },
             new() { Id = 3 },
         };
 

@@ -21,12 +21,17 @@ namespace MeetingRecord.Tests;
 public sealed class RateLimitPartitionTests
 {
     [Fact]
-    public void CookieUser_ShouldBePartitionedBySid()
-        => Assert.Equal("user:7", MeetingRecord.Web.Extensions.ServiceCollectionExtensions.ResolveRateLimitPartitionKey(Context(new Claim(ClaimTypes.Sid, "7"), new Claim(ClaimTypes.NameIdentifier, "alice"))));
+    public void CookieUser_ShouldBePartitionedBySid_AsWeb()
+        => Assert.Equal("web:7", MeetingRecord.Web.Extensions.ServiceCollectionExtensions.ResolveRateLimitPartitionKey(Context(new Claim(ClaimTypes.Sid, "7"), new Claim(ClaimTypes.NameIdentifier, "alice"))));
 
     [Fact]
     public void JwtUser_ShouldBePartitionedByNameIdentifier()
-        => Assert.Equal("user:9", MeetingRecord.Web.Extensions.ServiceCollectionExtensions.ResolveRateLimitPartitionKey(Context(new Claim(ClaimTypes.NameIdentifier, "9"))));
+    {
+        // 1.1.19：帶 Bearer 的是外部程式，與同一個人在網頁上的呼叫分開計算。
+        var context = Context(new Claim(ClaimTypes.NameIdentifier, "9"));
+        context.Request.Headers.Authorization = "Bearer abc";
+        Assert.Equal("user:9", MeetingRecord.Web.Extensions.ServiceCollectionExtensions.ResolveRateLimitPartitionKey(context));
+    }
 
     [Fact]
     public void Anonymous_ShouldBePartitionedByIp()
@@ -47,6 +52,7 @@ public sealed class RateLimitPartitionTests
         var settings = new RateLimitSettings();
 
         Assert.Equal(120, settings.PermitLimitPerUser);
+        Assert.Equal(600, settings.PermitLimitPerWebUser);
         Assert.Equal(30, settings.PermitLimitPerAnonymousIp);
         Assert.Equal(60, settings.WindowSeconds);
     }
@@ -62,6 +68,7 @@ public sealed class RateLimitTestApplicationFactory : ApiTestApplicationFactory
     {
         var settings = base.CreateSettings();
         settings["RateLimitSettings:PermitLimitPerUser"] = "3";
+        settings["RateLimitSettings:PermitLimitPerWebUser"] = "5";
         settings["RateLimitSettings:PermitLimitPerAnonymousIp"] = "3";
         return settings;
     }
@@ -118,6 +125,25 @@ public sealed class RateLimitIntegrationTests(RateLimitTestApplicationFactory fa
 
         using var fourth = await anonymous.PostAsJsonAsync("/api/Auth/login", new LoginRequestDto { Account = "nobody", Password = "x" });
         Assert.Equal(HttpStatusCode.TooManyRequests, fourth.StatusCode);
+    }
+
+    [Fact]
+    public async Task WebPageCalls_ShouldUseTheHigherWebQuota()
+    {
+        // 1.1.19（WASM 遷移）：網頁本身靠登入 Cookie 呼叫 API，額度另計（這台主機設 5 次），不受外部程式的 3 次限制。
+        const string password = "rate-limit-web-pass";
+        var (account, _) = await TestCookieLogin.CreateUserAsync(factory.Services, password, []);
+        using var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await TestCookieLogin.LoginAsync(client, account, password);
+
+        for (var i = 0; i < 5; i++)
+        {
+            using var ok = await client.GetAsync("/api/v1/session");
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        }
+
+        using var rejected = await client.GetAsync("/api/v1/session");
+        Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
     }
 
     private static async Task LoginAsync(HttpClient client, string account, string password)

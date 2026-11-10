@@ -17,7 +17,7 @@ public class ProjectAdapterModel : ICloneable, IValidatableObject
     /// 已完成＝封存（1.0.46）：預設不在專案選單與待辦清單出現，一般使用者唯讀（管理者不受限），
     /// 狀態改回其他任一種就是重新開啟。規則入口在 <c>ProjectArchiveRules</c>。
     /// </summary>
-    public const string ArchivedStatus = "已完成";
+    public const string ArchivedStatus = MeetingRecord.Share.Helpers.ProjectScopeRules.ArchivedStatus;
 
     public bool IsArchived => Status == ArchivedStatus;
 

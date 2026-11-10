@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using MeetingRecord.Share.Helpers;
+
 namespace MeetingRecord.Dtos.Models;
 
 /// <summary>
@@ -45,4 +48,33 @@ public class TodoDto : TodoCreateUpdateDto
     /// 只是給畫面決定要不要顯示刪除鈕；真正的檢查在刪除 API。
     /// </summary>
     public bool CanDelete { get; set; }
+
+    // ---- 顯示用（不序列化，1.1.19 WASM 待辦頁）：規則在 Share 的 TodoRules，與 TodoAdapterModel 同一份 ----
+
+    [JsonIgnore]
+    public bool IsCompleted => TodoRules.IsCompleted(Status);
+
+    [JsonIgnore]
+    public bool IsOverdue => TodoRules.IsOverdue(DueDate, Status);
+
+    [JsonIgnore]
+    public int OverdueDays => TodoRules.OverdueDays(DueDate, Status);
+
+    [JsonIgnore]
+    public string DueDateOnlyText => TodoRules.DueDateOnlyText(DueDate);
+
+    [JsonIgnore]
+    public string DueDateText => TodoRules.DueDateText(DueDate, Status);
+
+    [JsonIgnore]
+    public bool HasRecentDueDateChange => DueDateChangedAt is not null;
+
+    [JsonIgnore]
+    public bool IsSubtask => ParentTodoId is not null;
+
+    [JsonIgnore]
+    public bool IsProjectArchived => ProjectStatus == ProjectScopeRules.ArchivedStatus;
+
+    /// <summary>編輯前複製一份，取消時不影響清單（子項目清單只讀不改，淺複製即可）。</summary>
+    public TodoDto Clone() => (TodoDto)MemberwiseClone();
 }

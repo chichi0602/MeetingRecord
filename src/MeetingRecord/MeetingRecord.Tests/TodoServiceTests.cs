@@ -8,7 +8,7 @@ using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
-using MeetingRecord.Web.Components.Views.Todos;
+using MeetingRecord.Web.Client.Pages.Todos;
 
 namespace MeetingRecord.Tests;
 
@@ -434,8 +434,20 @@ public sealed class TodoServiceTests
             "做完但過期", project.Id, status: "已完成", owner: "王小明", dueDate: DateTime.Today.AddDays(-9));
 
         var service = fixture.CreateService();
-        var summary = Assert.Single(await service.GetOwnerSummariesAsync(null));
-        var todos = await service.GetByOwnerAsync("王小明", null);
+        var serviceSummary = Assert.Single(await service.GetOwnerSummariesAsync(null));
+        // 1.1.19 起面板在 WASM 頁，篩選吃的是 API 回的 DTO（逾期規則同在 Share 的 TodoRules）。
+        var summary = new MeetingRecord.Dtos.Todos.TodoOwnerSummaryDto
+        {
+            Owner = serviceSummary.Owner,
+            Total = serviceSummary.Total,
+            Completed = serviceSummary.Completed,
+            InProgress = serviceSummary.InProgress,
+            Pending = serviceSummary.Pending,
+            Overdue = serviceSummary.Overdue,
+        };
+        var todos = (await service.GetByOwnerAsync("王小明", null))
+            .Select(x => new MeetingRecord.Dtos.Models.TodoDto { Title = x.Title, Status = x.Status, DueDate = x.DueDate })
+            .ToList();
 
         foreach (var filter in new[]
         {

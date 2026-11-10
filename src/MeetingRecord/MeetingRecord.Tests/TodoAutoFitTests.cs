@@ -1,4 +1,4 @@
-using MeetingRecord.Web.Components.Views.Todos;
+using MeetingRecord.Web.Client.Pages.Todos;
 
 namespace MeetingRecord.Tests;
 

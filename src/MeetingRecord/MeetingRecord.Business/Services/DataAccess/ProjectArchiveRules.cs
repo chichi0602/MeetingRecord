@@ -55,10 +55,5 @@ public static class ProjectArchiveRules
         _ => query,
     };
 
-    public static bool Matches(string? status, ProjectScope scope) => scope switch
-    {
-        ProjectScope.Active => status != ProjectAdapterModel.ArchivedStatus,
-        ProjectScope.Archived => status == ProjectAdapterModel.ArchivedStatus,
-        _ => true,
-    };
+    public static bool Matches(string? status, ProjectScope scope) => MeetingRecord.Share.Helpers.ProjectScopeRules.Matches(status, scope);
 }

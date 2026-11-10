@@ -82,7 +82,7 @@ public sealed class ApiAuthorizationConventionTests
                 continue;
             }
 
-            if (!action.Has<HasPermissionAttribute>() && !action.Has<AdminOnlyAttribute>() && !AuthenticatedOnlyAllowList.ContainsKey(key))
+            if (!action.Has<HasPermissionAttribute>() && !action.Has<AdminOnlyAttribute>() && !action.Has<AiChatPermissionAttribute>() && !AuthenticatedOnlyAllowList.ContainsKey(key))
             {
                 violations.Add($"{key}：有 [Authorize] 但沒有 [HasPermission] 或 [AdminOnly]，也不在「只需登入」白名單");
             }

@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.24
+- 文件版本：1.25
 - 文件狀態：已實作
-- 現行系統版本：1.1.20
+- 現行系統版本：1.1.21
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -56,6 +56,8 @@
 **待辦事項**（1.1.18，`TodoController` 改走 `TodoService`）：既有五支（`GET {id}`、`POST search`、`POST`、`PUT {id}`、`DELETE {id}`）路由、權限、回應形狀不變，`TodoDto` 只多帶欄位：`projectStatus`、`createdByUserId`、`parentTitle`、`children`、`childrenTotal`／`childrenCompleted`、`dueDateChangedAt`／`dueDateChangeText`（後四項只有清單樹會帶）、`canDelete`（呼叫者能不能刪，畫面用）。`POST search` 照舊是**平面**清單（子項目也是一筆）。畫面用的新端點：`POST api/v1/Todo/tree`（只分頁主層、子項目跟著主待辦，內容 `TodoTreeRequestDto`，含 `projectScope` Active／Archived／All）、`PUT {id}/completed`（edit；失敗訊息放 `errorMessage`）、`GET owners?projectId&scope`、`GET by-owner?owner&projectId&scope`、`GET {id}/changes`、`GET parent-candidates?projectId&excludeId`（create 或 edit 任一）、`GET projects/selectable`；除註明者外都要 view。看不到的待辦一律 404。
 
 **會議紀錄**（1.1.20，`MeetingController` 改走 `MeetingService`）：既有五支路由、權限、回應形狀不變，`MeetingDto` 只多帶欄位（`projectId`、`projectTitle`、`createdByUserId`、`hasMedia`、`hasTranscript`、`canRetryTranscription`、`draftStatus`、`draftError`、`draftPromptTemplateName`、`draftCompletedAt`、`hasDraft`、`canGenerateDraft`、`isUploader`、`canDelete`；`draftContent` 只有 `GET {id}` 帶），`MeetingCreateUpdateDto` 多了 `categoryNames`（有帶就以它為準，比照提示詞）。`POST search` 照舊。**外部行為變更**：`PUT` 對已完成（封存）專案的會議改為 400（與畫面一致，管理者除外）。畫面用的新端點：`POST list`（分類篩選、畫面欄位排序，view）、`GET {id}/linked-todos`（edit）、`POST {id}/retranscribe`（edit）、`POST {id}/draft`（產生會議紀錄，edit，會花 AI 費用）、`PUT {id}/draft`（修改全文，edit）、`PUT {id}/project`（歸屬專案，edit）、`GET {id}/transcript`（view）、`GET {id}/transcript/file`（.txt 含 BOM，export，寫稽核）、`POST {id}/transcript/copied`（瀏覽器複製後寫稽核，export）、`POST {id}/draft/pdf`（可帶還沒存的內容，export，寫稽核）、`GET projects/selectable`（附與會人員名冊）、`GET prompt-templates/selectable`、`GET categories/enabled`（後三支 view，不借用其他頁的權限）。看不到的會議一律 404；服務層擋下回 400，新端點訊息放 `errorMessage`。
+
+**AI 問答**（1.1.21，`AiChatController`，路由 `api/v1/ai-chat/{project|meeting}/{targetId}`）：`GET conversations`、`POST conversations`（開新對話，回 Id）、`PUT conversations/{id}/title`（edit）、`DELETE conversations/{id}`（delete）、`GET conversations/{id}/messages`、`PUT conversations/{id}/messages/{index}`（edit；帶原本的角色與內容，對不上回 409）、`POST conversations/{id}/ask`（multipart：`question`＋0～5 個 `files`，**串流**）、`POST conversations/{id}/messages/{index}/regenerate`（edit，**串流**）、`GET conversations/{id}/attachments/{storedName}`（`download=true` 寫稽核）、`POST conversations/{id}/pdf`（export；`messageIndex` 有值＝單則，沒值＝整段，內容由伺服器讀）。權限依範圍（`AiChatPermissionAttribute`：專案看專案項目，會議看會議紀錄或專案項目），未註明者要 view。**串流格式**：`application/x-ndjson`，每行一筆 `AiChatStreamEventDto`——零到多筆 `delta`（新產生的文字），最後一筆 `done`（附完整結果）或 `error`（附原因）；在第一段文字產生之前就失敗（看不到 404、附件不合規定或額度用完 400）照一般 API 回應。服務層的錯誤原文放 `errorMessage`。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`（待辦 1.1.18、會議 1.1.20 起直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

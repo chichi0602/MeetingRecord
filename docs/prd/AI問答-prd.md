@@ -1,8 +1,8 @@
 ﻿# AI 問答 PRD
 
-- 文件版本：1.6
+- 文件版本：1.8
 - 文件狀態：已實作
-- 現行系統版本：1.1.17
+- 現行系統版本：1.1.21
 - 首次實作版本：0.4.51
 - 最後核對日期：2026/11/10
 
@@ -48,6 +48,7 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 | AI 抽出待辦（0.4.61） | `待辦事項:create`（這顆鈕真正做的事是新增待辦） | —（0.4.83 起不在此頁） |
 
 管理員短路。權限由宿主頁以 `AuthenticationStateHelper.CheckAccessAction(...)` 算好後傳入 `AiChatModal` 的 `CanEdit`／`CanDelete`／`CanExport` 參數。
+- **API 的動作權限（1.1.21）**：依範圍決定（`AiChatPermissionAttribute`）。專案範圍要專案項目的該動作；會議範圍要會議紀錄**或**專案項目的該動作（會議頁的入口看前者、專案頁會議歷史的入口看後者，與畫面一致）。讀取、開新對話、提問要 view；改名、修改訊息、重新產生要 edit；刪除對話要 delete；匯出 PDF 要 export。以前這些只在畫面上判斷。
 
 主要使用者：能看到該專案／會議的登入者。資料可見範圍見第五節。
 
@@ -99,7 +100,7 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 
 ### 資料流
 
-- UI：`ProjectViewView`／`MeetingViewView` → `AiChatModal` →（注入）`AiChatService` → `AiChatStore`（檔案）＋ `BackendDBContext`（讀會議與附件清單）＋ `ITextGenerationProvider`。Blazor Server 直接呼叫服務，**沒有對外 Web API 端點**。
+- UI：`ProjectViewView`／`MeetingViewView` → `AiChatModal` →（注入）`AiChatService` → `AiChatStore`（檔案）＋ `BackendDBContext`（讀會議與附件清單）＋ `ITextGenerationProvider`。Blazor Server 直接呼叫服務。1.1.21 起另有 Web API（`api/v1/ai-chat/{project|meeting}/{targetId}/...`，給 WASM 頁用，規則同一份 `AiChatService`；提問與重新產生是串流），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 - 模型：複用會議紀錄生成同一個 `ITextGenerationProvider`（依 `LlmSettings.DefaultProvider` 挑選，目前是 Azure OpenAI），沒有第二條到 Azure OpenAI 的路徑。同步互動，沒有佇列與背景 worker。串流回呼 `onDelta` 傳增量文字，UI 以 `InvokeAsync` 切回 UI 執行緒。
 - 系統提示詞要求全程繁體中文（台灣用語）、只根據參考資料回答、找不到就說明、盡量指出出處。
 
@@ -153,6 +154,7 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 
 - `AiChatService`：`AiChat.Create`（使用者按「新對話」；開視窗時自動建立的第一段不記）、`AiChat.Rename`、`AiChat.ClearHistory`、`AiChat.MessageUpdate`（只記位置與字數）、`AiChat.Regenerate`。目標是對話所屬的專案或會議，摘要帶對話編號，**不記任何問答內容**。
 - `AiChatModal`：匯出 PDF 寫 `AiChat.ExportPdf`（單則或整段），下載文件附件寫 `AiChat.AttachmentDownload`（圖片預覽不記）。
+- API（1.1.21）：匯出 PDF、下載文件附件（`download=true`）同樣寫這兩種稽核，摘要多 `via=Api`；PDF 的內容一律由伺服器從對話檔讀，不收用戶端的文字。
 - 看不到的專案或會議被嘗試做上述寫入時寫 `Permission.Denied`（`op=AiChat…`）；讀取不記。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界

@@ -45,10 +45,13 @@ public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilte
         permissionKeys = anyOf.Select(action => PermissionKey.For(page, action)).ToArray();
     }
 
-    /// <summary>給訊息與稽核用：「團隊清單:create 或 團隊清單:edit」。</summary>
-    private string Describe() => string.Join(" 或 ", permissionKeys);
+    public Task OnAuthorizationAsync(AuthorizationFilterContext context) => AuthorizeAsync(context, permissionKeys);
 
-    public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+    /// <summary>
+    /// 授權核心（1.1.21 抽出，<see cref="AiChatPermissionAttribute"/> 共用）：未登入 401；任一權限鍵通過就放行；
+    /// 都沒有回 403 <see cref="ApiResult"/> 並寫「權限拒絕」稽核。
+    /// </summary>
+    internal static async Task AuthorizeAsync(AuthorizationFilterContext context, string[] permissionKeys)
     {
         var principal = context.HttpContext.User;
         if (principal?.Identity?.IsAuthenticated != true)
@@ -84,11 +87,11 @@ public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilte
             StatusCode = StatusCodes.Status403Forbidden,
         };
 
-        await WriteDeniedAuditAsync(context, principal, userId);
+        await WriteDeniedAuditAsync(context, principal, userId, string.Join(" 或 ", permissionKeys));
     }
 
     /// <summary>⚠️ 稽核寫不進去也要照樣回 403：這裡任何例外都吞掉、只記警告。</summary>
-    private async Task WriteDeniedAuditAsync(AuthorizationFilterContext context, ClaimsPrincipal principal, int userId)
+    private static async Task WriteDeniedAuditAsync(AuthorizationFilterContext context, ClaimsPrincipal principal, int userId, string describe)
     {
         try
         {
@@ -102,12 +105,12 @@ public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilte
                 actorAccount: account,
                 targetType: "ApiEndpoint",
                 targetId: $"{request.Method} {request.Path}",
-                detail: $"缺少權限：{Describe()}; via={AuditVia.Api}");
+                detail: $"缺少權限：{describe}; via={AuditVia.Api}");
         }
         catch (Exception ex)
         {
             context.HttpContext.RequestServices.GetService<ILogger<HasPermissionAttribute>>()
-                ?.LogWarning(ex, "Failed to write permission-denied audit. Permission={Permission}", Describe());
+                ?.LogWarning(ex, "Failed to write permission-denied audit. Permission={Permission}", describe);
         }
     }
 }

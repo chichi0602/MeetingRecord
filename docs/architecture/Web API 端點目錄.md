@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.25
+- 文件版本：1.26
 - 文件狀態：已實作
-- 現行系統版本：1.1.21
+- 現行系統版本：1.1.23
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -121,6 +121,7 @@
 | 建立工作階段（1.1.16） | `POST api/v1/uploads` | WASM 頁用（`UploadSessionController`）。內容 `{ purpose: "MeetingMedia", meetingId, fileName, contentType, size, deleteMeetingOnCancel }`；會議紀錄「新增」或「修改」權限；先跑 `MeetingService.CheckMediaUploadAsync`（格式、大小、資料範圍、只限上傳者、封存、進行中工作），不合回 400 與原因；回 `{ uploadId, chunkSize, chunkCount }`。讀檔、存檔、排入轉錄在伺服器背景以上傳者身分執行 |
 | 查狀態（1.1.16） | `GET api/v1/uploads/{uploadId}` | 回 `{ state: Uploading/Succeeded/Cancelled/Failed, message, meetingDeleted, cancelTooLate }`；只認擁有者，別人的 404；結束後保留 10 分鐘 |
 | 取消（1.1.16） | `DELETE api/v1/uploads/{uploadId}` | 等同 Server 頁的「取消上傳」：新增時附的檔連會議一起刪（建好就取消、服務層還沒開始收檔時也一樣）；檔案已寫完則來不及取消、照樣排入轉錄 |
+| 回報失敗（1.1.23） | `POST api/v1/uploads/{uploadId}/fail` | 內容 `{ message }`。瀏覽器送不下去（重試用完、登入失效）時呼叫，伺服器立刻結束那趟上傳、會議保留（同 Server 頁），不必等 2 分鐘逾時；只認擁有者，別人的回 404 |
 
 專案附件的上傳用途等專案頁搬到 WASM 時再加（1.1.21）。
 

@@ -87,4 +87,35 @@ public sealed class AiTests(E2EAppFixture app) : E2ETestBase(app)
             await Task.Delay(300);
         }
     }
+
+    [E2EFact]
+    [Trait("Scenario", "AI-04")]
+    [Trait("Title", "會議 AI 問答（WASM 頁）：串流顯示回答並記入用量帳本")]
+    [Trait("Page", "會議紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task MeetingAiChat_OnWasmPage_ShouldStreamAnswer()
+    {
+        // 1.1.23 會議頁搬到 WASM：問答視窗改走 AiChatApi（打 API、邊收邊讀 NDJSON 串流），同 AI-01 的驗法。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/meetings", "會議標題");
+        await using var db = App.CreateDbContext();
+        var before = await db.AiUsageLog.CountAsync();
+
+        // 全套跑時其他情境新增的會議會把這筆種子資料擠出第一頁（清單依更新時間排序），先用標題搜尋。
+        await page.GetByPlaceholder("請輸入搜尋關鍵字").FillAsync(E2ESeedData.MinutesMeeting);
+        await page.GetByPlaceholder("請輸入搜尋關鍵字").PressAsync("Enter");
+        await RowAction(Row(page, E2ESeedData.MinutesMeeting), "AI 問答").ClickAsync();
+        var question = page.GetByPlaceholder("輸入問題後按 Enter 送出", new() { Exact = false });
+        await question.FillAsync("這場會議決定了什麼？");
+        await question.DispatchEventAsync("change");
+        await ToolbarButton(page, "送出").ClickAsync();
+
+        await Expect(page.Locator(".ai-chat-row-assistant").Last).ToContainTextAsync(Marker);
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (await db.AiUsageLog.CountAsync() <= before)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "AI 問答要記進用量帳本");
+            await Task.Delay(300);
+        }
+    }
 }

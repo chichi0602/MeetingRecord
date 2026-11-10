@@ -152,6 +152,43 @@ public sealed class UploadSessionApiTests(ApiTestApplicationFactory factory) : I
         Assert.False(await scope.ServiceProvider.GetRequiredService<BackendDBContext>().Meeting.AnyAsync(x => x.Id == meetingId));
     }
 
+    /// <summary>
+    /// 瀏覽器送不下去（1.1.23）：回報後立刻結束成「失敗」、帶出原因，會議保留（就算是新增時附的檔也不刪，比照 Server 頁）；
+    /// 別人回報不到。
+    /// </summary>
+    [Fact]
+    public async Task Fail_ShouldEndTheUploadAsFailed_AndKeepTheMeeting()
+    {
+        var (account, userId) = await TestCookieLogin.CreateUserAsync(factory.Services, Password, [PermissionKey.For(MagicObjectHelper.角色_會議紀錄, PermissionActions.Create)]);
+        var meetingId = await AddMeetingAsync(userId);
+        using var client = await LoginAsync(account);
+
+        var request = Request(meetingId, "a.mp3", 3000);
+        request.DeleteMeetingOnCancel = true;
+        var session = await CreateAsync(client, request);
+
+        var (otherAccount, _) = await TestCookieLogin.CreateUserAsync(factory.Services, Password, [MagicObjectHelper.角色_會議紀錄]);
+        using (var other = await LoginAsync(otherAccount))
+        using (var notFound = await other.PostAsJsonAsync($"/api/v1/uploads/{session.UploadId}/fail", new UploadFailRequestDto { Message = "x" }))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
+        }
+
+        using (var fail = await client.PostAsJsonAsync($"/api/v1/uploads/{session.UploadId}/fail", new UploadFailRequestDto { Message = "網路不穩，重試多次仍無法上傳，請稍後重新上傳。" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, fail.StatusCode);
+        }
+
+        var status = await WaitUntilEndedAsync(client, session.UploadId);
+        Assert.Equal(UploadStates.Failed, status.State);
+        Assert.Contains("網路不穩", status.Message);
+        Assert.False(status.MeetingDeleted);
+
+        using var scope = factory.Services.CreateScope();
+        var meeting = await scope.ServiceProvider.GetRequiredService<BackendDBContext>().Meeting.AsNoTracking().SingleAsync(x => x.Id == meetingId);
+        Assert.Null(meeting.MediaRelativePath);
+    }
+
     private static UploadSessionRequestDto Request(int meetingId, string fileName, long size)
         => new() { Purpose = UploadPurposes.MeetingMedia, MeetingId = meetingId, FileName = fileName, ContentType = "audio/mpeg", Size = size };
 

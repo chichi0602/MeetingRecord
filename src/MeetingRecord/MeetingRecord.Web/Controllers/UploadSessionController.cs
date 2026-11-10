@@ -23,7 +23,7 @@ namespace MeetingRecord.Web.Controllers;
 [Route("api/v1/uploads")]
 [ApiController]
 [Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]
-public sealed class UploadSessionController(MeetingService meetingService, MeetingMediaUploadJobs uploadJobs) : ControllerBase
+public sealed class UploadSessionController(MeetingService meetingService, MeetingMediaUploadJobs uploadJobs, ChunkedUploadStore store) : ControllerBase
 {
     /// <summary>
     /// 建立上傳工作階段。新增會議時附檔（要「新增」權限）與修改時換檔（要「修改」權限）都走這支，所以任一即可；
@@ -94,4 +94,33 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
         job.Cancellation.Cancel();
         return Ok(ApiResult.SuccessResult("已要求取消上傳。"));
     }
+
+    /// <summary>
+    /// 瀏覽器送不下去（1.1.23）：等同 Server 頁 <c>BrowserUploadCallback.OnFailed</c>——讓服務層走「上傳失敗」流程
+    /// （會議保留、原因帶到畫面），不必等 2 分鐘逾時。已經收齊或已結束的不受影響。
+    /// </summary>
+    [HttpPost("{uploadId:guid}/fail")]
+    public ActionResult<ApiResult> Fail(Guid uploadId, [FromBody] UploadFailRequestDto request)
+    {
+        if (UserClaims.GetUserId(User) is not { } userId)
+        {
+            return Unauthorized(ApiResult.UnauthorizedResult("無法識別使用者身分。"));
+        }
+
+        if (!uploadJobs.TryGet(uploadId, userId, out _))
+        {
+            return NotFound(ApiResult.NotFoundResult("找不到這趟上傳。"));
+        }
+
+        if (store.TryGet(uploadId, userId, out var session))
+        {
+            var message = string.IsNullOrWhiteSpace(request.Message) ? "上傳失敗，請重新上傳。" : request.Message.Trim();
+            session.Fail(message.Length > MaxFailMessageLength ? message[..MaxFailMessageLength] : message);
+        }
+
+        return Ok(ApiResult.SuccessResult("已記錄。"));
+    }
+
+    /// <summary>原因只拿來顯示給上傳者自己看，仍限制長度。</summary>
+    private const int MaxFailMessageLength = 200;
 }

@@ -14,6 +14,7 @@ public sealed record ApiDownload(bool Success, byte[]? Content, string? FileName
 /// WASM 端呼叫 Web API 的基底（1.1.1）。之後每個功能的 <c>XxxApiClient</c> 都經過這裡：
 /// <list type="bullet">
 /// <item>一律解成 <see cref="ApiResult{T}"/>；回應不是 ApiResult（例如代理伺服器的錯誤頁）也回失敗結果，不丟例外。</item>
+/// <item>連不上伺服器（斷網）也回失敗結果（1.1.23，狀態碼 <see cref="NetworkErrorStatusCode"/>）：以前會丟例外，整頁被錯誤邊界換成錯誤畫面。</item>
 /// <item>401（未登入、登入失效）整頁導到登入頁。</item>
 /// <item>403 且原因是須改密碼（1.1.4，伺服器的 MustChangePasswordFilter）整頁導到變更密碼頁。</item>
 /// </list>
@@ -24,46 +25,51 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
     public const string ChangePasswordPath = "/ChangePassword";
     public const string MustChangePasswordReason = "must-change-password";
 
-    public async Task<ApiResult<T>> GetAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
-    {
-        using var response = await http.GetAsync(url, cancellationToken);
-        return await ReadAsync(response, typeInfo, cancellationToken);
-    }
+    /// <summary>連不上伺服器時失敗結果的狀態碼（沒有 HTTP 回應）。</summary>
+    public const int NetworkErrorStatusCode = 0;
+
+    public const string NetworkErrorMessage = "無法連線到伺服器，請確認網路後再試一次。";
+
+    /// <summary>
+    /// 401 整頁導到登入頁之前先呼叫（1.1.23）：上傳中開著「確定要離開嗎？」（<c>beforeunload</c>），不先拿掉的話瀏覽器會擋下這次導向。
+    /// </summary>
+    public event Func<Task>? BeforeLoginRedirect;
+
+    public Task<ApiResult<T>> GetAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+        => SendAsync(() => http.GetAsync(url, cancellationToken), typeInfo, cancellationToken);
 
     /// <summary>不帶內容的 POST（例如「全部標為已讀」）。</summary>
-    public async Task<ApiResult<T>> PostAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
-    {
-        using var response = await http.PostAsync(url, content: null, cancellationToken);
-        return await ReadAsync(response, typeInfo, cancellationToken);
-    }
+    public Task<ApiResult<T>> PostAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+        => SendAsync(() => http.PostAsync(url, content: null, cancellationToken), typeInfo, cancellationToken);
 
     /// <summary>帶 JSON 內容的 POST；內容與回應都走原始碼產生器（<see cref="ClientJsonContext"/>）。</summary>
-    public async Task<ApiResult<T>> PostAsync<TBody, T>(string url, TBody body, JsonTypeInfo<TBody> bodyType, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
-    {
-        using var response = await http.PostAsJsonAsync(url, body, bodyType, cancellationToken);
-        return await ReadAsync(response, typeInfo, cancellationToken);
-    }
+    public Task<ApiResult<T>> PostAsync<TBody, T>(string url, TBody body, JsonTypeInfo<TBody> bodyType, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+        => SendAsync(() => http.PostAsJsonAsync(url, body, bodyType, cancellationToken), typeInfo, cancellationToken);
 
     /// <summary>帶 JSON 內容的 PUT（1.1.7，修改、切換啟用）。</summary>
-    public async Task<ApiResult<T>> PutAsync<TBody, T>(string url, TBody body, JsonTypeInfo<TBody> bodyType, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
-    {
-        using var response = await http.PutAsJsonAsync(url, body, bodyType, cancellationToken);
-        return await ReadAsync(response, typeInfo, cancellationToken);
-    }
+    public Task<ApiResult<T>> PutAsync<TBody, T>(string url, TBody body, JsonTypeInfo<TBody> bodyType, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+        => SendAsync(() => http.PutAsJsonAsync(url, body, bodyType, cancellationToken), typeInfo, cancellationToken);
 
     /// <summary>DELETE（1.1.7）。</summary>
-    public async Task<ApiResult<T>> DeleteAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
-    {
-        using var response = await http.DeleteAsync(url, cancellationToken);
-        return await ReadAsync(response, typeInfo, cancellationToken);
-    }
+    public Task<ApiResult<T>> DeleteAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+        => SendAsync(() => http.DeleteAsync(url, cancellationToken), typeInfo, cancellationToken);
 
     /// <summary>
     /// 下載檔案（1.1.22）：成功回內容與檔名；失敗回原因（401、須改密碼照樣導向）。
     /// </summary>
     public async Task<ApiDownload> DownloadAsync(HttpRequestMessage request, CancellationToken cancellationToken = default)
     {
-        using var response = await http.SendAsync(request, cancellationToken);
+        HttpResponseMessage sent;
+        try
+        {
+            sent = await http.SendAsync(request, cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            return new ApiDownload(false, null, null, null, NetworkErrorMessage, NetworkErrorStatusCode);
+        }
+
+        using var response = sent;
         if (response.IsSuccessStatusCode)
         {
             var headers = response.Content.Headers;
@@ -89,7 +95,33 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
     public Task<ApiResult<object>> ReadFailureAsync(HttpResponseMessage response, CancellationToken cancellationToken = default)
         => ReadAsync(response, ClientJsonContext.Default.EmptyResult, cancellationToken);
 
+    /// <summary>
+    /// 失敗原因（1.1.23 從 TodoApi 搬來，會議頁也用）：既有對外 API 的新增、修改、刪除把原因放在 <c>errors.Validation</c>，
+    /// 新端點放 <c>errorMessage</c>，兩種都認。
+    /// </summary>
+    public static string ErrorText<T>(ApiResult<T> result)
+        => result.ErrorMessage
+           ?? result.Errors?.Values.SelectMany(x => x).FirstOrDefault()
+           ?? result.Message;
+
     /// <summary>變更密碼頁本身（1.1.13 起在 WASM）：在這頁收到「須改密碼」的 403 不再導向自己，免得重新載入不停。</summary>
+    /// <summary>送出並解讀回應；連不上伺服器（斷網、伺服器沒開）時回失敗結果，不丟例外。</summary>
+    private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken)
+    {
+        HttpResponseMessage sent;
+        try
+        {
+            sent = await send();
+        }
+        catch (HttpRequestException)
+        {
+            return ApiResult<T>.FailureResult(NetworkErrorMessage, NetworkErrorStatusCode);
+        }
+
+        using var response = sent;
+        return await ReadAsync(response, typeInfo, cancellationToken);
+    }
+
     private bool IsOnChangePasswordPage()
         => string.Equals("/" + navigation.ToBaseRelativePath(navigation.Uri).Split('?', '#')[0], ChangePasswordPath, StringComparison.OrdinalIgnoreCase);
 
@@ -97,6 +129,11 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
+            foreach (var handler in BeforeLoginRedirect?.GetInvocationList().Cast<Func<Task>>() ?? [])
+            {
+                await handler();
+            }
+
             navigation.NavigateTo(LoginPath, forceLoad: true, replace: true);
             return ApiResult<T>.UnauthorizedResult("尚未登入或登入已失效。");
         }

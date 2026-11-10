@@ -20,7 +20,7 @@ public sealed partial class FormEnterGuardTests
     public static TheoryData<string> CrudForms =>
     [
         "MeetingRecord.Web.Client/Pages/Todos/TodoPage",
-        "MeetingRecord.Web/Components/Views/Meetings/MeetingViewView",
+        "MeetingRecord.Web.Client/Pages/Meetings/MeetingPage",
         "MeetingRecord.Web/Components/Views/Projects/ProjectViewView",
         "MeetingRecord.Web.Client/Pages/Categories/CategoryPage",
         "MeetingRecord.Web.Client/Pages/Teams/TeamPage",

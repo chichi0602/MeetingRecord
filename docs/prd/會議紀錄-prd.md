@@ -1,8 +1,8 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.21
+- 文件版本：2.22
 - 文件狀態：已實作
-- 現行系統版本：1.1.20
+- 現行系統版本：1.1.23
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/11/10
 
@@ -49,7 +49,7 @@
 
 ## 三、畫面與欄位
 
-單頁清單 + Modal 表單（`MeetingViewView`）：
+單頁清單 + Modal 表單（1.1.23 起是 WASM 頁 `Web.Client/Pages/Meetings/MeetingPage`，經 `api/v1/Meeting`；以前是 Server 的 `MeetingViewView`）：
 
 - 搜尋：關鍵字比對 `Title`、`Description` 或 `MediaOriginalFileName`（`Contains`）。清空搜尋鈕在有輸入時出現。
 - 工具列：新增、重新整理、**分類過濾（0.4.102 恢復，多選，含任一分類即符合）**、關鍵字、清空搜尋、搜尋。**0.4.35 移除分類過濾與團隊過濾**，團隊過濾沒有恢復。
@@ -84,7 +84,7 @@
   - **抽出待辦：0.4.83 起本頁沒有這顆鈕**（0.4.73～0.4.82 曾有）。待辦在資料表層級就必須有專案，而這一頁有一半的會議是未歸屬的，按了只能跳訊息叫使用者先去歸屬——那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案項目頁的清單裡，入口集中在那裡。
   - **歸屬到專案（0.4.73，`edit`，僅未歸屬時出現）**：只寫 `ProjectId`，不重新生成、不產生費用。不掛紅色——歸屬不是破壞性動作
   - **專案選單不列已完成專案（1.0.46）**：「歸屬到專案」與「產生會議紀錄」的專案下拉走 `ProjectService.GetSelectableAsync()`，預設排除狀態「已完成」（封存）的專案；已歸屬到已完成專案的會議，清單上照常顯示原本的專案名稱。規則見 [專案項目 PRD](專案項目-prd.md)。
-  - 修改（`edit`）、刪除（**1.0.47 起只對上傳者與管理者顯示**，角色要 `edit`；以前只看 `delete`。**1.0.52 起該會議所屬專案的負責人也看得到**，`MeetingViewView.CanDelete`）
+  - 修改（`edit`）、刪除（**1.0.47 起只對上傳者與管理者顯示**，角色要 `edit`；以前只看 `delete`。**1.0.52 起該會議所屬專案的負責人也看得到**，API 依呼叫者算好 `MeetingDto.CanDelete`）
   - 修改視窗（1.0.47）：不是上傳者時影音檔拖放區停用，下方顯示「只有上傳者或管理者可以更換影音檔；其他欄位可以照常修改。」；新增時一律可選檔。
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是描述為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在描述欄換行**。
 - 刪除：`ConfirmAsync` 二次確認，明確告知影音檔與逐字稿會一併刪除且不可復原。0.4.115 起依結果顯示成功或失敗原因（以前一律顯示「刪除成功」）。**1.0.47 起確認文字**：「確定要刪除這筆會議紀錄嗎？影音檔、逐字稿、會議紀錄與 AI 問答會一併刪除。從這場會議抽出的 N 筆待辦會保留在專案裡（不再連到這場會議）。此操作無法復原。」——N 取自 `MeetingService.CountLinkedTodosAsync`，N 為 0 時不顯示待辦那句。
@@ -118,7 +118,7 @@
 
 ## 四、內部系統運作
 
-- UI 路徑：`MeetingViewView` →（注入）`MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`（Blazor Server 直接呼叫服務，不經 HTTP）。
+- UI 路徑：1.1.23 起是 WASM 頁 `MeetingPage` → `MeetingApi`（`api/v1/Meeting`）→ `MeetingController` → `MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`。影音檔由整個前端共用的 `MeetingUploadManager` 上傳（`api/v1/uploads`＋`chunk-upload.js`，換 WASM 頁不中斷），進度讀 `api/v1/jobs` 並聽推播。以前是 Blazor Server 的 `MeetingViewView` 直接呼叫服務。
 - API 路徑：`MeetingController` → `MeetingService`（1.1.20 起全部，以前只有刪除，其他走 `MeetingRepository`）→ `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。刪除自 0.4.115 起就走 `MeetingService.DeleteAsync`：和畫面同一套，一併清影音、逐字稿與 AI 問答對話（1.0.29 起也刪這場會議的 AI 對話紀錄，用量帳本不動），背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
 - Entity `Meeting`（DbSet 為 `context.Meeting`）。**刻意不叫 `MeetingRecord`**——會與根命名空間 `MeetingRecord` 衝突；`Meeting` 也與 0.4.24 移除前的舊表同名。
   因為「一筆會議只有一個影音檔」，媒體欄位直接內嵌，**不另開附件子表**，省掉 Cascade 與附件集合的整套機制。
@@ -342,9 +342,9 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 
 ## 十、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Meetings/MeetingPage.razor`（`@page "/meetings"`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor.cs`（`MeetingViewView`：`OnInitializedAsync` 頁面權限、上傳進度、會議紀錄編修入口）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Meetings/MeetingPage.razor`（`@page "/meetings"`，1.1.23 起 WASM 頁）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Meetings/MeetingPage.razor.cs`（`MeetingPage`：頁面權限、背景工作進度、會議紀錄編修入口）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Api/MeetingApi.cs`、`Uploads/MeetingUploadManager.cs`（上傳由整個前端共用）
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs`（`MeetingController` 各端點的 `[HasPermission]` 動作鍵）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MeetingService.cs`（`MeetingService`：CRUD、專案權控、`SaveMediaAsync` 上傳、`RequeueTranscriptionAsync` 重新轉錄、`AttachToProjectAsync`／`DetachFromProjectAsync`、`RequestDraftAsync`、`ReadTranscriptAsync` 讀逐字稿）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/MeetingFileStore.cs`（`MeetingFileStore`：實體檔案存取與上傳進度回報；`ReadTranscriptAsync` 讀取時簡轉繁）

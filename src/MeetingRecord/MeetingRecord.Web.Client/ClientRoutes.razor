@@ -1,4 +1,9 @@
+@using MeetingRecord.Web.Client.Uploads
+@using Microsoft.AspNetCore.Components.Routing
+@implements IDisposable
 @inject NavigationManager NavigationManager
+@inject MeetingUploadManager UploadManager
+@inject ModalService ModalService
 
 @* WASM 端的路由（1.1.1）。遷移期間逐頁切換：不在 WasmRoutes 的路徑還是 Blazor Server 頁，整頁載入交給伺服器。 *@
 <ConfigProvider>
@@ -12,6 +17,48 @@
 </ConfigProvider>
 
 @code {
+    private IDisposable? locationChangingRegistration;
+
+    protected override void OnInitialized()
+    {
+        locationChangingRegistration = NavigationManager.RegisterLocationChangingHandler(OnLocationChangingAsync);
+    }
+
+    /// <summary>
+    /// 1.1.23：上傳由整個前端共用（<see cref="MeetingUploadManager"/>），WASM 頁之間切換不會中斷；
+    /// 要去的是還沒遷移的 Blazor Server 頁就是整頁載入，上傳會中斷，先問（比照 Server 頁往 WASM 頁的確認，1.1.6）。
+    /// </summary>
+    private async ValueTask OnLocationChangingAsync(LocationChangingContext context)
+    {
+        if (UploadManager.ActiveCount == 0)
+        {
+            return;
+        }
+
+        var path = "/" + NavigationManager.ToBaseRelativePath(context.TargetLocation).Split('?', '#')[0];
+        if (WasmRoutes.IsWasm(path))
+        {
+            return;
+        }
+
+        var leave = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "上傳還在進行",
+            Content = "影音檔或附件還在上傳，離開這頁會中斷上傳。確定要離開嗎？",
+            OkText = "離開",
+            CancelText = "留下",
+        });
+
+        if (!leave)
+        {
+            context.PreventNavigation();
+            return;
+        }
+
+        // 已確認要離開：拿掉 beforeunload，免得接著整頁載入時瀏覽器再問一次。
+        await UploadManager.ReleaseLeaveGuardAsync();
+    }
+
     private Task OnNavigateAsync(NavigationContext context)
     {
         // context.Path 是不含查詢字串的相對路徑；整頁載入時用 NavigationManager.Uri（已是目標網址）保留查詢字串。
@@ -22,4 +69,6 @@
 
         return Task.CompletedTask;
     }
+
+    public void Dispose() => locationChangingRegistration?.Dispose();
 }

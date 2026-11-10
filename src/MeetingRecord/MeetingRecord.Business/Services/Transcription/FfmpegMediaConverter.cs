@@ -19,7 +19,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 public class FfmpegMediaConverter : IMediaConverter
 {
     /// <summary>每個分段的長度（秒）。</summary>
-    public const int SegmentSeconds = 900;
+    public const int SegmentSeconds = MeetingRecord.Share.Helpers.MeetingMediaPolicy.TranscriptionSegmentSeconds;
 
     /// <summary>分段檔名樣板（FFmpeg segment muxer 使用）。</summary>
     public const string SegmentFileNamePattern = "part_%04d.mp3";

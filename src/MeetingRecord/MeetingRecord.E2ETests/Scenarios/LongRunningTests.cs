@@ -155,10 +155,11 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     [E2EFact]
     [Trait("Scenario", "L4-05")]
     [Trait("Title", "斷網 10 秒後自動重連，頁面沒有重新載入、仍可操作")]
-    [Trait("Page", "會議紀錄")]
+    [Trait("Page", "專案項目")]
     [Trait("Persona", "主責團隊成員")]
     public async Task OfflineTenSeconds_ShouldReconnectWithoutReload()
     {
+        // 1.1.23 會議頁搬到 WASM（沒有 Blazor Server 連線），這則改在還是 Blazor Server 的專案頁驗；WASM 頁的斷網見 L4-10。
         var page = await LoginAsAsync(Seed.Owner);
 
         // ⚠️ 瀏覽器的離線模擬不會切斷已經建立的 WebSocket（Blazor 照樣連著）：Blazor 連線改經 Playwright 轉接，斷網時自己切斷。
@@ -169,7 +170,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
             socket.ConnectToServer();
             blazorSocket = socket;
         });
-        await GotoAsync(page, "/meetings", "會議標題");
+        await GotoAsync(page, "/projects", "專案");
         await page.EvaluateAsync("() => window.__e2eMarker = 'L4-05'");
 
         await page.Context.SetOfflineAsync(true);
@@ -183,7 +184,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         await Expect(reconnect).ToBeHiddenAsync(new() { Timeout = 60_000 });
         Assert.Equal("L4-05", await page.EvaluateAsync<string?>("() => window.__e2eMarker ?? null"));
         await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
-        await Expect(page.GetByPlaceholder("請輸入會議標題")).ToBeVisibleAsync();
+        await Expect(page.GetByPlaceholder("請輸入專案標題")).ToBeVisibleAsync();
     }
 
     [E2EFact]
@@ -197,27 +198,37 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         await GotoAsync(page, "/meetings", "會議標題");
 
         await page.Context.ClearCookiesAsync();
-        await page.GotoAsync("/meetings");
+        try
+        {
+            await page.GotoAsync("/meetings");
+        }
+        catch (PlaywrightException ex) when (ex.Message.Contains("net::ERR_ABORTED"))
+        {
+            // 1.1.23 會議頁是 WASM 頁：清掉 Cookie 後，頁面背景的 API 呼叫（例如推播觸發的進度查詢）拿到 401 會自己先導到登入頁，
+            // 打斷這次進頁面。終點一樣是登入頁，所以不算失敗。
+        }
 
         await page.WaitForURLAsync(new Regex("/Auths/Login", RegexOptions.IgnoreCase), new() { Timeout = Timeout });
     }
 
     [E2EFact]
     [Trait("Scenario", "L4-07")]
-    [Trait("Title", "登入過期時上傳影音檔：提示登入已失效、會議保留，不會卡在上傳中")]
+    [Trait("Title", "上傳途中登入過期：導回登入頁，會議保留、沒有存進半個影音檔")]
     [Trait("Page", "會議紀錄")]
     [Trait("Persona", "主責團隊成員")]
     public async Task ExpiredLogin_Upload_ShouldFailCleanly()
     {
+        // 1.1.23 會議頁搬到 WASM：存檔、查進度都是 API 呼叫，登入一失效就整頁導回登入頁（以前停在頁面上顯示「登入已失效」）。
+        // 所以改成上傳途中才讓登入失效：要能導得回登入頁（上傳中的「確定要離開嗎？」不能擋住），會議保留、沒有存進影音檔。
         var page = await LoginAsAsync(Seed.Owner);
-        var (title, _) = await FillNewMeetingWithMediaAsync(page, 20 * MB);
+        var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
+        await ThrottleUploadsAsync(page, TimeSpan.FromSeconds(1.5));
 
-        await page.Context.ClearCookiesAsync();
         await SaveNewMeetingWithMediaAsync(page, title);
+        await Expect(JobPanelRow(page, title)).ToContainTextAsync("上傳中");
+        await page.Context.ClearCookiesAsync();
 
-        // 1.0.67：要講明是登入失效，使用者才知道要重新登入（以前只說「影音檔上傳失敗」）。
-        await Expect(Notice(page, "會議資料已保留")).ToContainTextAsync("登入已失效", new() { Timeout = 60_000 });
-        await Expect(Row(page, title)).Not.ToContainTextAsync("上傳中");
+        await page.WaitForURLAsync(new Regex("/Auths/Login", RegexOptions.IgnoreCase), new() { Timeout = 60_000 });
         await using var db = App.CreateDbContext();
         var meeting = await db.Meeting.AsNoTracking().SingleAsync(x => x.Title == title);
         Assert.Null(meeting.MediaRelativePath);
@@ -225,12 +236,13 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
 
     [E2EFact]
     [Trait("Scenario", "L4-08")]
-    [Trait("Title", "上傳中要切到 WASM 頁或關分頁會先確認；選留下上傳照常完成")]
+    [Trait("Title", "上傳中要切到舊版（Blazor Server）頁或關分頁會先確認；選留下上傳照常完成")]
     [Trait("Page", "會議紀錄")]
     [Trait("Persona", "主責團隊成員")]
     public async Task LeavingDuringUpload_ShouldAskFirst()
     {
-        // 1.1.6（WASM 遷移）：往 WASM 頁是整頁載入，舊版頁面的連線一斷上傳就中斷，所以離開前要先問。
+        // 1.1.6（WASM 遷移）：兩種頁面之間切換是整頁載入，上傳會中斷，所以離開前要先問。
+        // 1.1.23 會議頁搬到 WASM：上傳改由整個前端共用，WASM 頁之間切換不中斷（見 L4-09），要問的是往還沒遷移的舊版頁。
         var page = await LoginAsAsync(Seed.Owner);
         var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
         await ThrottleUploadsAsync(page, TimeSpan.FromSeconds(3));
@@ -243,8 +255,8 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         // 用事件驗而不真的關頁：Playwright 觸發關頁後會中斷攔截中的上傳請求。
         Assert.True(await BeforeUnloadBlockedAsync(page), "上傳中關分頁沒有提醒");
 
-        // 切到 WASM 頁：系統的確認框，選留下就不離開。
-        await page.EvaluateAsync("() => Blazor.navigateTo('/wasm')");
+        // 切到舊版頁：系統的確認框，選留下就不離開。
+        await page.EvaluateAsync("() => Blazor.navigateTo('/projects')");
         await Expect(page.Locator(".ant-modal-confirm").GetByText("上傳還在進行")).ToBeVisibleAsync();
         await ConfirmAsync(page, "留下");
         await Expect(page).ToHaveURLAsync(new Regex("/meetings$"));
@@ -257,6 +269,90 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         {
             Assert.True(DateTime.UtcNow < released, "上傳完成後關分頁還在提醒");
             await page.WaitForTimeoutAsync(200);
+        }
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "L4-09")]
+    [Trait("Title", "上傳中換到其他 WASM 頁不中斷、不必確認，回來看到轉錄完成、檔案無誤")]
+    [Trait("Page", "會議紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task SwitchingWasmPagesDuringUpload_ShouldKeepUploading()
+    {
+        // 1.1.23：上傳由整個前端共用（MeetingUploadManager），換 WASM 頁不是整頁載入，上傳照樣繼續。
+        var page = await LoginAsAsync(Seed.Owner);
+        var (title, media) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
+        await ThrottleUploadsAsync(page, TimeSpan.FromSeconds(1));
+        await SaveNewMeetingWithMediaAsync(page, title);
+        await Expect(JobPanelRow(page, title)).ToContainTextAsync("上傳中");
+        await page.EvaluateAsync("() => window.__e2eMarker = 'L4-09'");
+
+        await page.EvaluateAsync("() => Blazor.navigateTo('/todos')");
+        await Expect(page).ToHaveURLAsync(new Regex("/todos$"));
+        await Expect(page.Locator(".ant-modal-confirm")).ToHaveCountAsync(0);
+        await Expect(Notice(page, "影音檔已上傳")).ToBeVisibleAsync(new() { Timeout = UploadTimeout });
+        Assert.Equal("L4-09", await page.EvaluateAsync<string?>("() => window.__e2eMarker ?? null"));
+
+        await page.EvaluateAsync("() => Blazor.navigateTo('/meetings')");
+        await WaitForRowTextAsync(page, title, "已完成");
+        await AssertStoredMediaMatchesAsync(title, media);
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "L4-10")]
+    [Trait("Title", "WASM 頁推播通道：一開始連不上、或斷網 10 秒，都會自動連上，頁面沒有重新載入、仍可操作")]
+    [Trait("Page", "會議紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task WasmPage_PushChannel_ShouldRecoverFromStartFailureAndOutage()
+    {
+        // 1.1.23：WASM 頁沒有 Blazor Server 連線，要撐過網路問題的是推播通道（/hubs/app，進度面板、通知鈴靠它）。
+        var page = await LoginAsAsync(Seed.Owner);
+        var sockets = 0;
+        IWebSocketRoute? hubSocket = null;
+        var handshake = new TaskCompletionSource();
+        page.WebSocket += (_, ws) =>
+        {
+            if (ws.Url.Contains("/hubs/app"))
+            {
+                ws.FrameReceived += (_, _) => handshake.TrySetResult();
+            }
+        };
+        await page.RouteWebSocketAsync(new Regex("/hubs/app"), socket =>
+        {
+            socket.ConnectToServer();
+            hubSocket = socket;
+            Interlocked.Increment(ref sockets);
+        });
+
+        // 一開始連不上（協商被擋）：頁面照常可用，解除後背景重試會自己連上（以前第一次失敗就再也不試）。
+        await page.RouteAsync("**/hubs/app/negotiate**", route => route.AbortAsync("internetdisconnected"));
+        await GotoAsync(page, "/meetings", "會議標題");
+        await page.WaitForTimeoutAsync(1000);
+        Assert.Equal(0, Volatile.Read(ref sockets));
+        await page.UnrouteAsync("**/hubs/app/negotiate**");
+        await WaitUntilAsync(() => Volatile.Read(ref sockets) >= 1, "協商恢復後推播通道沒有自己連上");
+        await handshake.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await page.EvaluateAsync("() => window.__e2eMarker = 'L4-10'");
+
+        // 連上之後斷網 10 秒。同 L4-05，瀏覽器的離線模擬不會切斷已建立的 WebSocket，所以經 Playwright 轉接、斷網時自己切斷。
+        await page.Context.SetOfflineAsync(true);
+        await hubSocket!.CloseAsync();
+        await page.WaitForTimeoutAsync(10_000);
+        await page.Context.SetOfflineAsync(false);
+
+        await WaitUntilAsync(() => Volatile.Read(ref sockets) >= 2, "恢復連網後推播通道沒有自動重連");
+        Assert.Equal("L4-10", await page.EvaluateAsync<string?>("() => window.__e2eMarker ?? null"));
+        await page.GetByRole(AriaRole.Button, new() { Name = "新增" }).First.ClickAsync();
+        await Expect(page.GetByPlaceholder("請輸入會議標題")).ToBeVisibleAsync();
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string failure, int timeoutSeconds = 60)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, failure);
+            await Task.Delay(200);
         }
     }
 

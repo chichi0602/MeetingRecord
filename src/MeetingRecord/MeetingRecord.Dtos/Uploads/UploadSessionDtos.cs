@@ -67,3 +67,12 @@ public class UploadStatusDto
     /// <summary>按了取消但檔案已經寫完（來不及取消），照樣排入轉錄。</summary>
     public bool CancelTooLate { get; set; }
 }
+
+/// <summary>
+/// 瀏覽器送不下去（重試用完、登入失效）時回報原因（<c>POST api/v1/uploads/{uploadId}/fail</c>，1.1.23）：
+/// 伺服器立刻把這趟上傳標成失敗、會議保留，比照 Server 頁；不回報的話要等 2 分鐘沒收到分塊才逾時。
+/// </summary>
+public class UploadFailRequestDto
+{
+    public string? Message { get; set; }
+}

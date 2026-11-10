@@ -46,10 +46,7 @@ public sealed class TodoApi(ApiClient api)
     /// <summary>
     /// 失敗原因：新增、修改、刪除沿用既有對外 API 的格式（放在 <c>errors.Validation</c>），新端點放 <c>errorMessage</c>，兩種都認。
     /// </summary>
-    public static string ErrorText<T>(ApiResult<T> result)
-        => result.ErrorMessage
-           ?? result.Errors?.Values.SelectMany(x => x).FirstOrDefault()
-           ?? result.Message;
+    public static string ErrorText<T>(ApiResult<T> result) => ApiClient.ErrorText(result);
 
     private static string ProjectQuery(int? projectId) => projectId is > 0 ? $"projectId={projectId}&" : string.Empty;
 }

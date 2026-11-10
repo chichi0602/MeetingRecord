@@ -1,8 +1,13 @@
-@using MeetingRecord.Share.Helpers
+@page "/meetings"
+@using MeetingRecord.Dtos.Jobs
+@using MeetingRecord.Dtos.Meetings
+@using MeetingRecord.Dtos.Models
 @using MeetingRecord.Share.Enums
-@using MeetingRecord.Business.Helpers
-@using MeetingRecord.Business.Services.AiChat
-@using MeetingRecord.Web.Components.Views.Projects
+
+@* 會議紀錄（1.1.23 搬到 WASM，原 Server 的 MeetingViewView）：畫面、文字、按鈕、確認框全部照舊；
+   資料走 MeetingApi，上傳走整個前端共用的 MeetingUploadManager，進度來自 api/v1/jobs＋推播。 *@
+<PageTitle>會議紀錄</PageTitle>
+
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -14,7 +19,7 @@ else
     <div>
         <div class="meeting-view-toolbar">
             <div class="meeting-view-toolbar-left">
-                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Create))
+                @if (CanCreate)
                 {
                     <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
@@ -41,6 +46,7 @@ else
                     }
                 </Select>
                 <Input class="meeting-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
+                @* 「清空搜尋」放在「搜尋」前面：它有字才出現，放後面會在失焦那一刻把「搜尋」推開、點擊落空（1.1.19 待辦頁踩過）。 *@
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     <HoverTip Title="清空搜尋">
@@ -60,10 +66,10 @@ else
                            OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="meeting-view-table-wrap">
             <Table @ref="table"
-                   TItem="MeetingAdapterModel"
+                   TItem="MeetingDto"
                    Class="meeting-view-table"
                    RemoteDataSource="true"
-                   DataSource="@meetingAdapterModels"
+                   DataSource="@meetings"
                    RowKey="x => x.Id"
                    @bind-SelectedRows="selectedRows"
                    OnChange="OnTableChange"
@@ -76,15 +82,15 @@ else
                     <Selection Disabled="@(!CanSelect(context))" />
                 }
                 @* 所屬專案併在標題底下當第二行，不另開一欄——操作欄最多會有 11 顆圖示，能省一欄是一欄。 *@
-                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.Title)" Title="會議標題" Sortable ShowSorterTooltip="false">
+                <Column TData="string" DataIndex="@nameof(MeetingDto.Title)" Title="會議標題" Sortable ShowSorterTooltip="false">
                     <div class="meeting-title-cell">
                         <span class="meeting-title-name">@context.Title</span>
-                        <span class="@(context.IsUnassigned ? "meeting-title-project meeting-title-project-unassigned" : "meeting-title-project")"
-                              title="@context.ProjectTitleText">@context.ProjectTitleText</span>
+                        <span class="@(IsUnassigned(context) ? "meeting-title-project meeting-title-project-unassigned" : "meeting-title-project")"
+                              title="@ProjectTitleText(context)">@ProjectTitleText(context)</span>
                     </div>
                 </Column>
-                <Column TData="DateTime?" DataIndex="@nameof(MeetingAdapterModel.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable ShowSorterTooltip="false" />
-                <Column TData="string" DataIndex="@nameof(MeetingAdapterModel.CategoriesText)" Title="分類" />
+                <Column TData="DateTime?" DataIndex="@nameof(MeetingDto.MeetingDate)" Title="會議日期" Format="yyyy/MM/dd" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" Title="分類">@string.Join("、", context.CategoryNames ?? [])</Column>
                 <Column TData="string" Title="影音檔">
                     @if (context.HasMedia)
                     {
@@ -98,26 +104,27 @@ else
                         <span class="meeting-media-empty">尚未上傳</span>
                     }
                 </Column>
-                <Column TData="TranscriptionStatus" DataIndex="@nameof(MeetingAdapterModel.TranscriptionStatus)" Title="轉錄狀態" Sortable ShowSorterTooltip="false">
+                <Column TData="int" DataIndex="@nameof(MeetingDto.TranscriptionStatus)" Title="轉錄狀態" Sortable ShowSorterTooltip="false">
                     @{
-                        var progress = GetLiveProgress(context.Id);
+                        var progress = GetLiveProgress(IdOf(context));
+                        var transcriptionStatus = (TranscriptionStatus)context.TranscriptionStatus;
                     }
-                    @* 上傳中資料庫還是「未上傳」，徽章改看通知器（1.0.27），百分比接在後面。 *@
-                    @if (progress is { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading })
+                    @* 上傳中資料庫還是「未上傳」，徽章改看背景工作（1.0.27），百分比接在後面。 *@
+                    @if (progress is { IsUploading: true })
                     {
                         <span class="meeting-status meeting-status-processing">上傳中</span>
                     }
                     else
                     {
-                        <span class="meeting-status @GetStatusCssClass(context.TranscriptionStatus)">@context.TranscriptionStatusText</span>
+                        <span class="meeting-status @GetStatusCssClass(transcriptionStatus)">@TranscriptionStatusText.Describe(transcriptionStatus)</span>
                     }
                     @if (progress is not null)
                     {
-                        <HoverTip Title="@DescribeProgressPhase(progress)">
+                        <HoverTip Title="@progress.PhaseText">
                             <span class="meeting-status-percent">@progress.Percent%</span>
                         </HoverTip>
                     }
-                    @if (context.TranscriptionStatus == TranscriptionStatus.Failed && !string.IsNullOrWhiteSpace(context.TranscriptionError))
+                    @if (transcriptionStatus == TranscriptionStatus.Failed && !string.IsNullOrWhiteSpace(context.TranscriptionError))
                     {
                         <HoverTip Title="@context.TranscriptionError">
                             <span class="meeting-status-error-hint">⚠</span>
@@ -125,32 +132,34 @@ else
                     }
                 </Column>
                 @* Sortable="false"：服務層的排序白名單沒有 DraftStatus，掛上去只會得到一顆按了沒反應的箭頭。 *@
-                <Column TData="DraftStatus" DataIndex="@nameof(MeetingAdapterModel.DraftStatus)" Title="會議紀錄" Sortable="false">
-                    <span class="meeting-status @GetDraftStatusCssClass(context.DraftStatus)">@context.DraftStatusText</span>
+                <Column TData="int" DataIndex="@nameof(MeetingDto.DraftStatus)" Title="會議紀錄" Sortable="false">
                     @{
-                        var draftProgress = GetLiveDraftProgress(context.Id);
+                        var draftStatus = (DraftStatus)context.DraftStatus;
+                        var draftProgress = GetLiveDraftProgress(IdOf(context));
                     }
+                    <span class="meeting-status @GetDraftStatusCssClass(draftStatus)">@DraftStatusText.Describe(draftStatus)</span>
                     @if (draftProgress is not null)
                     {
                         <span class="meeting-status-percent">@draftProgress.Percent%</span>
                     }
-                    @if (context.DraftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
+                    @if (draftStatus == DraftStatus.Failed && !string.IsNullOrWhiteSpace(context.DraftError))
                     {
                         <HoverTip Title="@context.DraftError">
                             <span class="meeting-status-error-hint">⚠</span>
                         </HoverTip>
                     }
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(MeetingAdapterModel.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
+                <Column TData="DateTime?" DataIndex="@nameof(MeetingDto.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     @* 上傳在背景跑（1.0.27），只鎖住正在上傳的那一筆，其他紀錄照常操作。
-                       看通知器而不是本頁狀態：別的頁籤正在上傳的同一筆也會一起鎖住。
-                       「取消上傳」只出現在發起上傳的這一頁——取消來源在這個元件裡；其他頁籤可從右下角面板取消（1.0.37）。 *@
-                    @if (GetLiveProgress(context.Id) is { Phase: MeetingRecord.Business.Services.Transcription.TranscriptionPhase.Uploading })
+                       看背景工作而不是本頁狀態：別的分頁正在上傳的同一筆也會一起鎖住。
+                       「取消上傳」只出現在發起上傳的這個分頁（1.1.23 起上傳由整個前端共用，換過 WASM 頁回來照樣有）；
+                       其他分頁可從右下角面板取消（1.0.37）。 *@
+                    @if (GetLiveProgress(IdOf(context)) is { IsUploading: true })
                     {
-                        @if (context.Id == uploadingMeetingId)
+                        @if (UploadManager.IsUploading(IdOf(context)))
                         {
-                            <CrudActionButton Title="取消上傳" Icon="cancel" Danger OnClick="OnCancelUploadAsync" />
+                            <CrudActionButton Title="取消上傳" Icon="cancel" Danger OnClick="@(() => OnCancelUploadAsync(IdOf(context)))" />
                         }
                         else
                         {
@@ -183,17 +192,17 @@ else
                         @* 「抽出待辦」0.4.83 起只留在專案項目頁。待辦在資料表層級就必須有專案，
                            這一頁有一半的會議是未歸屬的，按了也只能跳訊息叫使用者先去歸屬——
                            那不是功能，是一顆騙人的按鈕。歸屬過的會議本來就會出現在專案頁的清單裡。 *@
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit))
+                        @if (CanEdit)
                         {
                             @* 歸屬不是破壞性動作，不掛 Danger；紅色留給專案頁那顆「從專案移除」。 *@
-                            @if (context.IsUnassigned)
+                            @if (IsUnassigned(context))
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="歸屬到專案" Icon="link"
                                                       OnClick="@(async () => await OnOpenAttachAsync(context))" />
                                 </SpaceItem>
                             }
-                            @if (context.CanRetryTranscription && IsOwner(context))
+                            @if (context.CanRetryTranscription && context.IsUploader)
                             {
                                 <SpaceItem>
                                     <CrudActionButton Title="重新轉錄" Icon="autorenew"
@@ -206,8 +215,9 @@ else
                                                   OnClick="@(async () => await OnEditAsync(context))" />
                             </SpaceItem>
                         }
-                        @* 1.0.47：刪除只限上傳者與管理者；上傳者是一般使用者（沒有刪除權限）也能刪自己上傳的。 *@
-                        @if (CanDelete(context))
+                        @* 1.0.47：刪除只限上傳者與管理者；上傳者是一般使用者（沒有刪除權限）也能刪自己上傳的。
+                           能不能刪由 API 依呼叫者算好（MeetingDto.CanDelete），刪除 API 會再檢查一次。 *@
+                        @if (context.CanDelete)
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="刪除" Icon="delete" Danger
@@ -221,9 +231,10 @@ else
         </div>
     </div>
 
+    @* 單向 Visible（1.1.19）：AntDesign 會在 OnOk 之前先送 VisibleChanged(false)，用 @bind-Visible 的話伺服器擋下時視窗已經關了。 *@
     <Modal Title="@modalTitle"
            Class="meeting-view-modal"
-           @bind-Visible="@modalVisible"
+           Visible="@modalVisible"
            Keyboard="@(!IsFormLocked)"
            Closable="@(!IsFormLocked)"
            CancelButtonProps="@(new ButtonProps { Disabled = IsFormLocked })"
@@ -237,7 +248,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="MeetingAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="MeetingDto" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="會議標題" Required>
                             <Input @bind-Value="CurrentRecord.Title" Disabled="@IsFormLocked" Placeholder="請輸入會議標題" />
@@ -254,7 +265,7 @@ else
                         <FormItem Label="分類" Class="form-modal-full">
                             <div @onkeydown:stopPropagation="true">
                                 <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                        Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                        Values="CurrentRecord.CategoryNames" OnSelectedItemsChanged="OnRecordCategoriesChanged"
                                         Placeholder="描述會議性質（不影響誰看得到）" AllowClear EnableSearch Disabled="@IsFormLocked" Style="width: 100%;">
                                     @foreach (var c in availableCategories)
                                     {
@@ -271,11 +282,12 @@ else
 
                         <FormItem Label="影音檔" Class="form-modal-full">
                             @* accept 只擋檔案挑選對話框，拖進來的檔案仍要靠 OnMediaFileSelectedAsync
-                               裡的 MeetingMediaPolicy.IsAllowedFileName 把關（那一段本來就在）。 *@
+                               裡的 MeetingMediaPolicy.IsAllowedFileName 把關（那一段本來就在）。
+                               1.1.23 起上傳開始時 JS 就拿到檔案本身，上傳期間照樣可以在這裡選另一筆的檔案。 *@
                             <FileDropZone @ref="mediaDropZone"
                                           OnChange="OnMediaFileSelectedAsync"
                                           Accept="@MeetingMediaPolicy.AcceptAttribute"
-                                          Disabled="@(IsFormLocked || isUploading || !CanChangeMedia)"
+                                          Disabled="@(IsFormLocked || !CanChangeMedia)"
                                           Title="把影音檔拖到這裡，或點擊選擇檔案（一次一個）">
                                 @* 「一次一個」要寫出來：單檔模式下一次拖入多個檔案，Chrome 會整個靜默拒絕——
                                    不觸發 change、不報錯，使用者只會覺得「拖進去沒反應」。 *@
@@ -286,13 +298,6 @@ else
                             @if (!CanChangeMedia)
                             {
                                 <div class="meeting-view-upload-hint">只有上傳者或管理者可以更換影音檔；其他欄位可以照常修改。</div>
-                            }
-
-                            @if (isUploading)
-                            {
-                                @* 同一頁一次只跑一個上傳（1.0.27）：上傳在背景讀的是這個拖拉區裡的檔案，
-                                   這時再選檔或重建拖拉區，會把那個還在讀的檔案弄丟。其他欄位照常可以改。 *@
-                                <div class="meeting-view-upload-hint">另一個影音檔正在上傳，完成後才能在這裡選擇檔案；其他欄位可以照常修改。</div>
                             }
 
                             @if (pendingMediaFile is not null)
@@ -322,7 +327,7 @@ else
 
     <Modal Title="產生會議紀錄"
            Class="form-modal-compact"
-           @bind-Visible="@draftRequestVisible"
+           Visible="@draftRequestVisible"
            Keyboard="true"
            MaskClosable="false"
            OkText="@("開始產生")"
@@ -340,27 +345,27 @@ else
             </div>
             <div class="meeting-draft-request-field">
                 <span class="meeting-draft-request-label">提示詞</span>
-                <Select TItem="PromptTemplateAdapterModel"
+                <Select TItem="MeetingPromptOptionDto"
                         TItemValue="int"
                         @key="@($"prompt-{draftRequestOpenCount}")"
                         DataSource="@promptTemplates"
                         @bind-Value="draftRequestPromptTemplateId"
-                        LabelName="@nameof(PromptTemplateAdapterModel.Name)"
-                        ValueName="@nameof(PromptTemplateAdapterModel.Id)"
+                        LabelName="@nameof(MeetingPromptOptionDto.Name)"
+                        ValueName="@nameof(MeetingPromptOptionDto.Id)"
                         EnableSearch
                         Placeholder="選擇要套用的提示詞"
                         Style="width: 100%;" />
             </div>
             <div class="meeting-draft-request-field">
                 <span class="meeting-draft-request-label">所屬專案（選填）</span>
-                <Select TItem="ProjectAdapterModel"
+                <Select TItem="MeetingProjectOptionDto"
                         TItemValue="int"
                         @key="@($"project-{draftRequestOpenCount}")"
                         DataSource="@projects"
                         @bind-Value="draftRequestProjectId"
                         @bind-Value:after="OnDraftRequestProjectChanged"
-                        LabelName="@nameof(ProjectAdapterModel.Title)"
-                        ValueName="@nameof(ProjectAdapterModel.Id)"
+                        LabelName="@nameof(MeetingProjectOptionDto.Title)"
+                        ValueName="@nameof(MeetingProjectOptionDto.Id)"
                         EnableSearch
                         AllowClear
                         Disabled="@draftRequestLockedProject"
@@ -403,7 +408,7 @@ else
 
     <Modal Title="歸屬到專案"
            Class="form-modal-compact"
-           @bind-Visible="@attachVisible"
+           Visible="@attachVisible"
            Keyboard="true"
            MaskClosable="false"
            OkText="@("歸屬")"
@@ -418,13 +423,13 @@ else
             </div>
             <div class="meeting-draft-request-field">
                 <span class="meeting-draft-request-label">歸屬到</span>
-                <Select TItem="ProjectAdapterModel"
+                <Select TItem="MeetingProjectOptionDto"
                         TItemValue="int"
                         @key="@($"attach-{attachOpenCount}")"
                         DataSource="@projects"
                         @bind-Value="attachProjectId"
-                        LabelName="@nameof(ProjectAdapterModel.Title)"
-                        ValueName="@nameof(ProjectAdapterModel.Id)"
+                        LabelName="@nameof(MeetingProjectOptionDto.Title)"
+                        ValueName="@nameof(MeetingProjectOptionDto.Id)"
                         EnableSearch
                         Placeholder="選擇專案"
                         Style="width: 100%;" />
@@ -458,13 +463,11 @@ else
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
 
-    @* AiChatModal 放在 Views.Projects 命名空間下。搬到共用目錄比較乾淨，
-       但那會動到專案頁；依外科手術原則這裡只加 using。 *@
     <AiChatModal @bind-Visible="aiChatVisible"
                  Scope="AiChatScope.Meeting"
                  TargetId="@aiChatTargetId"
                  Title="@aiChatTitle"
-                 CanExport="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Export)"
-                 CanEdit="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)"
-                 CanDelete="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_會議紀錄, PermissionActions.Delete)" />
+                 CanExport="@CanExport"
+                 CanEdit="@CanEdit"
+                 CanDelete="@PermissionView.Can(MagicObjectHelper.角色_會議紀錄, PermissionActions.Delete)" />
 }

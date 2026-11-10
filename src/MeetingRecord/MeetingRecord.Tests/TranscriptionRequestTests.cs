@@ -1,4 +1,4 @@
-using MeetingRecord.Business.Helpers;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 

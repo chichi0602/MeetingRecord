@@ -5,12 +5,14 @@ using MeetingRecord.Dtos.AiChats;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Dtos.Jobs;
+using MeetingRecord.Dtos.Meetings;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Dtos.Notifications;
 using MeetingRecord.Dtos.Roles;
 using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Dtos.Systems;
 using MeetingRecord.Dtos.Todos;
+using MeetingRecord.Dtos.Uploads;
 using MeetingRecord.Dtos.Users;
 
 namespace MeetingRecord.Web.Client.Api;
@@ -78,4 +80,19 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ApiResult<List<TodoChangeDto>>), TypeInfoPropertyName = "TodoChangesResult")]
 [JsonSerializable(typeof(ApiResult<List<TodoParentOptionDto>>), TypeInfoPropertyName = "TodoParentOptionsResult")]
 [JsonSerializable(typeof(ApiResult<List<TodoProjectOptionDto>>), TypeInfoPropertyName = "TodoProjectOptionsResult")]
+[JsonSerializable(typeof(MeetingListRequestDto))]
+[JsonSerializable(typeof(MeetingCreateUpdateDto))]
+[JsonSerializable(typeof(MeetingDraftRequestDto))]
+[JsonSerializable(typeof(MeetingDraftContentDto))]
+[JsonSerializable(typeof(MeetingAttachRequestDto))]
+[JsonSerializable(typeof(MeetingPdfRequestDto))]
+[JsonSerializable(typeof(ApiResult<PagedResult<MeetingDto>>), TypeInfoPropertyName = "MeetingPageResult")]
+[JsonSerializable(typeof(ApiResult<MeetingDto>), TypeInfoPropertyName = "MeetingResult")]
+[JsonSerializable(typeof(ApiResult<MeetingTranscriptDto>), TypeInfoPropertyName = "MeetingTranscriptResult")]
+[JsonSerializable(typeof(ApiResult<List<MeetingProjectOptionDto>>), TypeInfoPropertyName = "MeetingProjectOptionsResult")]
+[JsonSerializable(typeof(ApiResult<List<MeetingPromptOptionDto>>), TypeInfoPropertyName = "MeetingPromptOptionsResult")]
+[JsonSerializable(typeof(UploadSessionRequestDto))]
+[JsonSerializable(typeof(UploadFailRequestDto))]
+[JsonSerializable(typeof(ApiResult<UploadSessionDto>), TypeInfoPropertyName = "UploadSessionResult")]
+[JsonSerializable(typeof(ApiResult<UploadStatusDto>), TypeInfoPropertyName = "UploadStatusResult")]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

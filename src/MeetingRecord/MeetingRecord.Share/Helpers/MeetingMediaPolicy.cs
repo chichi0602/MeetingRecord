@@ -1,13 +1,21 @@
-namespace MeetingRecord.Business.Helpers;
+namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
 /// 會議影音檔的允收政策（前端與服務層共用同一份判斷，避免兩邊漂移）。
 ///
 /// 上傳端接受常見的音訊與視訊格式；送交語音轉錄前一律由 FFmpeg 轉成 mp3 並切段，
 /// 所以這份白名單只需要涵蓋「FFmpeg 讀得懂」的格式，不必受轉錄 API 的格式限制約束。
+///
+/// 1.1.23 從 Business 搬到 Share：WASM 版會議頁也要在畫面先擋一次。
 /// </summary>
 public static class MeetingMediaPolicy
 {
+    /// <summary>
+    /// 轉錄時每段的長度（秒）。FFmpeg 依它切段（<c>FfmpegMediaConverter.SegmentSeconds</c>），
+    /// 畫面的費用說明也用它算分鐘數，兩邊同一個來源，改常數時文案不會偷偷過期。
+    /// </summary>
+    public const int TranscriptionSegmentSeconds = 900;
+
     /// <summary>單一影音檔上限：1GB。</summary>
     public const long MaxUploadFileSize = 1024L * 1024L * 1024L;
 

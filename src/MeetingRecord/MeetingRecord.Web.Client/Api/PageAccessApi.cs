@@ -9,18 +9,10 @@ namespace MeetingRecord.Web.Client.Api;
 /// </summary>
 public sealed class PageAccessApi(ApiClient api)
 {
-    public async Task RecordPageDeniedAsync(string route)
-    {
-        try
-        {
-            await api.PostAsync(
-                "api/v1/audit/page-denied",
-                new PageDeniedRequestDto { Route = route },
-                ClientJsonContext.Default.PageDeniedRequestDto,
-                ClientJsonContext.Default.EmptyResult);
-        }
-        catch (HttpRequestException)
-        {
-        }
-    }
+    public Task RecordPageDeniedAsync(string route)
+        => api.PostAsync(
+            "api/v1/audit/page-denied",
+            new PageDeniedRequestDto { Route = route },
+            ClientJsonContext.Default.PageDeniedRequestDto,
+            ClientJsonContext.Default.EmptyResult);
 }

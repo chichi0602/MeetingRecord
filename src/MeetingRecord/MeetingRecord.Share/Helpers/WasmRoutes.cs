@@ -22,6 +22,7 @@ public static class WasmRoutes
         "/ChangePassword", // 1.1.13 變更密碼（比對不分大小寫）
         "/Profile", // 1.1.13 設定 API 密碼
         "/todos", // 1.1.19 待辦事項
+        "/meetings", // 1.1.23 會議紀錄
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

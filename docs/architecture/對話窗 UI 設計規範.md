@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.16
+- 文件版本：1.17
 - 文件狀態：已實作
-- 現行系統版本：1.1.22
+- 現行系統版本：1.1.23
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/10
 
@@ -89,8 +89,8 @@
 | 關於 | `Layout/MainLayout.razor` | `form-modal-compact` |
 | 分類維護 | `Web.Client/Pages/Categories/CategoryPage.razor`（1.1.7 起 WASM） | `form-modal-compact` |
 | 團隊維護 | `Web.Client/Pages/Teams/TeamPage.razor`（1.1.8 起 WASM） | `form-modal-compact` |
-| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
-| 歸屬到專案 | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
+| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `form-modal-compact` |
+| 歸屬到專案 | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `form-modal-compact` |
 | 使用者維護 | `Web.Client/Pages/Admins/MyUserPage.razor`（1.1.10 起 WASM） | `form-modal-standard` |
 | 提示詞範本維護 | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（1.1.9 起 WASM） | `form-modal-standard` |
 | 待辦維護、待辦詳情 | `Web.Client/Pages/Todos/TodoPage.razor`（1.1.19 起 WASM） | `form-modal-standard` |
@@ -104,7 +104,7 @@
 | 專案維護 | `Views/Projects/ProjectViewView.razor` | `form-modal-large` |
 | AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
 | 稽核明細（唯讀，1.0.32） | `Views/Admins/AuditLogView.razor` | `form-modal-large` |
-| 會議紀錄維護（含影音上傳） | `Views/Meetings/MeetingViewView.razor` | `meeting-view-modal` |
+| 會議紀錄維護（含影音上傳） | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `meeting-view-modal` |
 | 會議紀錄與逐字稿（檢視＋編修） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
 | AI 問答 | `Web.Client/Components/Commons/AiChatModal.razor`（1.1.22 起） | `meeting-view-modal ai-chat-modal` |
 
@@ -275,9 +275,9 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 | 入口 | 位置 | 標題 | Danger |
 |---|---|---|---|
-| 上傳影音檔（存檔後自動轉錄） | `MeetingViewView.OnModalOKHandleAsync` | 確認上傳並開始轉錄（會產生費用） | 已有音檔時套（舊音檔與逐字稿會被刪除） |
-| 執行／重新轉錄 | `MeetingViewView` | 確認執行轉錄／確認重新轉錄（會產生費用） | 已有逐字稿時套 |
-| 產生會議紀錄（會議頁對話窗、專案頁「AI 轉會議紀錄」） | `MeetingViewView`、`ProjectViewView` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
+| 上傳影音檔（存檔後自動轉錄） | `MeetingPage.OnModalOKHandleAsync`（1.1.23 起 WASM） | 確認上傳並開始轉錄（會產生費用） | 已有音檔時套（舊音檔與逐字稿會被刪除） |
+| 執行／重新轉錄 | `MeetingPage` | 確認執行轉錄／確認重新轉錄（會產生費用） | 已有逐字稿時套 |
+| 產生會議紀錄（會議頁對話窗、專案頁「AI 轉會議紀錄」） | `MeetingPage`、`ProjectViewView` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
 | 抽出待辦 | `ProjectViewView`（開窗**之前**的按鈕上） | 確認抽出待辦（會產生費用） | **永不**套（只產生候選） |
 | AI 問答：修改提問後重新產生答案 | `AiChatModal` | 確認重新產生答案（會產生費用） | 套（會覆蓋原本的回答） |
 | AI 問答：送出新問題 | `AiChatModal.OnAskAsync` | — | 刻意不確認，這是唯一沒有確認框的付費入口 |

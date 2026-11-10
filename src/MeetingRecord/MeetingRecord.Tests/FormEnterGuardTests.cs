@@ -13,17 +13,20 @@ namespace MeetingRecord.Tests;
 /// </summary>
 public sealed partial class FormEnterGuardTests
 {
-    /// <summary>有 Enter 送出的 CRUD 表單（Components/Views 下的相對路徑，不含副檔名）。</summary>
+    /// <summary>
+    /// 有 Enter 送出的 CRUD 表單（方案根目錄下的相對路徑，不含副檔名）。
+    /// 1.1.7 起搬到 WASM 的頁面在 <c>MeetingRecord.Web.Client/Pages</c>，搬家時改這裡的路徑、不要拿掉。
+    /// </summary>
     public static TheoryData<string> CrudForms =>
     [
-        "Todos/TodoViewView",
-        "Meetings/MeetingViewView",
-        "Projects/ProjectViewView",
-        "Categories/CategoryViewView",
-        "Teams/TeamViewView",
-        "PromptTemplates/PromptTemplateViewView",
-        "Admins/MyUserView",
-        "Admins/RoleViewView",
+        "MeetingRecord.Web/Components/Views/Todos/TodoViewView",
+        "MeetingRecord.Web/Components/Views/Meetings/MeetingViewView",
+        "MeetingRecord.Web/Components/Views/Projects/ProjectViewView",
+        "MeetingRecord.Web.Client/Pages/Categories/CategoryPage",
+        "MeetingRecord.Web/Components/Views/Teams/TeamViewView",
+        "MeetingRecord.Web/Components/Views/PromptTemplates/PromptTemplateViewView",
+        "MeetingRecord.Web/Components/Views/Admins/MyUserView",
+        "MeetingRecord.Web/Components/Views/Admins/RoleViewView",
     ];
 
     [Theory]
@@ -98,19 +101,5 @@ public sealed partial class FormEnterGuardTests
     private static partial Regex RazorCommentPattern();
 
     private static string ViewPath(string relative)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "MeetingRecord.Web", "Components", "Views");
-            if (Directory.Exists(candidate))
-            {
-                return Path.Combine(candidate, relative.Replace('/', Path.DirectorySeparatorChar));
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("找不到 MeetingRecord.Web/Components/Views。");
-    }
+        => Path.Combine(ComponentSourceRoots.SolutionRoot, relative.Replace('/', Path.DirectorySeparatorChar));
 }

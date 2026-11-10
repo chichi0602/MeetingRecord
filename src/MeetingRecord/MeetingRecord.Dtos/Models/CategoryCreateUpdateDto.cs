@@ -51,4 +51,11 @@ public class CategoryCreateUpdateDto
     /// </summary>
     [JsonPropertyName("updatedAt")]
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 負責團隊（參考，1.1.7）：只是參考資訊，不影響誰看得到。
+    /// null（沒帶這個欄位）＝新增時不設、修改時保留原本的團隊；空陣列＝清空。
+    /// </summary>
+    [JsonPropertyName("teamIds")]
+    public List<int>? TeamIds { get; set; }
 }

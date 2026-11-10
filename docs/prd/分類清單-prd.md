@@ -1,10 +1,10 @@
 ﻿# 分類清單 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.0.53
+- 現行系統版本：1.1.7
 - 首次實作版本：0.3.0
-- 最後核對日期：2026/10/20
+- 最後核對日期：2026/11/10
 
 > **0.4.102：分類＝「什麼資料」，只描述資料、不影響誰看得到。** 三者分工：**團隊＝誰的資料**（決定可見範圍，見 [團隊清單](團隊清單-prd.md)）、**分類＝什麼資料**、**角色＝能做什麼**。
 > - 分類重新被使用：專案表單與會議表單都有「分類」多選（啟用中的分類），以**名稱字串**存進 `Project.Categories`／`Meeting.Categories`（`TagStringHelper`）；會議頁工具列有「分類」過濾與清單欄，專案頁的選擇器旁有「依分類篩選」。
@@ -36,7 +36,7 @@
 
 ## 三、畫面與欄位
 
-單頁清單 + Modal 表單（`CategoryViewView`）：
+單頁清單 + Modal 表單（1.1.7 起是 WASM 頁 `Web.Client/Pages/Categories/CategoryPage`，畫面與以前的 `CategoryViewView` 相同）：
 
 - 搜尋：關鍵字比對 `Name` 或 `Description`（`Contains`）。清空搜尋鈕在有輸入時出現。
 - 排序：可排序欄位 `Name`、`IsEnabled`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。
@@ -56,11 +56,11 @@
 
 ## 四、內部系統運作
 
-- UI 路徑：`CategoryViewView` →（注入）`CategoryService` → `BackendDBContext`（Blazor Server 直接呼叫服務，不經 HTTP）。
-- API 路徑：`CategoryController` → `CategoryRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。
+- UI 路徑（1.1.7 起）：WASM 頁 `CategoryPage` → `CategoryApi`（瀏覽器，登入 Cookie＋防偽標頭）→ `CategoryController` → `CategoryService` → `BackendDBContext`。1.1.6 以前是 Blazor Server 的 `CategoryViewView` 直接注入 `CategoryService`。
+- API 路徑：`CategoryController` → `CategoryService`（1.1.7 起與畫面同一套規則；以前走 `CategoryRepository`，已移除），回傳 `ApiResult<T>` / `PagedResult<T>`。另有 `PUT {id}/enabled`（切換啟用）、`GET teams/selectable`（可選團隊）。
 - Entity `Category`（`Id/Name/Description/IsEnabled/CreatedAt/UpdatedAt`），DbSet 為 `context.Category`。關聯 `CategoryTeam`（分類↔團隊，0.4.102，`(CategoryId, TeamId)` 唯一、兩側 Cascade）。
 - 查詢一律 `AsNoTracking()`；新增前 `CleanTrackingHelper.Clean<Category>` 清追蹤，寫入後再清一次。
-- 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
+- 編輯前於 UI 以 `CurrentRecord = model.Clone()`（1.1.7 起是 `CategoryDto.Clone()`）複製，避免污染清單資料；`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
 - 模型變更需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）。
 
 ## 五、權限與安全
@@ -68,16 +68,16 @@
 - API 一律 `[Authorize(JwtBearer)]`；每個動作以 `[HasPermission(MagicObjectHelper.角色_分類清單, PermissionActions.*)]` 做動作級授權。
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`分類清單:view`、`分類清單:create`、`分類清單:edit`、`分類清單:delete`。裸鍵「分類清單」代表該頁全部動作（向後相容）。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路（不需個別權限）。
-- UI 與 API 共用單一 RBAC 權威來源：UI 用 Cookie 驗證並以 `CheckAccessPage`（頁面鍵）控制進入頁面，API 用 JWT Bearer 並以動作鍵控制個別操作。
+- UI 與 API 共用單一 RBAC 權威來源：1.1.7 起分類頁在 WASM 執行，進頁與按鈕由 `PermissionView`（Session API 的權限鍵，規則同 `CheckAccessPage`／`CheckAccessAction`）決定，資料一律經 API 的動作鍵檢查。
 
 ### 稽核（1.0.34）
 
-- `CategoryService`（網頁）與 `CategoryRepository`（API）：`Category.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要 `name`、`via`。
+- `CategoryService`：`Category.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要 `name`、`via`（經 API 的是 `via=Api`；1.1.7 起 WASM 分類頁也經 API）。
 - 適用團隊同步（`SyncTeamsAsync`）有實際增減時寫 `Category.TeamsChange`，沒變動不寫。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 
-- 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「分類名稱已存在」。API 端另以 `ExistsByNameAsync` 回 409 Conflict。
+- 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「分類名稱已存在」。API 用同一個檢查，重複回 409 Conflict（1.1.7 以前 API 另用大小寫敏感的 `ExistsByNameAsync`）。
 - 找不到資料：修改／刪除時查無記錄回「找不到要修改／刪除的分類資料」；API 回 404 NotFound。
 - 驗證失敗：`DataAnnotations`（名稱必填、長度上限）由 `EditContext.Validate()` 於 Modal 攔截並逐條通知。
 - 路由 ID 與 Payload ID 不一致：API `Update` 回 400 ValidationError。
@@ -96,13 +96,15 @@
 
 測試以 SQLite in-memory + `EnsureCreatedAsync` 建立隔離環境，透過 `AutoMapping` 設定 Mapper。
 
+API 的規則（名稱重複不分大小寫與前後空白、沒帶 `teamIds` 不動團隊、啟用切換與稽核、搜尋篩選與排序）見 `CategoryApiTests`（1.1.7）；端對端 MD-01／02／05／06、WASM-09。
+
 「負責團隊（參考）」的同步與清單顯示見 `ProjectAccessTests.CategoryTeams_AreReferenceOnly_SyncAndListed`；專案的分類篩選見 `ProjectAccessTests.ProjectList_CategoryFilter_ShouldMatchAnyCategory`。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Categories/CategoryPage.razor`（`@page "/categories"`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Categories/CategoryViewView.razor.cs`（`OnInitializedAsync` 頁面權限檢查）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Categories/CategoryPage.razor`（`@page "/categories"`，1.1.7 起在 WASM 執行）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Categories/CategoryPage.razor.cs`（`OnInitializedAsync` 以 `PermissionView` 檢查頁面權限）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Api/CategoryApi.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/CategoryController.cs`（`CategoryController` 各端點的 `[HasPermission]` 動作鍵）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/CategoryService.cs`（`CategoryService.AddAsync`、`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 前置檢查、`SyncTeamsAsync`）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Category.cs`（`Category` Entity 欄位）、`CategoryTeam.cs`

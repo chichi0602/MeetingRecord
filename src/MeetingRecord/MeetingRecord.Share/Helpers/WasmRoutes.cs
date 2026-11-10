@@ -13,6 +13,7 @@ public static class WasmRoutes
     private static readonly HashSet<string> Paths = new(StringComparer.OrdinalIgnoreCase)
     {
         "/wasm",
+        "/categories", // 1.1.7 分類清單
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

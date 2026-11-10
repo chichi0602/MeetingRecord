@@ -263,6 +263,30 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
         await Expect(page.Locator(".about-row").Filter(new() { HasText = "系統版本" })).ToContainTextAsync(version);
     }
 
+    [E2EFact]
+    [Trait("Scenario", "WASM-09")]
+    [Trait("Title", "分類清單在 WASM 執行：從 Server 頁切過去整頁載入、資料走分類 API、點欄位排序會把條件送給伺服器")]
+    [Trait("Page", "分類清單")]
+    [Trait("Persona", "管理者")]
+    public async Task CategoryPage_ShouldRunOnWasm_AndSortThroughApi()
+    {
+        // 1.1.7：第一個搬到 WASM 的實際頁面。MD-01／02／05／06 驗功能；這裡驗「真的在 WASM 跑」與排序欄位名在修剪後仍正確。
+        var page = await LoginAsAsync(Seed.Admin);
+        await GotoAsync(page, "/dashboard", "營運概況");
+
+        var firstSearch = page.WaitForRequestAsync(r => r.Url.Contains("/api/v1/Category/search"));
+        await page.EvaluateAsync("() => Blazor.navigateTo('/categories')");
+        await page.WaitForURLAsync(new Regex("/categories$"));
+        await firstSearch;
+        var nameHeader = page.Locator("th.ant-table-column-has-sorters").Filter(new() { HasText = "名稱" });
+        await Expect(nameHeader).ToBeVisibleAsync();
+
+        var sorted = page.WaitForRequestAsync(r => r.Url.Contains("/api/v1/Category/search") && (r.PostData ?? string.Empty).Contains("\"sortBy\":\"Name\""));
+        await nameHeader.ClickAsync();
+        var request = await sorted;
+        Assert.Contains("\"sortDescending\":false", request.PostData);
+    }
+
     /// <summary>通知鈴按鈕的可及名稱是「通知，N 則未讀」，沒有未讀時只有「通知」。</summary>
     private static async Task<int> UnreadAsync(IPage page)
     {

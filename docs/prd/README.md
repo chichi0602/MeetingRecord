@@ -1,10 +1,10 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.23
+- 文件版本：1.24
 - 文件狀態：維護中
-- 現行系統版本：1.0.44
+- 現行系統版本：1.1.7
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/11/10
 
 本目錄是產品需求的單一入口。PRD 以**產品能力**為單位；「已實作／部分實作」描述程式現況，「規劃中」必須獨立分區，不代表系統已提供。本系統源自 NET10-Blazor-Starter 樣板，0.4.25 起更名為 MeetingRecord 並發展為「AI 會議紀錄系統」，0.4.26 納入「會議紀錄提示詞」能力，**0.4.27 起實際呼叫 Azure OpenAI 完成影音檔的語音轉文字**（見 [會議紀錄](會議紀錄-prd.md)）。**0.4.31 起完成後半段**：套用提示詞範本、呼叫 Azure OpenAI 產生會議紀錄，並把逐字稿歸屬到專案項目（見 [會議紀錄產生流程](會議紀錄產生流程-prd.md)）。系統仍不含 RAG 能力。PRD 內容一律以程式碼、`Menu.json` 與測試為準。
 
@@ -24,7 +24,7 @@
 | Token 用量（原 AI 用量分析） | [Token 用量](Token用量-prd.md) | `/token-usage`（別名 `/ai-usage`） | `Pages/AiManagement/TokenUsagePage.razor`、`TokenUsageView`、`TokenUsageGroupTable`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiQuotaService`、`TokenUsageReportExporter`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別；1.0.30 起改名 Token 用量、移到「AI 管理」並只限管理者；1.0.31 起有上限列、篩選、圖表／每日／依使用者／依功能／依模型／明細頁籤、明細窗（可跳 AI 對話紀錄）、CSV／PDF 匯出、刪除與清除） | 1.0.31 |
 | AI 對話紀錄 | [AI 對話紀錄](AI對話紀錄-prd.md) | `/ai-call-logs` | `Pages/AiManagement/AiCallLogPage.razor`、`AiCallLogView`、`AiCallGateway`、`AiCallLogService`、`AiCallLogFileStore`、`AiLogRetentionBackgroundService` | 已實作（1.0.29 記錄、1.0.30 頁面；只限管理者） | 1.0.30 |
 | 稽核紀錄 | [稽核紀錄](稽核紀錄-prd.md) | `/audit-logs` | `Pages/Admins/AuditLogPage.razor`、`AuditLogView`、`AuditLogService`、`AuditLogQueryService`、`ClientIpProvider`、`AuditLogRetentionBackgroundService`、`AuditActions` | 已實作（寫入自樣板時期；1.0.32 起有查詢頁、來源 IP、保留 365 天，只限管理者；1.0.33 起記登出、Google 登入、密碼、啟停用、團隊成員、權限拒絕；1.0.34 起記專案、會議、待辦、團隊、分類、提示詞、AI 問答的異動與資料範圍擋下的寫入） | 1.0.34 |
-| 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Pages/Categories/CategoryPage.razor`、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
+| 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Web.Client/Pages/Categories/CategoryPage.razor`（WASM，1.1.7）、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
 | 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Pages/Teams/TeamPage.razor`、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
 | 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
 | 會議紀錄（含影音上傳與語音轉文字）| [會議紀錄](會議紀錄-prd.md) | `/meetings` | `Pages/Meetings/MeetingPage.razor`、`MeetingService`、`MeetingFileStore`、`TranscriptionJobRunner`、`MeetingController` | 已實作 | 0.4.118 |

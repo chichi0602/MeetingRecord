@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Accounts;
 using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Dtos.Models;
 using MeetingRecord.Dtos.Notifications;
 using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Dtos.Systems;
@@ -21,4 +22,10 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ChangePasswordRequestDto))]
 [JsonSerializable(typeof(PageDeniedRequestDto))]
 [JsonSerializable(typeof(ApiResult<List<NotificationDto>>), TypeInfoPropertyName = "NotificationsResult")]
+[JsonSerializable(typeof(ApiResult<PagedResult<CategoryDto>>), TypeInfoPropertyName = "CategoryPageResult")]
+[JsonSerializable(typeof(ApiResult<CategoryDto>), TypeInfoPropertyName = "CategoryResult")]
+[JsonSerializable(typeof(ApiResult<List<TeamOptionDto>>), TypeInfoPropertyName = "TeamOptionsResult")]
+[JsonSerializable(typeof(CategorySearchRequestDto))]
+[JsonSerializable(typeof(CategoryCreateUpdateDto))]
+[JsonSerializable(typeof(SetEnabledRequestDto))]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

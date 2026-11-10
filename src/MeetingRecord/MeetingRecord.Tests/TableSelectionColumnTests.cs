@@ -16,7 +16,7 @@ namespace MeetingRecord.Tests;
 ///
 /// <para>
 /// 規則：<c>&lt;Selection&gt;</c> 要嘛無條件出現，要嘛包在 <c>@if (屬性名)</c> 裡，而且那個屬性只由
-/// <c>AuthenticationStateHelper.CheckAccessAction(...)</c> 組成（權限在頁面存活期間不會變）。
+/// <c>AuthenticationStateHelper.CheckAccessAction(...)</c>（WASM 頁是 <c>PermissionView.Can(...)</c>，1.1.7）組成（權限在頁面存活期間不會變）。
 /// 不能勾的列用 <c>Disabled</c> 擋，不要用拿掉整欄的方式。
 /// </para>
 /// </summary>
@@ -52,7 +52,7 @@ public sealed partial class TableSelectionColumnTests
         Assert.True(
             offenders.Count == 0,
             "以下表格的勾選欄會跟著資料出現／消失，AntDesign 1.6 會在清掉 Selection 時丟 NullReferenceException 並拖垮整個伺服器行程。"
-            + "請改成只看權限（CheckAccessAction）的條件，不能勾的列用 Disabled：\n" + string.Join("\n", offenders));
+            + "請改成只看權限（CheckAccessAction；WASM 頁 PermissionView.Can）的條件，不能勾的列用 Disabled：\n" + string.Join("\n", offenders));
     }
 
     [Fact]
@@ -64,6 +64,8 @@ public sealed partial class TableSelectionColumnTests
             private bool CanDelete => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
             private bool CanBatch => AuthenticationStateHelper.CheckAccessAction(A, B)
                 || AuthenticationStateHelper.CheckAccessAction(A, C);
+            private bool CanDeleteWasm => PermissionView.Can(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
+            private bool ShowWasm => PermissionView.Can(A, B) && rows.Count > 0;
             """;
 
         Assert.False(IsPermissionOnly("ShowSelection", code));
@@ -71,6 +73,8 @@ public sealed partial class TableSelectionColumnTests
         Assert.False(IsPermissionOnly("Missing", code));
         Assert.True(IsPermissionOnly("CanDelete", code));
         Assert.True(IsPermissionOnly("CanBatch", code));
+        Assert.True(IsPermissionOnly("CanDeleteWasm", code));
+        Assert.False(IsPermissionOnly("ShowWasm", code));
     }
 
     private static bool IsPermissionOnly(string condition, string codeBehind)
@@ -87,7 +91,7 @@ public sealed partial class TableSelectionColumnTests
         }
 
         var rest = PermissionCallPattern().Replace(property.Groups["expression"].Value, string.Empty);
-        return property.Groups["expression"].Value.Contains("CheckAccessAction", StringComparison.Ordinal)
+        return PermissionCallPattern().IsMatch(property.Groups["expression"].Value)
                && LogicOnlyPattern().IsMatch(rest);
     }
 
@@ -97,7 +101,7 @@ public sealed partial class TableSelectionColumnTests
     [GeneratedRegex(@"@if\s*\((?<condition>(?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)")]
     private static partial Regex IfConditionPattern();
 
-    [GeneratedRegex(@"AuthenticationStateHelper\.CheckAccessAction\([^()]*\)")]
+    [GeneratedRegex(@"(?:AuthenticationStateHelper\.CheckAccessAction|PermissionView\.Can)\([^()]*\)")]
     private static partial Regex PermissionCallPattern();
 
     [GeneratedRegex(@"^[\s()!|&]*$")]

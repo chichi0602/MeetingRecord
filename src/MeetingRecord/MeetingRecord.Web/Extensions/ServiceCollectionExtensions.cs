@@ -149,7 +149,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ProjectService>();
         services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
-        services.AddScoped<CategoryRepository>();
         services.AddScoped<TeamService>();
         services.AddScoped<TeamRepository>();
         services.AddScoped<PromptTemplateService>();

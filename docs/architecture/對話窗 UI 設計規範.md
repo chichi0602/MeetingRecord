@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：1.0.62
+- 現行系統版本：1.1.7
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/11/09
+- 最後核對日期：2026/11/10
 
 ## 摘要
 
@@ -87,7 +87,7 @@
 |---|---|---|
 | 變更密碼 | `Layout/MainLayout.razor` | `form-modal-compact` |
 | 關於 | `Layout/MainLayout.razor` | `form-modal-compact` |
-| 分類維護 | `Views/Categories/CategoryViewView.razor` | `form-modal-compact` |
+| 分類維護 | `Web.Client/Pages/Categories/CategoryPage.razor`（1.1.7 起 WASM） | `form-modal-compact` |
 | 團隊維護 | `Views/Teams/TeamViewView.razor` | `form-modal-compact` |
 | 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
 | 歸屬到專案 | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
@@ -211,7 +211,7 @@
 ### 7.2 三個一定會踩到的坑
 
 1. **`@bind-Visible` 是雙向的。**AntDesign 在呼叫 `OnCancel` **之前**就已經把視窗關掉了。使用者選「繼續編修」時，必須寫 `modalVisible = true` 把視窗開回來。用單向 `Visible=` 的元件（`TodoExtractionModal`、`MarkdownEditorModal`、`AiChatModal`）則**不可以**這樣寫，直接 `return` 就能留住視窗。
-2. **Esc 會走兩條路。**Modal 的 `Keyboard="true"` 與表單的 `@onkeydown` 都會呼叫同一個 cancel handler，加了確認框之後會疊出兩個。每個表單都要一個 `isDiscardConfirming` 旗標擋重入，範例見 `CategoryViewView.OnModalCancelHandleAsync`。
+2. **Esc 會走兩條路。**Modal 的 `Keyboard="true"` 與表單的 `@onkeydown` 都會呼叫同一個 cancel handler，加了確認框之後會疊出兩個。每個表單都要一個 `isDiscardConfirming` 旗標擋重入，範例見 `CategoryPage.OnModalCancelHandleAsync`（1.1.7 起在 `Web.Client/Pages/Categories`）。
 3. **`TodoExtractionModal` 的快照要拍在 `ExtractAsync` 結尾**，不能拍在開窗時。開窗時候選清單還是空的，什麼都沒改也會被判成 dirty。
 
 ### 7.3 `Keyboard` 與 `MaskClosable`

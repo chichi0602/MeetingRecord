@@ -19,6 +19,8 @@ builder.Services.AddScoped<NotificationApi>();
 builder.Services.AddScoped<AccountApi>();
 builder.Services.AddScoped<SystemApi>();
 builder.Services.AddScoped<PageAccessApi>();
+builder.Services.AddScoped<PermissionView>();
+builder.Services.AddScoped<CategoryApi>();
 builder.Services.AddScoped<AppHubConnection>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, ApiNotificationSource>();
 builder.Services.AddScoped<AuthenticationStateProvider, SessionAuthenticationStateProvider>();

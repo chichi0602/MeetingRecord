@@ -1,10 +1,10 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.13
+- 文件版本：1.14
 - 文件狀態：已實作
-- 現行系統版本：1.0.60
+- 現行系統版本：1.1.7
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/11/09
+- 最後核對日期：2026/11/10
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
@@ -36,6 +36,8 @@
 | `ProjectController` | `api/Project`、`api/v1/Project` | `角色_專案項目` | `Controllers/ProjectController.cs` |
 | `PromptTemplateController` | `api/PromptTemplate`、`api/v1/PromptTemplate` | `角色_提示詞清單` | `Controllers/PromptTemplateController.cs` |
 | `MeetingController` | `api/Meeting`、`api/v1/Meeting` | `角色_會議紀錄` | `Controllers/MeetingController.cs` |
+
+分類另有兩支（1.1.7，WASM 分類頁用）：`PUT Category/{id}/enabled`（Edit，內容 `{ "isEnabled": true }`，切換啟用）與 `GET Category/teams/selectable`（View，啟用中的團隊 `TeamOptionDto`）。1.1.7 起分類 API 呼叫畫面用的 `CategoryService`：名稱重複去頭尾空白、不分大小寫判斷，回 409 的訊息是「分類名稱已存在，無法新增／修改。」；`CategoryDto` 多了 `teamIds`／`teamNames`，新增與修改可帶 `teamIds` 同步負責團隊，**沒帶就不動**、帶空陣列才清空。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

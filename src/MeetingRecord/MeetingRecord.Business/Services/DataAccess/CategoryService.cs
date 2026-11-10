@@ -32,7 +32,8 @@ public class CategoryService
         this.auditLogService = auditLogService;
     }
 
-    public async Task<DataRequestResult<CategoryAdapterModel>> GetAsync(DataRequest dataRequest)
+    /// <param name="isEnabled">只取啟用（true）或停用（false）的；null 不篩選。清單頁不傳，分類 API 的搜尋條件用（1.1.7）。</param>
+    public async Task<DataRequestResult<CategoryAdapterModel>> GetAsync(DataRequest dataRequest, bool? isEnabled = null)
     {
         Logger.LogDebug(
             "Loading categories. Search={Search}, SortField={SortField}, SortDescending={SortDescending}, CurrentPage={CurrentPage}, PageSize={PageSize}, Take={Take}",
@@ -51,6 +52,11 @@ public class CategoryService
             dataSource = dataSource.Where(x =>
                 x.Name.Contains(dataRequest.Search) ||
                 (x.Description != null && x.Description.Contains(dataRequest.Search)));
+        }
+
+        if (isEnabled.HasValue)
+        {
+            dataSource = dataSource.Where(x => x.IsEnabled == isEnabled.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
@@ -79,6 +85,15 @@ public class CategoryService
                         ? dataSource.OrderBy(x => x.UpdatedAt).ThenBy(x => x.Id)
                         : dataSource;
             }
+            else if (dataRequest.SortField == nameof(CategoryAdapterModel.CreatedAt))
+            {
+                // 分類 API 原本就能依建立時間排序（1.1.7 改走這裡時保留）。
+                dataSource = dataRequest.SortDescending == true
+                    ? dataSource.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+                    : dataRequest.SortDescending == false
+                        ? dataSource.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
+                        : dataSource;
+            }
         }
         else
         {
@@ -93,18 +108,7 @@ public class CategoryService
 
         List<Category> records = await dataSource.ToListAsync();
         result.Result = Mapper.Map<List<CategoryAdapterModel>>(records);
-
-        var categoryIds = result.Result.Select(x => x.Id).ToList();
-        var links = await context.CategoryTeam.AsNoTracking()
-            .Where(x => categoryIds.Contains(x.CategoryId))
-            .Select(x => new { x.CategoryId, x.TeamId, TeamName = x.Team!.Name })
-            .ToListAsync();
-        foreach (var item in result.Result)
-        {
-            var mine = links.Where(x => x.CategoryId == item.Id).OrderBy(x => x.TeamName).ToList();
-            item.TeamIds = mine.Select(x => x.TeamId).ToList();
-            item.TeamNames = mine.Select(x => x.TeamName).ToList();
-        }
+        await FillTeamsAsync(result.Result);
         Logger.LogDebug("Loaded categories successfully. Count={Count}", result.Count);
         return result;
     }
@@ -123,7 +127,25 @@ public class CategoryService
             return new CategoryAdapterModel();
         }
 
-        return Mapper.Map<CategoryAdapterModel>(item);
+        var model = Mapper.Map<CategoryAdapterModel>(item);
+        await FillTeamsAsync([model]);
+        return model;
+    }
+
+    /// <summary>帶上負責團隊（依團隊名稱排序）。</summary>
+    private async Task FillTeamsAsync(IEnumerable<CategoryAdapterModel> items)
+    {
+        var categoryIds = items.Select(x => x.Id).ToList();
+        var links = await context.CategoryTeam.AsNoTracking()
+            .Where(x => categoryIds.Contains(x.CategoryId))
+            .Select(x => new { x.CategoryId, x.TeamId, TeamName = x.Team!.Name })
+            .ToListAsync();
+        foreach (var item in items)
+        {
+            var mine = links.Where(x => x.CategoryId == item.Id).OrderBy(x => x.TeamName).ToList();
+            item.TeamIds = mine.Select(x => x.TeamId).ToList();
+            item.TeamNames = mine.Select(x => x.TeamName).ToList();
+        }
     }
 
     // ───────── 稽核（1.0.34）：操作者由 WriteForCurrentUserAsync 決定 ─────────
@@ -131,7 +153,8 @@ public class CategoryService
     private Task AuditAsync(string action, int id, string detail)
         => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Category), targetId: id.ToString(), detail: detail);
 
-    public async Task<VerifyRecordResult> AddAsync(CategoryAdapterModel paraObject)
+    /// <param name="via">稽核的來源：畫面 <see cref="AuditVia.Web"/>、API <see cref="AuditVia.Api"/>（1.1.7）。</param>
+    public async Task<VerifyRecordResult> AddAsync(CategoryAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Creating category. Name={CategoryName}", paraObject.Name);
 
@@ -147,7 +170,7 @@ public class CategoryService
             paraObject.Id = itemParameter.Id;
             CleanTrackingHelper.Clean<Category>(context);
 
-            await AuditAsync(AuditActions.CategoryCreate, itemParameter.Id, $"name={itemParameter.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.CategoryCreate, itemParameter.Id, $"name={itemParameter.Name}; via={via}");
             Logger.LogInformation("Category created successfully. CategoryId={CategoryId}, Name={CategoryName}", itemParameter.Id, itemParameter.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -158,7 +181,7 @@ public class CategoryService
         }
     }
 
-    public async Task<VerifyRecordResult> UpdateAsync(CategoryAdapterModel paraObject)
+    public async Task<VerifyRecordResult> UpdateAsync(CategoryAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Updating category. CategoryId={CategoryId}, Name={CategoryName}", paraObject.Id, paraObject.Name);
 
@@ -184,7 +207,7 @@ public class CategoryService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Category>(context);
 
-            await AuditAsync(AuditActions.CategoryUpdate, itemData.Id, $"name={itemData.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.CategoryUpdate, itemData.Id, $"name={itemData.Name}; via={via}");
             Logger.LogInformation("Category updated successfully. CategoryId={CategoryId}, Name={CategoryName}", itemData.Id, itemData.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -195,7 +218,7 @@ public class CategoryService
         }
     }
 
-    public async Task<VerifyRecordResult> DeleteAsync(int id)
+    public async Task<VerifyRecordResult> DeleteAsync(int id, string via = AuditVia.Web)
     {
         Logger.LogInformation("Deleting category. CategoryId={CategoryId}", id);
 
@@ -217,7 +240,7 @@ public class CategoryService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Category>(context);
 
-            await AuditAsync(AuditActions.CategoryDelete, id, $"name={item.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.CategoryDelete, id, $"name={item.Name}; via={via}");
             Logger.LogInformation("Category deleted successfully. CategoryId={CategoryId}, Name={CategoryName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
         }

@@ -42,6 +42,8 @@ public sealed partial class ApiIntegrationTests
         ["Category.Create"] = (MagicObjectHelper.角色_分類清單, PermissionActions.Create),
         ["Category.Update"] = (MagicObjectHelper.角色_分類清單, PermissionActions.Edit),
         ["Category.Delete"] = (MagicObjectHelper.角色_分類清單, PermissionActions.Delete),
+        ["Category.SetEnabled"] = (MagicObjectHelper.角色_分類清單, PermissionActions.Edit),
+        ["Category.SelectableTeams"] = (MagicObjectHelper.角色_分類清單, PermissionActions.View),
         ["PromptTemplate.GetById"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.View),
         ["PromptTemplate.Search"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.View),
         ["PromptTemplate.Create"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Create),
@@ -186,7 +188,7 @@ public sealed partial class ApiIntegrationTests
     private async Task<int> SeedTargetAsync(string endpoint, int userId)
     {
         var (controller, action) = SplitEndpoint(endpoint);
-        if (action is "Search" or "Create")
+        if (action is "Search" or "Create" or "SelectableTeams")
         {
             return 0;
         }
@@ -243,6 +245,8 @@ public sealed partial class ApiIntegrationTests
             "Create" => client.PostAsJsonAsync(baseUrl, CreateBody(controller, id: 0, suffix)),
             "Update" => client.PutAsJsonAsync($"{baseUrl}/{targetId}", CreateBody(controller, targetId, suffix)),
             "Delete" => client.DeleteAsync($"{baseUrl}/{targetId}"),
+            "SetEnabled" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/enabled", new { isEnabled = false }),
+            "SelectableTeams" => client.GetAsync($"{baseUrl}/teams/selectable"),
             _ => throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null),
         };
     }

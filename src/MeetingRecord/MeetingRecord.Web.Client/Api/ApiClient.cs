@@ -41,6 +41,20 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
         return await ReadAsync(response, typeInfo, cancellationToken);
     }
 
+    /// <summary>帶 JSON 內容的 PUT（1.1.7，修改、切換啟用）。</summary>
+    public async Task<ApiResult<T>> PutAsync<TBody, T>(string url, TBody body, JsonTypeInfo<TBody> bodyType, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PutAsJsonAsync(url, body, bodyType, cancellationToken);
+        return await ReadAsync(response, typeInfo, cancellationToken);
+    }
+
+    /// <summary>DELETE（1.1.7）。</summary>
+    public async Task<ApiResult<T>> DeleteAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.DeleteAsync(url, cancellationToken);
+        return await ReadAsync(response, typeInfo, cancellationToken);
+    }
+
     private async Task<ApiResult<T>> ReadAsync<T>(HttpResponseMessage response, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)

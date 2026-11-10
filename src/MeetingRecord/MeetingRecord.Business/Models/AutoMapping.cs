@@ -72,10 +72,6 @@ public class AutoMapping : Profile
         #region Category
         CreateMap<Category, CategoryAdapterModel>();
         CreateMap<CategoryAdapterModel, Category>();
-        CreateMap<Category, CategoryDto>();
-        CreateMap<CategoryDto, Category>();
-        CreateMap<Category, CategoryCreateUpdateDto>();
-        CreateMap<CategoryCreateUpdateDto, Category>();
         #endregion
 
         #region PromptTemplate

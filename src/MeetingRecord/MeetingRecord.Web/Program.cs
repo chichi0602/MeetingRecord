@@ -99,6 +99,8 @@ namespace MeetingRecord.Web
                     hubOptions.MaximumReceiveMessageSize = 10 * 1024 * 1024;
                 });
 
+                // 1.1.2（WASM 遷移 M1）：WASM 前端的推播通道 AppHub（Blazor Server 本身的連線另外由 AddInteractiveServerComponents 處理）。
+                builder.Services.AddSignalR();
                 builder.Services.AddControllers(options =>
                 {
                     options.Filters.Add<ApiExceptionFilterAttribute>();
@@ -634,6 +636,7 @@ namespace MeetingRecord.Web
 
                 app.MapControllers()
                     .RequireRateLimiting(MeetingRecord.Web.Extensions.ServiceCollectionExtensions.ApiRateLimitPolicy);
+                app.MapHub<MeetingRecord.Web.Hubs.AppHub>(MeetingRecord.Web.Hubs.AppHub.Path);
                 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
                 {
                     Predicate = check => check.Tags.Contains("live")
@@ -692,11 +695,11 @@ namespace MeetingRecord.Web
         }
 
         /// <summary>
-        /// Cookie 驗證的挑戰／拒絕（1.1.0）：<c>/api</c> 底下回 ApiResult JSON 與狀態碼，其餘（網頁）照舊導向登入頁。
+        /// Cookie 驗證的挑戰／拒絕（1.1.0）：<c>/api</c> 與 <c>/hubs</c>（1.1.2）底下回 ApiResult JSON 與狀態碼，其餘（網頁）照舊導向登入頁。
         /// </summary>
         private static async Task WriteApiResultOrRedirectAsync(Microsoft.AspNetCore.Authentication.RedirectContext<CookieAuthenticationOptions> context, int statusCode, ApiResult<object> result)
         {
-            if (!context.Request.Path.StartsWithSegments("/api"))
+            if (!context.Request.Path.StartsWithSegments("/api") && !context.Request.Path.StartsWithSegments("/hubs"))
             {
                 context.Response.Redirect(context.RedirectUri);
                 return;

@@ -12,4 +12,5 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
 [JsonSerializable(typeof(ApiResult<SessionDto>), TypeInfoPropertyName = "SessionResult")]
 [JsonSerializable(typeof(ApiResult<List<MenuItemDto>>), TypeInfoPropertyName = "MenuResult")]
+[JsonSerializable(typeof(ApiResult<int>), TypeInfoPropertyName = "IntResult")]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

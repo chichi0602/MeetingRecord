@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using MeetingRecord.Web.Client.Api;
 using MeetingRecord.Web.Client.Auth;
+using MeetingRecord.Web.Client.Realtime;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
@@ -14,6 +15,8 @@ builder.Services.AddScoped(_ => new HttpClient(new ClientHeaderHandler { InnerHa
 builder.Services.AddScoped<ApiClient>();
 
 builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<NotificationApi>();
+builder.Services.AddScoped<AppHubConnection>();
 builder.Services.AddScoped<AuthenticationStateProvider, SessionAuthenticationStateProvider>();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();

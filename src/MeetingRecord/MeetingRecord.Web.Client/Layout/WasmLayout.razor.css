@@ -69,3 +69,9 @@
     border-radius: 4px;
     background: #eef2ff;
 }
+
+.wasm-unread {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}

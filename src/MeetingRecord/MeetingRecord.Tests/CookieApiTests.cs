@@ -3,13 +3,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MeetingRecord.AccessDatas;
-using MeetingRecord.AccessDatas.Models;
-using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Auths;
 using MeetingRecord.Dtos.Commons;
@@ -24,7 +21,7 @@ namespace MeetingRecord.Tests;
 /// 這裡用真的網頁登入表單取得 Cookie（不偽造 claims），驗證 Cookie 路徑的驗證、CSRF 防偽標頭與 Session API。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
-public sealed partial class CookieApiTests(ApiTestApplicationFactory factory) : IClassFixture<ApiTestApplicationFactory>
+public sealed class CookieApiTests(ApiTestApplicationFactory factory) : IClassFixture<ApiTestApplicationFactory>
 {
     private const string Password = "cookie-api-pass";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -157,47 +154,16 @@ public sealed partial class CookieApiTests(ApiTestApplicationFactory factory) : 
         Assert.Equal(LogoutReasons.Disabled, result.Data!.Status);
     }
 
-    /// <summary>走真的登入頁表單（含 antiforgery 與畫面上的驗證碼），回傳帶著登入 Cookie 的用戶端。</summary>
+    /// <summary>走真的登入頁表單，回傳帶著登入 Cookie 的用戶端。</summary>
     private async Task<HttpClient> CookieClientAsync(string account, string password)
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var html = await client.GetStringAsync("/Auths/Login");
-        var fields = HiddenInputPattern().Matches(html)
-            .Select(m => (Name: NamePattern().Match(m.Value).Groups[1].Value, Value: WebUtility.HtmlDecode(ValuePattern().Match(m.Value).Groups[1].Value)))
-            .Where(x => x.Name.Length > 0)
-            .ToDictionary(x => x.Name, x => x.Value);
-        fields["Input.Account"] = account;
-        fields["Input.Password"] = password;
-        fields["Input.CaptchaInput"] = fields["Input.CaptchaCode"];
-
-        using var response = await client.PostAsync("/Auths/Login", new FormUrlEncodedContent(fields));
-        Assert.True(response.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.Found, $"{account} 網頁登入失敗：{(int)response.StatusCode}");
-        Assert.DoesNotContain("/Auths/Login", response.Headers.Location?.ToString() ?? string.Empty);
+        await TestCookieLogin.LoginAsync(client, account, password);
         return client;
     }
 
-    private async Task<(string Account, int UserId)> CreateUserAsync(string[] permissions, bool mustChangePassword = false)
-    {
-        var account = $"cookie-{Guid.NewGuid():N}";
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
-        var role = new RoleView { Name = $"Cookie 測試角色-{Guid.NewGuid():N}", TabViewJson = JsonSerializer.Serialize(permissions) };
-        db.RoleView.Add(role);
-        await db.SaveChangesAsync();
-        var user = new MyUser
-        {
-            Account = account,
-            Name = account,
-            Status = true,
-            RoleViewId = role.Id,
-            MustChangePassword = mustChangePassword,
-            Password = SecurePasswordHasher.HashPassword(Password),
-        };
-        db.MyUser.Add(user);
-        await db.SaveChangesAsync();
-        await new RbacWriteService(db).SyncRolePermissionsAsync(role.Id, permissions);
-        return (account, user.Id);
-    }
+    private Task<(string Account, int UserId)> CreateUserAsync(string[] permissions, bool mustChangePassword = false)
+        => TestCookieLogin.CreateUserAsync(factory.Services, Password, permissions, mustChangePassword);
 
     private static Task<HttpResponseMessage> PostSearchAsync(HttpClient client, bool withClientHeader)
     {
@@ -219,15 +185,6 @@ public sealed partial class CookieApiTests(ApiTestApplicationFactory factory) : 
 
     private static IEnumerable<MenuItemDto> Flatten(IEnumerable<MenuItemDto> items)
         => items.SelectMany(x => new[] { x }.Concat(Flatten(x.SubMenu)));
-
-    [GeneratedRegex(@"<input[^>]*type=""hidden""[^>]*>")]
-    private static partial Regex HiddenInputPattern();
-
-    [GeneratedRegex(@"name=""([^""]*)""")]
-    private static partial Regex NamePattern();
-
-    [GeneratedRegex(@"value=""([^""]*)""")]
-    private static partial Regex ValuePattern();
 }
 
 /// <summary>從登入身分取使用者 Id：Cookie 與 JWT 放的地方不同（1.1.0）。</summary>

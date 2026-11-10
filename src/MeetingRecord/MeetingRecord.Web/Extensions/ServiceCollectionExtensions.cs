@@ -160,6 +160,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TodoChangeRecorder>();
         services.AddSingleton<MeetingRecord.Business.Services.Notifications.IUserNotificationNotifier, MeetingRecord.Business.Services.Notifications.UserNotificationNotifier>();
         services.AddScoped<MeetingRecord.Business.Services.Notifications.UserNotificationService>();
+        // 1.1.2（WASM 遷移 M1）：把「誰有新通知」轉送到 AppHub，WASM 前端靠它即時更新未讀數。
+        services.AddHostedService<MeetingRecord.Web.Hubs.HubNotificationBridge>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();

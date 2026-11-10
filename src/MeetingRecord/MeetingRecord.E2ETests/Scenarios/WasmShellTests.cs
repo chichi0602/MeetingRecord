@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.E2ETests.Infrastructure;
 
 namespace MeetingRecord.E2ETests.Scenarios;
@@ -92,6 +93,46 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
         await page.GotoAsync("/wasm");
 
         await page.WaitForURLAsync(new Regex("/ChangePassword", RegexOptions.IgnoreCase));
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "WASM-05")]
+    [Trait("Title", "WASM 頁的未讀通知數經推播即時更新（不必重新整理）")]
+    [Trait("Page", "WASM 預覽")]
+    [Trait("Persona", "主責團隊成員＋協作團隊成員（兩個瀏覽器）")]
+    public async Task WasmUnreadCount_ShouldUpdateByPush()
+    {
+        var title = Unique("E2E 推播待辦");
+        await using (var db = App.CreateDbContext())
+        {
+            db.Todo.Add(new Todo { Title = title, ProjectId = Seed.SharedProjectId, Status = "待辦", Priority = "中", Owner = Seed.Owner.Name, CreatedByUserId = Seed.Owner.Id });
+            await db.SaveChangesAsync();
+        }
+
+        // 負責人開著 WASM 頁（收推播的一方）。
+        var owner = await LoginAsAsync(Seed.Owner);
+        await owner.GotoAsync("/wasm");
+        var unread = owner.Locator(".wasm-unread");
+        await Expect(unread).ToBeVisibleAsync();
+        var before = int.Parse(await unread.GetAttributeAsync("data-count") ?? "0");
+
+        // 協作成員在 Server 待辦頁改狀態（與 NTF-01 同樣的步驟），會寫通知給負責人。
+        var collaborator = await LoginAsAsync(Seed.Collaborator);
+        await GotoAsync(collaborator, "/todos", "待辦事項");
+        await collaborator.GetByPlaceholder("搜尋關鍵字").FillAsync(title);
+        await ToolbarButton(collaborator, "搜尋").ClickAsync();
+        await RowAction(Row(collaborator, title), "修改").ClickAsync();
+        await PickAsync(collaborator, SelectByLabel(collaborator, "狀態"), "進行中");
+        await ClickModalOkAsync(collaborator);
+        await Expect(Notice(collaborator, "修改成功")).ToBeVisibleAsync();
+
+        // 負責人那邊不重新整理，數字自己變多。
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (int.Parse(await unread.GetAttributeAsync("data-count") ?? "0") <= before)
+        {
+            Assert.True(DateTime.UtcNow < deadline, $"等了 20 秒未讀數還是 {before}，推播沒有到");
+            await owner.WaitForTimeoutAsync(200);
+        }
     }
 
     private static async Task<List<string>> HrefsAsync(ILocator links)

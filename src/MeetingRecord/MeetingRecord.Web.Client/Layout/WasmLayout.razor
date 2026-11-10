@@ -1,5 +1,8 @@
 @inherits LayoutComponentBase
+@implements IAsyncDisposable
 @inject SessionService SessionService
+@inject NotificationApi NotificationApi
+@inject AppHubConnection HubConnection
 @inject NavigationManager NavigationManager
 
 @* WASM 端的版面（1.1.1，M1 空殼）：開頁先問 Session API，依結果導向（登入、登出原因、改密碼），
@@ -33,6 +36,11 @@ else
 
         <main class="wasm-main">
             <header class="wasm-topbar">
+                @* 1.1.2：未讀通知數，伺服器推播「通知有變動」就重查。通知清單等 M3 搬通知鈴時再做。 *@
+                <span class="wasm-unread" data-count="@unreadCount" aria-label="@($"通知，{unreadCount} 則未讀")">
+                    <span class="material-icons-outlined" aria-hidden="true">notifications</span>
+                    <span>@unreadCount</span>
+                </span>
                 <span class="wasm-user">@session.Name</span>
                 @if (session.IsAdmin)
                 {
@@ -55,6 +63,7 @@ else
     private SessionDto? session;
     private List<MenuItemDto> menu = [];
     private string? errorMessage;
+    private int unreadCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -86,6 +95,34 @@ else
         var menuResult = await SessionService.GetMenuAsync();
         menu = menuResult.Data ?? [];
         session = current;
+
+        // 先查一次未讀數再接推播；推播或重連後都重查（斷線期間可能漏掉推播）。
+        await RefreshUnreadCountAsync();
+        HubConnection.NotificationsChanged += OnNotificationsChangedAsync;
+        HubConnection.Reconnected += OnNotificationsChangedAsync;
+        await HubConnection.StartAsync();
+    }
+
+    private async Task RefreshUnreadCountAsync()
+    {
+        var result = await NotificationApi.GetUnreadCountAsync();
+        if (result.Success)
+        {
+            unreadCount = result.Data;
+        }
+    }
+
+    private async Task OnNotificationsChangedAsync()
+    {
+        await RefreshUnreadCountAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        HubConnection.NotificationsChanged -= OnNotificationsChangedAsync;
+        HubConnection.Reconnected -= OnNotificationsChangedAsync;
+        return ValueTask.CompletedTask;
     }
 
     private static RenderFragment RenderItems(IEnumerable<MenuItemDto> items) =>

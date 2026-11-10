@@ -1,15 +1,16 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.66
+- 文件版本：7.67
 - 文件狀態：維護中
-- 現行系統版本：1.1.1
+- 現行系統版本：1.1.2
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/11/09
+- 最後核對日期：2026/11/10
 
 本目錄收納改版與變更紀錄。每篇對應一次功能或機制異動，標題含版本號；能力現況以 [prd/](../prd/README.md) 為準。
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M1 SignalR Hub 骨架（分支 `wasm-migration`）：新增推播通道 `/hubs/app`（同 API 的驗證、依使用者分群組），通知變動即時推給 WASM 前端，WASM 頁頂端的未讀數不必重新整理就更新；推播不帶資料、前端收到再打 API 重查；新增未讀數 API；`/hubs` 未登入也回 401 JSON（1.1.2）| [2026-11-10-WASM遷移M1-SignalR-Hub骨架](2026-11-10-WASM遷移M1-SignalR-Hub骨架.md) |
 | WASM 遷移 M1 WASM 前端與空殼頁（分支 `wasm-migration`）：新增 `MeetingRecord.Web.Client`，空殼頁 `/wasm` 能登入、顯示與 Server 頁相同的權限過濾選單；逐頁切換（`WasmRoutes`），WASM 與 Server 頁之間整頁載入；`ApiClient` 基底、Session 登入身分；修剪警告 0、Brotli 後約 4.3 MB；WASM 套件用 10.0.14（10.0.5 有已知弱點）（1.1.1）| [2026-11-09-WASM遷移M1-WASM前端與空殼頁](2026-11-09-WASM遷移M1-WASM前端與空殼頁.md) |
 | WASM 遷移 M1 伺服器端驗證基礎（分支 `wasm-migration`）：Web API 改成「帶 Bearer 走 JWT，否則走登入 Cookie」，Cookie 寫入要帶防偽標頭 `X-MeetingRecord-Client`，Cookie 與 JWT 的使用者 Id 統一由 `UserClaims` 讀，`/api` 未登入回 401 JSON；登入狀態判斷抽成 `UserSessionService`，新增 Session 與選單 API；畫面沒變（1.1.0）| [2026-11-09-WASM遷移M1-伺服器端驗證基礎](2026-11-09-WASM遷移M1-伺服器端驗證基礎.md) |
 | 套件弱點修補：簡繁轉換套件間接帶進的 `System.Drawing.Common` 4.7.0（危急）改以直接參考新版 `ConfigurationManager` 斷掉相依；Swagger 用的 `Microsoft.OpenApi` 2.4.1（高）隨 Swashbuckle 10.3.1 升到 2.12.2；程式不必改（1.0.68）| [2026-11-09-套件弱點修補](2026-11-09-套件弱點修補.md) |

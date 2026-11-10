@@ -1,10 +1,10 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1 進行中）
-- 現行系統版本：1.1.1
+- 現行系統版本：1.1.2
 - 首次實作版本：不適用
-- 最後核對日期：2026/11/09
+- 最後核對日期：2026/11/10
 
 使用者要求：
 
@@ -129,6 +129,7 @@
 - 由一個 hosted service 訂閱現有的三個 singleton notifier，**在伺服器端依 `ProjectAccessService` 過濾**後才推送給有權看的人（現在 `BackgroundJobProgressPanel` 是在元件裡過濾，搬到伺服器後不能把全公司的進度整包送到瀏覽器再濾）。
 - 取消背景工作改成 Hub 方法或 API，仍需會議紀錄的 Edit 權限。
 - 斷線重連：用 SignalR 自動重連，重連後重新取一次快照。
+- **實作現況（1.1.2）**：`Web/Hubs/AppHub`（`/hubs/app`，policy scheme 驗證，群組 `user:{id}`）與 `HubNotificationBridge`（轉送 `IUserNotificationNotifier`）已上線，WASM 端 `Realtime/AppHubConnection` 自動重連、重連後重查；目前只推「通知有變動」給 WASM 版面的未讀數。兩個進度通知器（轉錄、會議紀錄生成）依上面的伺服器端過濾規則在 M3 接上。
 
 ### 4.5 AI 串流 🟡
 
@@ -427,7 +428,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 |------|------|------|
 | 伺服器端驗證基礎：policy scheme（Bearer→JWT，否則 Cookie）、Cookie 路徑 CSRF 標頭、統一讀使用者 Id、`/api` 回 401／403 JSON、`UserSessionService`、Session 與選單 API | 1.1.0 | ✅ 完成 |
 | 新增 `MeetingRecord.Web.Client`、WASM 空殼頁 `/wasm`、`ApiClient` 基底、自訂 `AuthenticationStateProvider`、逐頁切換（`WasmRoutes`） | 1.1.1 | ✅ 完成；Brotli 後 `_framework` 約 4.3 MB（全部 `.br` 合計，含三個語系檔，實際只下載其中一個），修剪警告 0；前端錯誤回報 API 延後（需依帳號限流） |
-| SignalR Hub 骨架（通知鈴未讀數） | 1.1.2 | 待做 |
+| SignalR Hub 骨架（通知鈴未讀數） | 1.1.2 | ✅ 完成；加 SignalR 用戶端後 Brotli 下載量 +0.18 MB（全部 `.br` 合計 4.50 MB，只下載一個語系檔約 4.15 MB），修剪警告 0 |
 | 本機部署驗證、重估端點數、M1 報告 | 1.1.3 | 待做 |
 
 ## 十一、下一步

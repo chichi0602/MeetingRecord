@@ -11,11 +11,13 @@
 #   pwsh scripts/Run-E2E.ps1 -Filter "LGN"       # 只跑情境編號含 LGN 的端對端測試，不產生報告
 #   pwsh scripts/Run-E2E.ps1 -SkipUnitTests      # 只跑端對端測試
 #   pwsh scripts/Run-E2E.ps1 -Headed             # 開出瀏覽器視窗看它操作
+#   pwsh scripts/Run-E2E.ps1 -Milestone M1       # 遷移分支的里程碑報告（1.1.3），檔名「…-M1-里程碑測試報告-版本.md」
 param(
     [string]$Filter = "",
     [switch]$SkipUnitTests,
     [switch]$Headed,
-    [switch]$NoReport
+    [switch]$NoReport,
+    [string]$Milestone = "M0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,7 +61,7 @@ $e2eTrx = Join-Path $resultsPath "e2e.trx"
 
 if (-not $NoReport -and [string]::IsNullOrEmpty($Filter)) {
     Write-Host "== 產生測試報告"
-    & (Join-Path $PSScriptRoot "New-TestReport.ps1") -UnitTrx $unitTrx -E2ETrx $e2eTrx
+    & (Join-Path $PSScriptRoot "New-TestReport.ps1") -UnitTrx $unitTrx -E2ETrx $e2eTrx -Milestone $Milestone
 }
 
 Write-Host "測試結果（.trx）：$resultsPath"

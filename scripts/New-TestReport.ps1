@@ -3,12 +3,15 @@
 # M0 產出「基準報告」：只有 Server 欄；WASM 遷移完成後再跑一次，把 WASM 的 e2e.trx 用 -WasmE2ETrx 帶進來就是並列的最終報告。
 # 情境編號、標題、人物取自端對端測試原始碼上的 [Trait("Scenario"/"Title"/"Persona", ...)]。
 #
+# 遷移分支的里程碑報告（1.1.3）：-Milestone M1（M2…）只換標題與檔名（「M1 里程碑報告」「…-M1-里程碑測試報告-版本.md」），內容同一套。
+#
 # 用法（通常由 Run-E2E.ps1 呼叫）：
-#   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-WasmE2ETrx wasm-e2e.trx] [-OutputPath 檔案]
+#   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-WasmE2ETrx wasm-e2e.trx] [-Milestone M1] [-OutputPath 檔案]
 param(
     [string]$UnitTrx,
     [Parameter(Mandatory = $true)][string]$E2ETrx,
     [string]$WasmE2ETrx,
+    [string]$Milestone = "M0",
     [string]$OutputPath
 )
 
@@ -111,7 +114,7 @@ $counts = [ordered]@{
 }
 $failedTotal = ($counts.Values | Measure-Object -Property Failed -Sum).Sum
 $conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～L4 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
-$kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } else { "M0 基準報告（只有 Server 版）" }
+$kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } elseif ($Milestone -eq "M0") { "M0 基準報告（只有 Server 版）" } else { "$Milestone 里程碑報告（Server 版＋已遷移的 WASM 頁）" }
 
 $sb = [System.Text.StringBuilder]::new()
 function Line([string]$text = "") { [void]$sb.AppendLine($text) }
@@ -221,7 +224,7 @@ if ($failedTotal -gt 0) {
 }
 
 if ([string]::IsNullOrEmpty($OutputPath)) {
-    $label = if ($hasWasm) { "WASM遷移最終測試報告" } else { "M0-基準測試報告" }
+    $label = if ($hasWasm) { "WASM遷移最終測試報告" } elseif ($Milestone -eq "M0") { "M0-基準測試報告" } else { "$Milestone-里程碑測試報告" }
     $OutputPath = Join-Path $repoRoot ("docs/testing/" + (Get-Date -Format "yyyy-MM-dd") + "-$label-$versionNumber.md")
 }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null

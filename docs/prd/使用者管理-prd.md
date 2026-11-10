@@ -1,10 +1,10 @@
 ﻿# 使用者管理 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：1.0.55
+- 現行系統版本：1.1.10
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/10/22
+- 最後核對日期：2026/11/10
 
 > **0.4.102：「資料群組」改回「團隊」。** 團隊就是部門（例如業務部、管理部、研發部），一個人可以屬於多個；使用者看得到專案的條件是「他的任一團隊是該專案的主責或協作團隊」，**不再有公開專案**。欄位、清單欄與批次按鈕都改稱「團隊」，行為不變。
 >
@@ -23,8 +23,8 @@
 |------|------|----------|-----------|
 | `/myusers` | 系統管理 → 使用者管理（`Menu.json` id=31）| 僅管理員（`AuthenticationStateHelper.CheckIsAdmin`）| 系統管理員 |
 
-- 頁面 `MyUserView` 初始化先執行 `Check`，未通過即導向登出；非管理員顯示「你沒有權限存取此頁面」並停止載入。
-- 本頁為 Blazor 元件、無對應的 `MyUser` API 控制器；動作級 `[HasPermission("resource:action")]` 套用於業務資料 API（分類／團隊／專案），使用者維護僅以管理員身分閘控。
+- 1.1.10 起是 WASM 頁 `Web.Client/Pages/Admins/MyUserPage`（畫面與以前的 `MyUserView` 相同）：登入狀態由 WASM 版面先處理；非管理員（`PermissionView.IsAdmin`）顯示「你沒有權限存取此頁面」、寫頁面拒絕稽核並停止載入。
+- 1.1.10 起資料經 `UserController`（`api/v1/User`）取得，整個 Controller 以 `[AdminOnly]` 閘控（不看權限鍵，只看是不是管理者）；見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 
 ## 三、畫面與欄位
 
@@ -40,15 +40,17 @@
 
 ### 多選刪除（1.0.53）
 
-- 與批次調整團隊共用同一組勾選，批次列多一顆「刪除所選」。自己的帳號會略過，通知列為「不能刪除自己的帳號」。換頁、排序、搜尋與每次重載都清掉勾選。共通規則見[畫面與欄位字典 0.5](../guides/畫面與欄位字典.md)。
+- 與批次調整團隊共用同一組勾選，批次列多一顆「刪除所選」。自己的帳號、support 由伺服器擋下（1.1.10 起規則在服務層），通知列為「不能刪除自己的帳號。」等原因。換頁、排序、搜尋與每次重載都清掉勾選。共通規則見[畫面與欄位字典 0.5](../guides/畫面與欄位字典.md)。
 - 單筆刪除改成看結果，失敗時顯示原因（以前一律「刪除成功」）。
 
 ## 四、內部系統運作
 
-View（`MyUserView`）→ `MyUserService` → `BackendDBContext`：
+WASM 頁（`MyUserPage`）→ `UserApi` → `UserController`（`[AdminOnly]`）→ `MyUserService` → `BackendDBContext`（1.1.10 起；以前是 Blazor Server 的 `MyUserView` 直接注入服務）：
 
 - **新增**（`AddAsync`）：`CleanTrackingHelper.Clean` 清追蹤；產生 `Salt`、以 `SecurePasswordHasher.HashPassword` 雜湊密碼，並設 `MustChangePassword = true`（0.4.113，帳號密碼是管理者提供的，第一次登入要改成自己的；`support` 不設）；存檔後 `SyncAssignmentsAsync` 雙寫角色與團隊；寫 `User.Create` 稽核。
 - **修改**（`UpdateAsync`）：清追蹤、以 `Entry(...).State = Modified` 更新；先帶回畫面模型沒有的欄位：`MustChangePassword`，以及 0.4.115 起的 `AccessFailedCount`、`LockoutEndUtc`、`TwoFactorEnabled`、`TwoFactorSecret`（以前整筆蓋回，管理者改個名字就把被鎖的帳號解鎖、兩步驟驗證清空）；密碼留白時沿用既有 `Password`／`Salt`，否則重新雜湊，且**替別人**重設時設 `MustChangePassword = true`（改自己的、`support` 不設）；重設密碼時清掉失敗次數與鎖定（0.4.115，這是管理者解鎖的方法）；再 `SyncAssignmentsAsync`；寫 `User.Update` 稽核。
+- **自己與 support 的保護**（1.1.10，以前只在畫面）：`DeleteAsync` 不能刪自己（「不能刪除自己的帳號。」）與 support；`SetStatusAsync` 不能停用自己與 support；`UpdateAsync` 不能把自己停用、不能拿掉自己的管理者身分（「不能拿掉自己的管理者身分。」）、不能停用 support。
+- **修改時帶回 `LastProjectId`**（1.1.10 修正：以前管理者每編輯一次，對方記住的「上次選的專案」就被清掉）。API 修改另外先讀出原資料再套上可改的欄位，Google 登入綁定（`OAuthProvider`、`GoogleId`）不會被清掉。
 - **刪除**（`DeleteAsync`）：`Entry(...).State = Deleted`；寫 `User.Delete` 稽核（含帳號）。
 - **稽核（1.0.33）**：管理者在編輯視窗填了新密碼時，`User.Update` 之外另寫 `Password.Reset`（摘要 `by=admin`，不含密碼）；清單上切換狀態寫 `User.Enable`／`User.Disable`；批次加入／移出團隊寫 `User.TeamAdd`／`User.TeamRemove`（目標 `Team#id`，摘要 `count` 與最多 50 個使用者編號，0 人不寫）。
 - **RBAC 雙寫**（`SyncAssignmentsAsync` → `RbacWriteService`）：`SyncUserRolesAsync` 以 `UserRole` 反映主要＋額外角色（去重）；團隊名稱先解析為 `Team.Id`，`SyncUserTeamsAsync` 以 `UserTeam` 差異化增刪。
@@ -57,13 +59,13 @@ View（`MyUserView`）→ `MyUserService` → `BackendDBContext`：
 - **有效團隊**：登入後由 `EffectiveTeamResolver` 決定，0.4.101 起只取使用者直接所屬的團隊（`UserTeam`）。資料可見範圍的實際判斷在 `ProjectAccessService`。
 - **批次加入／移出**（`AddUsersToTeamAsync`／`RemoveUsersFromTeamAsync`）：只動勾選者的 `UserTeam`，已在（或本來就不在）該團隊的人略過，回傳實際異動筆數。
 - **前置檢查**：`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 檢查帳號唯一性。
-- **稽核 actor**：`ResolveActor` 取目前登入者；未登入時 actor 為 null。
+- **稽核 actor**：`ResolveActor` 取目前登入者（1.1.10 起經 `IAuditActorProvider`：Blazor 頁看 `CurrentUserService`、API 從 claims 取；以前只看 `CurrentUserService`，API 呼叫時是空的）；未登入時 actor 為 null。「替別人重設密碼」的判斷也用它。
 
 ## 五、權限與安全
 
 - 本頁僅管理員可進入（`CheckIsAdmin`）；權限判定以 RBAC 表為單一權威，管理員短路一律通過。
 - API 端業務資料以 `HasPermissionAttribute` 判權，無權限回 `ApiResult` 403（管理員短路），與本頁指派結果一致。
-- 清單／單筆輸出經 `OtherDependencyData` 將密碼欄位清空；不輸出 `Salt`、雜湊、Token。
+- 清單／單筆輸出經 `OtherDependencyData` 將密碼欄位清空；API 回應一律是 `UserDto`（1.1.10），不含密碼雜湊、`Salt`、兩步驟驗證金鑰、Google 編號；密碼只在新增或重設時單向送入。
 - 密碼一律 PBKDF2 雜湊儲存；細節見 [登入與帳號流程](登入與帳號流程-prd.md) 與安全文件。
 
 ## 六、錯誤與邊界
@@ -83,11 +85,14 @@ View（`MyUserView`）→ `MyUserService` → `BackendDBContext`：
 - `MeetingRecord.Tests/DefaultRoleSeederTests.cs`：`RunAsync_ShouldNotTouchUserRoles`（啟動不再改帳號的角色）。
 - `MeetingRecord.Tests/AuditEventsTests.cs`：`User.Create`／`User.Update`／`User.Delete`（含帳號）與未登入 actor 為 null。
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`：多角色聯集有效權限鍵、管理員短路。
+- `MeetingRecord.Tests/UserApiTests.cs`（1.1.10）：只限管理者（有權限鍵也不行，留稽核）、回應不含任何機密、新增要密碼與帳號不重複、修改保留畫面以外的欄位與沒帶的指派、替別人重設密碼要對方改（改自己的不會）、自己與 support 的保護、批次團隊人數、預設角色、稽核操作者是 API 呼叫者。
+- 端對端 ADM-01（新增）、ADM-04（非管理者被擋）、ADM-05（修改團隊、批次加入團隊、停用再啟用、不能停用自己）。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/MyUserPage.razor`（`@page "/myusers"`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/MyUserView.razor`（清單、編輯視窗、批次調整團隊）、`MyUserView.razor.cs`（`OnEditAsync` 編輯回填、`OnAdditionalRolesChanged`／`OnUserTeamsChanged` 多角色／團隊變更、`OnModalOKHandleAsync` 存檔、`OnBatchTeamAsync` 批次調整團隊）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/MyUserPage.razor`（`@page "/myusers"`，1.1.10 起在 WASM 執行；清單、編輯視窗、批次調整團隊）、`MyUserPage.razor.cs`（`OnEditAsync` 編輯回填、`OnModalOKHandleAsync` 存檔、`OnBatchTeamAsync` 批次調整團隊）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Api/UserApi.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/UserController.cs`、`src/MeetingRecord/MeetingRecord.Web/Filters/AdminOnlyAttribute.cs`
+- `src/MeetingRecord/MeetingRecord.Dtos/Users/`（`UserDto`、`UserCreateUpdateDto`、`RoleOptionDto`、`UserTeamBatchRequestDto`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MyUserService.cs`（`MyUserService.AddAsync`、`UpdateAsync`、`SyncAssignmentsAsync` 雙寫、`GetUserAssignmentsAsync` 回填）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs`（`RbacWriteService.SyncUserRolesAsync`、`SyncUserTeamsAsync`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacBackfillService.cs`（啟動回填）

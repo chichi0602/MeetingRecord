@@ -12,7 +12,7 @@ namespace MeetingRecord.Tests;
 /// <para>
 /// 每個 action 必須是下列其一：
 /// 1. 在 <see cref="AnonymousAllowList"/>（明列可匿名的端點）；
-/// 2. 有 <see cref="AuthorizeAttribute"/>（類別或方法）**且**有 <see cref="HasPermissionAttribute"/>；
+/// 2. 有 <see cref="AuthorizeAttribute"/>（類別或方法）**且**有 <see cref="HasPermissionAttribute"/> 或 <see cref="AdminOnlyAttribute"/>（1.1.10，只限管理者）；
 /// 3. 有 <see cref="AuthorizeAttribute"/> 且在 <see cref="AuthenticatedOnlyAllowList"/>（只需登入、不需動作權限）。
 /// 白名單每一項都要寫理由；不要為了讓測試變綠就把端點加進去。
 /// </para>
@@ -73,9 +73,9 @@ public sealed class ApiAuthorizationConventionTests
                 continue;
             }
 
-            if (!action.Has<HasPermissionAttribute>() && !AuthenticatedOnlyAllowList.ContainsKey(key))
+            if (!action.Has<HasPermissionAttribute>() && !action.Has<AdminOnlyAttribute>() && !AuthenticatedOnlyAllowList.ContainsKey(key))
             {
-                violations.Add($"{key}：有 [Authorize] 但沒有 [HasPermission]，也不在「只需登入」白名單");
+                violations.Add($"{key}：有 [Authorize] 但沒有 [HasPermission] 或 [AdminOnly]，也不在「只需登入」白名單");
             }
         }
 

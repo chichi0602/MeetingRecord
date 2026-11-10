@@ -23,6 +23,9 @@ public sealed class PermissionView(SessionService sessionService)
         isAdmin = result.Data?.IsAdmin ?? false;
     }
 
+    /// <summary>是不是管理者（1.1.10）：使用者管理、角色管理這類只限管理者的頁面只看這個，同 Server 頁的 <c>CheckIsAdmin</c>。</summary>
+    public bool IsAdmin => isAdmin;
+
     public bool CanAccessPage(string page) => CanAccessPage(keys, isAdmin, page);
 
     public bool Can(string page, string action) => Can(keys, isAdmin, page, action);

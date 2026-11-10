@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.16
+- 文件版本：1.17
 - 文件狀態：已實作
-- 現行系統版本：1.1.9
+- 現行系統版本：1.1.10
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -42,6 +42,8 @@
 團隊另有三支（1.1.8，WASM 團隊頁用）：`PUT Team/{id}/enabled`（Edit，切換啟用）、`GET Team/{id}/delete-check`（Delete；可刪 200、仍是專案主責團隊的非管理者 409 與原因、不存在 404）、`GET Team/members/selectable`（**Create 或 Edit 其中之一**，啟用中帳號 `MemberOptionDto`：`id`、`label`＝「姓名（帳號）」）。1.1.8 起團隊 API 呼叫 `TeamService`：名稱與代號重複去頭尾空白、不分大小寫，409 訊息是「團隊名稱／代號已存在，無法新增／修改。」；`TeamDto` 多了 `memberCount`（單筆另帶 `memberIds`），新增與修改可帶 `memberIds` 同步成員，**沒帶就不動**、帶空陣列才清空。
 
 提示詞另有五支（1.1.9，WASM 提示詞頁用）：`PUT PromptTemplate/{id}/enabled`（Edit）；`GET PromptTemplate/presets`（Create，內建範本名稱）、`POST PromptTemplate/presets`（Create，一次建立全部內建範本，已有同名的略過，訊息說明新增與略過幾筆）、`POST PromptTemplate/presets/single`（Create，內容 `{ "name": "…" }`；不在內建清單 404、已存在 409「「x」已存在，未新增。」）；`GET PromptTemplate/categories/enabled`（View，啟用中的分類名稱）。1.1.9 起提示詞 API 呼叫 `PromptTemplateService`：名稱重複去頭尾空白、不分大小寫，409 訊息「提示詞名稱已存在，無法新增／修改。」。**分類**：`PromptTemplateDto` 多了 `categoryNames`（名稱清單）；輸入時 `categoryNames` 有帶就以它為準，沒帶才看舊欄位 `categories`（資料庫的儲存格式，每個名稱前後各一個換行，例 `"\n週報\n"`），兩個都沒帶＝沒有分類；存檔時一律正規化（去空白、去重複）。
+
+**使用者管理**（1.1.10，`UserController`，`api/v1/User`，整個 Controller **只限管理者** `[AdminOnly]`，非管理者 403）：`POST search`（`UserSearchRequestDto`，排序欄位 account／name／email／roletext／statustext／createat／updateat）、`GET {id}`（含額外角色、團隊）、`POST`（密碼必填；帳號重複 409）、`PUT {id}`（先讀出原資料再套上可改的欄位；額外角色與團隊 null＝不動；密碼留白＝不變）、`DELETE {id}`、`PUT {id}/status`（`{ "isEnabled": false }`）、`POST teams/batch`（`{ "userIds": [], "teamId": 1, "add": true }`，回實際異動人數）、`GET roles`（`isDefault` 標出新建帳號的預設角色）、`GET teams`（啟用中的團隊）。不能刪除或停用自己與 support、不能拿掉自己的管理者身分，違反回 400 與原因。回應 `UserDto` 不含任何密碼相關欄位。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

@@ -18,6 +18,7 @@ public class MyUserService
     private readonly IRbacWriteService rbacWriteService;
     private readonly IAuditLogService auditLogService;
     private readonly CurrentUserService currentUserService;
+    private readonly IAuditActorProvider? actorProvider;
 
     public IMapper Mapper { get; }
     public ILogger<MyUserService> Logger { get; }
@@ -28,7 +29,8 @@ public class MyUserService
         ILogger<MyUserService> logger,
         IRbacWriteService rbacWriteService,
         IAuditLogService auditLogService,
-        CurrentUserService currentUserService)
+        CurrentUserService currentUserService,
+        IAuditActorProvider? actorProvider = null)
     {
         this.context = context;
         Mapper = mapper;
@@ -36,11 +38,22 @@ public class MyUserService
         this.rbacWriteService = rbacWriteService;
         this.auditLogService = auditLogService;
         this.currentUserService = currentUserService;
+        this.actorProvider = actorProvider;
     }
 
-    /// <summary>取得目前操作者作為稽核 actor；未登入（Id==0）時回 null。</summary>
+    /// <summary>
+    /// 取得目前操作者（稽核 actor，以及「是不是改自己」的判斷）；未登入時回 null。
+    /// 1.1.10：優先用 <see cref="IAuditActorProvider"/>——Blazor 頁看 <see cref="CurrentUserService"/>、API 改從 claims 取。
+    /// 以前只看 CurrentUserService，從 API 呼叫時操作者是空的，「替別人重設密碼」也會把自己當成別人。
+    /// </summary>
     private (int? ActorUserId, string? ActorAccount) ResolveActor()
     {
+        if (actorProvider is not null)
+        {
+            var (userId, account) = actorProvider.GetActor();
+            return userId > 0 ? (userId, account) : (null, null);
+        }
+
         var user = currentUserService.CurrentUser;
         return user.Id > 0 ? (user.Id, user.Account) : (null, null);
     }
@@ -272,12 +285,30 @@ public class MyUserService
                 return VerifyRecordResultFactory.Build(false, "找不到要修改的使用者資料。");
             }
 
+            // 1.1.10：自己與 support 的保護搬進服務（以前只有畫面的批次刪除會略過自己，API 繞得過）。
+            var isSelf = ResolveActor().ActorUserId == currentItem.Id;
+            if (isSelf && currentItem.Status && !paraObject.Status)
+            {
+                return VerifyRecordResultFactory.Build(false, "不能停用自己的帳號。");
+            }
+
+            if (isSelf && currentItem.IsAdmin && !paraObject.IsAdmin)
+            {
+                return VerifyRecordResultFactory.Build(false, "不能拿掉自己的管理者身分。");
+            }
+
+            if (IsSupportAccount(currentItem.Account) && !paraObject.Status)
+            {
+                return VerifyRecordResultFactory.Build(false, "不能停用 support 帳號。");
+            }
+
             MyUser itemData = Mapper.Map<MyUser>(paraObject);
             itemData.RoleView = null;
 
             // 畫面模型沒有這些欄位，整筆蓋回時要先帶回原值，否則會被清掉。
             itemData.MustChangePassword = currentItem.MustChangePassword;
-
+            // 1.1.10：以前沒帶回，管理者每編輯一次使用者，對方記住的「上次選的專案」就被清掉。
+            itemData.LastProjectId = currentItem.LastProjectId;
             // 0.4.115：以前沒帶回，管理者只要編輯一次（例如改名字）就會把被鎖定的帳號解鎖、
             // 失敗次數歸零、兩步驟驗證設定清空。重設密碼時才解鎖（見下方）。
             itemData.AccessFailedCount = currentItem.AccessFailedCount;
@@ -301,7 +332,7 @@ public class MyUserService
 
                 // 管理者替別人重設密碼：對方下次登入要改（0.4.113）。改自己的不設；
                 // support 被禁止改密碼，設了會卡在改密碼頁出不去。
-                if (currentUserService.CurrentUser.Id != currentItem.Id && !IsSupportAccount(currentItem.Account))
+                if (!isSelf && !IsSupportAccount(currentItem.Account))
                 {
                     itemData.MustChangePassword = true;
                 }
@@ -410,6 +441,17 @@ public class MyUserService
             {
                 Logger.LogWarning("User deletion rejected because record was not found. UserId={UserId}", id);
                 return VerifyRecordResultFactory.Build(false, "找不到要刪除的使用者資料。");
+            }
+
+            // 1.1.10：自己與 support 不能刪（以前只有畫面的批次刪除會略過自己）。
+            if (ResolveActor().ActorUserId == item.Id)
+            {
+                return VerifyRecordResultFactory.Build(false, "不能刪除自己的帳號。");
+            }
+
+            if (IsSupportAccount(item.Account))
+            {
+                return VerifyRecordResultFactory.Build(false, "不能刪除 support 帳號。");
             }
 
             CleanTrackingHelper.Clean<MyUser>(context);
@@ -641,6 +683,17 @@ public class MyUserService
             {
                 Logger.LogWarning("MyUser state update rejected because record was not found. Id={Id}", id);
                 return VerifyRecordResultFactory.Build(false, "找不到要更新的使用者資料。");
+            }
+
+            // 1.1.10：自己與 support 不能停用。
+            if (!value && ResolveActor().ActorUserId == item.Id)
+            {
+                return VerifyRecordResultFactory.Build(false, "不能停用自己的帳號。");
+            }
+
+            if (!value && IsSupportAccount(item.Account))
+            {
+                return VerifyRecordResultFactory.Build(false, "不能停用 support 帳號。");
             }
 
             item.Status = value;

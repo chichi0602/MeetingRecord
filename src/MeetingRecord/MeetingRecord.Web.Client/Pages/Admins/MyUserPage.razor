@@ -1,3 +1,9 @@
+@page "/myusers"
+@using MeetingRecord.Dtos.Users
+
+@* 使用者管理（1.1.10 搬到 WASM，只限管理者）：由 Blazor Server 的 MyUserView 改寫，畫面、文字、按鈕都不變；資料改走使用者 API。 *@
+<PageTitle>使用者管理</PageTitle>
+
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -73,10 +79,10 @@ else
         </div>
         <div class="my-user-table-wrap">
             <Table @ref="table"
-                   TItem="MyUserAdapterModel"
+                   TItem="UserDto"
                    Class="my-user-table"
                    RemoteDataSource="true"
-                   DataSource="@myUserAdapterModels"
+                   DataSource="@users"
                    OnChange=OnTableChange
                    @bind-PageIndex="_pageIndex"
                    @bind-PageSize="_pageSize"
@@ -84,19 +90,19 @@ else
                    RowKey="x => x.Id"
                    @bind-SelectedRows="selectedUsers">
                 <Selection />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Account)" Title="帳號" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.Email)" Title="Email" Sortable ShowSorterTooltip="false" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.RoleText)" Title="角色" Sortable ShowSorterTooltip="false" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.TeamNamesText)" Title="團隊" />
-                <Column TData="string" DataIndex="@nameof(MyUserAdapterModel.StatusText)" Title="狀態" Sortable ShowSorterTooltip="false">
+                <Column TData="string" DataIndex="@nameof(UserDto.Account)" Title="帳號" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(UserDto.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(UserDto.Email)" Title="Email" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(UserDto.RoleText)" Title="角色" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(UserDto.TeamNamesText)" Title="團隊" />
+                <Column TData="string" DataIndex="@nameof(UserDto.StatusText)" Title="狀態" Sortable ShowSorterTooltip="false">
                     <StatusToggleTag Enabled="@context.Status"
                                      Name="@context.Account"
-                                     CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_使用者管理, PermissionActions.Edit)"
+                                     CanToggle="@PermissionView.Can(MagicObjectHelper.角色_使用者管理, PermissionActions.Edit)"
                                      OnToggle="@(async () => await OnToggleStatusAsync(context))" />
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="DateTime" DataIndex="@nameof(MyUserAdapterModel.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(UserDto.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(UserDto.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
                         <SpaceItem>
@@ -125,7 +131,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="MyUserAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="UserDto" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="帳號" Required>
                             <Input @bind-Value="CurrentRecord.Account" Placeholder="請輸入帳號" />
@@ -154,13 +160,16 @@ else
                         @* 角色＝能做什麼，團隊＝誰的資料（看得到哪些專案），兩者分開設定、互不影響。 *@
                         <FormItem Label="角色" Required>
                             <div @onkeydown:stopPropagation="true">
-                                <Select TItem="RoleViewAdapterModel" TItemValue="int?"
-                                        DataSource="@roleViewAdapterModels"
+                                @* 1.1.10：改用 SelectOption 列出（原本以 LabelName／ValueName 依屬性名稱反射取值，WASM 修剪後不保證留得住）。 *@
+                                <Select TItem="int?" TItemValue="int?"
                                         @bind-Value="CurrentRecord.RoleViewId"
-                                        LabelName="@nameof(RoleViewAdapterModel.Name)"
-                                        ValueName="@nameof(RoleViewAdapterModel.Id)"
                                         Placeholder="請選擇角色"
-                                        Style="width: 100%;" />
+                                        Style="width: 100%;">
+                                    @foreach (var r in roleOptions)
+                                    {
+                                        <SelectOption TItemValue="int?" TItem="int?" Value="@((int?)r.Id)" Label="@r.Name" />
+                                    }
+                                </Select>
                             </div>
                             <ValidationMessage For="() => CurrentRecord.RoleViewId" />
                         </FormItem>
@@ -171,7 +180,7 @@ else
                                         Values="CurrentRecord.AdditionalRoleIds" OnSelectedItemsChanged="OnAdditionalRolesChanged"
                                         Placeholder="可另外指派多個角色（與主要角色權限取聯集）"
                                         AllowClear EnableSearch Style="width: 100%;">
-                                    @foreach (var r in roleViewAdapterModels)
+                                    @foreach (var r in roleOptions)
                                     {
                                         <SelectOption TItemValue="int" TItem="int" Value="@r.Id">@r.Name</SelectOption>
                                     }

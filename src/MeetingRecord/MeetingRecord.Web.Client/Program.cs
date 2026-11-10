@@ -23,6 +23,7 @@ builder.Services.AddScoped<PermissionView>();
 builder.Services.AddScoped<CategoryApi>();
 builder.Services.AddScoped<TeamApi>();
 builder.Services.AddScoped<PromptTemplateApi>();
+builder.Services.AddScoped<UserApi>();
 builder.Services.AddScoped<AppHubConnection>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, ApiNotificationSource>();
 builder.Services.AddScoped<AuthenticationStateProvider, SessionAuthenticationStateProvider>();

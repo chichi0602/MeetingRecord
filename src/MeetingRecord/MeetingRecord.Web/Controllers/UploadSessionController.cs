@@ -1,0 +1,97 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using MeetingRecord.Business.Services.DataAccess;
+using MeetingRecord.Dtos.Commons;
+using MeetingRecord.Dtos.Uploads;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Auth;
+using MeetingRecord.Web.Filters;
+using MeetingRecord.Web.Uploads;
+
+namespace MeetingRecord.Web.Controllers;
+
+/// <summary>
+/// 上傳工作階段（1.1.16，WASM 遷移 M3）：WASM 頁上傳會議影音檔用。建立 → 瀏覽器照舊以
+/// <c>PUT api/v1/uploads/{id}/chunks/{i}</c>（<see cref="UploadChunkController"/>，只認網頁 Cookie）送分塊 → 查狀態。
+/// 讀檔、存檔、排入轉錄在伺服器背景跑（<see cref="MeetingMediaUploadJobs"/>），規則全在 <c>MeetingService</c>。
+///
+/// <para>
+/// 建立前先跑 <c>MeetingService.CheckMediaUploadAsync</c>（格式、大小、資料範圍、只限上傳者、封存、進行中工作），
+/// 不合直接回 400 與原因。查詢與取消只認工作階段的擁有者，別人的一律 404。
+/// </para>
+/// </summary>
+[Route("api/v1/uploads")]
+[ApiController]
+[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]
+public sealed class UploadSessionController(MeetingService meetingService, MeetingMediaUploadJobs uploadJobs) : ControllerBase
+{
+    /// <summary>
+    /// 建立上傳工作階段。新增會議時附檔（要「新增」權限）與修改時換檔（要「修改」權限）都走這支，所以任一即可；
+    /// 「只限上傳者」等資料層級的規則由服務層把關。
+    /// </summary>
+    [HttpPost]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, new[] { PermissionActions.Create, PermissionActions.Edit })]
+    public async Task<ActionResult<ApiResult<UploadSessionDto>>> Create([FromBody] UploadSessionRequestDto request)
+    {
+        if (UserClaims.GetUserId(User) is not { } userId)
+        {
+            return Unauthorized(ApiResult<UploadSessionDto>.UnauthorizedResult("無法識別使用者身分。"));
+        }
+
+        if (request.Purpose != UploadPurposes.MeetingMedia)
+        {
+            return BadRequest(ApiResult<UploadSessionDto>.FailureResult("不支援的上傳用途。"));
+        }
+
+        if (request.Size < 0 || string.IsNullOrWhiteSpace(request.FileName))
+        {
+            return BadRequest(ApiResult<UploadSessionDto>.FailureResult("檔案資訊不正確。"));
+        }
+
+        var check = await meetingService.CheckMediaUploadAsync(request.MeetingId, request.FileName, request.Size);
+        if (!check.Success)
+        {
+            return BadRequest(ApiResult<UploadSessionDto>.FailureResult(check.Message));
+        }
+
+        var job = uploadJobs.Start(userId, request);
+        return Ok(ApiResult<UploadSessionDto>.SuccessResult(new UploadSessionDto
+        {
+            UploadId = job.UploadId,
+            ChunkSize = ChunkedUploadStore.ChunkSize,
+            ChunkCount = job.ChunkCount,
+        }));
+    }
+
+    /// <summary>查這趟上傳的狀態；結束後保留 10 分鐘。</summary>
+    [HttpGet("{uploadId:guid}")]
+    public ActionResult<ApiResult<UploadStatusDto>> Get(Guid uploadId)
+    {
+        if (UserClaims.GetUserId(User) is not { } userId)
+        {
+            return Unauthorized(ApiResult<UploadStatusDto>.UnauthorizedResult("無法識別使用者身分。"));
+        }
+
+        return uploadJobs.TryGet(uploadId, userId, out var job)
+            ? Ok(ApiResult<UploadStatusDto>.SuccessResult(job.ToDto()))
+            : NotFound(ApiResult<UploadStatusDto>.NotFoundResult("找不到這趟上傳。"));
+    }
+
+    /// <summary>取消上傳（等同 Server 頁的「取消上傳」）：新增時附的檔，會議一起刪。已經寫完的來不及取消，照樣排入轉錄。</summary>
+    [HttpDelete("{uploadId:guid}")]
+    public ActionResult<ApiResult> Cancel(Guid uploadId)
+    {
+        if (UserClaims.GetUserId(User) is not { } userId)
+        {
+            return Unauthorized(ApiResult.UnauthorizedResult("無法識別使用者身分。"));
+        }
+
+        if (!uploadJobs.TryGet(uploadId, userId, out var job))
+        {
+            return NotFound(ApiResult.NotFoundResult("找不到這趟上傳。"));
+        }
+
+        job.Cancellation.Cancel();
+        return Ok(ApiResult.SuccessResult("已要求取消上傳。"));
+    }
+}

@@ -565,16 +565,9 @@ public class MeetingService
             uploadFile.FileName,
             uploadFile.FileSize);
 
-        if (!MeetingMediaPolicy.IsAllowedFileName(uploadFile.FileName))
+        if (CheckMediaFile(uploadFile.FileName, uploadFile.FileSize) is { } fileError)
         {
-            return VerifyRecordResultFactory.Build(false, $"不支援的檔案格式，允許的格式：{MeetingMediaPolicy.AllowedExtensionsText}。");
-        }
-
-        if (uploadFile.FileSize > MeetingMediaPolicy.MaxUploadFileSize)
-        {
-            return VerifyRecordResultFactory.Build(
-                false,
-                $"影音檔大小不可超過 {MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)}。");
+            return fileError;
         }
 
         StoredMediaFile? stored = null;
@@ -585,45 +578,9 @@ public class MeetingService
         {
             CleanTrackingHelper.Clean<Meeting>(context);
             var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
-            if (meeting is null)
+            if (await CheckMeetingForMediaUploadAsync(meeting, meetingId) is { } meetingError)
             {
-                Logger.LogWarning("Meeting media upload rejected because record was not found. MeetingId={MeetingId}", meetingId);
-                return VerifyRecordResultFactory.Build(false, "找不到要上傳影音檔的會議紀錄。");
-            }
-
-            var access = await projectAccess.GetAsync();
-            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
-            {
-                Logger.LogWarning("Meeting media upload denied by project access. MeetingId={MeetingId}", meetingId);
-                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "MediaUpload");
-                return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
-            }
-
-            // 1.0.47：換影音檔只限上傳者與管理者（新增會議時上傳者就是自己）。
-            if (!access.IsMeetingOwner(meeting.CreatedByUserId))
-            {
-                return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("更換這筆會議紀錄的影音檔"));
-            }
-
-            // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
-            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
-            {
-                return VerifyRecordResultFactory.Build(false, archivedError);
-            }
-
-            // 背景工作還在跑就不能換檔（0.4.115，比照重新轉錄）：舊檔那趟轉錄不會停，
-            // 跑完會把舊錄音的逐字稿和「已完成」寫到已經換成新檔的會議上；生成中的會議紀錄也正在讀舊逐字稿。
-            if (IsJobActive(meeting))
-            {
-                Logger.LogWarning("Meeting media upload rejected because a background job is active. MeetingId={MeetingId}", meetingId);
-                return VerifyRecordResultFactory.Build(false, "這筆會議正在轉錄或產生會議紀錄，請等它完成，或從右下角的進度面板取消後再替換影音檔。");
-            }
-
-            // 上傳中還沒寫進資料庫，上面那道擋不到——同一筆會議在另一個視窗上傳到一半時，要靠通知器擋（0.4.117）。
-            if (progressNotifier.Find(meetingId) is { Phase: TranscriptionPhase.Uploading })
-            {
-                Logger.LogWarning("Meeting media upload rejected because another upload is in progress. MeetingId={MeetingId}", meetingId);
-                return VerifyRecordResultFactory.Build(false, "這筆會議正在其他視窗上傳影音檔，請等它完成。");
+                return meetingError;
             }
 
             var previousMediaRelativePath = meeting.MediaRelativePath;
@@ -751,6 +708,86 @@ public class MeetingService
                 ? VerifyRecordResultFactory.Build(false, UploadCancelledMessage)
                 : VerifyRecordResultFactory.Build(false, failureMessage ?? "影音檔上傳失敗。", ex);
         }
+    }
+
+    /// <summary>
+    /// 上傳影音檔前的檢查（1.1.16，從 <see cref="SaveMediaAsync"/> 抽出來）：檔名格式、大小、會議存在、資料範圍、只限上傳者、
+    /// 封存唯讀、背景工作進行中、另一個視窗正在上傳。WASM 頁經 API 建立上傳工作階段前先跑，不合就直接回原因，
+    /// 不必等瀏覽器送完第一塊才知道；真正存檔時 <see cref="SaveMediaAsync"/> 會再檢查一次。
+    /// </summary>
+    public async Task<VerifyRecordResult> CheckMediaUploadAsync(int meetingId, string fileName, long fileSize)
+    {
+        if (CheckMediaFile(fileName, fileSize) is { } fileError)
+        {
+            return fileError;
+        }
+
+        var meeting = await context.Meeting.AsNoTracking().FirstOrDefaultAsync(x => x.Id == meetingId);
+        return await CheckMeetingForMediaUploadAsync(meeting, meetingId) ?? VerifyRecordResultFactory.Build(true);
+    }
+
+    private static VerifyRecordResult? CheckMediaFile(string fileName, long fileSize)
+    {
+        if (!MeetingMediaPolicy.IsAllowedFileName(fileName))
+        {
+            return VerifyRecordResultFactory.Build(false, $"不支援的檔案格式，允許的格式：{MeetingMediaPolicy.AllowedExtensionsText}。");
+        }
+
+        if (fileSize > MeetingMediaPolicy.MaxUploadFileSize)
+        {
+            return VerifyRecordResultFactory.Build(
+                false,
+                $"影音檔大小不可超過 {MeetingMediaPolicy.FormatFileSize(MeetingMediaPolicy.MaxUploadFileSize)}。");
+        }
+
+        return null;
+    }
+
+    /// <summary>會議層級的上傳檢查；通過回 null。</summary>
+    private async Task<VerifyRecordResult?> CheckMeetingForMediaUploadAsync(Meeting? meeting, int meetingId)
+    {
+        if (meeting is null)
+        {
+            Logger.LogWarning("Meeting media upload rejected because record was not found. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "找不到要上傳影音檔的會議紀錄。");
+        }
+
+        var access = await projectAccess.GetAsync();
+        if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
+        {
+            Logger.LogWarning("Meeting media upload denied by project access. MeetingId={MeetingId}", meetingId);
+            await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "MediaUpload");
+            return VerifyRecordResultFactory.Build(false, "沒有權限對這筆會議紀錄上傳影音檔。");
+        }
+
+        // 1.0.47：換影音檔只限上傳者與管理者（新增會議時上傳者就是自己）。
+        if (!access.IsMeetingOwner(meeting.CreatedByUserId))
+        {
+            return VerifyRecordResultFactory.Build(false, OwnerOnlyMessage("更換這筆會議紀錄的影音檔"));
+        }
+
+        // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
+        if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+        {
+            return VerifyRecordResultFactory.Build(false, archivedError);
+        }
+
+        // 背景工作還在跑就不能換檔（0.4.115，比照重新轉錄）：舊檔那趟轉錄不會停，
+        // 跑完會把舊錄音的逐字稿和「已完成」寫到已經換成新檔的會議上；生成中的會議紀錄也正在讀舊逐字稿。
+        if (IsJobActive(meeting))
+        {
+            Logger.LogWarning("Meeting media upload rejected because a background job is active. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "這筆會議正在轉錄或產生會議紀錄，請等它完成，或從右下角的進度面板取消後再替換影音檔。");
+        }
+
+        // 上傳中還沒寫進資料庫，上面那道擋不到——同一筆會議在另一個視窗上傳到一半時，要靠通知器擋（0.4.117）。
+        if (progressNotifier.Find(meetingId) is { Phase: TranscriptionPhase.Uploading })
+        {
+            Logger.LogWarning("Meeting media upload rejected because another upload is in progress. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "這筆會議正在其他視窗上傳影音檔，請等它完成。");
+        }
+
+        return null;
     }
 
     /// <summary>

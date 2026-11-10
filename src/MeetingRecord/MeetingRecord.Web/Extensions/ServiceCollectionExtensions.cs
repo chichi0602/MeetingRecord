@@ -168,6 +168,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Web.Jobs.BackgroundJobBoard>();
         services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, MeetingRecord.Web.Jobs.ServerJobProgressSource>();
         services.AddHostedService<MeetingRecord.Web.Hubs.JobProgressHubBridge>();
+        // 1.1.16：WASM 頁的會議影音檔上傳，讀檔存檔在伺服器背景跑（規則仍在 MeetingService）。
+        services.AddSingleton<MeetingRecord.Web.Uploads.MeetingMediaUploadJobs>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();

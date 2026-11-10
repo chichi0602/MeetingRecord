@@ -39,6 +39,8 @@ public sealed class ApiAuthorizationConventionTests
         ["JobController.Get"] = "背景工作進度（1.1.15）：只回呼叫者資料範圍內的會議的工作，同 Server 頁的進度面板",
         ["JobController.Dismiss"] = "關閉進度通知（1.1.15）：工作照跑；只動得到呼叫者看得到的工作，看不到回 404",
         ["JobController.DismissAll"] = "關閉看得到的全部進度通知（1.1.15）：工作照跑",
+        ["UploadSessionController.Get"] = "查自己建立的上傳工作階段（1.1.16）：只認擁有者，別人的回 404",
+        ["UploadSessionController.Cancel"] = "取消自己建立的上傳（1.1.16）：只認擁有者，別人的回 404；建立時已檢查過會議紀錄權限與資料範圍",
         ["SystemController.GetAbout"] = "「關於」對話窗的系統名稱、版本、環境（1.1.6），Server 頁本來就讓所有登入者看得到",
         ["AuditController.PageDenied"] = "WASM 頁擋下呼叫者自己時寫「頁面拒絕存取」稽核（1.1.6），只收單純路徑",
         ["NotificationController.GetRecent"] = "只回呼叫者自己的最近通知（1.1.6，WASM 頁通知鈴）",

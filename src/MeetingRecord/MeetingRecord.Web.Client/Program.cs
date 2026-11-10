@@ -28,6 +28,8 @@ builder.Services.AddScoped<RoleApi>();
 builder.Services.AddScoped<DashboardApi>();
 builder.Services.AddScoped<AppHubConnection>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, ApiNotificationSource>();
+builder.Services.AddScoped<JobApi>();
+builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, ApiJobProgressSource>();
 builder.Services.AddScoped<AuthenticationStateProvider, SessionAuthenticationStateProvider>();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();

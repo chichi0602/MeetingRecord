@@ -287,6 +287,49 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
         Assert.Contains("\"sortDescending\":false", request.PostData);
     }
 
+    [E2EFact]
+    [Trait("Scenario", "WASM-10")]
+    [Trait("Title", "WASM 頁的進度面板即時顯示協作團隊的上傳與轉錄（不必重新整理），沒有團隊的人看不到；關閉通知會消失")]
+    [Trait("Page", "儀表板")]
+    [Trait("Persona", "主責＋協作＋無團隊")]
+    public async Task JobPanel_OnWasmPage_ShouldShowLiveProgress_ByScope()
+    {
+        // 1.1.15：進度面板在 WASM 頁改由 api/v1/jobs＋推播 JobsChanged 提供。比照 L4-04，只是看的人停在 WASM 頁（儀表板）。
+        const int mb = 1024 * 1024;
+        var title = Unique("E2E WASM推播會議");
+        await using (var db = App.CreateDbContext())
+        {
+            db.Meeting.Add(new Meeting { Title = title, ProjectId = Seed.SharedProjectId, CreatedByUserId = Seed.Owner.Id, MeetingDate = DateTime.Today });
+            await db.SaveChangesAsync();
+        }
+
+        var collaborator = await LoginAsAsync(Seed.Collaborator);
+        await GotoAsync(collaborator, "/dashboard", "營運概況");
+        var noTeam = await LoginAsAsync(Seed.NoTeam);
+        await GotoAsync(noTeam, "/dashboard", "營運概況");
+
+        var owner = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(owner, "/meetings", "會議標題");
+        await ThrottleUploadsAsync(owner, TimeSpan.FromSeconds(1.5));
+        await RowAction(Row(owner, title), "修改").ClickAsync();
+        await owner.Locator(".ant-modal-wrap:visible input[type=file]").SetInputFilesAsync(FakeMediaFile($"{title}.mp3", 40 * mb));
+        await Expect(owner.GetByText("待上傳：")).ToBeVisibleAsync();
+        await ClickModalOkAsync(owner);
+        await ConfirmAsync(owner, "儲存並開始轉錄");
+
+        // 協作成員停在 WASM 頁不動，面板自己冒出這一列，接著跟著轉錄跑到完成。
+        var row = JobPanelRow(collaborator, title);
+        await Expect(row).ToContainTextAsync("上傳中");
+        await Expect(row.Locator("[aria-label='已完成']")).ToBeVisibleAsync(new() { Timeout = 120_000 });
+
+        // 沒有團隊的人自始至終看不到。
+        await Expect(JobPanelRow(noTeam, title)).ToHaveCountAsync(0);
+
+        // 關閉通知經 API，這一列消失。
+        await row.Locator(".job-progress-panel-row-close").ClickAsync();
+        await Expect(row).ToHaveCountAsync(0);
+    }
+
     /// <summary>通知鈴按鈕的可及名稱是「通知，N 則未讀」，沒有未讀時只有「通知」。</summary>
     private static async Task<int> UnreadAsync(IPage page)
     {

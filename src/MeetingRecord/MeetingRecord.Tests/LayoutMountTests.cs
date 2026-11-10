@@ -27,6 +27,7 @@ public sealed partial class LayoutMountTests
     [InlineData("MeetingRecord.Web.Client/Components/Layout/AppShell.razor", "@NotificationContent", "通知鈴插槽")]
     [InlineData("MeetingRecord.Web.Client/Components/Layout/AppShell.razor", "@OverlayContent", "進度面板插槽")]
     [InlineData("MeetingRecord.Web.Client/Layout/WasmLayout.razor", "<AppShell", "共用外框")]
+    [InlineData("MeetingRecord.Web.Client/Layout/WasmLayout.razor", "<BackgroundJobProgressPanel", "右下角的進度面板（1.1.15）")]
     public void Layout_ShouldMount(string relativePath, string marker, string purpose)
     {
         // 註解掉的不算——那正是「看起來還在、其實沒有渲染」的樣子。

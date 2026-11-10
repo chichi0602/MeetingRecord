@@ -6,7 +6,8 @@
 
 @* WASM 端的版面：開頁先問 Session API，依結果導向（登入、登出原因、改密碼），通過才畫外框。
    外框用共用的 AppShell（1.1.5），與 Blazor Server 頁的 MainLayout 同一份外觀；這裡供應 API 來的資料：
-   選單與使用者來自 Session、通知鈴的資料來源是 ApiNotificationSource、變更密碼與關於打 API（1.1.6）。 *@
+   選單與使用者來自 Session、通知鈴的資料來源是 ApiNotificationSource、變更密碼與關於打 API（1.1.6）；
+   右下角的背景工作進度面板（1.1.15）資料來源是 ApiJobProgressSource。 *@
 @if (session is null)
 {
     <div class="wasm-loading">
@@ -32,6 +33,10 @@ else
         <NotificationContent>
             <NotificationBell UserId="@session.UserId" />
         </NotificationContent>
+        <OverlayContent>
+            @* 常駐於所有 WASM 頁：上傳、轉錄與會議紀錄生成的進度（1.1.15，與 Server 頁同一個面板）。 *@
+            <BackgroundJobProgressPanel />
+        </OverlayContent>
         <ChildContent>
             <ErrorBoundary>
                 <ChildContent>@Body</ChildContent>

@@ -26,6 +26,12 @@ public sealed class AppHub : Hub
     /// <summary>某些通知有變動（新通知或已讀），前端重查未讀數。</summary>
     public const string NotificationsChanged = "NotificationsChanged";
 
+    /// <summary>
+    /// 背景工作（上傳、轉錄、會議紀錄生成）的進度有變動（1.1.15），前端重查 <c>api/v1/jobs</c>。
+    /// 送給所有連線：不帶任何資料，看得到哪些工作由 API 依呼叫者的資料範圍決定。
+    /// </summary>
+    public const string JobsChanged = "JobsChanged";
+
     public static string UserGroup(int userId) => $"user:{userId}";
 
     public override async Task OnConnectedAsync()

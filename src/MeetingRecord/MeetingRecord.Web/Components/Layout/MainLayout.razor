@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
 
 @* Blazor Server 頁的版面（1.1.5 起外觀交給共用的 AppShell，與 WASM 頁的 WasmLayout 同一份）。
-   這裡只負責「伺服器端的資料」：登入檢查、選單、使用者、變更密碼、關於，以及只在 Server 頁才有的通知鈴與進度面板。 *@
+   這裡只負責「伺服器端的資料」：登入檢查、選單、使用者、變更密碼、關於，以及通知鈴與進度面板（兩者的元件放在 WASM 專案、兩種頁面共用，這裡給的是 Server 版的資料來源）。 *@
 <AppShell MenuItems="menuItems"
           SystemName="@SystemName"
           UserDisplayName="@currentUserDisplayName"

@@ -163,6 +163,11 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<MeetingRecord.Web.Hubs.HubNotificationBridge>();
         // 1.1.6：通知鈴（放在 WASM 專案、兩種頁面共用）在 Server 頁的資料來源。
         services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, MeetingRecord.Web.Notifications.ServerNotificationSource>();
+        // 1.1.15（WASM 遷移 M3）：背景工作進度。規則只有一份（BackgroundJobBoard），Server 頁面板與 JobController 共用；
+        // 進度變動節流後推給 AppHub，WASM 頁的面板據此重查。
+        services.AddScoped<MeetingRecord.Web.Jobs.BackgroundJobBoard>();
+        services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, MeetingRecord.Web.Jobs.ServerJobProgressSource>();
+        services.AddHostedService<MeetingRecord.Web.Hubs.JobProgressHubBridge>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingRepository>();
         services.AddScoped<MeetingFileStore>();

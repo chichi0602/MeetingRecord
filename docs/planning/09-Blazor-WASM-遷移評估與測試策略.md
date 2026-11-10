@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.19
+- 文件版本：1.20
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1、M2 完成，IIS 測試機驗證待補，M3 進行中）
-- 現行系統版本：1.1.14
+- 現行系統版本：1.1.15
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/10
 
@@ -140,7 +140,7 @@
 - 由一個 hosted service 訂閱現有的三個 singleton notifier，**在伺服器端依 `ProjectAccessService` 過濾**後才推送給有權看的人（現在 `BackgroundJobProgressPanel` 是在元件裡過濾，搬到伺服器後不能把全公司的進度整包送到瀏覽器再濾）。
 - 取消背景工作改成 Hub 方法或 API，仍需會議紀錄的 Edit 權限。
 - 斷線重連：用 SignalR 自動重連，重連後重新取一次快照。
-- **實作現況（1.1.2）**：`Web/Hubs/AppHub`（`/hubs/app`，policy scheme 驗證，群組 `user:{id}`）與 `HubNotificationBridge`（轉送 `IUserNotificationNotifier`）已上線，WASM 端 `Realtime/AppHubConnection` 自動重連、重連後重查；目前只推「通知有變動」給 WASM 版面的未讀數。兩個進度通知器（轉錄、會議紀錄生成）依上面的伺服器端過濾規則在 M3 接上。
+- **實作現況（1.1.2）**：`Web/Hubs/AppHub`（`/hubs/app`，policy scheme 驗證，群組 `user:{id}`）與 `HubNotificationBridge`（轉送 `IUserNotificationNotifier`）已上線，WASM 端 `Realtime/AppHubConnection` 自動重連、重連後重查；目前只推「通知有變動」給 WASM 版面的未讀數。兩個進度通知器（轉錄、會議紀錄生成）1.1.15 接上：`JobProgressHubBridge` 節流後推不帶資料的 `JobsChanged` 給所有連線，WASM 面板收到再打 `api/v1/jobs`，由伺服器依 `ProjectAccessService` 過濾（不把全公司的進度送到瀏覽器）；取消走 API，要會議紀錄的 Edit 權限。
 
 ### 4.5 AI 串流 🟡
 
@@ -462,24 +462,25 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 個人資料 `/Profile`、變更密碼 `/ChangePassword` | 1.1.13 | ✅ 完成；`AccountController` 新增 3 支只需登入的端點；WASM 版面與 `ApiClient` 在變更密碼頁不再導向自己；LGN-04、WASM-04 照過，新增 LGN-08、ACC-01 |
 | M2 里程碑報告 | 1.1.14 | ✅ 完成，見 [2026-11-10-M2-里程碑測試報告-1.1.14](../testing/2026-11-10-M2-里程碑測試報告-1.1.14.md)；M2 新開 37 支端點，另 15 支既有 CRUD 改走服務層（§4.3） |
 
-## 十一、下一步
+## 十、之四 M3 進度（專案、會議、待辦，1.1.15 起）
 
-M0、M1、M2 已完成。接著做 **M3（專案、會議、待辦三個核心頁）**，使用者決定（2026/11/10）：
-
+決定（2026/11/10）：
 - AI 問答、待辦抽取併進 M3（它們嵌在會議頁與專案頁），M4 只剩使用說明的 AI 助理；
 - 上傳在 WASM 端是整個前端層級的，換 WASM 頁照樣繼續傳；關分頁、重新整理、換到舊版頁面才中斷，照現在一樣先確認；
 - 會議、專案、待辦既有的對外 API 照 M2 做法改走同一套服務，只加欄位，畫面專用的形狀另開端點，外部看得到的行為變更寫進 changelog。
 
-| 步驟 | 版本（預定） |
-|------|------|
-| 背景工作進度：推播與 WASM 版進度面板 | 1.1.15 |
-| HTTP 上傳工作階段與 WASM 端上傳服務 | 1.1.16 |
-| 共用元件搬到 Client（上傳區、Markdown 編輯器、專案範圍切換、下載） | 1.1.17 |
-| 待辦 `/todos` | 1.1.18 |
-| AI 問答（串流）、會議 `/meetings` | 1.1.19～1.1.20（依相依調整順序） |
-| 專案 `/projects`（一）（二），含待辦抽取 | 1.1.21～1.1.22 |
-| M3 里程碑報告 | 1.1.23 |
+| 步驟 | 版本 | 狀態 |
+|------|------|------|
+| 背景工作進度：推播與 WASM 版進度面板 | 1.1.15 | ✅ 完成；規則抽成 `BackgroundJobBoard`（Server 頁面板與 `api/v1/jobs` 共用），面板搬到 Client、資料來源 `IJobProgressSource`；進度變動節流 0.5 秒推 `JobsChanged`；L4-03／04 照過，新增 WASM-10 |
+| HTTP 上傳工作階段與 WASM 端上傳服務 | 1.1.16 | 待做 |
+| 共用元件搬到 Client（上傳區、Markdown 編輯器、專案範圍切換、下載） | 1.1.17 | 待做 |
+| 待辦 `/todos` | 1.1.18 | 待做 |
+| AI 問答（串流）、會議 `/meetings` | 1.1.19～1.1.20（依相依調整順序） | 待做 |
+| 專案 `/projects`（一）（二），含待辦抽取 | 1.1.21～1.1.22 | 待做 |
+| M3 里程碑報告 | 1.1.23 | 待做 |
 
-IIS 測試機驗證、前端錯誤回報 API 仍待補；效能調校在 M6。
+## 十一、下一步
+
+M0、M1、M2 已完成，M3 進行中（見「十、之四」）。IIS 測試機驗證、前端錯誤回報 API 仍待補；效能調校在 M6。
 
 > 返回 [planning 索引](README.md)

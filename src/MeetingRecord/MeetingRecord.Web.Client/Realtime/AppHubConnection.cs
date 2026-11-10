@@ -15,11 +15,15 @@ public sealed class AppHubConnection(NavigationManager navigation) : IAsyncDispo
 {
     public const string Path = "/hubs/app";
     public const string NotificationsChangedEvent = "NotificationsChanged";
+    public const string JobsChangedEvent = "JobsChanged";
 
     private HubConnection? connection;
 
     /// <summary>某些通知有變動（新通知或已讀）。</summary>
     public event Func<Task>? NotificationsChanged;
+
+    /// <summary>背景工作（上傳、轉錄、會議紀錄生成）的進度有變動（1.1.15）。</summary>
+    public event Func<Task>? JobsChanged;
 
     /// <summary>斷線後重新連上；斷線期間的推播可能漏掉，要重查。</summary>
     public event Func<Task>? Reconnected;
@@ -38,6 +42,7 @@ public sealed class AppHubConnection(NavigationManager navigation) : IAsyncDispo
             .WithAutomaticReconnect()
             .Build();
         connection.On(NotificationsChangedEvent, () => RaiseAsync(NotificationsChanged));
+        connection.On(JobsChangedEvent, () => RaiseAsync(JobsChanged));
         connection.Reconnected += _ => RaiseAsync(Reconnected);
 
         try

@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.20
+- 文件版本：1.21
 - 文件狀態：已實作
-- 現行系統版本：1.1.13
+- 現行系統版本：1.1.15
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -50,6 +50,8 @@
 **儀表板**（1.1.12，`DashboardController`）：`GET api/v1/dashboard`，只需登入（0.4.97 起儀表板登入即可看），回 `ApiResult<DashboardSummary>`（型別在 `Dtos/Dashboards`）；呼叫者看不到的專案在「各專案會議紀錄份數」併成「其他專案」。
 
 **變更密碼頁與設定 API 密碼頁**（1.1.13，`AccountController`，只需登入、只動呼叫者自己）：`POST api/v1/account/change-own-password`（內容 `{ currentPassword, newPassword, confirmPassword }`；要確認新密碼、沒有字數下限、稽核 `via=FirstLogin`；標 `[AllowWhenMustChangePassword]`，改完清掉須改密碼標記）；`GET api/v1/account/password-status`（回 `{ hasLocalPassword }`）；`POST api/v1/account/api-password`（內容同上，還沒有本地密碼的帳號免填 `currentPassword`）。失敗回 400、訊息照原頁；support 帳號一律被拒。與 1.1.6 的 `change-password`（使用者選單對話窗，至少 6 字）是不同的規則。
+
+**背景工作進度**（1.1.15，`JobController`，WASM 頁右下角進度面板用）：`GET api/v1/jobs`（只需登入；回 `List<BackgroundJobDto>`，只含呼叫者資料範圍內的會議的上傳、轉錄、會議紀錄生成工作，進行中排前面）；`POST api/v1/jobs/{meetingId}/cancel?kind=Transcription|Draft`（會議紀錄 Edit；上傳中的轉錄工作會以「上傳」種類取消）；`POST api/v1/jobs/{meetingId}/dismiss?kind=…`、`POST api/v1/jobs/dismiss-all`（只需登入，關閉通知、工作照跑；關閉是全域的，比照 Server 頁面板）。看不到或已結束的工作回 404，`kind` 不對回 400。推播 `AppHub.JobsChanged`（不帶資料、節流 0.5 秒）提醒前端重查。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

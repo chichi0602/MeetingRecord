@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.TextGeneration;
 

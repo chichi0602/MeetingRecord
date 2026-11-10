@@ -19,9 +19,9 @@ namespace MeetingRecord.Business.Helpers;
 /// <c>PromptTemplatePresetsTests</c> 守著）：
 /// <list type="number">
 /// <item><b>一定要含 <c>{{transcript}}</c></b>。<c>MeetingDraftJobRunner</c> 只做
-/// <see cref="PromptVariableHelper.Render"/>，逐字稿只有在範本含這個變數時才會被代入
+/// <see cref="MeetingRecord.Share.Helpers.PromptVariableHelper.Render"/>，逐字稿只有在範本含這個變數時才會被代入
 /// ——漏了它模型完全拿不到逐字稿，而且不會報任何錯。</item>
-/// <item>只用 <see cref="PromptVariableHelper.KnownVariables"/> 裡的變數，否則使用者
+/// <item>只用 <see cref="MeetingRecord.Share.Helpers.PromptVariableHelper.KnownVariables"/> 裡的變數，否則使用者
 /// 每次儲存都會被彈未知變數警告。</item>
 /// <item>長度要符合 <c>PromptTemplateAdapterModel</c> 的驗證上限。</item>
 /// <item><c>{{meetingDate}}</c> 可能被代入空字串（會議沒填日期時），所以要附一句

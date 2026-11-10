@@ -137,6 +137,54 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
     }
 
     [E2EFact]
+    [Trait("Scenario", "MD-08")]
+    [Trait("Title", "提示詞新增單一內建範本（重複會擋）、修改時選分類、未知變數只提醒不阻擋")]
+    [Trait("Page", "提示詞清單")]
+    [Trait("Persona", "管理者")]
+    public async Task PromptTemplate_AddSinglePreset_EditCategoryAndUnknownVariable()
+    {
+        // 1.1.9（提示詞清單搬到 WASM）：MD-04 只驗「建立全部內建範本」，補上單一範本、分類與變數提醒（PromptVariableHelper 在 WASM 執行）。
+        var preset = MeetingRecord.Business.Helpers.PromptTemplatePresets.All[^1].Name;
+        var category = Unique("E2E提示詞分類");
+        await using (var db = App.CreateDbContext())
+        {
+            await db.PromptTemplate.Where(x => x.Name == preset).ExecuteDeleteAsync();
+            db.Category.Add(new MeetingRecord.AccessDatas.Models.Category { Name = category, IsEnabled = true });
+            await db.SaveChangesAsync();
+        }
+
+        var page = await LoginAsAsync(Seed.Admin);
+        await GotoAsync(page, "/prompttemplates", "內容預覽");
+
+        var presetSelect = page.Locator(".prompt-template-view-toolbar .ant-select").First;
+        await PickAsync(page, presetSelect, preset);
+        await ToolbarButton(page, "新增此範本").ClickAsync();
+        await Expect(Notice(page, $"已新增「{preset}」")).ToBeVisibleAsync();
+
+        await ToolbarButton(page, "新增此範本").ClickAsync();
+        await Expect(Notice(page, $"「{preset}」已存在，未新增")).ToBeVisibleAsync();
+
+        await page.GetByPlaceholder("請輸入搜尋關鍵字").FillAsync(preset);
+        await page.GetByRole(AriaRole.Button, new() { Name = "搜尋" }).ClickAsync();
+        await RowAction(Row(page, preset), "修改").ClickAsync();
+        await PickAsync(page, SelectByLabel(page, "分類"), category);
+        // 多選下拉選完不會自己收起來（會蓋住欄位與「確定」）：點一下對話窗標題收起。
+        await page.Locator(".ant-modal-wrap:visible .ant-modal-title").ClickAsync();
+        var content = page.GetByPlaceholder("請輸入產生會議紀錄時要送給模型的指令內容");
+        await content.FillAsync(await content.InputValueAsync() + "\n{{foo}}");
+        await ClickModalOkAsync(page);
+
+        await Expect(Notice(page, "提示詞變數提醒")).ToBeVisibleAsync();
+        await Expect(Notice(page, "修改成功")).ToBeVisibleAsync();
+        await using (var db = App.CreateDbContext())
+        {
+            var saved = await db.PromptTemplate.SingleAsync(x => x.Name == preset);
+            Assert.Contains("{{foo}}", saved.Content);
+            Assert.Equal($"\n{category}\n", saved.Categories);
+        }
+    }
+
+    [E2EFact]
     [Trait("Scenario", "MD-06")]
     [Trait("Title", "按 Enter 送出後立刻再按「確定」只新增一筆、不會跳名稱已存在")]
     [Trait("Page", "分類清單")]

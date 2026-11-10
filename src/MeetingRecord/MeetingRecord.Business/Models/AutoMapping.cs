@@ -79,10 +79,6 @@ public class AutoMapping : Profile
             .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)));
         CreateMap<PromptTemplateAdapterModel, PromptTemplate>()
             .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)));
-        CreateMap<PromptTemplate, PromptTemplateDto>();
-        CreateMap<PromptTemplateDto, PromptTemplate>();
-        CreateMap<PromptTemplate, PromptTemplateCreateUpdateDto>();
-        CreateMap<PromptTemplateCreateUpdateDto, PromptTemplate>();
         #endregion
 
         #region ExceptionLog

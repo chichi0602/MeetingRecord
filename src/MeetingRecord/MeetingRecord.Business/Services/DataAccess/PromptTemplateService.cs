@@ -36,7 +36,8 @@ public class PromptTemplateService
         this.auditLogService = auditLogService;
     }
 
-    public async Task<DataRequestResult<PromptTemplateAdapterModel>> GetAsync(DataRequest dataRequest)
+    /// <param name="isEnabled">只取啟用（true）或停用（false）的；null 不篩選。清單頁不傳，提示詞 API 的搜尋條件用（1.1.9）。</param>
+    public async Task<DataRequestResult<PromptTemplateAdapterModel>> GetAsync(DataRequest dataRequest, bool? isEnabled = null)
     {
         Logger.LogDebug(
             "Loading prompt templates. Search={Search}, SortField={SortField}, SortDescending={SortDescending}, CurrentPage={CurrentPage}, PageSize={PageSize}, Take={Take}",
@@ -57,6 +58,11 @@ public class PromptTemplateService
                 x.Name.Contains(search) ||
                 x.Content.Contains(search) ||
                 (x.Description ?? string.Empty).Contains(search));
+        }
+
+        if (isEnabled.HasValue)
+        {
+            dataSource = dataSource.Where(x => x.IsEnabled == isEnabled.Value);
         }
 
         if (dataRequest.CategoryFilters.Count > 0)
@@ -142,7 +148,8 @@ public class PromptTemplateService
     private Task AuditAsync(string action, int id, string detail)
         => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(PromptTemplate), targetId: id.ToString(), detail: detail);
 
-    public async Task<VerifyRecordResult> AddAsync(PromptTemplateAdapterModel paraObject)
+    /// <param name="via">稽核的來源：畫面 <see cref="AuditVia.Web"/>、API <see cref="AuditVia.Api"/>（1.1.9）。</param>
+    public async Task<VerifyRecordResult> AddAsync(PromptTemplateAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Creating prompt template. Name={PromptTemplateName}", paraObject.Name);
 
@@ -155,10 +162,11 @@ public class PromptTemplateService
 
             await context.PromptTemplate.AddAsync(itemParameter);
             await context.SaveChangesAsync();
+            paraObject.Id = itemParameter.Id; // API 要回傳新建的那筆（1.1.9）。
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
             // 只記名稱，不記提示詞本文。
-            await AuditAsync(AuditActions.PromptTemplateCreate, itemParameter.Id, $"name={itemParameter.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.PromptTemplateCreate, itemParameter.Id, $"name={itemParameter.Name}; via={via}");
             Logger.LogInformation("Prompt template created successfully. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", itemParameter.Id, itemParameter.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -169,7 +177,7 @@ public class PromptTemplateService
         }
     }
 
-    public async Task<VerifyRecordResult> UpdateAsync(PromptTemplateAdapterModel paraObject)
+    public async Task<VerifyRecordResult> UpdateAsync(PromptTemplateAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Updating prompt template. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", paraObject.Id, paraObject.Name);
 
@@ -195,7 +203,7 @@ public class PromptTemplateService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
-            await AuditAsync(AuditActions.PromptTemplateUpdate, itemData.Id, $"name={itemData.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.PromptTemplateUpdate, itemData.Id, $"name={itemData.Name}; via={via}");
             Logger.LogInformation("Prompt template updated successfully. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", itemData.Id, itemData.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -206,7 +214,7 @@ public class PromptTemplateService
         }
     }
 
-    public async Task<VerifyRecordResult> DeleteAsync(int id)
+    public async Task<VerifyRecordResult> DeleteAsync(int id, string via = AuditVia.Web)
     {
         Logger.LogInformation("Deleting prompt template. PromptTemplateId={PromptTemplateId}", id);
 
@@ -228,7 +236,7 @@ public class PromptTemplateService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<PromptTemplate>(context);
 
-            await AuditAsync(AuditActions.PromptTemplateDelete, id, $"name={item.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.PromptTemplateDelete, id, $"name={item.Name}; via={via}");
             Logger.LogInformation("Prompt template deleted successfully. PromptTemplateId={PromptTemplateId}, Name={PromptTemplateName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
         }

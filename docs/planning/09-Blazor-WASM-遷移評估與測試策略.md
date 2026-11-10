@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.13
+- 文件版本：1.14
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1 完成、IIS 測試機驗證待補，M2 進行中）
-- 現行系統版本：1.1.8
+- 現行系統版本：1.1.9
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/10
 
@@ -454,7 +454,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 版面需要的 API（通知清單、變更密碼、關於）、頁面拒絕稽核、上傳中換頁確認 | 1.1.6 | ✅ 完成；通知鈴兩邊共用（資料來源介面）、FormDirtyHelper 在 WASM 實測正常 |
 | 分類 `/categories` | 1.1.7 | ✅ 完成；第一個實際搬到 WASM 的頁，定下 API 走服務層、`PermissionView`、搬頁固定動作的做法；MD-01／02／05／06 一行不改照過 |
 | 團隊 `/teams` | 1.1.8 | ✅ 完成；`[HasPermission]` 支援任一動作（成員清單要新增或修改權限）、刪除前檢查端點；MD-03 照過，新增 MD-07（修改成員、刪除） |
-| 提示詞 `/prompttemplates` | 1.1.9 | 待做 |
+| 提示詞 `/prompttemplates` | 1.1.9 | ✅ 完成；`PromptVariableHelper` 搬到 Share（WASM 頁照舊提醒未知變數）、內建範本改由 API 提供、分類多一個清單欄位 `categoryNames`；MD-04 照過，新增 MD-08。原計畫「搜尋加分類篩選」不做（畫面與外部 API 都沒用到） |
 | 使用者 `/myusers` | 1.1.10 | 待做 |
 | 角色 `/roleviews` | 1.1.11 | 待做 |
 | 儀表板 `/dashboard` | 1.1.12 | 待做 |

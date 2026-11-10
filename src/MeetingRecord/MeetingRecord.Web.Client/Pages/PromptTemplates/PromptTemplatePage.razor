@@ -1,5 +1,9 @@
-@using MeetingRecord.Business.Helpers
-@using MeetingRecord.Share.Helpers
+@page "/prompttemplates"
+@using MeetingRecord.Dtos.Models
+
+@* 會議紀錄提示詞清單（1.1.9 搬到 WASM）：由 Blazor Server 的 PromptTemplateViewView 改寫，畫面、文字、按鈕都不變；資料改走提示詞 API。 *@
+<PageTitle>提示詞清單</PageTitle>
+
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -11,7 +15,7 @@ else
     <div>
         <div class="prompt-template-view-toolbar">
             <div class="prompt-template-view-toolbar-left">
-                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Create))
+                @if (PermissionView.Can(MagicObjectHelper.角色_提示詞清單, PermissionActions.Create))
                 {
                     <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
@@ -36,9 +40,9 @@ else
                             @bind-Value="selectedPresetName"
                             Placeholder="選擇內建範本"
                             AllowClear EnableSearch Style="min-width: 180px;">
-                        @foreach (var preset in PromptTemplatePresets.All)
+                        @foreach (var presetName in presetNames)
                         {
-                            <SelectOption TItemValue="string" TItem="string" Value="@preset.Name">@preset.Name</SelectOption>
+                            <SelectOption TItemValue="string" TItem="string" Value="@presetName">@presetName</SelectOption>
                         }
                     </Select>
                     <HoverTip Title="只新增選取的那一個內建範本">
@@ -77,10 +81,10 @@ else
                            OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="prompt-template-view-table-wrap">
             <Table @ref="table"
-                   TItem="PromptTemplateAdapterModel"
+                   TItem="PromptTemplateDto"
                    Class="prompt-template-view-table"
                    RemoteDataSource="true"
-                   DataSource="@promptTemplateAdapterModels"
+                   DataSource="@promptTemplates"
                    RowKey="x => x.Id"
                    @bind-SelectedRows="selectedRows"
                    OnChange="OnTableChange"
@@ -91,15 +95,15 @@ else
                 {
                     <Selection />
                 }
-                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
-                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.ContentPreview)" Title="內容預覽" />
-                <Column TData="string" DataIndex="@nameof(PromptTemplateAdapterModel.Description)" Title="描述" />
-                <Column TData="bool" DataIndex="@nameof(PromptTemplateAdapterModel.IsEnabled)" Title="啟用狀態" Sortable ShowSorterTooltip="false">
+                <Column TData="string" DataIndex="@nameof(PromptTemplateDto.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateDto.ContentPreview)" Title="內容預覽" />
+                <Column TData="string" DataIndex="@nameof(PromptTemplateDto.Description)" Title="描述" />
+                <Column TData="bool" DataIndex="@nameof(PromptTemplateDto.IsEnabled)" Title="啟用狀態" Sortable ShowSorterTooltip="false">
                     @* 有 Edit 權限才做成可點的按鈕；沒權限就退回純文字，不要用 disabled 按鈕
                        ——disabled 的按鈕不可 focus，掛在上面的 aria-label 狀態說明就讀不到了。
                        可見文字講「狀態」、aria-label 與 title 講「動作」：把「啟用」直接當按鈕的
                        可及名稱會被讀成命令，語意與實際相反。 *@
-                    @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))
+                    @if (PermissionView.Can(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))
                     {
                         <button type="button"
                                 class="prompt-template-status @(context.IsEnabled ? "prompt-template-status-enabled" : "prompt-template-status-disabled")"
@@ -116,17 +120,17 @@ else
                         </span>
                     }
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(PromptTemplateAdapterModel.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
+                <Column TData="DateTime" DataIndex="@nameof(PromptTemplateDto.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))
+                        @if (PermissionView.Can(MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="修改" Icon="edit"
                                                   OnClick="@(async () => await OnEditAsync(context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_提示詞清單, PermissionActions.Delete))
+                        @if (PermissionView.Can(MagicObjectHelper.角色_提示詞清單, PermissionActions.Delete))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="刪除" Icon="delete" Danger
@@ -151,7 +155,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="PromptTemplateAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="PromptTemplateDto" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="名稱" Required>
                             <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入提示詞名稱" />
@@ -165,7 +169,7 @@ else
                         <FormItem Label="分類">
                             <div @onkeydown:stopPropagation="true">
                                 <Select TItem="string" TItemValue="string" Mode="SelectMode.Multiple"
-                                        Values="CurrentRecord.Categories" OnSelectedItemsChanged="OnRecordCategoriesChanged"
+                                        Values="CurrentRecord.CategoryNames" OnSelectedItemsChanged="OnRecordCategoriesChanged"
                                         Placeholder="選擇分類" AllowClear EnableSearch Style="width: 100%;">
                                     @foreach (var c in availableCategories)
                                     {

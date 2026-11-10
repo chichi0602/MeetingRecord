@@ -55,6 +55,13 @@ public class PromptTemplateCreateUpdateDto
     public string? Categories { get; set; }
 
     /// <summary>
+    /// 分類名稱清單（1.1.9）。有帶就以這個為準；沒帶才看 <see cref="Categories"/>（資料庫的儲存格式：每個名稱前後各一個換行，例如 "\n分類A\n分類B\n"）。
+    /// 兩個都沒帶＝沒有分類。回應兩個都會填。
+    /// </summary>
+    [JsonPropertyName("categoryNames")]
+    public List<string>? CategoryNames { get; set; }
+
+    /// <summary>
     /// 建立時間
     /// </summary>
     [JsonPropertyName("createdAt")]

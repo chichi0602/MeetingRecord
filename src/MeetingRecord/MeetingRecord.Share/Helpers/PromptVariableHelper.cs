@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace MeetingRecord.Business.Helpers;
+namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
 /// 提示詞內容的變數佔位符輔助。

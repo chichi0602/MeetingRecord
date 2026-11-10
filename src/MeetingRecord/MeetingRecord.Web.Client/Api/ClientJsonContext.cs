@@ -33,4 +33,10 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ApiResult<List<MemberOptionDto>>), TypeInfoPropertyName = "MemberOptionsResult")]
 [JsonSerializable(typeof(TeamSearchRequestDto))]
 [JsonSerializable(typeof(TeamCreateUpdateDto))]
+[JsonSerializable(typeof(ApiResult<PagedResult<PromptTemplateDto>>), TypeInfoPropertyName = "PromptTemplatePageResult")]
+[JsonSerializable(typeof(ApiResult<PromptTemplateDto>), TypeInfoPropertyName = "PromptTemplateResult")]
+[JsonSerializable(typeof(ApiResult<List<string>>), TypeInfoPropertyName = "StringListResult")]
+[JsonSerializable(typeof(PromptTemplateSearchRequestDto))]
+[JsonSerializable(typeof(PromptTemplateCreateUpdateDto))]
+[JsonSerializable(typeof(PresetNameRequestDto))]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.25
+- 文件版本：1.26
 - 文件狀態：維護中
-- 現行系統版本：1.1.8
+- 現行系統版本：1.1.9
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/10
 
@@ -26,7 +26,7 @@
 | 稽核紀錄 | [稽核紀錄](稽核紀錄-prd.md) | `/audit-logs` | `Pages/Admins/AuditLogPage.razor`、`AuditLogView`、`AuditLogService`、`AuditLogQueryService`、`ClientIpProvider`、`AuditLogRetentionBackgroundService`、`AuditActions` | 已實作（寫入自樣板時期；1.0.32 起有查詢頁、來源 IP、保留 365 天，只限管理者；1.0.33 起記登出、Google 登入、密碼、啟停用、團隊成員、權限拒絕；1.0.34 起記專案、會議、待辦、團隊、分類、提示詞、AI 問答的異動與資料範圍擋下的寫入） | 1.0.34 |
 | 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Web.Client/Pages/Categories/CategoryPage.razor`（WASM，1.1.7）、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
 | 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Web.Client/Pages/Teams/TeamPage.razor`（WASM，1.1.8）、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
-| 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
+| 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（WASM，1.1.9）、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
 | 會議紀錄（含影音上傳與語音轉文字）| [會議紀錄](會議紀錄-prd.md) | `/meetings` | `Pages/Meetings/MeetingPage.razor`、`MeetingService`、`MeetingFileStore`、`TranscriptionJobRunner`、`MeetingController` | 已實作 | 0.4.118 |
 | 會議紀錄產生流程 | [會議紀錄產生流程](會議紀錄產生流程-prd.md) | 跨 `/meetings`、`/projects`（上傳→轉錄→套用提示詞→草稿） | `TranscriptionJobRunner`、`MeetingDraftJobRunner`、`ITextGenerationProvider`、`MeetingDraftProgressNotifier` | 已實作（前半段 0.4.27、後半段 0.4.31） | 0.4.118 |
 | 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Pages/Monitoring/SystemHealthPage.razor`、`SystemHealthView`、Health services | 已實作（0.4.120 起改名並只限管理者；0.4.123 改版為 17 項、頁尾改最近 24 小時警告以上日誌；1.0.29 新增 AI 用量上限成為 18 項；1.0.35 起 AI 供應商設定顯示實際部署並提示不認得的設定鍵，另有手動「測試 AI 連線」） | 1.0.35 |

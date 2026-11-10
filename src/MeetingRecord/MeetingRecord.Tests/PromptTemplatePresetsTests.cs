@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using MeetingRecord.Business.Helpers;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Models.AdapterModel;
 
 namespace MeetingRecord.Tests;

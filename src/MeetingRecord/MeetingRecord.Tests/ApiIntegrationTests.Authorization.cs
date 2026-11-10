@@ -49,6 +49,11 @@ public sealed partial class ApiIntegrationTests
         ["PromptTemplate.Create"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Create),
         ["PromptTemplate.Update"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit),
         ["PromptTemplate.Delete"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Delete),
+        ["PromptTemplate.SetEnabled"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Edit),
+        ["PromptTemplate.Presets"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Create),
+        ["PromptTemplate.AddPresets"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Create),
+        ["PromptTemplate.AddPreset"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.Create),
+        ["PromptTemplate.EnabledCategories"] = (MagicObjectHelper.角色_提示詞清單, PermissionActions.View),
         ["Team.GetById"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.View),
         ["Team.Search"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.View),
         ["Team.Create"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.Create),
@@ -64,6 +69,9 @@ public sealed partial class ApiIntegrationTests
     };
 
     public static TheoryData<string> GuardedEndpointNames => [.. GuardedEndpoints.Keys];
+
+    /// <summary>「只新增一個內建範本」授權測試用的範本名稱。</summary>
+    private static string AuthorizationPresetName => PromptTemplatePresets.All[0].Name;
 
     [Theory]
     [MemberData(nameof(GuardedEndpointNames))]
@@ -229,8 +237,17 @@ public sealed partial class ApiIntegrationTests
     private async Task<int> SeedTargetAsync(string endpoint, int userId)
     {
         var (controller, action) = SplitEndpoint(endpoint);
-        if (action is "Search" or "Create" or "SelectableTeams")
+        if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories")
         {
+            return 0;
+        }
+
+        if (action == "AddPreset")
+        {
+            // 單一內建範本：先確保那個名稱還不存在（其他測試可能已經建過全部內建範本），成功案例才不會撞名。
+            using var cleanup = factory.Services.CreateScope();
+            var cleanupDb = cleanup.ServiceProvider.GetRequiredService<BackendDBContext>();
+            await cleanupDb.PromptTemplate.Where(x => x.Name == AuthorizationPresetName).ExecuteDeleteAsync();
             return 0;
         }
 
@@ -289,6 +306,10 @@ public sealed partial class ApiIntegrationTests
             "SetEnabled" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/enabled", new { isEnabled = false }),
             "SelectableTeams" => client.GetAsync($"{baseUrl}/teams/selectable"),
             "DeleteCheck" => client.GetAsync($"{baseUrl}/{targetId}/delete-check"),
+            "Presets" => client.GetAsync($"{baseUrl}/presets"),
+            "AddPresets" => client.PostAsync($"{baseUrl}/presets", content: null),
+            "AddPreset" => client.PostAsJsonAsync($"{baseUrl}/presets/single", new { name = AuthorizationPresetName }),
+            "EnabledCategories" => client.GetAsync($"{baseUrl}/categories/enabled"),
             _ => throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null),
         };
     }

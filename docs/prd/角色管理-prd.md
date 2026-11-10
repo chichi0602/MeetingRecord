@@ -1,10 +1,10 @@
 ﻿# 角色管理 PRD
 
-- 文件版本：1.7
+- 文件版本：1.8
 - 文件狀態：已實作
-- 現行系統版本：1.0.55
+- 現行系統版本：1.1.11
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/10/22
+- 最後核對日期：2026/11/10
 
 > **0.4.102：權限矩陣的「資料群組」改回「團隊清單」。** 0.4.101 的「資料群組」權限鍵（含 `資料群組:edit` 這類動作鍵）由 `RbacBackfillService.RenameLegacyPermissionKeysAsync` 啟動時就地改回「團隊清單」，原本有的角色照樣有。角色本身的行為與 0.4.101 相同。三者分工：**角色＝能做什麼，團隊＝誰的資料，分類＝什麼資料**。
 >
@@ -27,8 +27,8 @@
 |------|------|----------|-----------|
 | `/roleviews` | 系統管理 → 帳號與權限 → 角色管理（`Menu.json` id=32）| 僅管理員（`AuthenticationStateHelper.CheckIsAdmin`）| 系統管理員 |
 
-- `RoleViewView` 初始化先 `Check`，非管理員顯示「你沒有權限存取此頁面」並停止載入。
-- 角色本身以 Blazor 頁面、管理員身分閘控（無 `RoleView` API 控制器）；此處編輯出來的權限鍵，才是各業務 API 控制器 `[HasPermission("頁面", "動作")]` 的授權依據。
+- 1.1.11 起是 WASM 頁 `Web.Client/Pages/Admins/RoleViewPage`（畫面與以前的 `RoleViewView` 相同）：登入狀態由 WASM 版面先處理；非管理員（`PermissionView.IsAdmin`）顯示「你沒有權限存取此頁面」、寫頁面拒絕稽核並停止載入。
+- 1.1.11 起資料經 `RoleController`（`api/v1/Role`，`[AdminOnly]`）取得；此處編輯出來的權限鍵，才是各業務 API 控制器 `[HasPermission("頁面", "動作")]` 的授權依據。
 
 ## 三、畫面與欄位
 
@@ -57,7 +57,7 @@
 
 ## 四、內部系統運作
 
-View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
+WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`，檢查權限樹都在目錄裡）→ `RoleViewService` → `BackendDBContext`（1.1.11 起；以前是 Blazor Server 的 `RoleViewView` 直接注入服務）。清單不帶權限樹，修改時再取單筆；新增時取 `permission-template`：
 
 - **矩陣 ↔ 權限鍵**（`RolePermissionService`）：`GetPermissionInput` 將勾選狀態轉為權限鍵清單——群組名、裸頁面鍵（＝全動作），或 `PermissionKey.For(頁面, 動作)`（如「專案項目:edit」）；`SetPermissionInput` 反向回填矩陣。清單序列化為 `RoleView.TabViewJson`。
 - **新增／修改**（`AddAsync`／`UpdateAsync`）：`CleanTrackingHelper.Clean` 清追蹤；以 `GetPermissionInputToJson` 產生 `TabViewJson` 存檔；再 `ParsePermissionKeys` 解析並呼叫 `RbacWriteService.SyncRolePermissionsAsync` 雙寫至 `RolePermissionMap`；寫 `Role.Create`／`Role.Update` 稽核（含權限鍵數）。
@@ -86,7 +86,7 @@ View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
 - 修改對象不存在：回「找不到要修改的角色資料。」
 - `TabViewJson` 解析失敗：`OtherDependencyData` 以空權限初始化矩陣（不致命）。
 - 未設任何權限：該角色無有效權限鍵，成員（非管理員）將無對應頁面／動作。
-- 矩陣使用未在目錄中的權限鍵時，雙寫會自動補建 `Permission` 列。
+- 權限樹裡有目錄外的群組、頁面或動作：API 回 400「權限項目「X」不在權限目錄裡。」（1.1.11；以前只有畫面在把關，任意名稱都會由雙寫自動補建 `Permission` 列）。
 
 ## 七、驗收與測試
 
@@ -95,11 +95,13 @@ View（`RoleViewView`）→ `RoleViewService` → `BackendDBContext`：
 - `MeetingRecord.Tests/DefaultRoleSeederTests.cs`（原 `RoleConsolidationServiceTests`）：舊名就地改名、沒有角色時新建、角色管理調整過的權限不被蓋回、不動帳號的角色、冪等。
 - `MeetingRecord.Tests/PermissionCheckerTests.cs`：管理員全通過、角色具／缺鍵、裸頁面鍵授予全動作、僅 `view` 不含 `edit`、多角色聯集。
 - `MeetingRecord.Tests/AuditEventsTests.cs`：`Role.Create`／`Role.Delete` 稽核。
+- `MeetingRecord.Tests/RoleApiTests.cs`（1.1.11）：只限管理者、權限樹轉成正確的權限鍵並讀回一致、目錄外的名稱 400、名稱重複 409、範本是完整目錄、刪除有人用的角色時那些人改用其他角色、建立預設角色可重複呼叫、稽核操作者是 API 呼叫者。
+- 端對端 ADM-02（建立預設角色，確認框寫五個角色）、ADM-03（矩陣顯示）、ADM-04（非管理者被擋）、ADM-06（只勾部分動作存成正確的權限鍵、刪除前確認）。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor`（`@page "/roleviews"`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor`（「角色項目」權限矩陣 `CurrentRecord.RolePermission.Groups`）、`RoleViewView.razor.cs`（矩陣互動 `OnPermissionGroupChanged`／`OnPermissionItemChanged`／`OnPermissionActionChanged`、`GetActionChecked`；動作欄定義 `PermissionActionItems`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/RoleViewPage.razor`（`@page "/roleviews"`，1.1.11 起在 WASM 執行；「角色項目」權限矩陣）、`RoleViewPage.razor.cs`（矩陣互動 `OnPermissionGroupChanged`／`OnPermissionItemChanged`／`OnPermissionActionChanged`、`GetActionChecked`；動作欄定義 `PermissionActionItems`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Api/RoleApi.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/RoleController.cs`（權限樹與目錄檢查）、`src/MeetingRecord/MeetingRecord.Dtos/Roles/RoleDtos.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs`（`RoleViewService.AddAsync`、`UpdateAsync`、`AddPresetsAsync`；`OtherDependencyData` 回填矩陣）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`RolePermissionService.SetPermissionInput`、`GetPermissionInput`、`GetRoleListPermissionAllName`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacWriteService.cs`（`RbacWriteService.SyncRolePermissionsAsync`、`EnsurePermissionsAsync`）

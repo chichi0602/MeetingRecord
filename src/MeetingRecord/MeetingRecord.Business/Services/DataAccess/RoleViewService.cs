@@ -21,6 +21,7 @@ public class RoleViewService
     private readonly IRbacWriteService rbacWriteService;
     private readonly IAuditLogService auditLogService;
     private readonly CurrentUserService currentUserService;
+    private readonly IAuditActorProvider? actorProvider;
 
     public IMapper Mapper { get; }
     public ILogger<RoleViewService> Logger { get; }
@@ -32,7 +33,8 @@ public class RoleViewService
         RolePermissionService rolePermissionService,
         IRbacWriteService rbacWriteService,
         IAuditLogService auditLogService,
-        CurrentUserService currentUserService)
+        CurrentUserService currentUserService,
+        IAuditActorProvider? actorProvider = null)
     {
         this.context = context;
         Mapper = mapper;
@@ -41,11 +43,19 @@ public class RoleViewService
         this.rbacWriteService = rbacWriteService;
         this.auditLogService = auditLogService;
         this.currentUserService = currentUserService;
+        this.actorProvider = actorProvider;
     }
 
     /// <summary>取得目前操作者作為稽核 actor；未登入（Id==0）時回 null。</summary>
+    /// <remarks>1.1.11：優先用 <see cref="IAuditActorProvider"/>（API 呼叫時從 claims 取）；以前只看 CurrentUserService，API 呼叫時操作者是空的。</remarks>
     private (int? ActorUserId, string? ActorAccount) ResolveActor()
     {
+        if (actorProvider is not null)
+        {
+            var (userId, account) = actorProvider.GetActor();
+            return userId > 0 ? (userId, account) : (null, null);
+        }
+
         var user = currentUserService.CurrentUser;
         return user.Id > 0 ? (user.Id, user.Account) : (null, null);
     }
@@ -163,6 +173,7 @@ public class RoleViewService
 
             await context.RoleView.AddAsync(itemParameter);
             await context.SaveChangesAsync();
+            paraObject.Id = itemParameter.Id; // API 要回傳新建的那筆（1.1.11）。
             CleanTrackingHelper.Clean<RoleView>(context);
 
             var permissionKeys = ParsePermissionKeys(itemParameter.TabViewJson);

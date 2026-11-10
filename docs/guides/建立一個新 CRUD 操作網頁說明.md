@@ -1,12 +1,14 @@
 ﻿# 以 `RoleViewView` 為藍本手動開發新 CRUD 頁面的計畫
 
-- 文件版本：1.3
+- 文件版本：1.4
 - 文件狀態：已實作
-- 現行系統版本：1.1.7
+- 現行系統版本：1.1.11
 - 首次實作版本：—（未追溯，約 0.1.x 初始腳手架）
 - 最後核對日期：2026/11/10
 
 > 目標：完整複刻 `RoleViewView` 的「新增、查詢、更新、刪除、過濾、排序、分頁、驗證、通知」行為，並保留同等結構（Page + View + Service + AdapterModel + Entity + 註冊 + 樣式）。
+
+> ⚠️ **1.1.11 起角色管理已搬到 WASM**（`Web.Client/Pages/Admins/RoleViewPage`，資料經 `RoleController` API）。本文描述的是 Blazor Server 頁（Page + View 直接注入服務）的做法，下方「主樣板元件」的檔案已改名搬家；WASM 遷移期間要做新頁，先看 [開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §1 的「搬到 WASM 的頁」幾條。
 
 ---
 
@@ -160,9 +162,9 @@
 ## 6. 參考與引用程式碼清單（複製模板時優先順序）
 
 1. **主樣板元件（首要）**
-   - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor`
-   - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor.cs`
-   - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Admins/RoleViewView.razor.css`
+   - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/RoleViewPage.razor`（1.1.11 起在 WASM，原 `Views/Admins/RoleViewView.razor`）
+   - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/RoleViewPage.razor.cs`
+   - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/RoleViewPage.razor.css`
 
 2. **服務層樣板**
    - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs`
@@ -177,7 +179,6 @@
    - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/InputWatcher.cs`
    - `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs`
    - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddApplicationServices()`）
-   - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Admins/RoleViewPage.razor`
    - `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`、`src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`
 
 ---

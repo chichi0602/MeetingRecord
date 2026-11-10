@@ -107,6 +107,7 @@ public sealed class AdminTests(E2EAppFixture app) : E2ETestBase(app)
         await GotoAsync(page, "/roleviews", "名稱");
 
         await page.GetByRole(AriaRole.Button, new() { Name = "建立預設角色" }).ClickAsync();
+        await Expect(page.Locator(".ant-modal-confirm")).ToContainTextAsync("甲方五個角色"); // 1.1.11：以前誤寫「四個角色」
         await ConfirmAsync(page, "建立");
 
         await Expect(Notice(page, "預設角色")).ToBeVisibleAsync();
@@ -128,6 +129,42 @@ public sealed class AdminTests(E2EAppFixture app) : E2ETestBase(app)
         var modal = page.Locator(".ant-modal-wrap:visible");
         await Expect(modal.GetByText("專案項目（全部）")).ToBeVisibleAsync();
         await Expect(modal.GetByText("檢視").First).ToBeVisibleAsync();
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "ADM-06")]
+    [Trait("Title", "角色管理：新增只勾部分動作的角色，存成正確的權限鍵；刪除前確認")]
+    [Trait("Page", "角色管理")]
+    [Trait("Persona", "管理者")]
+    public async Task Admin_CreateRoleWithActionPermissions_ThenDelete()
+    {
+        // 1.1.11（角色管理搬到 WASM）：權限樹經 API 轉成權限鍵、伺服器檢查目錄。ADM-03 只看矩陣顯示，這裡驗存檔結果。
+        var page = await LoginAsAsync(Seed.Admin);
+        await GotoAsync(page, "/roleviews", "名稱");
+        var name = Unique("E2E角色");
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        await page.GetByPlaceholder("請輸入名稱").FillAsync(name);
+        var categoryNode = page.Locator(".ant-modal-wrap:visible .role-permission-node").Filter(new() { HasText = "分類清單（全部）" });
+        await categoryNode.Locator("label").Filter(new() { HasText = "檢視" }).ClickAsync();
+        await ClickModalOkAsync(page);
+        await Expect(Notice(page, "新增成功")).ToBeVisibleAsync();
+
+        await using (var db = App.CreateDbContext())
+        {
+            var roleId = (await db.RoleView.SingleAsync(x => x.Name == name)).Id;
+            var keys = await db.RolePermissionMap.Where(x => x.RoleViewId == roleId).Join(db.Permission, m => m.PermissionId, p => p.Id, (m, p) => p.Key).ToListAsync();
+            Assert.Contains("分類清單:view", keys);
+            Assert.DoesNotContain("分類清單:create", keys);
+            Assert.DoesNotContain("分類清單", keys);
+        }
+
+        await page.GetByPlaceholder("請輸入搜尋關鍵字").FillAsync(name);
+        await ToolbarButton(page, "搜尋").ClickAsync();
+        await RowAction(Row(page, name), "刪除").ClickAsync();
+        await Expect(page.Locator(".ant-modal-confirm")).ToContainTextAsync($"確定要刪除「{name}」嗎？");
+        await ConfirmAsync(page, "刪除");
+        await Expect(Row(page, name)).ToHaveCountAsync(0);
     }
 
     [E2ETheory]

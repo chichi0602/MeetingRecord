@@ -12,7 +12,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
 {
     public partial class RoleViewViewSample
     {
-        private readonly ILogger<RoleViewView> logger;
+        private readonly ILogger<RoleViewViewSample> logger;
         private readonly RoleViewService roleViewService;
         private readonly ModalService modalService;
         private readonly MessageService messageService;
@@ -29,7 +29,7 @@ namespace MeetingRecord.Web.Components.Views.Admins
         RecordVm CurrentRecord = new();
         public EditContext? LocalEditContext { get; set; }
 
-        public RoleViewViewSample(ILogger<RoleViewView> logger,
+        public RoleViewViewSample(ILogger<RoleViewViewSample> logger,
             RoleViewService roleViewService,
             ModalService modalService, MessageService messageService, NotificationService notificationService)
         {

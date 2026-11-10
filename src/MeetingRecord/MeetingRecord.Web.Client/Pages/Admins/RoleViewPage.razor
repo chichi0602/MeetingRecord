@@ -1,4 +1,10 @@
-﻿@if (string.IsNullOrEmpty(RoleMessage) == false)
+@page "/roleviews"
+@using MeetingRecord.Dtos.Roles
+
+@* 角色管理（1.1.11 搬到 WASM，只限管理者）：由 Blazor Server 的 RoleViewView 改寫，畫面、權限矩陣、文字都不變；資料改走角色 API。 *@
+<PageTitle>角色管理</PageTitle>
+
+@if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
         @RoleMessage
@@ -52,10 +58,10 @@ else
                            OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="role-view-table-wrap">
             <Table @ref="table"
-            TItem="RoleViewAdapterModel"
+            TItem="RoleDto"
             Class="role-view-table"
             RemoteDataSource="true"
-            DataSource="@roleViewAdapterModels"
+            DataSource="@roles"
             RowKey="x => x.Id"
             @bind-SelectedRows="selectedRows"
             OnChange=OnTableChange
@@ -63,9 +69,9 @@ else
             @bind-PageSize="_pageSize"
             @bind-Total=_total>
                 <Selection />
-                <Column TData="string" DataIndex="@nameof(RoleViewAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
-                <Column TData="DateTime" DataIndex="@nameof(RoleViewAdapterModel.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="string" DataIndex="@nameof(RoleDto.Name)" Title="名稱" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(RoleDto.CreateAt)" Title="建立時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
+                <Column TData="DateTime" DataIndex="@nameof(RoleDto.UpdateAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Ascending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
                         <SpaceItem>
@@ -94,7 +100,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="RoleViewAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="RoleDto" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="名稱" Required>
                             <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入名稱" />
@@ -107,7 +113,7 @@ else
                         @* 權限矩陣跨整列：54 個核取方塊壓成半欄會擠成一團。 *@
                         <FormItem Label="角色項目" Class="form-modal-full">
                             <FormItem>
-                                @foreach (var group in CurrentRecord.RolePermission.Groups)
+                                @foreach (var group in Permission.Groups)
                                 {
                                     <div class="role-permission-group">
                                         <Checkbox Checked="@group.Enable" CheckedChanged="@(value => OnPermissionGroupChanged(group, value))">

@@ -4,6 +4,7 @@ using MeetingRecord.Dtos.Accounts;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Dtos.Notifications;
+using MeetingRecord.Dtos.Roles;
 using MeetingRecord.Dtos.Sessions;
 using MeetingRecord.Dtos.Systems;
 using MeetingRecord.Dtos.Users;
@@ -46,4 +47,9 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(UserSearchRequestDto))]
 [JsonSerializable(typeof(UserCreateUpdateDto))]
 [JsonSerializable(typeof(UserTeamBatchRequestDto))]
+[JsonSerializable(typeof(ApiResult<PagedResult<RoleDto>>), TypeInfoPropertyName = "RolePageResult")]
+[JsonSerializable(typeof(ApiResult<RoleDto>), TypeInfoPropertyName = "RoleResult")]
+[JsonSerializable(typeof(ApiResult<RolePermissionDto>), TypeInfoPropertyName = "RolePermissionResult")]
+[JsonSerializable(typeof(RoleSearchRequestDto))]
+[JsonSerializable(typeof(RoleDto))]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

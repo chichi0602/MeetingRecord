@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.17
+- 文件版本：1.18
 - 文件狀態：已實作
-- 現行系統版本：1.1.10
+- 現行系統版本：1.1.11
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -44,6 +44,8 @@
 提示詞另有五支（1.1.9，WASM 提示詞頁用）：`PUT PromptTemplate/{id}/enabled`（Edit）；`GET PromptTemplate/presets`（Create，內建範本名稱）、`POST PromptTemplate/presets`（Create，一次建立全部內建範本，已有同名的略過，訊息說明新增與略過幾筆）、`POST PromptTemplate/presets/single`（Create，內容 `{ "name": "…" }`；不在內建清單 404、已存在 409「「x」已存在，未新增。」）；`GET PromptTemplate/categories/enabled`（View，啟用中的分類名稱）。1.1.9 起提示詞 API 呼叫 `PromptTemplateService`：名稱重複去頭尾空白、不分大小寫，409 訊息「提示詞名稱已存在，無法新增／修改。」。**分類**：`PromptTemplateDto` 多了 `categoryNames`（名稱清單）；輸入時 `categoryNames` 有帶就以它為準，沒帶才看舊欄位 `categories`（資料庫的儲存格式，每個名稱前後各一個換行，例 `"\n週報\n"`），兩個都沒帶＝沒有分類；存檔時一律正規化（去空白、去重複）。
 
 **使用者管理**（1.1.10，`UserController`，`api/v1/User`，整個 Controller **只限管理者** `[AdminOnly]`，非管理者 403）：`POST search`（`UserSearchRequestDto`，排序欄位 account／name／email／roletext／statustext／createat／updateat）、`GET {id}`（含額外角色、團隊）、`POST`（密碼必填；帳號重複 409）、`PUT {id}`（先讀出原資料再套上可改的欄位；額外角色與團隊 null＝不動；密碼留白＝不變）、`DELETE {id}`、`PUT {id}/status`（`{ "isEnabled": false }`）、`POST teams/batch`（`{ "userIds": [], "teamId": 1, "add": true }`，回實際異動人數）、`GET roles`（`isDefault` 標出新建帳號的預設角色）、`GET teams`（啟用中的團隊）。不能刪除或停用自己與 support、不能拿掉自己的管理者身分，違反回 400 與原因。回應 `UserDto` 不含任何密碼相關欄位。
+
+**角色管理**（1.1.11，`RoleController`，`api/v1/Role`，整個 Controller **只限管理者** `[AdminOnly]`）：`POST search`（不帶權限樹；排序欄位 name／createat／updateat）、`GET {id}`（含權限樹 `rolePermission`）、`GET permission-template`（全部未勾選的權限樹）、`POST`、`PUT {id}`（名稱重複 409；權限樹裡的群組、頁面、動作都要在權限目錄裡，否則 400「權限項目「X」不在權限目錄裡。」；修改沒帶權限樹＝權限不變）、`DELETE {id}`（以它為主要角色的人改用其他角色；最後一個角色不能刪）、`GET {id}/user-count`、`POST presets`（建立預設角色，可重複呼叫）。權限樹格式：`groups[].name／enable／permissions[].name／enable／actions{"view":true,…}`，勾 `enable` 的頁面＝該頁全部動作。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

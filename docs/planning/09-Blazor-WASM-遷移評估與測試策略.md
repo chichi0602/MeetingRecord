@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.15
+- 文件版本：1.16
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1 完成、IIS 測試機驗證待補，M2 進行中）
-- 現行系統版本：1.1.10
+- 現行系統版本：1.1.11
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/10
 
@@ -456,7 +456,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 團隊 `/teams` | 1.1.8 | ✅ 完成；`[HasPermission]` 支援任一動作（成員清單要新增或修改權限）、刪除前檢查端點；MD-03 照過，新增 MD-07（修改成員、刪除） |
 | 提示詞 `/prompttemplates` | 1.1.9 | ✅ 完成；`PromptVariableHelper` 搬到 Share（WASM 頁照舊提醒未知變數）、內建範本改由 API 提供、分類多一個清單欄位 `categoryNames`；MD-04 照過，新增 MD-08。原計畫「搜尋加分類篩選」不做（畫面與外部 API 都沒用到） |
 | 使用者 `/myusers` | 1.1.10 | ✅ 完成；新增 `[AdminOnly]`、`UserDto` 不含任何密碼欄位、自己與 support 的保護搬進服務、服務層操作者改經 `IAuditActorProvider`；ADM-01／04 照過，新增 ADM-05 |
-| 角色 `/roleviews` | 1.1.11 | 待做 |
+| 角色 `/roleviews` | 1.1.11 | ✅ 完成；權限樹改由 API 提供與驗證（目錄外的名稱擋下）、清單不帶權限樹、確認框改寫五個角色；ADM-02／03／04 照過（ADM-02 多驗確認框文字），新增 ADM-06 |
 | 儀表板 `/dashboard` | 1.1.12 | 待做 |
 | 個人資料 `/Profile`、變更密碼 `/ChangePassword` | 1.1.13 | 待做 |
 | M2 里程碑報告 | 1.1.14 | 待做 |

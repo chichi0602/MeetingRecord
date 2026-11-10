@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.12
+- 文件版本：1.13
 - 文件狀態：已實作
-- 現行系統版本：1.1.10
+- 現行系統版本：1.1.11
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/10
 
@@ -97,7 +97,7 @@
 | 專案附件 | `Views/Projects/ProjectViewView.razor` | `form-modal-standard` |
 | 抽出待辦 | `Views/Projects/TodoExtractionModal.razor` | `form-modal-standard` |
 | 用量明細（唯讀，1.0.31） | `Views/AiManagement/TokenUsageView.razor` | `form-modal-standard` |
-| 角色維護 | `Views/Admins/RoleViewView.razor` | `form-modal-large` |
+| 角色維護 | `Web.Client/Pages/Admins/RoleViewPage.razor`（1.1.11 起 WASM） | `form-modal-large` |
 | 專案維護 | `Views/Projects/ProjectViewView.razor` | `form-modal-large` |
 | AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
 | 稽核明細（唯讀，1.0.32） | `Views/Admins/AuditLogView.razor` | `form-modal-large` |

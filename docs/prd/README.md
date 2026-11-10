@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.27
+- 文件版本：1.28
 - 文件狀態：維護中
-- 現行系統版本：1.1.10
+- 現行系統版本：1.1.11
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/10
 
@@ -20,7 +20,7 @@
 | AI 問答（含 AI 抽出待辦） | [AI 問答](AI問答-prd.md) | 無獨立路由：`/projects` 工具列與歷史會議紀錄列、`/meetings` 列（`AiChatModal`） | `AiChatModal`、`AiChatService`、`AiChatStore`（`AiChatPath`）、`ChatContextBuilder`、`AttachmentTextExtractor`、`AiChatDocumentExporter`、`TodoExtractionService`／`TodoExtractionModal` | 已實作（0.4.51；0.4.60 起對話存檔案系統） | 0.4.118 |
 | 使用說明 | [使用說明](使用說明-prd.md) | `/help` | `Pages/Helps/HelpPage.razor`、`HelpView`、`HelpManual`（內嵌 `docs/guides/系統使用說明.md` 為資源）、`MarkdownRenderer` | 已實作（0.4.78；1.0.42 起 6 分類＋頁內搜尋） | 1.0.42 |
 | 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Web.Client/Pages/Admins/MyUserPage.razor`（WASM，1.1.10）、`MyUserService`、`UserController` | 已實作 | 0.4.118 |
-| 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Pages/Admins/RoleViewPage.razor`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
+| 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Web.Client/Pages/Admins/RoleViewPage.razor`（WASM，1.1.11）、`RoleController`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
 | Token 用量（原 AI 用量分析） | [Token 用量](Token用量-prd.md) | `/token-usage`（別名 `/ai-usage`） | `Pages/AiManagement/TokenUsagePage.razor`、`TokenUsageView`、`TokenUsageGroupTable`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiQuotaService`、`TokenUsageReportExporter`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別；1.0.30 起改名 Token 用量、移到「AI 管理」並只限管理者；1.0.31 起有上限列、篩選、圖表／每日／依使用者／依功能／依模型／明細頁籤、明細窗（可跳 AI 對話紀錄）、CSV／PDF 匯出、刪除與清除） | 1.0.31 |
 | AI 對話紀錄 | [AI 對話紀錄](AI對話紀錄-prd.md) | `/ai-call-logs` | `Pages/AiManagement/AiCallLogPage.razor`、`AiCallLogView`、`AiCallGateway`、`AiCallLogService`、`AiCallLogFileStore`、`AiLogRetentionBackgroundService` | 已實作（1.0.29 記錄、1.0.30 頁面；只限管理者） | 1.0.30 |
 | 稽核紀錄 | [稽核紀錄](稽核紀錄-prd.md) | `/audit-logs` | `Pages/Admins/AuditLogPage.razor`、`AuditLogView`、`AuditLogService`、`AuditLogQueryService`、`ClientIpProvider`、`AuditLogRetentionBackgroundService`、`AuditActions` | 已實作（寫入自樣板時期；1.0.32 起有查詢頁、來源 IP、保留 365 天，只限管理者；1.0.33 起記登出、Google 登入、密碼、啟停用、團隊成員、權限拒絕；1.0.34 起記專案、會議、待辦、團隊、分類、提示詞、AI 問答的異動與資料範圍擋下的寫入） | 1.0.34 |

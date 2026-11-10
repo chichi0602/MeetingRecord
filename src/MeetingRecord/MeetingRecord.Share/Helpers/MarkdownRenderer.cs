@@ -5,7 +5,7 @@ using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
-namespace MeetingRecord.Business.Helpers;
+namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
 /// 全站唯一的 Markdown → HTML 轉換點。畫面（AI 問答氣泡、會議紀錄草稿檢視）

@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using MeetingRecord.Business.Helpers;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Components.Views.Helps;
 

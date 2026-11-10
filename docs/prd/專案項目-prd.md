@@ -1,10 +1,10 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.21
+- 文件版本：4.22
 - 文件狀態：已實作
-- 現行系統版本：1.0.54
+- 現行系統版本：1.1.17
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
-- 最後核對日期：2026/10/22
+- 最後核對日期：2026/11/10
 
 > **0.4.102：專案改由「主責團隊＋協作團隊」控管可見性，並加回「分類」**（取代 0.4.101 的「資料群組」與 0.4.99～0.4.100 的專案成員制）。團隊＝誰的資料（部門），分類＝什麼資料，角色＝能做什麼。
 > - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
@@ -176,7 +176,7 @@
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor`（`<AiChatModal>` 的 `CanEdit`／`CanDelete`／`CanExport`、「抽出待辦」鈕的 `待辦事項:create` 守門）、`ProjectViewView.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/AiChatModal.razor.cs`（`CanEdit`／`CanDelete`／`CanExport` 參數）、`TodoExtractionModal.razor.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectService.cs`（`ProjectService`；`GetSelectableAsync(includeArchived)`，1.0.46）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`、`Matches`，1.0.46）、`src/MeetingRecord/MeetingRecord.Share/Enums/ProjectScope.cs`、`src/MeetingRecord/MeetingRecord.Web/Components/Commons/ProjectScopeSwitch.razor`
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`、`Matches`，1.0.46）、`src/MeetingRecord/MeetingRecord.Share/Enums/ProjectScope.cs`、`src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/ProjectScopeSwitch.razor`（1.1.17 起在 Web.Client）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectOwnerRules.cs`（負責人候選人、驗證、誰能換，1.0.52）、`src/MeetingRecord/MeetingRecord.AccessDatas/Migrations/Sql/ProjectOwnerBackfill.cs`（升級回填）
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/ProjectController.cs`（`ProjectController`）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Project.cs`（`Project`）、`ProjectFile.cs`（`ProjectFile`）

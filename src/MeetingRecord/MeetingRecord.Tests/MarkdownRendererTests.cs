@@ -1,4 +1,4 @@
-using MeetingRecord.Business.Helpers;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
 

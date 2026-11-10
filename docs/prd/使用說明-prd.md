@@ -1,10 +1,10 @@
 ﻿# 使用說明 PRD
 
-- 文件版本：1.2
+- 文件版本：1.3
 - 文件狀態：已實作
-- 現行系統版本：1.0.43
+- 現行系統版本：1.1.17
 - 首次實作版本：0.4.78
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/11/10
 
 ## 一、目標與範圍
 
@@ -165,7 +165,7 @@
 - `src/MeetingRecord/MeetingRecord.Share/Enums/AiUsageFeature.cs`（`HelpAssistant = 9`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/AuditActions.cs`（`HelpAiAsk`）
 - `src/MeetingRecord/MeetingRecord.Web/wwwroot/js/help-view.js`、`src/MeetingRecord/MeetingRecord.Web/Services/HelpViewInterop.cs`（1.0.42）
 - `src/MeetingRecord/MeetingRecord.Web/MeetingRecord.Web.csproj`（`EmbeddedResource` 與 `LogicalName`）
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/MarkdownRenderer.cs`（`ToHtml`、`AllowedSchemes`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MarkdownRenderer.cs`（`ToHtml`、`AllowedSchemes`；1.1.17 從 Business 搬來）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`角色_使用說明`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 12）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`GetRoleListPermissionAllName` 單元素群組）、`src/MeetingRecord/MeetingRecord.Business/Helpers/RolePresets.cs`

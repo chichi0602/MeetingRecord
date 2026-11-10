@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.19
+- 文件版本：2.20
 - 文件狀態：已實作
-- 現行系統版本：1.0.60
+- 現行系統版本：1.1.17
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/11/09
+- 最後核對日期：2026/11/10
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -92,7 +92,7 @@
 - 進度面板的「取消」要有 `會議紀錄:edit`（0.4.115）。只看得到那筆會議的人仍看得到進度，但沒有取消鈕。
 - **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。1.0.40 起同一個視窗先唯讀、按「編修」才切到編修模式；視窗一律 `markdown-editor-modal meeting-view-modal`（寬 96vw、內容固定高 96vh），檢視與編修切換時大小不跳動。
   版面是左邊 `<textarea>`、右邊 Markdown 即時預覽，上方一列常駐的搜尋／取代（搜尋、上一個／下一個、取代、全部取代，顯示「第 n / 共 m 筆」）。
-  - 搜尋取代的邏輯全在 `Business/Helpers/TextSearchHelper`（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
+  - 搜尋取代的邏輯全在 `Share/Helpers/TextSearchHelper`（1.1.17 從 Business 搬來，WASM 頁也用）（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
   - ⚠️ **只反白當前那一筆**。`<textarea>` 裡唯一能做的反白就是 selection；要同時標記全部 m 筆得做逐像素對齊的 overlay，中文字型 fallback 一有差異就整段錯位。用「第 n / 共 m 筆」補足資訊。
   - ⚠️ **刻意不綁 Ctrl+F**。Blazor 的 `@onkeydown:preventDefault` 是編譯期決定的，攔 Ctrl+F 就得對整個容器無條件攔，連右邊預覽區的瀏覽器原生搜尋都會被吃掉。
   - ⚠️ **編修時 `Keyboard="false"`**（Esc 不關窗），改過後按「取消」會先跳確認——一整篇打到一半的會議紀錄，按錯一次鍵就沒了。

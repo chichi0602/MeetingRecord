@@ -1,10 +1,10 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.16
+- 文件版本：1.17
 - 文件狀態：已實作
-- 現行系統版本：1.0.55
+- 現行系統版本：1.1.17
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/10/22
+- 最後核對日期：2026/11/10
 
 > **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
@@ -224,7 +224,7 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/Notifications/UserNotificationService.cs`、`UserNotificationNotifier.cs`；`MeetingRecord.Web/BackgroundServices/NotificationRetentionBackgroundService.cs`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoHierarchyRules.cs`（`ValidateAsync`、`MoveChildrenAsync`，1.0.45）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web/Components/Commons/ProjectScopeSwitch.razor`（1.0.46）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/ProjectScopeSwitch.razor`（1.0.46；1.1.17 起在 Web.Client）
 - 測試：`TodoChangeAndNotificationTests`（35 條：1.0.44 的 15 條＋1.0.45 子項目 11 條＋1.0.46 封存 8 條＋1.0.52 `DeleteTodo_OnlyProjectOwnerOrAdmin_WebAndApi`）、`TodoServiceTests`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）

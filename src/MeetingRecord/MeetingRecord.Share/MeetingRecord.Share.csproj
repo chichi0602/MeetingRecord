@@ -6,4 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 1.1.17（WASM 遷移 M3）：MarkdownRenderer 搬到這裡，伺服器（匯出、說明頁）與 WASM 頁（Markdown 編輯器預覽）共用同一份 -->
+    <PackageReference Include="Markdig" Version="1.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MarkdownRenderer.SanitizeUrl 等 internal 方法的單元測試（原本在 Business 時就是這樣開給測試） -->
+    <InternalsVisibleTo Include="MeetingRecord.Tests" />
+  </ItemGroup>
+
 </Project>

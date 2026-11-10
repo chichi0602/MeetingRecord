@@ -1,10 +1,10 @@
 ﻿# AI 問答 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：1.0.44
+- 現行系統版本：1.1.17
 - 首次實作版本：0.4.51
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/11/10
 
 ## 一、目標與範圍
 
@@ -228,7 +228,7 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatService.cs`（`AiChatService`：`EnsureAccessAsync`、`ListConversationsAsync`、`CreateConversationAsync`、`RenameConversationAsync`、`GetHistoryAsync`、`ClearHistoryAsync`、`AskAsync`、`UpdateMessageAsync`、`RegenerateAsync`、`GenerateAnswerAsync`、`BuildUserPrompt`、`CollectAttachments`、`ReadAttachmentAsync`、`RecordUsageAsync`；`AiChatScope`、`AiChatMessageItem`、`AiChatAnswer`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatStore.cs`（`AiChatStore`：`ListConversationsAsync`、`AppendTurnAsync`、`ReadHistoryAsync`、`UpdateMessagesAsync`、`TryDelete`、`TryDeleteConversation`、`SaveAttachmentsAsync`、`GetAttachmentFullPath`、`ConversationExists`、`CountQuestions`、`MigrateLegacyIfNeeded`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatAttachment.cs`（`AiChatAttachmentPolicy`）、`ChatContextBuilder.cs`（`ChatContextBuilder.Build`）、`AttachmentTextExtractor.cs`
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/MarkdownRenderer.cs`（`MarkdownRenderer.ToHtml`、`SanitizeUrl`）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MarkdownRenderer.cs`（`MarkdownRenderer.ToHtml`、`SanitizeUrl`；1.1.17 從 Business 搬來）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Export/AiChatDocumentExporter.cs`（`BuildConversationHtml`、`BuildMessageHtml`、`BuildConversationFileName`、`BuildMessageFileName`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/TodoExtraction/TodoExtractionService.cs`（`ExtractAsync`、`GetExistingTitlesAsync`）、`TodoExtractionParser.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（`ProjectAccessService.GetAsync`；`ProjectAccess.CanViewProject`、`ProjectAccess.CanViewMeeting`）

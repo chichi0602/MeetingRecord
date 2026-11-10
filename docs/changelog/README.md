@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.81
+- 文件版本：7.82
 - 文件狀態：維護中
-- 現行系統版本：1.1.16
+- 現行系統版本：1.1.17
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/10
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M3 共用元件搬到 WASM 專案（分支 `wasm-migration`）：拖放上傳區、Markdown 編輯器、專案範圍切換與四個前端互動類別搬到 Client，`MarkdownRenderer`、`TextSearchHelper` 搬到 Share（1.1.17）| [2026-11-10-WASM遷移M3-共用元件搬到Client](2026-11-10-WASM遷移M3-共用元件搬到Client.md) |
 | WASM 遷移 M3 上傳工作階段 API（分支 `wasm-migration`）：新增建立、查狀態、取消上傳的 API，存檔在伺服器背景以上傳者身分執行；上傳檢查抽成 `CheckMediaUploadAsync`（1.1.16）| [2026-11-10-WASM遷移M3-上傳工作階段API](2026-11-10-WASM遷移M3-上傳工作階段API.md) |
 | WASM 遷移 M3 背景工作進度（分支 `wasm-migration`）：進度面板規則抽到伺服器、新增 `api/v1/jobs` 與 `JobsChanged` 推播，面板搬到 WASM 專案、WASM 頁也有進度面板（1.1.15）| [2026-11-10-WASM遷移M3-背景工作進度](2026-11-10-WASM遷移M3-背景工作進度.md) |
 | WASM 遷移 M2 里程碑報告（分支 `wasm-migration`）：M2 八頁搬完，全套照過並產出里程碑報告；09 號文件補上 M2 實際端點數與 M3 規劃（1.1.14）| [2026-11-10-WASM遷移M2-里程碑報告](2026-11-10-WASM遷移M2-里程碑報告.md) |

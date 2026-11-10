@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace MeetingRecord.Business.Helpers;
+namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
 /// 文字中的一次出現。<see cref="Start"/> 與 <see cref="Length"/> 的單位是

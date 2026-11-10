@@ -1,5 +1,5 @@
 using AntDesign;
-using MeetingRecord.Business.Helpers;
+using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;

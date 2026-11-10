@@ -30,6 +30,10 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="OpenCCNET" Version="1.1.0" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
+    <!-- 1.0.68：OpenCCNET → jieba.NET 間接帶進 ConfigurationManager 4.7.0，一路拉到 System.Drawing.Common 4.7.0（危急弱點 GHSA-rxg9-xrhp-64gj）。
+         直接參考新版 ConfigurationManager，新版不再相依 Security.Permissions／Windows.Extensions，整條路徑就斷了。
+         OpenCCNET 1.1.0 已是最新版；它升版不再帶舊版時可以拿掉這行。 -->
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.14" />
   </ItemGroup>
 
 </Project>

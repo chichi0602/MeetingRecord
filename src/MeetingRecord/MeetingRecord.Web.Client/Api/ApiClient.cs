@@ -55,6 +55,10 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
         return await ReadAsync(response, typeInfo, cancellationToken);
     }
 
+    /// <summary>變更密碼頁本身（1.1.13 起在 WASM）：在這頁收到「須改密碼」的 403 不再導向自己，免得重新載入不停。</summary>
+    private bool IsOnChangePasswordPage()
+        => string.Equals("/" + navigation.ToBaseRelativePath(navigation.Uri).Split('?', '#')[0], ChangePasswordPath, StringComparison.OrdinalIgnoreCase);
+
     private async Task<ApiResult<T>> ReadAsync<T>(HttpResponseMessage response, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)
@@ -74,7 +78,8 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
 
         if (response.StatusCode == HttpStatusCode.Forbidden
             && result?.Errors?.TryGetValue("Reason", out var reasons) == true
-            && reasons.Contains(MustChangePasswordReason))
+            && reasons.Contains(MustChangePasswordReason)
+            && !IsOnChangePasswordPage())
         {
             navigation.NavigateTo(ChangePasswordPath, forceLoad: true, replace: true);
         }

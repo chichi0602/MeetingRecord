@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：1.0.33
+- 現行系統版本：1.1.13
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/11/10
 
 ## 一、目標與範圍
 
@@ -21,7 +21,7 @@
 | `/Auths/Logout` | 無版面 | 已登入 | 所有登入者 |
 | `/Auths/Pending` | `NoFooterLayout` | 匿名 | Google 自動建帳待審核者 |
 | `/Profile` | 預設版面 | 已登入（`AuthenticationStateHelper.Check`）| 需設定 API 密碼者。**0.4.113 起從右上使用者選單移除**：它寫的就是同一組登入密碼，對帳號密碼登入的人等於第二個「變更密碼」；頁面保留，之後接外部系統時再開放，目前只能直接輸入網址進入 |
-| `/ChangePassword` | 預設版面 | 已登入 | 需變更密碼者 |
+| `/ChangePassword` | 預設版面（1.1.13 起 WASM 版面） | 已登入 | 需變更密碼者。1.1.13 起是 WASM 頁：`WasmLayout` 對須改密碼的帳號導來這頁，但在這頁本身不再導向自己；`ApiClient` 在這頁收到「須改密碼」的 403 也不導向 |
 | `/api/v1/auth/login`、`/refresh` | — | 匿名（帳密換 JWT）| API 用戶端 |
 | `/api/v1/auth/me` | — | JWT Bearer | API 用戶端 |
 
@@ -64,6 +64,7 @@
 - 連續 5 次失敗鎖定 15 分鐘；鎖定到期後（`LockoutEndUtc` 過期）可再次登入。管理者**重設密碼即解鎖**；只編輯其他欄位不會解鎖（0.4.115，見 [使用者管理](使用者管理-prd.md)）。
 - Google Callback 缺 `subject`／`email`：登出外部身分並導回登入頁。
 - `support` 帳號於 `/Profile`、`/ChangePassword` 一律被拒；Google 帳號首次設 API 密碼免驗舊密碼。
+- 1.1.13 起兩頁的 API（都只動呼叫者自己、只需登入）：`POST /api/v1/account/change-own-password`（標 `[AllowWhenMustChangePassword]`，須改密碼的帳號也能改）、`GET /api/v1/account/password-status`（有沒有本地密碼）、`POST /api/v1/account/api-password`。失敗回 400，訊息照原頁（例如「目前密碼不正確。」「新密碼與確認密碼不一致。」）。
 - 使用者無角色、`RoleView` 為 null 或 `TabViewJson` 解析失敗：導向登出。
 
 ## 七、驗收與測試
@@ -78,7 +79,7 @@
 
 - `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor`（`<EditForm FormName="login">` 登入表單）、`Login.razor.cs`（`Login.LoginUser`：驗證與 Cookie 簽發）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Logout.razor.cs`（`Logout.OnInitializedAsync`：登出）、`Pending.razor`（`@page "/Auths/Pending"`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Profile.razor`（`OnSubmitAsync`）、`ChangePassword.razor`（`OnSubmitAsync`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Account/Profile.razor`（`OnSubmitAsync`）、`ChangePassword.razor`（`OnSubmitAsync`）：1.1.13 起是 WASM 頁，經 `AccountApi` 呼叫 `AccountController` 的 `change-own-password`、`password-status`、`api-password`；規則仍在 `MyUserService.ChangeOwnPasswordAsync`／`SetOwnApiPasswordAsync`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/MyUserServiceLogin.cs`（`MyUserServiceLogin.LoginAsync`：鎖定、PBKDF2、升級、稽核）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ExternalLoginService.cs`（`ExternalLoginService.FindOrCreateAsync`：Google 查找／建立）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/AuthenticationStateHelper.cs`（`AuthenticationStateHelper.Check`：登入後檢查與 RBAC 載入）

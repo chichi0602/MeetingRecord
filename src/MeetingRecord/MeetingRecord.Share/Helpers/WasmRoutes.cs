@@ -19,6 +19,8 @@ public static class WasmRoutes
         "/myusers", // 1.1.10 使用者管理
         "/roleviews", // 1.1.11 角色管理
         "/dashboard", // 1.1.12 儀表板
+        "/ChangePassword", // 1.1.13 變更密碼（比對不分大小寫）
+        "/Profile", // 1.1.13 設定 API 密碼
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

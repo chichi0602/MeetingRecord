@@ -69,7 +69,8 @@ else
             return;
         }
 
-        if (current.MustChangePassword)
+        // 須改密碼的帳號一律去變更密碼頁；已經在那頁（1.1.13 起在 WASM）就照常畫出來，不導向自己。
+        if (current.MustChangePassword && !IsOnChangePasswordPage())
         {
             NavigationManager.NavigateTo("/ChangePassword", forceLoad: true, replace: true);
             return;
@@ -79,6 +80,9 @@ else
         menu = menuResult.Data ?? [];
         session = current;
     }
+
+    private bool IsOnChangePasswordPage()
+        => string.Equals("/" + NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Split('?', '#')[0], ApiClient.ChangePasswordPath, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>AppShell 已檢查過輸入；伺服器會再檢查一次（至少 6 字、support 不可改、目前密碼要對）。成功回 null。</summary>
     private async Task<string?> ChangePasswordAsync(string currentPassword, string newPassword)

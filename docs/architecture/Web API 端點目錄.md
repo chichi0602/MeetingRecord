@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.19
+- 文件版本：1.20
 - 文件狀態：已實作
-- 現行系統版本：1.1.12
+- 現行系統版本：1.1.13
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -48,6 +48,8 @@
 **角色管理**（1.1.11，`RoleController`，`api/v1/Role`，整個 Controller **只限管理者** `[AdminOnly]`）：`POST search`（不帶權限樹；排序欄位 name／createat／updateat）、`GET {id}`（含權限樹 `rolePermission`）、`GET permission-template`（全部未勾選的權限樹）、`POST`、`PUT {id}`（名稱重複 409；權限樹裡的群組、頁面、動作都要在權限目錄裡，否則 400「權限項目「X」不在權限目錄裡。」；修改沒帶權限樹＝權限不變）、`DELETE {id}`（以它為主要角色的人改用其他角色；最後一個角色不能刪）、`GET {id}/user-count`、`POST presets`（建立預設角色，可重複呼叫）。權限樹格式：`groups[].name／enable／permissions[].name／enable／actions{"view":true,…}`，勾 `enable` 的頁面＝該頁全部動作。
 
 **儀表板**（1.1.12，`DashboardController`）：`GET api/v1/dashboard`，只需登入（0.4.97 起儀表板登入即可看），回 `ApiResult<DashboardSummary>`（型別在 `Dtos/Dashboards`）；呼叫者看不到的專案在「各專案會議紀錄份數」併成「其他專案」。
+
+**變更密碼頁與設定 API 密碼頁**（1.1.13，`AccountController`，只需登入、只動呼叫者自己）：`POST api/v1/account/change-own-password`（內容 `{ currentPassword, newPassword, confirmPassword }`；要確認新密碼、沒有字數下限、稽核 `via=FirstLogin`；標 `[AllowWhenMustChangePassword]`，改完清掉須改密碼標記）；`GET api/v1/account/password-status`（回 `{ hasLocalPassword }`）；`POST api/v1/account/api-password`（內容同上，還沒有本地密碼的帳號免填 `currentPassword`）。失敗回 400、訊息照原頁；support 帳號一律被拒。與 1.1.6 的 `change-password`（使用者選單對話窗，至少 6 字）是不同的規則。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

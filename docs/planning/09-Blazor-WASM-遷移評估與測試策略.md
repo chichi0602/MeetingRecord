@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.17
+- 文件版本：1.18
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1 完成、IIS 測試機驗證待補，M2 進行中）
-- 現行系統版本：1.1.12
+- 現行系統版本：1.1.13
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/10
 
@@ -458,7 +458,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 使用者 `/myusers` | 1.1.10 | ✅ 完成；新增 `[AdminOnly]`、`UserDto` 不含任何密碼欄位、自己與 support 的保護搬進服務、服務層操作者改經 `IAuditActorProvider`；ADM-01／04 照過，新增 ADM-05 |
 | 角色 `/roleviews` | 1.1.11 | ✅ 完成；權限樹改由 API 提供與驗證（目錄外的名稱擋下）、清單不帶權限樹、確認框改寫五個角色；ADM-02／03／04 照過（ADM-02 多驗確認框文字），新增 ADM-06 |
 | 儀表板 `/dashboard` | 1.1.12 | ✅ 完成；資料型別搬到 Dtos、圖表元件搬到 Client、圓餅幾何搬到 Share；DSH-01／02、NTF-01、MNU、WASM 照過 |
-| 個人資料 `/Profile`、變更密碼 `/ChangePassword` | 1.1.13 | 待做 |
+| 個人資料 `/Profile`、變更密碼 `/ChangePassword` | 1.1.13 | ✅ 完成；`AccountController` 新增 3 支只需登入的端點；WASM 版面與 `ApiClient` 在變更密碼頁不再導向自己；LGN-04、WASM-04 照過，新增 LGN-08、ACC-01 |
 | M2 里程碑報告 | 1.1.14 | 待做 |
 
 ## 十一、下一步

@@ -54,4 +54,6 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(RoleSearchRequestDto))]
 [JsonSerializable(typeof(RoleDto))]
 [JsonSerializable(typeof(ApiResult<DashboardSummary>), TypeInfoPropertyName = "DashboardResult")]
+[JsonSerializable(typeof(OwnPasswordRequestDto))]
+[JsonSerializable(typeof(ApiResult<PasswordStatusDto>), TypeInfoPropertyName = "PasswordStatusResult")]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

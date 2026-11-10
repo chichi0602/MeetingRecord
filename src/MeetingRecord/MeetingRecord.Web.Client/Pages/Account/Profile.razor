@@ -1,19 +1,15 @@
-@page "/ChangePassword"
+@page "/Profile"
 
 @using System.ComponentModel.DataAnnotations
-@using Microsoft.AspNetCore.Components.Authorization
-@using MeetingRecord.Business.Services.DataAccess
-@using MeetingRecord.Business.Services.Other
 
-@inject AuthenticationStateHelper AuthenticationStateHelper
-@inject AuthenticationStateProvider AuthenticationStateProvider
-@inject MyUserService MyUserService
+@inject SessionService SessionService
+@inject AccountApi AccountApi
 @inject NavigationManager NavigationManager
 @inject MessageService MessageService
 @inject NotificationService NotificationService
-@inject ILogger<ChangePassword> Logger
 
-<PageTitle>變更密碼</PageTitle>
+@* 設定 API 密碼（1.1.13 搬到 WASM）：畫面、文字、驗證都照原頁；已有本地密碼才要填「目前密碼」。 *@
+<PageTitle>設定 API 密碼</PageTitle>
 
 @if (!string.IsNullOrWhiteSpace(roleMessage))
 {
@@ -28,14 +24,19 @@ else if (isLoading)
 else if (isSupportAccount)
 {
     <Alert Type="AlertType.Warning"
-           Message="系統預設開發帳號 support 禁止變更密碼"
+           Message="系統預設開發帳號 support 禁止於此變更密碼"
            ShowIcon="true" />
 }
 else
 {
-    <div class="change-password-page">
-        <h1>變更密碼</h1>
-        <p class="change-password-account">@currentAccount</p>
+    <div class="profile-page">
+        <h1>設定 API 密碼</h1>
+        <p class="profile-account">@currentAccount</p>
+        <Alert Type="AlertType.Info"
+               Message="設定本地 API 密碼後，即可使用「帳號（Email）+ 此密碼」呼叫 /api/v1/auth/login 取得 JWT。"
+               Description="網頁登入可繼續使用 Google 單一登入，此密碼僅供 API 存取使用。"
+               ShowIcon="true"
+               Style="margin-bottom: 20px;" />
 
         <AntDesign.Form TModel="InputModel"
                         Model="@input"
@@ -43,10 +44,13 @@ else
                         OnFinish="@(_ => OnSubmitAsync())"
                         OnFinishFailed="@(_ => OnValidationFailedAsync())"
                         Context="formContext">
-            <FormItem Label="目前密碼" Required>
-                <Input Password @bind-Value="input.CurrentPassword" Placeholder="請輸入目前密碼" />
-                <ValidationMessage For="() => input.CurrentPassword" />
-            </FormItem>
+            @if (hasLocalPassword)
+            {
+                <FormItem Label="目前密碼" Required>
+                    <Input Password @bind-Value="input.CurrentPassword" Placeholder="請輸入目前密碼" />
+                    <ValidationMessage For="() => input.CurrentPassword" />
+                </FormItem>
+            }
 
             <FormItem Label="新密碼" Required>
                 <Input Password @bind-Value="input.NewPassword" Placeholder="請輸入新密碼" />
@@ -65,7 +69,7 @@ else
                     </Button>
                 </SpaceItem>
                 <SpaceItem>
-                    <Button OnClick="@(() => NavigationManager.NavigateTo("/meetings"))" Disabled="@isSubmitting">
+                    <Button OnClick="@(() => NavigationManager.NavigateTo("/meetings", forceLoad: true))" Disabled="@isSubmitting">
                         取消
                     </Button>
                 </SpaceItem>
@@ -79,31 +83,28 @@ else
     private bool isLoading = true;
     private bool isSubmitting;
     private bool isSupportAccount;
-    private int currentUserId;
+    private bool hasLocalPassword;
     private string currentAccount = string.Empty;
     private string roleMessage = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(AuthenticationStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            roleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            isLoading = false;
-            return;
-        }
-
-        var currentUser = await AuthenticationStateHelper.GetUserInformation(AuthenticationStateProvider);
-        if (currentUser is null || currentUser.Id == 0)
+        // 登入狀態由 WasmLayout 先處理過；帳號與是不是 support 取自 Session。
+        var session = (await SessionService.GetAsync()).Data;
+        if (session is null || session.UserId == 0)
         {
             roleMessage = "找不到目前登入使用者資料。";
             isLoading = false;
             return;
         }
 
-        currentUserId = currentUser.Id;
-        currentAccount = currentUser.Account;
-        isSupportAccount = string.Equals(currentUser.Account, MagicObjectHelper.開發者帳號, StringComparison.OrdinalIgnoreCase);
+        currentAccount = session.Account;
+        isSupportAccount = session.IsSupportAccount;
+        if (!isSupportAccount)
+        {
+            hasLocalPassword = (await AccountApi.GetPasswordStatusAsync()).Data?.HasLocalPassword ?? true;
+        }
+
         isLoading = false;
     }
 
@@ -117,18 +118,18 @@ else
         isSubmitting = true;
         try
         {
-            var result = await MyUserService.ChangeOwnPasswordAsync(
-                currentUserId,
-                input.CurrentPassword,
-                input.NewPassword,
-                input.ConfirmPassword);
-
+            var result = await AccountApi.SetApiPasswordAsync(input.CurrentPassword, input.NewPassword, input.ConfirmPassword);
             if (!result.Success)
             {
+                if (result.StatusCode == 401)
+                {
+                    return; // ApiClient 已導到登入頁。
+                }
+
                 await NotificationService.Open(new NotificationConfig
                 {
-                    Message = "變更密碼失敗",
-                    Description = result.Message,
+                    Message = "設定 API 密碼失敗",
+                    Description = result.ErrorMessage ?? result.Message,
                     NotificationType = NotificationType.Error,
                     Placement = NotificationPlacement.BottomRight,
                     Duration = 5
@@ -136,20 +137,9 @@ else
                 return;
             }
 
-            await MessageService.SuccessAsync("密碼已變更。");
-            NavigationManager.NavigateTo("/meetings");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Changing own password failed unexpectedly. UserId={UserId}", currentUserId);
-            await NotificationService.Open(new NotificationConfig
-            {
-                Message = "變更密碼失敗",
-                Description = "變更密碼時發生未預期的錯誤。",
-                NotificationType = NotificationType.Error,
-                Placement = NotificationPlacement.BottomRight,
-                Duration = 5
-            });
+            await MessageService.SuccessAsync("API 密碼已設定。");
+            // 會議紀錄頁還是舊版頁面：整頁載入。
+            NavigationManager.NavigateTo("/meetings", forceLoad: true);
         }
         finally
         {
@@ -161,7 +151,7 @@ else
     {
         await NotificationService.Open(new NotificationConfig
         {
-            Message = "變更密碼失敗",
+            Message = "設定 API 密碼失敗",
             Description = "請確認密碼欄位皆已正確填寫。",
             NotificationType = NotificationType.Error,
             Placement = NotificationPlacement.BottomRight,
@@ -171,7 +161,6 @@ else
 
     private sealed class InputModel
     {
-        [Required(ErrorMessage = "目前密碼 不可為空白")]
         public string CurrentPassword { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "新密碼 不可為空白")]

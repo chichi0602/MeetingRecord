@@ -1,8 +1,8 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.20
+- 文件版本：2.21
 - 文件狀態：已實作
-- 現行系統版本：1.1.17
+- 現行系統版本：1.1.20
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/11/10
 
@@ -38,7 +38,7 @@
 | 項目 | 內容 |
 | --- | --- |
 | 路由 | `/meetings`（`MeetingPage.razor`，`MainLayout`） |
-| REST API | `api/Meeting`、`api/v1/Meeting`（`GET {id}`／`POST search`／`POST`／`PUT {id}`／`DELETE {id}`） |
+| REST API | `api/Meeting`、`api/v1/Meeting`（`GET {id}`／`POST search`／`POST`／`PUT {id}`／`DELETE {id}`；1.1.20 起另有畫面用的清單、重新轉錄、會議紀錄、歸屬、逐字稿、下載與匯出端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)） |
 | 選單路徑 | 側邊欄「核心功能」區的頂層項目「會議紀錄」（id=61，`url=/meetings`，icon `mic`；0.4.33 起不再有「會議管理」群組） |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[61] = 角色_會議紀錄` |
 | UI 頁面權限 | 頁面鍵「會議紀錄」（`AuthenticationStateHelper.CheckAccessPage`；管理員短路） |
@@ -119,7 +119,7 @@
 ## 四、內部系統運作
 
 - UI 路徑：`MeetingViewView` →（注入）`MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`（Blazor Server 直接呼叫服務，不經 HTTP）。
-- API 路徑：`MeetingController` → `MeetingRepository` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。**刪除例外，走 `MeetingService.DeleteAsync`**（0.4.115）：和畫面同一套，一併清影音、逐字稿與 AI 問答對話（1.0.29 起也刪這場會議的 AI 對話紀錄，用量帳本不動），背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
+- API 路徑：`MeetingController` → `MeetingService`（1.1.20 起全部，以前只有刪除，其他走 `MeetingRepository`）→ `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。刪除自 0.4.115 起就走 `MeetingService.DeleteAsync`：和畫面同一套，一併清影音、逐字稿與 AI 問答對話（1.0.29 起也刪這場會議的 AI 對話紀錄，用量帳本不動），背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
 - Entity `Meeting`（DbSet 為 `context.Meeting`）。**刻意不叫 `MeetingRecord`**——會與根命名空間 `MeetingRecord` 衝突；`Meeting` 也與 0.4.24 移除前的舊表同名。
   因為「一筆會議只有一個影音檔」，媒體欄位直接內嵌，**不另開附件子表**，省掉 Cascade 與附件集合的整套機制。
 - 標籤欄位 `Categories` 以 `TagStringHelper` 的「換行包夾」格式儲存；AutoMapper 以 `ForMember` 搭配 `ToList`／`ToStored` 轉換（`Teams` 0.4.103 已刪除）。
@@ -203,7 +203,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 
 ### 稽核（1.0.34）
 
-- `MeetingService`（網頁）與 `MeetingRepository`（API）：`Meeting.Create`／`Update`／`Delete`（摘要帶 `via`；API 刪除經 `MeetingService.DeleteAsync(id, via)`）。
+- `MeetingService`（網頁與 API）：`Meeting.Create`／`Update`／`Delete`（摘要帶 `via`，API 傳 `Api`）。逐字稿下載與複製、PDF 匯出（`Meeting.TranscriptDownload`／`TranscriptCopy`／`ExportPdf`）1.1.20 起也可由 API 寫（摘要多 `via=Api`）。
 - 流程動作：`Meeting.MediaUpload`（檔名與大小；使用者取消不記）、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`（`projectId`）、`Meeting.DraftRequest`（專案、提示詞名稱、與會者人數）、`Meeting.DraftUpdate`（**只記字數**，不記會議紀錄內容）、`Meeting.ExportPdf`（會議頁與專案頁的匯出）、`Meeting.TranscriptDownload`「下載逐字稿」與 `Meeting.TranscriptCopy`「複製逐字稿」（1.0.40，頁面在成功後寫入，detail 帶 `page=Meeting`／`Project`）。
 - 看不到的會議被嘗試修改、刪除、上傳、重新轉錄、歸屬、移出、產生或編修草稿時寫 `Permission.Denied`（`reason=DataScope; op=…`）；歸屬或產生草稿時指定了看不到的專案，目標是那個專案。用量上限擋下由 `AiCallGateway` 另記 `Ai.QuotaBlocked`。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
@@ -357,7 +357,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionQueue.cs`（`ITranscriptionQueue`／`TranscriptionQueue`）
 - `src/MeetingRecord/MeetingRecord.Web/BackgroundServices/TranscriptionBackgroundService.cs`（`TranscriptionBackgroundService`）
 - `src/MeetingRecord/MeetingRecord.Business/Helpers/MeetingMediaPolicy.cs`（`MeetingMediaPolicy`：允收政策）
-- `src/MeetingRecord/MeetingRecord.Business/Repositories/MeetingRepository.cs`（`MeetingRepository`：API 路徑，0.4.99 起同樣經 `ProjectAccessService` 過濾）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs`（1.1.20 起走 `MeetingService`；`MeetingRepository` 已刪）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Meeting.cs`（`Meeting`）、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs`（`BackendDBContext.Meeting` DbSet）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Migrations/20260821090356_AddMeeting.cs`（`AddMeeting`）
 - `src/MeetingRecord/MeetingRecord.Share/Enums/TranscriptionStatus.cs`（`TranscriptionStatus`、`TranscriptionStatusText`）

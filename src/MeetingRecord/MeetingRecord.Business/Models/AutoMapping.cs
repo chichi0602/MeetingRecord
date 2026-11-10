@@ -115,10 +115,21 @@ public class AutoMapping : Profile
             .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)));
         CreateMap<MeetingAdapterModel, Meeting>()
             .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)));
-        CreateMap<Meeting, MeetingDto>();
-        CreateMap<MeetingDto, Meeting>();
-        CreateMap<Meeting, MeetingCreateUpdateDto>();
-        CreateMap<MeetingCreateUpdateDto, Meeting>();
+        // 1.1.20：API 改走 MeetingService。分類兩種格式與呼叫者相關的旗標由 Controller 填。
+        CreateMap<MeetingAdapterModel, MeetingDto>()
+            .ForMember(d => d.Categories, o => o.Ignore())
+            .ForMember(d => d.CategoryNames, o => o.Ignore())
+            .ForMember(d => d.TranscriptionStatus, o => o.MapFrom(s => (int)s.TranscriptionStatus))
+            .ForMember(d => d.DraftStatus, o => o.MapFrom(s => (int)s.DraftStatus))
+            .ForMember(d => d.IsUploader, o => o.Ignore())
+            .ForMember(d => d.CanDelete, o => o.Ignore())
+            // 全文可能很長，只有取單筆時由 Controller 填，清單與搜尋不帶。
+            .ForMember(d => d.DraftContent, o => o.Ignore());
+        CreateMap<MeetingCreateUpdateDto, MeetingAdapterModel>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.Id ?? 0))
+            .ForMember(d => d.Categories, o => o.Ignore())
+            .ForMember(d => d.CreatedAt, o => o.Ignore())
+            .ForMember(d => d.UpdatedAt, o => o.Ignore());
         #endregion
 
         #region Team

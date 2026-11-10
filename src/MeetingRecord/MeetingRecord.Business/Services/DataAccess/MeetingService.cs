@@ -201,6 +201,47 @@ public class MeetingService
         return result;
     }
 
+    /// <summary>
+    /// 對外 API 的會議搜尋（<c>POST api/Meeting/search</c>，1.1.20 從 <c>MeetingRepository.GetPagedAsync</c> 搬來，行為不變）：
+    /// 關鍵字比對標題、描述、影音檔名；可依轉錄狀態篩選；預設依更新時間新到舊。
+    /// 畫面清單（分類篩選、畫面欄位排序）是 <see cref="GetAsync(DataRequest)"/>。
+    /// </summary>
+    public async Task<(List<MeetingAdapterModel> Items, int TotalCount)> SearchFlatAsync(MeetingRecord.Dtos.Commons.MeetingSearchRequestDto request)
+    {
+        var query = (await projectAccess.GetAsync()).Filter(context.Meeting.AsNoTracking()).Include(x => x.Project).AsQueryable();
+
+        if (!string.IsNullOrEmpty(request.Keyword))
+        {
+            query = query.Where(x =>
+                x.Title.Contains(request.Keyword) ||
+                (x.Description != null && x.Description.Contains(request.Keyword)) ||
+                (x.MediaOriginalFileName != null && x.MediaOriginalFileName.Contains(request.Keyword)));
+        }
+
+        if (request.TranscriptionStatus.HasValue)
+        {
+            var status = (TranscriptionStatus)request.TranscriptionStatus.Value;
+            query = query.Where(x => x.TranscriptionStatus == status);
+        }
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "title" => request.SortDescending ? query.OrderByDescending(x => x.Title) : query.OrderBy(x => x.Title),
+            "meetingdate" => request.SortDescending ? query.OrderByDescending(x => x.MeetingDate) : query.OrderBy(x => x.MeetingDate),
+            "transcriptionstatus" => request.SortDescending ? query.OrderByDescending(x => x.TranscriptionStatus) : query.OrderBy(x => x.TranscriptionStatus),
+            "createdat" => request.SortDescending ? query.OrderByDescending(x => x.CreatedAt) : query.OrderBy(x => x.CreatedAt),
+            "updatedat" => request.SortDescending ? query.OrderByDescending(x => x.UpdatedAt) : query.OrderBy(x => x.UpdatedAt),
+            _ => query.OrderByDescending(x => x.UpdatedAt),
+        };
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync();
+        return (MapWithProjectTitle(items), totalCount);
+    }
+
     public async Task<MeetingAdapterModel> GetAsync(int id)
     {
         Logger.LogDebug("Loading meeting by id. MeetingId={MeetingId}", id);
@@ -233,7 +274,8 @@ public class MeetingService
     /// 新增會議紀錄。成功時把資料庫產生的 Id 回填到 <paramref name="paraObject"/>，
     /// 讓 UI 可以接著把影音檔掛到這筆紀錄上。
     /// </summary>
-    public async Task<VerifyRecordResult> AddAsync(MeetingAdapterModel paraObject)
+    /// <param name="via">入口（稽核用，1.1.20）：API 傳 <see cref="AuditVia.Api"/>。</param>
+    public async Task<VerifyRecordResult> AddAsync(MeetingAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Creating meeting. Title={Title}", paraObject.Title);
 
@@ -254,7 +296,7 @@ public class MeetingService
 
             paraObject.Id = itemParameter.Id;
 
-            await AuditAsync(AuditActions.MeetingCreate, itemParameter.Id, $"title={itemParameter.Title}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.MeetingCreate, itemParameter.Id, $"title={itemParameter.Title}; via={via}");
             Logger.LogInformation("Meeting created successfully. MeetingId={MeetingId}, Title={Title}", itemParameter.Id, itemParameter.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -271,7 +313,8 @@ public class MeetingService
     /// 修改會議紀錄。影音檔與轉錄相關欄位一律沿用資料庫既有值，
     /// 避免畫面上的舊複本把背景轉錄剛寫入的狀態蓋掉。
     /// </summary>
-    public async Task<VerifyRecordResult> UpdateAsync(MeetingAdapterModel paraObject)
+    /// <param name="via">入口（稽核用，1.1.20）：API 傳 <see cref="AuditVia.Api"/>。</param>
+    public async Task<VerifyRecordResult> UpdateAsync(MeetingAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Updating meeting. MeetingId={MeetingId}, Title={Title}", paraObject.Id, paraObject.Title);
 
@@ -341,7 +384,7 @@ public class MeetingService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Meeting>(context);
 
-            await AuditAsync(AuditActions.MeetingUpdate, itemData.Id, $"title={itemData.Title}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.MeetingUpdate, itemData.Id, $"title={itemData.Title}; via={via}");
             Logger.LogInformation("Meeting updated successfully. MeetingId={MeetingId}, Title={Title}", itemData.Id, itemData.Title);
             return VerifyRecordResultFactory.Build(true);
         }

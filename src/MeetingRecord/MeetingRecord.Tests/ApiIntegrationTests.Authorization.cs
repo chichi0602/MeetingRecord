@@ -66,6 +66,15 @@ public sealed partial class ApiIntegrationTests
         ["Meeting.Create"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Create),
         ["Meeting.Update"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
         ["Meeting.Delete"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
+        // 1.1.20：會議改走 MeetingService 後畫面用的端點（歸屬專案、產生會議紀錄、下載與 PDF 另在 MeetingApiTests 驗）。
+        ["Meeting.List"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
+        ["Meeting.LinkedTodos"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
+        ["Meeting.Transcript"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
+        ["Meeting.TranscriptCopied"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Export),
+        ["Meeting.UpdateDraft"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
+        ["Meeting.SelectableProjects"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
+        ["Meeting.SelectablePromptTemplates"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
+        ["Meeting.EnabledCategories"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
         // 1.1.18：待辦改走 TodoService，並多了畫面用的端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
         ["Todo.GetById"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.Search"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
@@ -257,7 +266,8 @@ public sealed partial class ApiIntegrationTests
             return await SeedTodoAsync(action, userId);
         }
 
-        if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories")
+        if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories"
+            or "List" or "SelectableProjects" or "SelectablePromptTemplates")
         {
             return 0;
         }
@@ -360,6 +370,13 @@ public sealed partial class ApiIntegrationTests
             "AddPresets" => client.PostAsync($"{baseUrl}/presets", content: null),
             "AddPreset" => client.PostAsJsonAsync($"{baseUrl}/presets/single", new { name = AuthorizationPresetName }),
             "EnabledCategories" => client.GetAsync($"{baseUrl}/categories/enabled"),
+            "List" => client.PostAsJsonAsync($"{baseUrl}/list", new { pageIndex = 1, pageSize = 10 }),
+            "LinkedTodos" => client.GetAsync($"{baseUrl}/{targetId}/linked-todos"),
+            "Transcript" => client.GetAsync($"{baseUrl}/{targetId}/transcript"),
+            "TranscriptCopied" => client.PostAsync($"{baseUrl}/{targetId}/transcript/copied", content: null),
+            "UpdateDraft" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/draft", new { content = "授權測試" }),
+            "SelectableProjects" => client.GetAsync($"{baseUrl}/projects/selectable"),
+            "SelectablePromptTemplates" => client.GetAsync($"{baseUrl}/prompt-templates/selectable"),
             _ => throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null),
         };
     }

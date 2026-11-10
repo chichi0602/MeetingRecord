@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.23
+- 文件版本：1.24
 - 文件狀態：已實作
-- 現行系統版本：1.1.18
+- 現行系統版本：1.1.20
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -55,7 +55,9 @@
 
 **待辦事項**（1.1.18，`TodoController` 改走 `TodoService`）：既有五支（`GET {id}`、`POST search`、`POST`、`PUT {id}`、`DELETE {id}`）路由、權限、回應形狀不變，`TodoDto` 只多帶欄位：`projectStatus`、`createdByUserId`、`parentTitle`、`children`、`childrenTotal`／`childrenCompleted`、`dueDateChangedAt`／`dueDateChangeText`（後四項只有清單樹會帶）、`canDelete`（呼叫者能不能刪，畫面用）。`POST search` 照舊是**平面**清單（子項目也是一筆）。畫面用的新端點：`POST api/v1/Todo/tree`（只分頁主層、子項目跟著主待辦，內容 `TodoTreeRequestDto`，含 `projectScope` Active／Archived／All）、`PUT {id}/completed`（edit；失敗訊息放 `errorMessage`）、`GET owners?projectId&scope`、`GET by-owner?owner&projectId&scope`、`GET {id}/changes`、`GET parent-candidates?projectId&excludeId`（create 或 edit 任一）、`GET projects/selectable`；除註明者外都要 view。看不到的待辦一律 404。
 
-> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`（待辦 1.1.18 起直接走 `TodoService`）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
+**會議紀錄**（1.1.20，`MeetingController` 改走 `MeetingService`）：既有五支路由、權限、回應形狀不變，`MeetingDto` 只多帶欄位（`projectId`、`projectTitle`、`createdByUserId`、`hasMedia`、`hasTranscript`、`canRetryTranscription`、`draftStatus`、`draftError`、`draftPromptTemplateName`、`draftCompletedAt`、`hasDraft`、`canGenerateDraft`、`isUploader`、`canDelete`；`draftContent` 只有 `GET {id}` 帶），`MeetingCreateUpdateDto` 多了 `categoryNames`（有帶就以它為準，比照提示詞）。`POST search` 照舊。**外部行為變更**：`PUT` 對已完成（封存）專案的會議改為 400（與畫面一致，管理者除外）。畫面用的新端點：`POST list`（分類篩選、畫面欄位排序，view）、`GET {id}/linked-todos`（edit）、`POST {id}/retranscribe`（edit）、`POST {id}/draft`（產生會議紀錄，edit，會花 AI 費用）、`PUT {id}/draft`（修改全文，edit）、`PUT {id}/project`（歸屬專案，edit）、`GET {id}/transcript`（view）、`GET {id}/transcript/file`（.txt 含 BOM，export，寫稽核）、`POST {id}/transcript/copied`（瀏覽器複製後寫稽核，export）、`POST {id}/draft/pdf`（可帶還沒存的內容，export，寫稽核）、`GET projects/selectable`（附與會人員名冊）、`GET prompt-templates/selectable`、`GET categories/enabled`（後三支 view，不借用其他頁的權限）。看不到的會議一律 404；服務層擋下回 400，新端點訊息放 `errorMessage`。
+
+> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`（待辦 1.1.18、會議 1.1.20 起直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >
 > **專案的團隊與分類（0.4.102）**：`ProjectCreateUpdateDto`／`ProjectDto` 多了選填的 `primaryTeamId`、`collaboratorTeamIds`、`categories`，專案的 GET／搜尋結果會帶回團隊 Id。
 > - `POST api/Project` 沒給 `primaryTeamId` 時，用建立者所屬、Id 最小的團隊當主責；建立者不屬於任何團隊時回 **400**「請先加入團隊，或指定主責團隊。」
@@ -78,7 +80,7 @@
 
 - **沒有同名衝突檢查**（會議標題可重複），因此新增／更新不會回 `Conflict`。
 - **只開放中繼資料**。影音檔上傳、語音轉錄與逐字稿讀取刻意不開 API——那些操作牽涉實體檔案、背景佇列與長時間外部呼叫，只在 Blazor 服務層提供（見 [會議紀錄 PRD](../prd/會議紀錄-prd.md)）。
-- `PUT` 與 `MeetingRepository.UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位，API 用戶端無法覆寫背景轉錄寫入的狀態。
+- `PUT` 經 `MeetingService.UpdateAsync`（1.1.20 起，與畫面同一份）一律沿用資料庫既有的媒體、轉錄、會議紀錄與歸屬欄位，API 用戶端無法覆寫背景轉錄寫入的狀態。
 - `DELETE` 走 `MeetingService.DeleteAsync`（0.4.115）：和畫面同一套，一併清影音檔、逐字稿與 AI 問答對話；轉錄或會議紀錄生成進行中回 **400**。以前由控制器自己清兩個實體檔，對話檔留在磁碟上。
 - **`DELETE api/Meeting/{id}` 1.0.47 起要求 `會議紀錄:edit`（以前是 `delete`）**：刪除只限上傳者與管理者，由 `MeetingService.DeleteAsync` 把關，上傳者的角色只要能編輯就能刪自己上傳的（與畫面一致）。不是上傳者回 **400** `ValidationError`「只有上傳者或管理者可以刪除這筆會議紀錄。」；看不到回 404；沒有 `edit` 回 403。只有 `delete` 沒有 `edit` 的自訂角色從此呼叫不了這支 API。刪除會保留從這場會議抽出的待辦（`MeetingId` 改成 null）。**1.0.52 起專案負責人也能刪**該專案底下任何人的會議，擋下的訊息改為「只有上傳者或專案負責人可以刪除這筆會議紀錄。」。
 - **`DELETE api/Todo/{id}` 1.0.52 起要求 `待辦事項:edit`（以前是 `delete`）**：刪除只限專案負責人與管理者（`TodoService.DeleteAsync`，1.1.18 起 API 與畫面同一份），不是負責人回 **400** `ValidationError`「只有專案負責人可以刪除待辦。」；看不到 404；沒有 `edit` 回 403。主待辦連同子項目一起刪。

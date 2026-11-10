@@ -47,6 +47,13 @@ public class MeetingCreateUpdateDto
     public string? Categories { get; set; }
 
     /// <summary>
+    /// 分類名稱清單（1.1.20，比照提示詞的 <c>categoryNames</c>）：有帶就以它為準；沒帶就把 <see cref="Categories"/> 照儲存格式拆開。
+    /// 回應兩個欄位都會填。
+    /// </summary>
+    [JsonPropertyName("categoryNames")]
+    public List<string>? CategoryNames { get; set; }
+
+    /// <summary>
     /// 建立時間
     /// </summary>
     [JsonPropertyName("createdAt")]

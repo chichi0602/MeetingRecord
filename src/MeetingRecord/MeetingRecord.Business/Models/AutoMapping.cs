@@ -134,10 +134,6 @@ public class AutoMapping : Profile
         #region Team
         CreateMap<Team, TeamAdapterModel>();
         CreateMap<TeamAdapterModel, Team>();
-        CreateMap<Team, TeamDto>();
-        CreateMap<TeamDto, Team>();
-        CreateMap<Team, TeamCreateUpdateDto>();
-        CreateMap<TeamCreateUpdateDto, Team>();
         #endregion
 
         #region MyUser

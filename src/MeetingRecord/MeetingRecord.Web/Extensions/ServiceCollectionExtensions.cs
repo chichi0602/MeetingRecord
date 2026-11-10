@@ -150,7 +150,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
         services.AddScoped<TeamService>();
-        services.AddScoped<TeamRepository>();
         services.AddScoped<PromptTemplateService>();
         services.AddScoped<PromptTemplateRepository>();
         services.AddScoped<TodoService>();

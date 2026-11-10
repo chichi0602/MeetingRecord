@@ -83,6 +83,42 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
     }
 
     [E2EFact]
+    [Trait("Scenario", "MD-07")]
+    [Trait("Title", "團隊修改成員、刪除（刪除前先檢查再確認）")]
+    [Trait("Page", "團隊清單")]
+    [Trait("Persona", "管理者")]
+    public async Task Team_EditMembersAndDelete()
+    {
+        // 1.1.8（團隊清單搬到 WASM）：以前只有 MD-03 一個團隊情境，補上修改成員與刪除。
+        var page = await LoginAsAsync(Seed.Admin);
+        await GotoAsync(page, "/teams", "成員數");
+        var name = Unique("E2E成員團隊");
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        await page.GetByPlaceholder("請輸入團隊名稱").FillAsync(name);
+        await ClickModalOkAsync(page);
+        await Expect(Row(page, name)).ToBeVisibleAsync();
+
+        await RowAction(Row(page, name), "修改").ClickAsync();
+        await PickAsync(page, SelectByLabel(page, "成員"), $"（{Seed.Viewer.Account}）");
+        // 多選下拉選完不會自己收起來（會蓋住「確定」）：點一下對話窗標題收起。
+        await page.Locator(".ant-modal-wrap:visible .ant-modal-title").ClickAsync();
+        await Expect(page.Locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")).ToHaveCountAsync(0);
+        await ClickModalOkAsync(page);
+        await Expect(Notice(page, "修改成功")).ToBeVisibleAsync();
+
+        await using (var db = App.CreateDbContext())
+        {
+            var team = await db.Team.SingleAsync(x => x.Name == name);
+            Assert.Equal([Seed.Viewer.Id], await db.UserTeam.Where(x => x.TeamId == team.Id).Select(x => x.MyUserId).ToListAsync());
+        }
+
+        await RowAction(Row(page, name), "刪除").ClickAsync();
+        await ConfirmAsync(page, "刪除");
+        await Expect(Row(page, name)).ToHaveCountAsync(0);
+    }
+
+    [E2EFact]
     [Trait("Scenario", "MD-04")]
     [Trait("Title", "提示詞一鍵建立內建範本")]
     [Trait("Page", "提示詞清單")]

@@ -28,4 +28,9 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(CategorySearchRequestDto))]
 [JsonSerializable(typeof(CategoryCreateUpdateDto))]
 [JsonSerializable(typeof(SetEnabledRequestDto))]
+[JsonSerializable(typeof(ApiResult<PagedResult<TeamDto>>), TypeInfoPropertyName = "TeamPageResult")]
+[JsonSerializable(typeof(ApiResult<TeamDto>), TypeInfoPropertyName = "TeamResult")]
+[JsonSerializable(typeof(ApiResult<List<MemberOptionDto>>), TypeInfoPropertyName = "MemberOptionsResult")]
+[JsonSerializable(typeof(TeamSearchRequestDto))]
+[JsonSerializable(typeof(TeamCreateUpdateDto))]
 public sealed partial class ClientJsonContext : JsonSerializerContext;

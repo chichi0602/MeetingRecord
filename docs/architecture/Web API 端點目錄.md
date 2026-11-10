@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.14
+- 文件版本：1.15
 - 文件狀態：已實作
-- 現行系統版本：1.1.7
+- 現行系統版本：1.1.8
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -38,6 +38,8 @@
 | `MeetingController` | `api/Meeting`、`api/v1/Meeting` | `角色_會議紀錄` | `Controllers/MeetingController.cs` |
 
 分類另有兩支（1.1.7，WASM 分類頁用）：`PUT Category/{id}/enabled`（Edit，內容 `{ "isEnabled": true }`，切換啟用）與 `GET Category/teams/selectable`（View，啟用中的團隊 `TeamOptionDto`）。1.1.7 起分類 API 呼叫畫面用的 `CategoryService`：名稱重複去頭尾空白、不分大小寫判斷，回 409 的訊息是「分類名稱已存在，無法新增／修改。」；`CategoryDto` 多了 `teamIds`／`teamNames`，新增與修改可帶 `teamIds` 同步負責團隊，**沒帶就不動**、帶空陣列才清空。
+
+團隊另有三支（1.1.8，WASM 團隊頁用）：`PUT Team/{id}/enabled`（Edit，切換啟用）、`GET Team/{id}/delete-check`（Delete；可刪 200、仍是專案主責團隊的非管理者 409 與原因、不存在 404）、`GET Team/members/selectable`（**Create 或 Edit 其中之一**，啟用中帳號 `MemberOptionDto`：`id`、`label`＝「姓名（帳號）」）。1.1.8 起團隊 API 呼叫 `TeamService`：名稱與代號重複去頭尾空白、不分大小寫，409 訊息是「團隊名稱／代號已存在，無法新增／修改。」；`TeamDto` 多了 `memberCount`（單筆另帶 `memberIds`），新增與修改可帶 `memberIds` 同步成員，**沒帶就不動**、帶空陣列才清空。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

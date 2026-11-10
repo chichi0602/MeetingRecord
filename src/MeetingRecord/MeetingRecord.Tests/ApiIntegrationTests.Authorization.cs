@@ -54,6 +54,8 @@ public sealed partial class ApiIntegrationTests
         ["Team.Create"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.Create),
         ["Team.Update"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.Edit),
         ["Team.Delete"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.Delete),
+        ["Team.SetEnabled"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.Edit),
+        ["Team.DeleteCheck"] = (MagicObjectHelper.角色_團隊清單, PermissionActions.Delete),
         ["Meeting.GetById"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
         ["Meeting.Search"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
         ["Meeting.Create"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Create),
@@ -114,6 +116,45 @@ public sealed partial class ApiIntegrationTests
 
         Assert.True(response.StatusCode == HttpStatusCode.OK, $"{endpoint} 回 {(int)response.StatusCode}：{result.Message}");
         Assert.True(result.Success);
+    }
+
+    /// <summary>
+    /// 任一動作即可的端點（1.1.8，<c>[HasPermission(頁, anyOf)]</c>）：團隊的可選成員清單是全公司帳號，
+    /// 只給能新增或修改團隊的人；只有檢視權限要 403 並留稽核。
+    /// </summary>
+    [Fact]
+    public async Task TeamSelectableMembers_ShouldRequireCreateOrEdit()
+    {
+        const string url = "/api/Team/members/selectable";
+        var page = MagicObjectHelper.角色_團隊清單;
+
+        using (var anonymous = factory.CreateClient())
+        using (var response = await anonymous.GetAsync(url))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var viewer = await CreateApiUserAsync(PermissionKey.For(page, PermissionActions.View), PermissionKey.For(page, PermissionActions.Delete));
+        using (var client = await CreateBearerClientAsync(viewer))
+        using (var response = await client.GetAsync(url))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var denied = await db.AuditLog.AsNoTracking().SingleAsync(x => x.Action == AuditActions.PermissionDenied && x.ActorAccount == viewer.Account);
+            Assert.Equal($"缺少權限：{PermissionKey.For(page, PermissionActions.Create)} 或 {PermissionKey.For(page, PermissionActions.Edit)}; via=Api", denied.Detail);
+        }
+
+        foreach (var action in new[] { PermissionActions.Create, PermissionActions.Edit })
+        {
+            var user = await CreateApiUserAsync(PermissionKey.For(page, action));
+            using var client = await CreateBearerClientAsync(user);
+            using var response = await client.GetAsync(url);
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"只有 {action} 時回 {(int)response.StatusCode}");
+        }
     }
 
     [Fact]
@@ -247,6 +288,7 @@ public sealed partial class ApiIntegrationTests
             "Delete" => client.DeleteAsync($"{baseUrl}/{targetId}"),
             "SetEnabled" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/enabled", new { isEnabled = false }),
             "SelectableTeams" => client.GetAsync($"{baseUrl}/teams/selectable"),
+            "DeleteCheck" => client.GetAsync($"{baseUrl}/{targetId}/delete-check"),
             _ => throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null),
         };
     }

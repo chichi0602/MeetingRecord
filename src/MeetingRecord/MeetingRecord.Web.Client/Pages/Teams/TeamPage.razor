@@ -1,3 +1,10 @@
+@page "/teams"
+@using MeetingRecord.Dtos.Models
+@using MeetingRecord.Dtos.Commons
+
+@* 團隊清單（1.1.8 搬到 WASM）：由 Blazor Server 的 TeamViewView 改寫，畫面、文字、按鈕都不變；資料改走團隊 API。 *@
+<PageTitle>團隊清單</PageTitle>
+
 @if (string.IsNullOrEmpty(RoleMessage) == false)
 {
     <div class="alert alert-danger" role="alert">
@@ -9,8 +16,8 @@ else
     <div>
         <div class="team-view-toolbar">
             <div class="team-view-toolbar-left">
-                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109）。 *@
-                @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Create))
+                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109；WASM 頁用 PermissionView，規則同伺服器）。 *@
+                @if (PermissionView.Can(MagicObjectHelper.角色_團隊清單, PermissionActions.Create))
                 {
                     <HoverTip Title="新增">
                         <Button Type="ButtonType.Default"
@@ -47,10 +54,10 @@ else
                            OnAction="OnBatchDeleteAsync" OnClear="@(() => selectedRows = [])" />
         <div class="team-view-table-wrap">
             <Table @ref="table"
-                   TItem="TeamAdapterModel"
+                   TItem="TeamDto"
                    Class="team-view-table"
                    RemoteDataSource="true"
-                   DataSource="@teamAdapterModels"
+                   DataSource="@teams"
                    RowKey="x => x.Id"
                    @bind-SelectedRows="selectedRows"
                    OnChange="OnTableChange"
@@ -61,27 +68,27 @@ else
                 {
                     <Selection />
                 }
-                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
-                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Code)" Title="代號" Sortable ShowSorterTooltip="false" />
-                <Column TData="string" DataIndex="@nameof(TeamAdapterModel.Description)" Title="描述" />
-                <Column TData="int" DataIndex="@nameof(TeamAdapterModel.MemberCount)" Title="成員數" />
-                <Column TData="bool" DataIndex="@nameof(TeamAdapterModel.IsEnabled)" Title="啟用狀態" Sortable ShowSorterTooltip="false">
+                <Column TData="string" DataIndex="@nameof(TeamDto.Name)" Title="名稱" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(TeamDto.Code)" Title="代號" Sortable ShowSorterTooltip="false" />
+                <Column TData="string" DataIndex="@nameof(TeamDto.Description)" Title="描述" />
+                <Column TData="int" DataIndex="@nameof(TeamDto.MemberCount)" Title="成員數" />
+                <Column TData="bool" DataIndex="@nameof(TeamDto.IsEnabled)" Title="啟用狀態" Sortable ShowSorterTooltip="false">
                     <StatusToggleTag Enabled="@context.IsEnabled"
                                      Name="@context.Name"
-                                     CanToggle="@AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit)"
+                                     CanToggle="@PermissionView.Can(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit)"
                                      OnToggle="@(async () => await OnToggleEnabledAsync(context))" />
                 </Column>
-                <Column TData="DateTime" DataIndex="@nameof(TeamAdapterModel.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
+                <Column TData="DateTime" DataIndex="@nameof(TeamDto.UpdatedAt)" Title="更新時間" Sortable ShowSorterTooltip="false" DefaultSortOrder="SortDirection.Descending" />
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     <Space>
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit))
+                        @if (PermissionView.Can(MagicObjectHelper.角色_團隊清單, PermissionActions.Edit))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="修改" Icon="edit"
                                                   OnClick="@(async () => await OnEditAsync(@context))" />
                             </SpaceItem>
                         }
-                        @if (AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete))
+                        @if (PermissionView.Can(MagicObjectHelper.角色_團隊清單, PermissionActions.Delete))
                         {
                             <SpaceItem>
                                 <CrudActionButton Title="刪除" Icon="delete" Danger
@@ -106,7 +113,7 @@ else
                 <ValidationSummary />
                 <InputWatcher EditContextActionChanged="OnEditContestChanged" />
 
-                <AntDesign.Form TModel="TeamAdapterModel" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
+                <AntDesign.Form TModel="TeamDto" Model="@CurrentRecord" Layout="FormLayout.Vertical" Context="formContext">
                     <div class="form-modal-grid">
                         <FormItem Label="名稱" Required>
                             <Input @bind-Value="CurrentRecord.Name" Placeholder="請輸入團隊名稱" />

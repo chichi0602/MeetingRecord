@@ -14,6 +14,7 @@ public static class WasmRoutes
     {
         "/wasm",
         "/categories", // 1.1.7 分類清單
+        "/teams", // 1.1.8 團隊清單
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

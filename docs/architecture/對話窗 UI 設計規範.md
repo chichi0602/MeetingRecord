@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.9
+- 文件版本：1.10
 - 文件狀態：已實作
-- 現行系統版本：1.1.7
+- 現行系統版本：1.1.8
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/10
 
@@ -88,7 +88,7 @@
 | 變更密碼 | `Layout/MainLayout.razor` | `form-modal-compact` |
 | 關於 | `Layout/MainLayout.razor` | `form-modal-compact` |
 | 分類維護 | `Web.Client/Pages/Categories/CategoryPage.razor`（1.1.7 起 WASM） | `form-modal-compact` |
-| 團隊維護 | `Views/Teams/TeamViewView.razor` | `form-modal-compact` |
+| 團隊維護 | `Web.Client/Pages/Teams/TeamPage.razor`（1.1.8 起 WASM） | `form-modal-compact` |
 | 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
 | 歸屬到專案 | `Views/Meetings/MeetingViewView.razor` | `form-modal-compact` |
 | 使用者維護 | `Views/Admins/MyUserView.razor` | `form-modal-standard` |

@@ -16,19 +16,37 @@ namespace MeetingRecord.Web.Filters;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilter
 {
-    private readonly string permissionKey;
+    /// <summary>有其中任何一個就通過（一般只有一個）。</summary>
+    private readonly string[] permissionKeys;
 
     /// <summary>頁面級（裸鍵）授權。</summary>
     public HasPermissionAttribute(string permissionKey)
     {
-        this.permissionKey = permissionKey;
+        permissionKeys = [permissionKey];
     }
 
     /// <summary>動作級授權，權限鍵為「頁面:動作」。</summary>
     public HasPermissionAttribute(string page, string action)
     {
-        this.permissionKey = PermissionKey.For(page, action);
+        permissionKeys = [PermissionKey.For(page, action)];
     }
+
+    /// <summary>
+    /// 任一動作即可（1.1.8）：例如團隊的可選成員清單，能新增**或**能修改團隊的人都要用到（編輯視窗裡的下拉）。
+    /// 寫法：<c>[HasPermission(頁, new[] { PermissionActions.Create, PermissionActions.Edit })]</c>。
+    /// </summary>
+    public HasPermissionAttribute(string page, string[] anyOf)
+    {
+        if (anyOf.Length == 0)
+        {
+            throw new ArgumentException("至少要指定一個動作。", nameof(anyOf));
+        }
+
+        permissionKeys = anyOf.Select(action => PermissionKey.For(page, action)).ToArray();
+    }
+
+    /// <summary>給訊息與稽核用：「團隊清單:create 或 團隊清單:edit」。</summary>
+    private string Describe() => string.Join(" 或 ", permissionKeys);
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
@@ -53,15 +71,20 @@ public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilte
         }
 
         var checker = context.HttpContext.RequestServices.GetRequiredService<IPermissionChecker>();
-        if (!await checker.HasPermissionAsync(userId, permissionKey))
+        foreach (var key in permissionKeys)
         {
-            context.Result = new ObjectResult(ApiResult.ForbiddenResult($"目前使用者沒有「{permissionKey}」權限。"))
+            if (await checker.HasPermissionAsync(userId, key))
             {
-                StatusCode = StatusCodes.Status403Forbidden,
-            };
-
-            await WriteDeniedAuditAsync(context, principal, userId);
+                return;
+            }
         }
+
+        context.Result = new ObjectResult(ApiResult.ForbiddenResult($"目前使用者沒有「{string.Join("」或「", permissionKeys)}」權限。"))
+        {
+            StatusCode = StatusCodes.Status403Forbidden,
+        };
+
+        await WriteDeniedAuditAsync(context, principal, userId);
     }
 
     /// <summary>⚠️ 稽核寫不進去也要照樣回 403：這裡任何例外都吞掉、只記警告。</summary>
@@ -79,12 +102,12 @@ public sealed class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilte
                 actorAccount: account,
                 targetType: "ApiEndpoint",
                 targetId: $"{request.Method} {request.Path}",
-                detail: $"缺少權限：{permissionKey}; via={AuditVia.Api}");
+                detail: $"缺少權限：{Describe()}; via={AuditVia.Api}");
         }
         catch (Exception ex)
         {
             context.HttpContext.RequestServices.GetService<ILogger<HasPermissionAttribute>>()
-                ?.LogWarning(ex, "Failed to write permission-denied audit. Permission={Permission}", permissionKey);
+                ?.LogWarning(ex, "Failed to write permission-denied audit. Permission={Permission}", Describe());
         }
     }
 }

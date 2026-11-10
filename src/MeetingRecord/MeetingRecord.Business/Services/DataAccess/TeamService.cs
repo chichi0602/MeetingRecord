@@ -35,7 +35,8 @@ public class TeamService
         this.auditLogService = auditLogService;
     }
 
-    public async Task<DataRequestResult<TeamAdapterModel>> GetAsync(DataRequest dataRequest)
+    /// <param name="isEnabled">只取啟用（true）或停用（false）的；null 不篩選。清單頁不傳，團隊 API 的搜尋條件用（1.1.8）。</param>
+    public async Task<DataRequestResult<TeamAdapterModel>> GetAsync(DataRequest dataRequest, bool? isEnabled = null)
     {
         Logger.LogDebug(
             "Loading teams. Search={Search}, SortField={SortField}, SortDescending={SortDescending}, CurrentPage={CurrentPage}, PageSize={PageSize}, Take={Take}",
@@ -55,6 +56,11 @@ public class TeamService
                 x.Name.Contains(dataRequest.Search) ||
                 (x.Code != null && x.Code.Contains(dataRequest.Search)) ||
                 (x.Description != null && x.Description.Contains(dataRequest.Search)));
+        }
+
+        if (isEnabled.HasValue)
+        {
+            dataSource = dataSource.Where(x => x.IsEnabled == isEnabled.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(dataRequest.SortField))
@@ -89,6 +95,15 @@ public class TeamService
                     ? dataSource.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id)
                     : dataRequest.SortDescending == false
                         ? dataSource.OrderBy(x => x.UpdatedAt).ThenBy(x => x.Id)
+                        : dataSource;
+            }
+            else if (dataRequest.SortField == nameof(TeamAdapterModel.CreatedAt))
+            {
+                // 團隊 API 原本就能依建立時間排序（1.1.8 改走這裡時保留）。
+                dataSource = dataRequest.SortDescending == true
+                    ? dataSource.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+                    : dataRequest.SortDescending == false
+                        ? dataSource.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
                         : dataSource;
             }
         }
@@ -142,7 +157,8 @@ public class TeamService
     private Task AuditAsync(string action, int id, string detail)
         => auditLogService.WriteForCurrentUserAsync(action, success: true, targetType: nameof(Team), targetId: id.ToString(), detail: detail);
 
-    public async Task<VerifyRecordResult> AddAsync(TeamAdapterModel paraObject)
+    /// <param name="via">稽核的來源：畫面 <see cref="AuditVia.Web"/>、API <see cref="AuditVia.Api"/>（1.1.8）。</param>
+    public async Task<VerifyRecordResult> AddAsync(TeamAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Creating team. Name={TeamName}", paraObject.Name);
 
@@ -158,7 +174,7 @@ public class TeamService
             paraObject.Id = itemParameter.Id;
             CleanTrackingHelper.Clean<Team>(context);
 
-            await AuditAsync(AuditActions.TeamCreate, itemParameter.Id, $"name={itemParameter.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.TeamCreate, itemParameter.Id, $"name={itemParameter.Name}; via={via}");
             Logger.LogInformation("Team created successfully. TeamId={TeamId}, Name={TeamName}", itemParameter.Id, itemParameter.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -169,7 +185,7 @@ public class TeamService
         }
     }
 
-    public async Task<VerifyRecordResult> UpdateAsync(TeamAdapterModel paraObject)
+    public async Task<VerifyRecordResult> UpdateAsync(TeamAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Updating team. TeamId={TeamId}, Name={TeamName}", paraObject.Id, paraObject.Name);
 
@@ -195,7 +211,7 @@ public class TeamService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Team>(context);
 
-            await AuditAsync(AuditActions.TeamUpdate, itemData.Id, $"name={itemData.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.TeamUpdate, itemData.Id, $"name={itemData.Name}; via={via}");
             Logger.LogInformation("Team updated successfully. TeamId={TeamId}, Name={TeamName}", itemData.Id, itemData.Name);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -206,7 +222,7 @@ public class TeamService
         }
     }
 
-    public async Task<VerifyRecordResult> DeleteAsync(int id)
+    public async Task<VerifyRecordResult> DeleteAsync(int id, string via = AuditVia.Web)
     {
         Logger.LogInformation("Deleting team. TeamId={TeamId}", id);
 
@@ -237,7 +253,7 @@ public class TeamService
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Team>(context);
 
-            await AuditAsync(AuditActions.TeamDelete, id, $"name={item.Name}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.TeamDelete, id, $"name={item.Name}; via={via}");
             Logger.LogInformation("Team deleted successfully. TeamId={TeamId}, Name={TeamName}", id, item.Name);
             return VerifyRecordResultFactory.Build(true);
         }

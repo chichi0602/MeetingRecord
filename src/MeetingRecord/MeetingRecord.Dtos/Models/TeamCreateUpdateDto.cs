@@ -58,4 +58,11 @@ public class TeamCreateUpdateDto
     /// </summary>
     [JsonPropertyName("updatedAt")]
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 成員（使用者 Id，1.1.8）：成員看得到這個團隊主責或協作的專案。
+    /// null（沒帶這個欄位）＝新增時不設、修改時保留原本的成員；空陣列＝清空。
+    /// </summary>
+    [JsonPropertyName("memberIds")]
+    public List<int>? MemberIds { get; set; }
 }

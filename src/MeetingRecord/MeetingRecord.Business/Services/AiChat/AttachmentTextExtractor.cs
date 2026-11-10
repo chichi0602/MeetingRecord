@@ -41,19 +41,7 @@ public class AttachmentTextExtractor
     /// 判斷這個副檔名是否有辦法擷取文字。抽成純函式以便單元測試——
     /// 不必為了測「.xlsx 不支援」而準備一個真的 Excel 檔。
     /// </summary>
-    public static bool IsSupported(string? fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName))
-        {
-            return false;
-        }
-
-        return Path.GetExtension(fileName).ToLowerInvariant() switch
-        {
-            ".pdf" or ".docx" or ".txt" or ".md" or ".csv" => true,
-            _ => false,
-        };
-    }
+    public static bool IsSupported(string? fileName) => MeetingRecord.Share.Helpers.AttachmentFormats.IsTextExtractable(fileName);
 
     /// <summary>
     /// 讀出附件的純文字。無法擷取時回傳 null——呼叫端要把它列進「已跳過」讓使用者看見，

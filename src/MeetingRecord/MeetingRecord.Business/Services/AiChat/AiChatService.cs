@@ -13,16 +13,6 @@ using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.AiChat;
 
-/// <summary>問答的對象。</summary>
-public enum AiChatScope
-{
-    /// <summary>整個專案：讀本專案的所有會議紀錄與附件。</summary>
-    Project = 0,
-
-    /// <summary>單一會議：讀該會議的會議紀錄與逐字稿。</summary>
-    Meeting = 1,
-}
-
 /// <summary>畫面用的一則對話訊息。</summary>
 public sealed record AiChatMessageItem(
     string Role,

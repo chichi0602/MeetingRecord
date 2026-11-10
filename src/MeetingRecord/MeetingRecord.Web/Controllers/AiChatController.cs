@@ -9,7 +9,9 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.AiChats;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.AiChat;
 using MeetingRecord.Web.Filters;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Web.Controllers;
 
@@ -29,15 +31,11 @@ namespace MeetingRecord.Web.Controllers;
 [Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]
 public sealed class AiChatController(
     AiChatService chatService,
-    ProjectService projectService,
-    MeetingService meetingService,
-    IAuditLogService auditLogService,
-    IPdfRenderer pdfRenderer,
+    AiChatOperations operations,
     ILogger<AiChatController> logger) : ControllerBase
 {
     /// <summary>服務層「看不到」的訊息：對外當成不存在。</summary>
     private const string NotVisibleMessage = "找不到這個專案或會議，可能已被刪除或沒有權限。";
-    private const string PdfContentType = "application/pdf";
     private static readonly JsonSerializerOptions StreamJson = new(JsonSerializerDefaults.Web);
 
     /// <summary>附件總量上限：一次最多 <see cref="AiChatAttachmentPolicy.MaxAttachmentsPerQuestion"/> 個、單一文件上限 20 MB，再留一點給問題本身。</summary>
@@ -49,14 +47,14 @@ public sealed class AiChatController(
         => RunAsync(async () =>
         {
             var items = await chatService.ListConversationsAsync(ToScope(scope), targetId, cancellationToken);
-            return Ok(ApiResult<List<AiChatConversationDto>>.SuccessResult([.. items.Select(ToDto)]));
+            return Ok(ApiResult<List<AiChatConversationDto>>.SuccessResult([.. items.Select(AiChatOperations.ToDto)]));
         });
 
-    /// <summary>開新對話（回新對話的 Id）。</summary>
+    /// <summary>開新對話（回新對話的 Id）。<c>automatic=true</c>：開視窗時自動建的第一段，不算使用者的動作、不寫稽核（1.1.22）。</summary>
     [HttpPost("conversations")]
     [AiChatPermission(PermissionActions.View)]
-    public Task<IActionResult> CreateConversation(string scope, int targetId, CancellationToken cancellationToken)
-        => RunAsync(async () => Ok(ApiResult<string>.SuccessResult(await chatService.CreateConversationAsync(ToScope(scope), targetId, cancellationToken))));
+    public Task<IActionResult> CreateConversation(string scope, int targetId, [FromQuery] bool automatic, CancellationToken cancellationToken)
+        => RunAsync(async () => Ok(ApiResult<string>.SuccessResult(await chatService.CreateConversationAsync(ToScope(scope), targetId, cancellationToken, audit: !automatic))));
 
     /// <summary>重新命名對話（要修改權限）。</summary>
     [HttpPut("conversations/{conversationId}/title")]
@@ -80,7 +78,7 @@ public sealed class AiChatController(
         => RunAsync(async () =>
         {
             var items = await chatService.GetHistoryAsync(ToScope(scope), targetId, conversationId, cancellationToken);
-            return Ok(ApiResult<List<AiChatMessageDto>>.SuccessResult([.. items.Select(ToDto)]));
+            return Ok(ApiResult<List<AiChatMessageDto>>.SuccessResult([.. items.Select(AiChatOperations.ToDto)]));
         });
 
     /// <summary>修改一則訊息（要修改權限）：原本的角色與內容對不上回 409（多半是別人先改過）。</summary>
@@ -125,75 +123,21 @@ public sealed class AiChatController(
     [AiChatPermission(PermissionActions.View)]
     public Task<IActionResult> Attachment(string scope, int targetId, string conversationId, string storedName, [FromQuery] bool download, CancellationToken cancellationToken)
         => RunAsync(async () =>
-        {
-            var chatScope = ToScope(scope);
-            var history = await chatService.GetHistoryAsync(chatScope, targetId, conversationId, cancellationToken);
-            var attachment = history.SelectMany(x => x.AttachmentList).FirstOrDefault(x => x.StoredName == storedName);
-            var content = attachment is null ? null : await chatService.ReadAttachmentAsync(chatScope, targetId, conversationId, attachment, cancellationToken);
-            if (attachment is null || content is null)
-            {
-                return NotFound(ApiResult.NotFoundResult("找不到這個附件，可能已被刪除。"));
-            }
-
-            if (download)
-            {
-                await auditLogService.WriteForCurrentUserAsync(
-                    AuditActions.AiChatAttachmentDownload, targetType: chatScope.ToString(), targetId: targetId.ToString(),
-                    detail: $"conversationId={conversationId}; file={attachment.FileName}; size={content.Length}; via={AuditVia.Api}");
-            }
-
-            var contentType = attachment.Kind == AiChatAttachmentKind.Image
-                ? AiChatAttachmentPolicy.GetImageMediaType(attachment.FileName)
-                : "application/octet-stream";
-            return File(content, contentType, attachment.FileName);
-        });
+            await operations.ReadAttachmentAsync(ToScope(scope), targetId, conversationId, storedName, download, AuditVia.Api, cancellationToken) is { } file
+                ? File(file.Content, file.ContentType, file.FileName)
+                : NotFound(ApiResult.NotFoundResult("找不到這個附件，可能已被刪除。")));
 
     /// <summary>匯出 PDF（要匯出權限）：一則或整段對話，內容一律從對話檔讀。</summary>
     [HttpPost("conversations/{conversationId}/pdf")]
     [AiChatPermission(PermissionActions.Export)]
     public Task<IActionResult> ExportPdf(string scope, int targetId, string conversationId, [FromBody] AiChatExportRequestDto request, CancellationToken cancellationToken)
         => RunAsync(async () =>
-        {
-            var chatScope = ToScope(scope);
-            var history = await chatService.GetHistoryAsync(chatScope, targetId, conversationId, cancellationToken);
-            if (history.Count == 0 || request.MessageIndex is { } i && (i < 0 || i >= history.Count))
-            {
-                return NotFound(ApiResult.NotFoundResult("找不到要匯出的內容。"));
-            }
-
-            var conversationTitle = (await chatService.ListConversationsAsync(chatScope, targetId, cancellationToken))
-                .FirstOrDefault(x => x.Id == conversationId)?.Title;
-            var targetName = await TargetNameAsync(chatScope, targetId);
-            var exportedAt = DateTime.Now;
-            string html, fileName, kind;
-            if (request.MessageIndex is { } index)
-            {
-                html = AiChatDocumentExporter.BuildMessageHtml(targetName, history[index], index + 1, exportedAt);
-                fileName = AiChatDocumentExporter.BuildMessageFileName(targetName, index + 1, exportedAt, conversationTitle);
-                kind = "Message";
-            }
-            else
-            {
-                html = AiChatDocumentExporter.BuildConversationHtml(targetName, history, exportedAt, conversationTitle);
-                fileName = AiChatDocumentExporter.BuildConversationFileName(targetName, exportedAt, conversationTitle);
-                kind = "Conversation";
-            }
-
-            var pdf = await pdfRenderer.RenderAsync(html, cancellationToken);
-            await auditLogService.WriteForCurrentUserAsync(
-                AuditActions.AiChatExportPdf, targetType: chatScope.ToString(), targetId: targetId.ToString(),
-                detail: $"conversationId={conversationId}; kind={kind}; file={fileName}; bytes={pdf.Length}; via={AuditVia.Api}");
-            return File(pdf, PdfContentType, fileName);
-        });
+            await operations.ExportPdfAsync(ToScope(scope), targetId, conversationId, request.MessageIndex, AuditVia.Api, cancellationToken) is { } file
+                ? File(file.Content, file.ContentType, file.FileName)
+                : NotFound(ApiResult.NotFoundResult("找不到要匯出的內容。")));
 
     private static AiChatScope ToScope(string scope)
         => string.Equals(scope, "project", StringComparison.OrdinalIgnoreCase) ? AiChatScope.Project : AiChatScope.Meeting;
-
-    /// <summary>PDF 表頭的對象名稱（服務層已檢查過看得到）。</summary>
-    private async Task<string> TargetNameAsync(AiChatScope scope, int targetId)
-        => scope == AiChatScope.Project
-            ? (await projectService.GetAsync(targetId)).Title
-            : (await meetingService.GetAsync(targetId)).Title;
 
     /// <summary>服務層的例外都是 <see cref="InvalidOperationException"/>（含額度用完、AI 服務錯誤）：「看不到」回 404，其他回 400 與原文。</summary>
     private async Task<IActionResult> RunAsync(Func<Task<IActionResult>> action)
@@ -280,7 +224,7 @@ public sealed class AiChatController(
         try
         {
             var answer = await work;
-            await WriteEventAsync(new AiChatStreamEventDto { Type = AiChatStreamEventDto.Done, Answer = ToDto(answer) }, cancellationToken);
+            await WriteEventAsync(new AiChatStreamEventDto { Type = AiChatStreamEventDto.Done, Answer = AiChatOperations.ToDto(answer) }, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -309,37 +253,4 @@ public sealed class AiChatController(
             // 使用者離開頁面、連線斷了：請求的取消權杖也傳給了服務層，產生會跟著停（不再繼續花費）。
         }
     }
-
-    private static AiChatConversationDto ToDto(AiChatConversationInfo x) => new()
-    {
-        Id = x.Id,
-        Title = x.Title,
-        CreatedBy = x.CreatedBy,
-        CreatedAt = x.CreatedAt,
-        UpdatedAt = x.UpdatedAt,
-        MessageCount = x.MessageCount,
-    };
-
-    private static AiChatMessageDto ToDto(AiChatMessageItem x) => new()
-    {
-        Role = x.Role,
-        Content = x.Content,
-        AskedBy = x.AskedBy,
-        CreatedAt = x.CreatedAt,
-        Attachments = [.. x.AttachmentList.Select(a => new AiChatAttachmentDto
-        {
-            FileName = a.FileName,
-            StoredName = a.StoredName,
-            Kind = a.Kind.ToString(),
-            Size = a.Size,
-        })],
-    };
-
-    private static AiChatAnswerDto ToDto(AiChatAnswer x) => new()
-    {
-        Answer = x.Answer,
-        UsedLabels = [.. x.UsedLabels],
-        TruncatedLabels = [.. x.TruncatedLabels],
-        SkippedLabels = [.. x.SkippedLabels],
-    };
 }

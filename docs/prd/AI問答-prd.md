@@ -1,8 +1,8 @@
 ﻿# AI 問答 PRD
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：1.1.21
+- 現行系統版本：1.1.22
 - 首次實作版本：0.4.51
 - 最後核對日期：2026/11/10
 
@@ -28,7 +28,7 @@
 
 ## 二、使用者與入口
 
-AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的共用視窗元件 `AiChatModal`（`Components/Views/Projects/`）。
+AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的共用視窗元件 `AiChatModal`（1.1.22 起在 `Web.Client/Components/Commons`，Server 頁與 WASM 頁共用；資料來源介面 `IAiChatSource`：Server 頁 `ServerAiChatSource` 直接呼叫服務，WASM 頁 `AiChatApi` 打 API 並讀串流）。
 
 | 入口 | 位置 | 對象 | 出現條件 |
 |------|------|------|----------|
@@ -155,6 +155,7 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 - `AiChatService`：`AiChat.Create`（使用者按「新對話」；開視窗時自動建立的第一段不記）、`AiChat.Rename`、`AiChat.ClearHistory`、`AiChat.MessageUpdate`（只記位置與字數）、`AiChat.Regenerate`。目標是對話所屬的專案或會議，摘要帶對話編號，**不記任何問答內容**。
 - `AiChatModal`：匯出 PDF 寫 `AiChat.ExportPdf`（單則或整段），下載文件附件寫 `AiChat.AttachmentDownload`（圖片預覽不記）。
 - API（1.1.21）：匯出 PDF、下載文件附件（`download=true`）同樣寫這兩種稽核，摘要多 `via=Api`；PDF 的內容一律由伺服器從對話檔讀，不收用戶端的文字。
+- 1.1.22 起視窗的匯出 PDF 與下載附件也改由伺服器產生並寫稽核（Server 頁經 `ServerAiChatSource`，WASM 頁經 API），共用 `Web/AiChat/AiChatOperations`；PDF 的對象名稱由伺服器從專案或會議讀，視窗不再需要 `TargetName` 參數。
 - 看不到的專案或會議被嘗試做上述寫入時寫 `Permission.Denied`（`op=AiChat…`）；讀取不記。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
@@ -229,12 +230,12 @@ AI 問答**沒有自己的選單項目與路由**，是掛在兩個頁面上的�
 
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatService.cs`（`AiChatService`：`EnsureAccessAsync`、`ListConversationsAsync`、`CreateConversationAsync`、`RenameConversationAsync`、`GetHistoryAsync`、`ClearHistoryAsync`、`AskAsync`、`UpdateMessageAsync`、`RegenerateAsync`、`GenerateAnswerAsync`、`BuildUserPrompt`、`CollectAttachments`、`ReadAttachmentAsync`、`RecordUsageAsync`；`AiChatScope`、`AiChatMessageItem`、`AiChatAnswer`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatStore.cs`（`AiChatStore`：`ListConversationsAsync`、`AppendTurnAsync`、`ReadHistoryAsync`、`UpdateMessagesAsync`、`TryDelete`、`TryDeleteConversation`、`SaveAttachmentsAsync`、`GetAttachmentFullPath`、`ConversationExists`、`CountQuestions`、`MigrateLegacyIfNeeded`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatAttachment.cs`（`AiChatAttachmentPolicy`）、`ChatContextBuilder.cs`（`ChatContextBuilder.Build`）、`AttachmentTextExtractor.cs`
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/AiChatAttachmentPolicy.cs`（`AiChatAttachmentPolicy`，1.1.22 從 Business 搬來，WASM 頁也用）、`src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatAttachment.cs`、`ChatContextBuilder.cs`（`ChatContextBuilder.Build`）、`AttachmentTextExtractor.cs`
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MarkdownRenderer.cs`（`MarkdownRenderer.ToHtml`、`SanitizeUrl`；1.1.17 從 Business 搬來）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Export/AiChatDocumentExporter.cs`（`BuildConversationHtml`、`BuildMessageHtml`、`BuildConversationFileName`、`BuildMessageFileName`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/TodoExtraction/TodoExtractionService.cs`（`ExtractAsync`、`GetExistingTitlesAsync`）、`TodoExtractionParser.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/ProjectAccessService.cs`（`ProjectAccessService.GetAsync`；`ProjectAccess.CanViewProject`、`ProjectAccess.CanViewMeeting`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/AiChatModal.razor`、`AiChatModal.razor.cs`（`OnAskAsync`、`OnRegenerateAsync`、`OnDeleteConversationAsync`、`OnAttachmentsSelectedAsync`、`OnCopyAsync`、`OnCancelAsync`）、`AiChatModal.razor.css`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/AiChatModal.razor`、`AiChatModal.razor.cs`（1.1.22 起在 Web.Client；`OnAskAsync`、`OnRegenerateAsync`、`OnDeleteConversationAsync`、`OnAttachmentsSelectedAsync`、`OnCopyAsync`、`OnCancelAsync`）、`AiChatModal.razor.css`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/TodoExtractionModal.razor`、`TodoExtractionModal.razor.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Projects/ProjectViewView.razor`、`ProjectViewView.razor.cs`（`OpenProjectChat`、`OpenMeetingChat`、`OpenTodoExtractionAsync`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Views/Meetings/MeetingViewView.razor`、`MeetingViewView.razor.cs`（會議頁入口）

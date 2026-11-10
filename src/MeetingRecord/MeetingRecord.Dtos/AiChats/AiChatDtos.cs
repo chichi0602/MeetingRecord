@@ -84,6 +84,24 @@ public class AiChatStreamEventDto
     public string? Message { get; set; }
 }
 
+/// <summary>修改類動作的結果（1.1.22，Server 與 WASM 兩種資料來源共用）。</summary>
+public enum AiChatUpdateOutcome
+{
+    Updated,
+
+    /// <summary>整段對話已經不存在（被刪除或清空）。</summary>
+    NotFound,
+
+    /// <summary>原本的內容對不上（多半是別人先改過）。</summary>
+    Conflict,
+}
+
+/// <summary>畫面剛選、還沒送出的附件（內容整份在記憶體裡，上限見 <c>AiChatAttachmentPolicy</c>）。</summary>
+public sealed record AiChatPendingFile(string FileName, byte[] Content);
+
+/// <summary>讀出來的檔案（附件或匯出的 PDF）。</summary>
+public sealed record AiChatFileDto(string FileName, string ContentType, byte[] Content);
+
 public class AiChatRenameRequestDto
 {
     public string Title { get; set; } = string.Empty;

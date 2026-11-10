@@ -173,6 +173,32 @@ public sealed class AiChatApiTests(AiChatTestApplicationFactory factory) : IClas
         Assert.True(await db.AuditLog.AnyAsync(x => x.Action == AuditActions.AiChatExportPdf && x.TargetId == target));
     }
 
+    [Fact]
+    public async Task CreateConversation_Automatic_ShouldNotBeAudited()
+    {
+        // 1.1.22：開視窗時自動建的第一段對話不算使用者的動作（同 Server 頁），使用者按「開新對話」才寫稽核。
+        var world = await SeedAsync([MagicObjectHelper.角色_會議紀錄]);
+        using var client = await LoginAsync(world.Account);
+        var baseUrl = $"/api/v1/ai-chat/meeting/{world.MeetingId}";
+
+        string automatic, manual;
+        using (var response = await client.PostAsync($"{baseUrl}/conversations?automatic=true", null))
+        {
+            automatic = (await ReadAsync<string>(response)).Data!;
+        }
+
+        using (var response = await client.PostAsync($"{baseUrl}/conversations", null))
+        {
+            manual = (await ReadAsync<string>(response)).Data!;
+        }
+
+        using var scope = factory.Services.CreateScope();
+        var details = await scope.ServiceProvider.GetRequiredService<BackendDBContext>().AuditLog.AsNoTracking()
+            .Where(x => x.Action == AuditActions.AiChatCreate).Select(x => x.Detail).ToListAsync();
+        Assert.DoesNotContain(details, x => x!.Contains(automatic));
+        Assert.Contains(details, x => x!.Contains(manual));
+    }
+
     private sealed record World(string Account, int ProjectId, int MeetingId, int HiddenMeetingId);
 
     /// <summary>使用者所在團隊主責的專案、專案底下一場有會議紀錄的會議；另一場別人上傳、未歸屬的會議（看不到）。</summary>

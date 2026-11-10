@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Accounts;
+using MeetingRecord.Dtos.AiChats;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Dtos.Jobs;
@@ -60,6 +61,14 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ApiResult<PasswordStatusDto>), TypeInfoPropertyName = "PasswordStatusResult")]
 [JsonSerializable(typeof(ApiResult<List<BackgroundJobDto>>), TypeInfoPropertyName = "BackgroundJobsResult")]
 [JsonSerializable(typeof(TodoTreeRequestDto))]
+[JsonSerializable(typeof(ApiResult<List<AiChatConversationDto>>), TypeInfoPropertyName = "AiChatConversationsResult")]
+[JsonSerializable(typeof(ApiResult<List<AiChatMessageDto>>), TypeInfoPropertyName = "AiChatMessagesResult")]
+[JsonSerializable(typeof(ApiResult<string>), TypeInfoPropertyName = "StringResult")]
+[JsonSerializable(typeof(AiChatRenameRequestDto))]
+[JsonSerializable(typeof(AiChatUpdateMessageRequestDto))]
+[JsonSerializable(typeof(AiChatRegenerateRequestDto))]
+[JsonSerializable(typeof(AiChatExportRequestDto))]
+[JsonSerializable(typeof(AiChatStreamEventDto))]
 [JsonSerializable(typeof(TodoCreateUpdateDto))]
 [JsonSerializable(typeof(TodoCompletedRequestDto))]
 [JsonSerializable(typeof(ApiResult<PagedResult<TodoDto>>), TypeInfoPropertyName = "TodoPageResult")]

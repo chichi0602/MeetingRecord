@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.15
+- 文件版本：1.16
 - 文件狀態：已實作
-- 現行系統版本：1.1.19
+- 現行系統版本：1.1.22
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/10
 
@@ -106,7 +106,7 @@
 | 稽核明細（唯讀，1.0.32） | `Views/Admins/AuditLogView.razor` | `form-modal-large` |
 | 會議紀錄維護（含影音上傳） | `Views/Meetings/MeetingViewView.razor` | `meeting-view-modal` |
 | 會議紀錄與逐字稿（檢視＋編修） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
-| AI 問答 | `Views/Projects/AiChatModal.razor` | `meeting-view-modal ai-chat-modal` |
+| AI 問答 | `Web.Client/Components/Commons/AiChatModal.razor`（1.1.22 起） | `meeting-view-modal ai-chat-modal` |
 
 `MarkdownEditorModal` 的 `ModalClass` 在 1.0.40 起是**常數**，檢視與編修都是 96vw ＋ 固定高 96vh（比照 AI 問答）。0.4.82～1.0.39 依 `CanEdit` 切換，唯讀時用 880px 的 `form-modal-standard`；1.0.40 改成同一個視窗內檢視↔編修切換，尺寸一跟著變就整個跳動，使用者也要求檢視「像 AI 問答一樣滿版」。razor 仍寫 `Class="@ModalClass"`，所以 `ModalSizeClassTests` 照樣跳過它。
 
@@ -357,7 +357,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 - 搜尋框：Enter 跳下一筆（`IsSubmit`）、Shift+Enter 跳上一筆（`IsReverseSubmit`），兩者都擋組字中的 Enter。**刻意不綁 Ctrl+F**，因為 `@onkeydown:preventDefault` 在編譯期就決定了，攔了會連右邊預覽的瀏覽器原生搜尋都吃掉。
 - **左右同步捲動**（0.4.100）：預覽用 `MarkdownRenderer.ToHtml(editingText, includeSourceLines: true)` 產生，每個區塊都帶 `data-source-line`。`TextEditorInterop.BindScrollSyncAsync` 呼叫 `wwwroot/js/text-editor.js` 的 `meetingRecordTextEditor.bindScrollSync`，兩邊各量出「這一行或這個區塊在第幾個像素」組成對應點，捲動時在兩個對應點之間內插，**對齊到段落，而不是按比例**。程式設定捲動位置也會觸發 scroll 事件，所以用「預期的值」擋掉回彈，不用旗標。視窗剛打開時內容可能還沒進 DOM，`bindScrollSync` 會回傳 false，讓 C# 端下一輪再試。`includeSourceLines` 預設關閉，PDF、AI 問答與使用說明都不要打開。
 
-### 11.2 AI 問答：`Components/Views/Projects/AiChatModal.razor`
+### 11.2 AI 問答：`Web.Client/Components/Commons/AiChatModal.razor`（1.1.22 起，Server 與 WASM 頁共用）
 
 - class 是 `meeting-view-modal ai-chat-modal`，**固定高度**（`height: 96vh`，0.4.94；0.4.94～1.0.39 是全站唯一，1.0.40 起會議紀錄與逐字稿視窗比照）。聊天視窗吃滿螢幕才正常；0.4.93 之前高度隨內容縮，剛開新對話時只有四百多 px 高。
 - 版面 `.ai-chat-shell` 是 `grid-template-columns: 240px minmax(0, 1fr)`，左欄對話紀錄、右欄訊息；900px 以下退回單欄。

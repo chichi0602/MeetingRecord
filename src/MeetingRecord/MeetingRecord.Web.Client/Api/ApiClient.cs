@@ -7,6 +7,9 @@ using MeetingRecord.Dtos.Commons;
 
 namespace MeetingRecord.Web.Client.Api;
 
+/// <summary>下載的結果（1.1.22）。</summary>
+public sealed record ApiDownload(bool Success, byte[]? Content, string? FileName, string? ContentType, string? Error, int StatusCode);
+
 /// <summary>
 /// WASM 端呼叫 Web API 的基底（1.1.1）。之後每個功能的 <c>XxxApiClient</c> 都經過這裡：
 /// <list type="bullet">
@@ -54,6 +57,37 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
         using var response = await http.DeleteAsync(url, cancellationToken);
         return await ReadAsync(response, typeInfo, cancellationToken);
     }
+
+    /// <summary>
+    /// 下載檔案（1.1.22）：成功回內容與檔名；失敗回原因（401、須改密碼照樣導向）。
+    /// </summary>
+    public async Task<ApiDownload> DownloadAsync(HttpRequestMessage request, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            var headers = response.Content.Headers;
+            var fileName = headers.ContentDisposition?.FileNameStar ?? headers.ContentDisposition?.FileName?.Trim('"') ?? "download";
+            return new ApiDownload(true, await response.Content.ReadAsByteArrayAsync(cancellationToken), fileName, headers.ContentType?.MediaType ?? "application/octet-stream", null, (int)response.StatusCode);
+        }
+
+        var failure = await ReadAsync(response, ClientJsonContext.Default.EmptyResult, cancellationToken);
+        return new ApiDownload(false, null, null, null, failure.ErrorMessage ?? failure.Message, failure.StatusCode);
+    }
+
+    /// <summary>
+    /// 送出串流請求（1.1.22，AI 問答）：讓瀏覽器邊收邊交給 .NET（<c>SetBrowserResponseStreamingEnabled</c>），
+    /// 只等到回應標頭就回來。呼叫端要自己釋放回應；失敗的回應用 <see cref="ReadFailureAsync"/> 讀原因。
+    /// </summary>
+    public Task<HttpResponseMessage> SendStreamingAsync(HttpRequestMessage request, CancellationToken cancellationToken = default)
+    {
+        Microsoft.AspNetCore.Components.WebAssembly.Http.WebAssemblyHttpRequestMessageExtensions.SetBrowserResponseStreamingEnabled(request, true);
+        return http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+    }
+
+    /// <summary>讀失敗回應的原因（401、須改密碼照樣導向）。</summary>
+    public Task<ApiResult<object>> ReadFailureAsync(HttpResponseMessage response, CancellationToken cancellationToken = default)
+        => ReadAsync(response, ClientJsonContext.Default.EmptyResult, cancellationToken);
 
     /// <summary>變更密碼頁本身（1.1.13 起在 WASM）：在這頁收到「須改密碼」的 403 不再導向自己，免得重新載入不停。</summary>
     private bool IsOnChangePasswordPage()

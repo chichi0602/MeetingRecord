@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
 

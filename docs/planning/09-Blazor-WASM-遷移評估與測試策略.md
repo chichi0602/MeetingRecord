@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.26
+- 文件版本：1.27
 - 文件狀態：已啟動遷移（分支 `wasm-migration`，M1、M2 完成，IIS 測試機驗證待補，M3 進行中）
-- 現行系統版本：1.1.21
+- 現行系統版本：1.1.22
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/10
 
@@ -478,7 +478,7 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 待辦（二）頁面 `/todos` | 1.1.19 | ✅ 完成；頁面搬到 WASM，選項與逾期規則抽到 Share；順帶修正 M2 起所有 WASM 表單「伺服器擋下時視窗被關掉」（單向繫結＋掃描測試，新增 MD-09）、網頁 API 另訂限流額度（每帳號每分鐘 600 次）；TDO-01～10、NTF-01、WASM 系列照過 |
 | 會議（一）API | 1.1.20 | ✅ 完成；`MeetingController` 改走 `MeetingService`（`MeetingRepository` 刪除），既有五支只加欄位、`PUT` 多擋封存；新增清單、重新轉錄、產生與修改會議紀錄、歸屬、逐字稿、下載與 PDF、選項 13 支；授權矩陣加 8 支 |
 | AI 問答（一）API（串流） | 1.1.21 | ✅ 完成；`AiChatController` 10 支端點，提問與重新產生用 NDJSON 串流；權限依範圍（`AiChatPermissionAttribute`），改名、修改、重新產生、刪除、匯出的權限從畫面搬進 API |
-| AI 問答（二）視窗搬到 Client（Server 專案頁與 WASM 會議頁共用） | 1.1.22 | 待做 |
+| AI 問答（二）視窗搬到 Client（Server 專案頁與 WASM 會議頁共用） | 1.1.22 | ✅ 完成；`IAiChatSource`（Server 直接呼叫服務／WASM 打 API 讀串流），匯出與下載附件改由伺服器產生並寫稽核（與 API 共用 `AiChatOperations`）；AI 系列照過，WASM 端實際操作在會議頁那版用端對端驗 |
 | 會議頁面 `/meetings`（含 WASM 端上傳） | 1.1.23 | 待做 |
 | 專案 `/projects`（一）（二），含待辦抽取 | 1.1.24～1.1.25 | 待做 |
 | M3 里程碑報告 | 1.1.26 | 待做 |

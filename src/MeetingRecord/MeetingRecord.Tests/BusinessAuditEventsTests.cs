@@ -12,6 +12,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Tests;
 

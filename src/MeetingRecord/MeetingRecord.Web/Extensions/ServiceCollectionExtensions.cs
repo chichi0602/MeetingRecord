@@ -167,6 +167,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Web.Jobs.BackgroundJobBoard>();
         services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, MeetingRecord.Web.Jobs.ServerJobProgressSource>();
         services.AddHostedService<MeetingRecord.Web.Hubs.JobProgressHubBridge>();
+        // 1.1.22：AI 問答視窗（放在 WASM 專案、兩種頁面共用）在 Server 頁的資料來源；匯出與讀附件的邏輯與 API 共用一份。
+        services.AddScoped<MeetingRecord.Web.AiChat.AiChatOperations>();
+        services.AddScoped<MeetingRecord.Web.Components.Commons.IAiChatSource, MeetingRecord.Web.AiChat.ServerAiChatSource>();
         // 1.1.16：WASM 頁的會議影音檔上傳，讀檔存檔在伺服器背景跑（規則仍在 MeetingService）。
         services.AddSingleton<MeetingRecord.Web.Uploads.MeetingMediaUploadJobs>();
         services.AddScoped<MeetingService>();

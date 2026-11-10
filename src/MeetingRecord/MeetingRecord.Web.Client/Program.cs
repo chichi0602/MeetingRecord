@@ -30,6 +30,7 @@ builder.Services.AddScoped<AppHubConnection>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, ApiNotificationSource>();
 builder.Services.AddScoped<JobApi>();
 builder.Services.AddScoped<TodoApi>();
+builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.IAiChatSource, AiChatApi>();
 
 // 1.1.17：前端互動（剪貼簿、下載、文字編輯器、待辦自動欄寬），與 Server 頁共用同一份類別（命名空間 MeetingRecord.Web.Services）。
 builder.Services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();

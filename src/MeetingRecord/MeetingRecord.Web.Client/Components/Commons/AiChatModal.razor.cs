@@ -2,31 +2,25 @@ using AntDesign;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using MeetingRecord.Business.Services.AiChat;
-using MeetingRecord.Business.Services.Export;
-using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Dtos.AiChats;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Services;
-using MeetingRecord.Web.Components.Commons;
 
-namespace MeetingRecord.Web.Components.Views.Projects;
+namespace MeetingRecord.Web.Components.Commons;
 
 /// <summary>
 /// AI 問答視窗。專案層級與單一會議共用同一個元件，差別只在 <see cref="Scope"/> 與 <see cref="TargetId"/>。
 /// </summary>
 public partial class AiChatModal : ComponentBase
 {
-    private const string PdfContentType = "application/pdf";
-
+    /// <summary>資料來源（1.1.22）：Server 頁直接呼叫服務，WASM 頁打 API（見 <see cref="IAiChatSource"/>）。</summary>
     [Inject]
-    private AiChatService AiChatService { get; set; } = default!;
+    private IAiChatSource Source { get; set; } = default!;
 
-    [Inject]
-    private IAuditLogService AuditLogService { get; set; } = default!;
 
-    [Inject]
-    private IPdfRenderer PdfRenderer { get; set; } = default!;
 
     [Inject]
     private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
@@ -50,7 +44,7 @@ public partial class AiChatModal : ComponentBase
     private IJSRuntime JSRuntime { get; set; } = default!;
 
     /// <summary>待送出的附件在畫面上的樣子。縮圖只給小圖——大圖轉成 data URL 會整份經過 SignalR 送到瀏覽器。</summary>
-    private sealed record PendingView(PendingAttachment Item, bool IsImage, string? ThumbnailUrl);
+    private sealed record PendingView(AiChatPendingFile Item, bool IsImage, string? ThumbnailUrl);
 
     /// <summary>超過這個大小的圖片不做縮圖，只顯示圖示（一般截圖遠小於此）。</summary>
     private const long MaxThumbnailBytes = 2L * 1024 * 1024;
@@ -85,10 +79,6 @@ public partial class AiChatModal : ComponentBase
     [Parameter]
     public string Title { get; set; } = "AI 問答";
 
-    /// <summary>對象名稱（專案或會議標題），用在匯出的檔名與 PDF 表頭。</summary>
-    [Parameter]
-    public string TargetName { get; set; } = string.Empty;
-
     /// <summary>
     /// 是否顯示匯出 PDF 的按鈕。沿用清單頁既有的「匯出」動作權限，
     /// 免得同一個畫面上出現「不能匯出會議紀錄、卻能匯出 AI 答案」。
@@ -107,7 +97,7 @@ public partial class AiChatModal : ComponentBase
     [Parameter]
     public bool CanDelete { get; set; }
 
-    private readonly List<AiChatMessageItem> messages = [];
+    private readonly List<AiChatMessageDto> messages = [];
 
     private string question = string.Empty;
     private string streamingAnswer = string.Empty;
@@ -129,7 +119,7 @@ public partial class AiChatModal : ComponentBase
     private (AiChatScope Scope, int TargetId)? loadedTarget;
 
     /// <summary>這個對象底下的所有對話，最近更新的排最前面。</summary>
-    private IReadOnlyList<AiChatConversationInfo> conversations = [];
+    private IReadOnlyList<AiChatConversationDto> conversations = [];
 
     /// <summary>目前正在看哪一段對話。空字串代表還沒有任何對話。</summary>
     private string currentConversationId = string.Empty;
@@ -139,7 +129,7 @@ public partial class AiChatModal : ComponentBase
     private string renamingText = string.Empty;
     private bool isSwitching;
 
-    private AiChatConversationInfo? CurrentConversation
+    private AiChatConversationDto? CurrentConversation
         => conversations.FirstOrDefault(x => string.Equals(x.Id, currentConversationId, StringComparison.Ordinal));
 
     /// <summary>目前這段還沒問過問題時，按鈕是停用的，要說清楚為什麼。</summary>
@@ -239,7 +229,7 @@ public partial class AiChatModal : ComponentBase
     {
         try
         {
-            conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
+            conversations = await Source.ListConversationsAsync(Scope, TargetId);
 
             var target = preferredId is not null
                 && conversations.Any(x => string.Equals(x.Id, preferredId, StringComparison.Ordinal))
@@ -250,8 +240,8 @@ public partial class AiChatModal : ComponentBase
             {
                 // 一段都沒有：開一段空的，使用者可以直接開始問。
                 // 開視窗時自動建的第一段對話不算使用者的動作，不寫稽核（1.0.34）。
-                target = await AiChatService.CreateConversationAsync(Scope, TargetId, audit: false);
-                conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
+                target = await Source.CreateConversationAsync(Scope, TargetId, automatic: true);
+                conversations = await Source.ListConversationsAsync(Scope, TargetId);
             }
 
             currentConversationId = target;
@@ -306,7 +296,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var created = await AiChatService.CreateConversationAsync(Scope, TargetId);
+            var created = await Source.CreateConversationAsync(Scope, TargetId, automatic: false);
             await LoadConversationsAsync(created);
         }
         catch (Exception ex)
@@ -316,7 +306,7 @@ public partial class AiChatModal : ComponentBase
         }
     }
 
-    private void OnRenameStart(AiChatConversationInfo session)
+    private void OnRenameStart(AiChatConversationDto session)
     {
         // 按鈕已依權限隱藏，這裡再擋一次。
         if (!CanEdit)
@@ -361,8 +351,8 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var outcome = await AiChatService.RenameConversationAsync(Scope, TargetId, target, title);
-            if (outcome == UpdateOutcome.NotFound)
+            var outcome = await Source.RenameConversationAsync(Scope, TargetId, target, title);
+            if (outcome == AiChatUpdateOutcome.NotFound)
             {
                 errorMessage = "這段對話已經被刪除了，請重新整理後再試。";
             }
@@ -377,7 +367,7 @@ public partial class AiChatModal : ComponentBase
     }
 
     /// <summary>刪掉其中一段對話。會刪資料，所以跳二次確認。</summary>
-    private async Task OnDeleteConversationAsync(AiChatConversationInfo session)
+    private async Task OnDeleteConversationAsync(AiChatConversationDto session)
     {
         if (IsBusy || !CanDelete)
         {
@@ -403,7 +393,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            await AiChatService.ClearHistoryAsync(Scope, TargetId, session.Id);
+            await Source.DeleteConversationAsync(Scope, TargetId, session.Id);
 
             // 刪掉的正好是目前這一段時，交給 LoadConversationsAsync 自己挑下一段
             // （沒有任何對話時它會開一段新的）。
@@ -433,7 +423,7 @@ public partial class AiChatModal : ComponentBase
     {
         try
         {
-            conversations = await AiChatService.ListConversationsAsync(Scope, TargetId);
+            conversations = await Source.ListConversationsAsync(Scope, TargetId);
         }
         catch (Exception ex)
         {
@@ -459,7 +449,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            messages.AddRange(await AiChatService.GetHistoryAsync(Scope, TargetId, currentConversationId));
+            messages.AddRange(await Source.GetHistoryAsync(Scope, TargetId, currentConversationId));
         }
         catch (Exception ex)
         {
@@ -520,22 +510,24 @@ public partial class AiChatModal : ComponentBase
 
         // 先把提問放進畫面，使用者才不會覺得按了沒反應。實際落庫在服務層與回答一起做。
         // 附件在這裡只是顯示用的空殼（StoredName 空白＝還不能點），落庫後重載歷史就換成真的。
-        messages.Add(new AiChatMessageItem(
-            AiChatService.UserRole,
-            asked,
-            null,
-            DateTime.Now,
-            [.. attachments.Select(x => new AiChatAttachment(
-                x.FileName,
-                string.Empty,
-                AiChatAttachmentPolicy.Classify(x.FileName) ?? AiChatAttachmentKind.Document,
-                x.Content.LongLength))]));
+        messages.Add(new AiChatMessageDto
+        {
+            Role = "user",
+            Content = asked,
+            CreatedAt = DateTime.Now,
+            Attachments = [.. attachments.Select(x => new AiChatAttachmentDto
+            {
+                FileName = x.FileName,
+                StoredName = string.Empty,
+                Kind = (AiChatAttachmentPolicy.Classify(x.FileName) ?? AiChatAttachmentKind.Document).ToString(),
+                Size = x.Content.LongLength,
+            })],
+        });
         StateHasChanged();
 
         try
         {
-            var answer = await AiChatService.AskAsync(
-                Scope, TargetId, currentConversationId, asked, OnDelta, attachments: attachments);
+            var answer = await Source.AskAsync(Scope, TargetId, currentConversationId, asked, attachments, OnDelta);
 
             // 成功才清掉待送附件；失敗時留著，使用者改一下問題就能重送，不必重新挑檔案。
             pendingAttachments.Clear();
@@ -547,15 +539,8 @@ public partial class AiChatModal : ComponentBase
         }
         catch (Exception ex)
         {
-            // 已達用量上限是預期中的狀況，記 Warning、不進系統例外紀錄（1.0.29）。
-            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
-            {
-                Logger.LogWarning("AI chat blocked by AI quota. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
-            }
-            else
-            {
-                Logger.LogError(ex, "AI chat failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
-            }
+            // 1.1.22：已達用量上限等可預期的狀況，伺服器那一端已經記過；這裡只留警告（WASM 端的 log 只在瀏覽器）。
+            Logger.LogWarning(ex, "AI chat failed. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
 
             errorMessage = $"回答失敗：{ex.Message}";
 
@@ -592,7 +577,7 @@ public partial class AiChatModal : ComponentBase
             StateHasChanged();
         });
 
-    private static string DescribeSources(AiChatAnswer answer)
+    private static string DescribeSources(AiChatAnswerDto answer)
     {
         var parts = new List<string> { $"本次讀取了 {answer.UsedLabels.Count} 份資料" };
 
@@ -655,7 +640,7 @@ public partial class AiChatModal : ComponentBase
                     ? $"data:{AiChatAttachmentPolicy.GetImageMediaType(file.Name)};base64,{Convert.ToBase64String(content)}"
                     : null;
 
-                pendingAttachments.Add(new PendingView(new PendingAttachment(file.Name, content), isImage, thumbnail));
+                pendingAttachments.Add(new PendingView(new AiChatPendingFile(file.Name, content), isImage, thumbnail));
             }
         }
         catch (Exception ex)
@@ -681,38 +666,46 @@ public partial class AiChatModal : ComponentBase
         }
     }
 
-    /// <summary>圖片：在訊息下方展開／收起預覽。文件：直接下載。</summary>
-    private async Task OnOpenAttachmentAsync(AiChatAttachment attachment)
+    /// <summary>圖片：在訊息下方展開／收起預覽。文件：直接下載（下載的稽核由伺服器寫，1.1.22）。</summary>
+    private async Task OnOpenAttachmentAsync(AiChatAttachmentDto attachment)
     {
         if (IsBusy || string.IsNullOrEmpty(attachment.StoredName))
         {
             return;
         }
 
-        if (attachment.Kind == AiChatAttachmentKind.Image && previewStoredName == attachment.StoredName)
+        if (attachment.IsImage && previewStoredName == attachment.StoredName)
         {
             ClosePreview();
             return;
         }
 
-        var content = await AiChatService.ReadAttachmentAsync(Scope, TargetId, currentConversationId, attachment);
-        if (content is null)
+        AiChatFileDto? file;
+        try
+        {
+            file = await Source.ReadAttachmentAsync(Scope, TargetId, currentConversationId, attachment.StoredName, download: !attachment.IsImage);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Reading AI chat attachment failed. File={File}", attachment.FileName);
+            errorMessage = $"讀取附件失敗：{ex.Message}";
+            return;
+        }
+
+        if (file is null)
         {
             _ = MessageService.WarningAsync($"找不到附件「{attachment.FileName}」，可能已被刪除。");
             return;
         }
 
-        if (attachment.Kind == AiChatAttachmentKind.Image)
+        if (attachment.IsImage)
         {
             previewStoredName = attachment.StoredName;
-            previewDataUrl = $"data:{AiChatAttachmentPolicy.GetImageMediaType(attachment.FileName)};base64,{Convert.ToBase64String(content)}";
+            previewDataUrl = $"data:{AiChatAttachmentPolicy.GetImageMediaType(attachment.FileName)};base64,{Convert.ToBase64String(file.Content)}";
             return;
         }
 
-        await FileDownloadInterop.SaveBytesAsync(attachment.FileName, content, "application/octet-stream");
-        await AuditLogService.WriteForCurrentUserAsync(
-            AuditActions.AiChatAttachmentDownload, targetType: Scope.ToString(), targetId: TargetId.ToString(),
-            detail: $"conversationId={currentConversationId}; file={attachment.FileName}; size={content.Length}");
+        await FileDownloadInterop.SaveBytesAsync(file.FileName, file.Content, "application/octet-stream");
     }
 
     private void ClosePreview()
@@ -798,7 +791,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var outcome = await AiChatService.UpdateMessageAsync(Scope, TargetId, currentConversationId, index, original, newContent);
+            var outcome = await Source.UpdateMessageAsync(Scope, TargetId, currentConversationId, index, original, newContent);
             if (!HandleUpdateOutcome(outcome))
             {
                 return;
@@ -867,8 +860,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var answer = await AiChatService.RegenerateAsync(
-                Scope, TargetId, currentConversationId, index, original.Content, newQuestion, OnDelta);
+            var answer = await Source.RegenerateAsync(Scope, TargetId, currentConversationId, index, original.Content, newQuestion, OnDelta);
 
             await LoadHistoryAsync();
             await RefreshConversationListAsync();
@@ -876,15 +868,7 @@ public partial class AiChatModal : ComponentBase
         }
         catch (Exception ex)
         {
-            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
-            {
-                Logger.LogWarning("Regenerating AI chat answer blocked by AI quota. Scope={Scope}, TargetId={TargetId}", Scope, TargetId);
-            }
-            else
-            {
-                Logger.LogError(ex, "Regenerating AI chat answer failed. Scope={Scope}, TargetId={TargetId}, Index={Index}",
-                    Scope, TargetId, index);
-            }
+            Logger.LogWarning(ex, "Regenerating AI chat answer failed. Scope={Scope}, TargetId={TargetId}, Index={Index}", Scope, TargetId, index);
 
             errorMessage = $"重新產生失敗：{ex.Message}";
         }
@@ -897,14 +881,14 @@ public partial class AiChatModal : ComponentBase
     }
 
     /// <summary>把 store 的結果翻成畫面訊息。回傳是否可以繼續。</summary>
-    private bool HandleUpdateOutcome(UpdateOutcome outcome)
+    private bool HandleUpdateOutcome(AiChatUpdateOutcome outcome)
     {
         switch (outcome)
         {
-            case UpdateOutcome.Updated:
+            case AiChatUpdateOutcome.Updated:
                 return true;
 
-            case UpdateOutcome.NotFound:
+            case AiChatUpdateOutcome.NotFound:
                 errorMessage = "這段對話已經被清空，剛才的修改沒有寫入。";
                 return false;
 
@@ -932,11 +916,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var exportedAt = DateTime.Now;
-            var html = AiChatDocumentExporter.BuildMessageHtml(TargetName, messages[index], index + 1, exportedAt);
-            var fileName = AiChatDocumentExporter.BuildMessageFileName(TargetName, index + 1, exportedAt, CurrentConversation?.Title);
-
-            await ExportAsync(html, fileName, "Message");
+            await ExportAsync(index);
         }
         catch (Exception ex)
         {
@@ -964,11 +944,7 @@ public partial class AiChatModal : ComponentBase
 
         try
         {
-            var exportedAt = DateTime.Now;
-            var html = AiChatDocumentExporter.BuildConversationHtml(TargetName, messages, exportedAt, CurrentConversation?.Title);
-            var fileName = AiChatDocumentExporter.BuildConversationFileName(TargetName, exportedAt, CurrentConversation?.Title);
-
-            await ExportAsync(html, fileName, "Conversation");
+            await ExportAsync(messageIndex: null);
         }
         catch (Exception ex)
         {
@@ -983,15 +959,16 @@ public partial class AiChatModal : ComponentBase
         }
     }
 
-    /// <param name="kind">稽核用（1.0.34）：<c>Message</c>（單則）或 <c>Conversation</c>（整段）。</param>
-    private async Task ExportAsync(string html, string fileName, string kind)
+    /// <summary>
+    /// 匯出 PDF（1.1.22 起由伺服器產生並寫稽核，內容從對話檔讀）：<paramref name="messageIndex"/> 有值＝單則，沒值＝整段對話。
+    /// </summary>
+    private async Task ExportAsync(int? messageIndex)
     {
-        var pdf = await PdfRenderer.RenderAsync(html);
+        var file = await Source.ExportPdfAsync(Scope, TargetId, currentConversationId, messageIndex)
+            ?? throw new InvalidOperationException("找不到要匯出的內容，請重新整理後再試。");
+        var fileName = file.FileName;
 
-        await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-        await AuditLogService.WriteForCurrentUserAsync(
-            AuditActions.AiChatExportPdf, targetType: Scope.ToString(), targetId: TargetId.ToString(),
-            detail: $"conversationId={currentConversationId}; kind={kind}; file={fileName}; bytes={pdf.Length}");
+        await FileDownloadInterop.SaveBytesAsync(fileName, file.Content, file.ContentType);
 
         // 單則與整段對話都走這裡，所以提示只寫一次；檔名本身就分得出是哪一種。
         //

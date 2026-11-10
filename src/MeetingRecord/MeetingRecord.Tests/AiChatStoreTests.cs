@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Tests;
 

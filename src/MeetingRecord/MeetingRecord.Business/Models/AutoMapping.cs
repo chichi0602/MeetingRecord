@@ -100,19 +100,13 @@ public class AutoMapping : Profile
             // ⚠️ 導覽屬性一律不對應回去：存檔時 EF 會把帶回來的子項目當成新資料整串寫入。
             .ForMember(d => d.Parent, o => o.Ignore())
             .ForMember(d => d.Children, o => o.Ignore());
-        CreateMap<Todo, TodoDto>()
-            .ForMember(d => d.ProjectTitle, o => o.MapFrom(s => s.Project != null ? s.Project.Title : null))
-            .ForMember(d => d.MeetingTitle, o => o.MapFrom(s => s.Meeting != null ? s.Meeting.Title : null));
-        CreateMap<TodoDto, Todo>()
-            .ForMember(d => d.Project, o => o.Ignore())
-            .ForMember(d => d.Meeting, o => o.Ignore())
-            .ForMember(d => d.Parent, o => o.Ignore())
-            .ForMember(d => d.Children, o => o.Ignore());
-        CreateMap<Todo, TodoCreateUpdateDto>();
-        CreateMap<TodoCreateUpdateDto, Todo>()
-            .ForMember(d => d.Project, o => o.Ignore())
-            .ForMember(d => d.Meeting, o => o.Ignore())
-            .ForMember(d => d.Parent, o => o.Ignore())
+        // 1.1.18：API 改走 TodoService，對外 DTO 與畫面模型互轉（CanDelete 由 Controller 依呼叫者另算）。
+        CreateMap<TodoAdapterModel, TodoDto>()
+            .ForMember(d => d.CanDelete, o => o.Ignore());
+        CreateMap<TodoCreateUpdateDto, TodoAdapterModel>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.Id ?? 0))
+            .ForMember(d => d.CreatedAt, o => o.Ignore())
+            .ForMember(d => d.UpdatedAt, o => o.Ignore())
             .ForMember(d => d.Children, o => o.Ignore());
         #endregion
 

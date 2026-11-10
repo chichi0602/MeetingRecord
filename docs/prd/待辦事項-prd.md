@@ -1,8 +1,8 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.17
+- 文件版本：1.18
 - 文件狀態：已實作
-- 現行系統版本：1.1.17
+- 現行系統版本：1.1.18
 - 首次實作版本：0.4.32
 - 最後核對日期：2026/11/10
 
@@ -117,7 +117,7 @@
 | 哪些會通知 | **只有期限、負責人、狀態**。標題、優先度只記錄不通知——多半是錯字或措辭修正，通知只會變成雜訊 |
 | 通知誰 | `ProjectAccessService.GetProjectMemberIdsAsync`：專案主責＋協作團隊的成員、只算啟用中的帳號、**排除操作者本人**。不是團隊成員的管理者**不通知**（會被全公司的異動淹沒）。待辦搬到別的專案時，兩個專案的成員都通知 |
 | 新增、刪除 | 不記錄；刪除待辦會連同異動紀錄一起刪掉（Cascade）。**1.0.55 起甲方帳號新增、刪除會通知專案負責人**（見下節） |
-| 寫入路徑 | `TodoService.UpdateAsync`、`SetCompletedAsync`（勾選完成）、`TodoRepository.UpdateAsync`（Web API）、`ApplyExtractedUpdateAsync`（AI 抽出更新）全部經 `TodoChangeRecorder`：`StageAsync` 與待辦同一次 `SaveChanges` 寫入（一起成功、一起失敗），存檔成功後 `Publish` 叫醒各人的通知鈴 |
+| 寫入路徑 | `TodoService.UpdateAsync`、`SetCompletedAsync`（勾選完成）、`ApplyExtractedUpdateAsync`（AI 抽出更新）全部經（1.1.18 起 Web API 也走 `TodoService`，`via=Api`） `TodoChangeRecorder`：`StageAsync` 與待辦同一次 `SaveChanges` 寫入（一起成功、一起失敗），存檔成功後 `Publish` 叫醒各人的通知鈴 |
 | 通知文字 | 「王小明 把『完成報表』的期限改為 2026/10/31、負責人改為 林大華（來源：從〈10/16 週會〉抽出）」，來源後綴只有 AI 抽出更新才有 |
 | 通知保留 | `LogRetentionSettings:NotificationDays`（預設 90 天，0＝不清），每日清一次，不寫稽核；歷史留在 `TodoChange` |
 
@@ -138,7 +138,7 @@
 起因：同一份會議紀錄用提示詞 A 產生後抽出「完成報表」，再換提示詞 B 重新產生（**一場會議只有一份草稿，重新產生會覆蓋**）又抽一次，B 拆成「整理資料／畫統計圖／寫結論」。1.0.44 的「AI 對應既有待辦」一筆既有待辦只能被一條候選對上，其餘變成互不相干的新待辦，清單散成 4 列。解法是讓細項掛在主待辦底下。
 
 - **資料**：`Todo.ParentTodoId`（`int?`，自我參照，`OnDelete(Cascade)`），導覽 `Parent`／`Children`。子項目是**完整的待辦**：自己的負責人、截止日、狀態、異動紀錄與通知。
-- **規則**（`TodoHierarchyRules`，網頁 `TodoService` 與 API `TodoRepository` 共用）：**只有一層**（子項目底下不能再掛子項目；已有子項目的待辦不能變成別人的子項目）；不能當自己的主待辦；子項目必須和主待辦**同一個專案**。主待辦搬到別的專案時子項目一起搬（`MoveChildrenAsync`，同 0.4.115 規則清掉它們的來源會議）。違反規則網頁顯示訊息、API 回 400。
+- **規則**（`TodoHierarchyRules`，網頁與 API 都經 `TodoService`）：**只有一層**（子項目底下不能再掛子項目；已有子項目的待辦不能變成別人的子項目）；不能當自己的主待辦；子項目必須和主待辦**同一個專案**。主待辦搬到別的專案時子項目一起搬（`MoveChildrenAsync`，同 0.4.115 規則清掉它們的來源會議）。違反規則網頁顯示訊息、API 回 400。
 - **狀態各自獨立**：子項目全部完成**不會**自動把主待辦設為已完成。
 - **清單 `/todos`**：只分頁**主項目**（沒有主待辦的待辦），子項目用 AntDesign Table 的 `TreeChildren` 掛在底下（預設收合、點箭頭展開，`RowKey=Id`）。標題旁膠囊「子項目 1/3」（全部完成時變綠）。子項目列一樣可以勾完成、修改、刪除、看異動紀錄。
 - **過濾與搜尋**：主待辦本身**或任一子項目**符合就列出主待辦；展開時顯示的子項目跟著過濾，但 n/m **一律以全部子項目計**。
@@ -167,7 +167,7 @@
 專案的「負責人」1.0.52 起是帳號（規則見 [專案項目 PRD](專案項目-prd.md)），**刪除待辦只限該專案的負責人與管理者**；新增、修改、勾完成、新增子項目照舊，同專案的人依角色都能做。
 
 - 畫面：「刪除」按鈕只在**是專案負責人**＋有 `待辦事項:edit`＋專案不是唯讀時出現（`TodoViewView.CanDelete`）。負責人是「一般使用者」角色（沒有 `delete`）也能刪；不是負責人的「主管」有 `delete` 也看不到按鈕。
-- 服務層：`TodoService.DeleteAsync` 與 API `TodoRepository.DeleteAsync` 都先擋封存，再用 `ProjectAccess.IsProjectOwner(todo.ProjectId)` 擋，訊息「只有專案負責人可以刪除待辦。」（`ProjectOwnerRules.DeleteTodoMessage`）。API `DELETE api/Todo/{id}` 因此改要求 `待辦事項:edit`（以前是 `delete`），被擋回 400 `ValidationError`。
+- 服務層：`TodoService.DeleteAsync`（1.1.18 起 API 也走這裡）先擋封存，再用 `ProjectAccess.IsProjectOwner(todo.ProjectId)` 擋，訊息「只有專案負責人可以刪除待辦。」（`ProjectOwnerRules.DeleteTodoMessage`）。API `DELETE api/Todo/{id}` 因此改要求 `待辦事項:edit`（以前是 `delete`），被擋回 400 `ValidationError`。
 - 刪主待辦照舊連同子項目一起刪；子項目本身也一樣只有負責人能刪。
 - 升級前對不到帳號、還沒有負責人的專案，待辦只有管理者能刪。
 - 待辦自己的「負責人」欄位仍是文字，與這裡的專案負責人無關。
@@ -188,7 +188,7 @@
 | 會議紀錄關聯 | `MeetingId` **可空**，`OnDelete(SetNull)`。會議紀錄被刪除時待辦保留，只是失去來源 |
 | 團隊權控 | **0.4.99 起跟著專案走**：只看得到、改得到自己所屬團隊（專案的主責＋協作團隊）底下的待辦，管理者不受限，一律經 `ProjectAccessService`。（0.4.66～0.4.98 期間待辦本身沒有團隊欄位、所有人可見；`Categories`／`Teams` 兩欄已隨 migration `RemoveTodoCategoriesTeams` 移除。）1.0.44 起異動通知的收件人也是同一群人 |
 | 專案完成度 | **不連動**。`Project.CompletionPercentage` 維持手動填寫——待辦數量與專案進度未必成正比，自動換算反而變成假資訊 |
-| 來源會議紀錄的保護 | `MeetingId` 不開放從畫面或 API 覆寫，`TodoService.UpdateAsync` 與 `TodoRepository.UpdateAsync` 都一律沿用資料庫既有值；**換專案時清成 null**（0.4.115，來源會議屬於原專案） |
+| 來源會議紀錄的保護 | `MeetingId` 不開放從畫面或 API 覆寫，`TodoService.UpdateAsync`（網頁與 API 共用）一律沿用資料庫既有值；**換專案時清成 null**（0.4.115，來源會議屬於原專案） |
 | 看不到的來源會議 | 讀取時（畫面清單、單筆、API）來源會議看不到就不帶標題（`ProjectAccess.HideInvisibleSourceMeetings`，0.4.115）。會議改歸屬到別的團隊的專案後，留在原專案的待辦以前會帶出它的標題 |
 | API 選項檢查 | 狀態必須是 待辦／進行中／已完成，優先度必須是 低／中／高，否則回 400；新增一律由資料庫配號（0.4.115） |
 | 防連點 | 編輯視窗存檔中不接受第二次確定，確定鈕顯示讀取中（0.4.115） |
@@ -201,7 +201,7 @@
 
 ## 五、內部系統運作
 
-- 資料流：`TodoPage.razor` → `TodoViewView` → `TodoService` → `BackendDBContext.Todo`。REST API 走 `TodoController` → `TodoRepository`（兩條路徑並存，皆回 `ApiResult`）。
+- 資料流：`TodoPage.razor` → `TodoViewView` → `TodoService` → `BackendDBContext.Todo`。REST API 走 `TodoController` → 同一個 `TodoService`（1.1.18 起；以前是 `TodoRepository`，兩套規則並存），回 `ApiResult`；畫面用的清單樹、負責人面板、異動紀錄等另有端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 - 讀取：清單與單筆都 `Include(Project)` 與 `Include(Meeting)` 以取得關聯名稱；`ProjectTitle`／`MeetingTitle` 由 AutoMapper 的 `ForMember` 自導覽屬性帶出。
 - 0.4.66 起 `TodoService` 不再注入 `IRecordAccessScopeProvider`——四處列級權控（清單、單筆、勾選完成、修改前置檢查）與 `DashboardService.BuildTodoQuery` 的團隊過濾全部移除。
 - 前置檢查：新增與修改都會驗證所屬專案存在（0.4.66 起不再檢查團隊可見範圍）。
@@ -210,7 +210,7 @@
 
 ### 稽核（1.0.34）
 
-- `TodoService`（網頁）與 `TodoRepository`（API）：`Todo.Create`／`Update`／`Delete`，勾選完成與取消完成寫 `Todo.Complete`／`Todo.Reopen`。摘要帶 `title`、`projectId`、`via`；搬到別的專案時加 `movedFrom`。
+- `TodoService`（網頁與 API）：`Todo.Create`／`Update`／`Delete`，勾選完成與取消完成寫 `Todo.Complete`／`Todo.Reopen`。摘要帶 `title`、`projectId`、`via`；搬到別的專案時加 `movedFrom`。
 - AI 抽出待辦批次加入時每筆各記一筆 `Todo.Create`，摘要 `via=AiExtract`；更新既有待辦（1.0.44）記 `Todo.Update`，摘要 `via=AiExtract; sourceMeetingId=…`。
 - 稽核只有管理者看得到；給一般使用者看的歷史是待辦自己的異動紀錄（`TodoChange`，1.0.44）。
 - 看不到的待辦被嘗試修改、勾選、刪除，或要建在看不到的專案底下時，寫 `Permission.Denied`（`reason=DataScope`）。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。

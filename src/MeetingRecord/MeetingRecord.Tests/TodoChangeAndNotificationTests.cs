@@ -223,43 +223,28 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
     [Fact]
     public async Task DeleteTodo_OnlyProjectOwnerOrAdmin_WebAndApi()
     {
-        // 1.0.52：刪待辦只限專案負責人（甲）與管理者；同專案的乙不行，API 同樣擋下。
+        // 1.0.52：刪待辦只限專案負責人（甲）與管理者；同專案的乙不行，API 同樣擋下（1.1.18 起 API 也走這個服務，via=Api）。
         var todo = await AddTodoAsync("完成報表", project1);
-        var access = TestProjectAccess.User(context, userB);
-        var actor = TestAuditActor.Fixed(userB, "b");
-        var repository = new TodoRepository(
-            context,
-            access,
-            TestAuditLogs.CreateService(context, actor),
-            TestTodoChanges.CreateRecorder(context, access, actor, notifier));
 
         var byMember = await CreateService(userB).DeleteAsync(todo.Id);
-        var apiError = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.DeleteAsync(todo.Id));
+        var byApi = await CreateService(userB).DeleteAsync(todo.Id, AuditVia.Api);
 
         Assert.Equal(ProjectOwnerRules.DeleteTodoMessage, byMember.Message);
-        Assert.Equal(ProjectOwnerRules.DeleteTodoMessage, apiError.Message);
+        Assert.Equal(ProjectOwnerRules.DeleteTodoMessage, byApi.Message);
         Assert.True(await context.Todo.AnyAsync(x => x.Id == todo.Id));
         Assert.True((await CreateService(userA).DeleteAsync(todo.Id)).Success);
     }
 
     [Fact]
-    public async Task ApiRepository_Update_ShouldRecordViaApi()
+    public async Task UpdateViaApi_ShouldRecordViaApi()
     {
-        // 改待辦的每一條路徑都要經過記錄器——API 改的也要讓專案成員知道。
+        // 改待辦的每一條路徑都要經過記錄器——API 改的也要讓專案成員知道（1.1.18 起 API 也走 TodoService，via=Api）。
         var todo = await AddTodoAsync("完成報表", project1, dueDate: new DateTime(2026, 10, 20));
-        var access = TestProjectAccess.User(context, userA);
-        var actor = TestAuditActor.Fixed(userA, "a");
-        var repository = new TodoRepository(
-            context,
-            access,
-            TestAuditLogs.CreateService(context, actor),
-            TestTodoChanges.CreateRecorder(context, access, actor, notifier));
+        var model = await CreateService(userA).GetAsync(todo.Id);
+        model.DueDate = new DateTime(2026, 11, 5);
+        model.DueDateChangeNote = "延後";
 
-        var update = await context.Todo.AsNoTracking().SingleAsync(x => x.Id == todo.Id);
-        update.DueDate = new DateTime(2026, 11, 5);
-        context.ChangeTracker.Clear();
-
-        Assert.True(await repository.UpdateAsync(update, "延後"));
+        Assert.True((await CreateService(userA).UpdateAsync(model, AuditVia.Api)).Success);
         var change = await context.TodoChange.AsNoTracking().SingleAsync();
         Assert.Equal(AuditVia.Api, change.Via);
         Assert.Equal("2026/11/05", change.NewValue);
@@ -278,10 +263,9 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
 
         var web = await CreateService(userA).UpdateAsync(model);
 
-        var update = await context.Todo.AsNoTracking().SingleAsync(x => x.Id == todo.Id);
-        update.DueDate = new DateTime(2026, 11, 5);
-        context.ChangeTracker.Clear();
-        var api = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateRepository(userA).UpdateAsync(update));
+        model.DueDate = new DateTime(2026, 11, 5);
+        model.DueDateChangeNote = null;
+        var api = await CreateService(userA).UpdateAsync(model, AuditVia.Api);
 
         Assert.False(web.Success);
         Assert.Equal(TodoChangeRecorder.DueDateNoteRequiredMessage, web.Message);
@@ -394,11 +378,12 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
         var created = await context.Todo.AsNoTracking().SingleAsync();
         Assert.Equal(userE, created.CreatedByUserId);
 
-        var apiCreated = await CreateRepository(userE).AddAsync(new Todo { Title = "API 建的", ProjectId = project1, Status = "待辦", Priority = "中" });
+        var apiCreated = NewModel("API 建的", project1);
+        Assert.True((await CreateService(userE).AddAsync(apiCreated, AuditVia.Api)).Success);
         context.ChangeTracker.Clear();
 
         Assert.True((await CreateService(userE).DeleteAsync(created.Id)).Success);
-        Assert.True(await CreateRepository(userE).DeleteAsync(apiCreated.Id));
+        Assert.True((await CreateService(userE).DeleteAsync(apiCreated.Id, AuditVia.Api)).Success);
 
         var messages = await context.UserNotification.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
         Assert.All(messages, x => Assert.Equal(userA, x.UserId));
@@ -425,7 +410,7 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
         var byB = await context.Todo.AsNoTracking().SingleAsync();
 
         var web = await CreateService(userE).DeleteAsync(byB.Id);
-        var api = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateRepository(userE).DeleteAsync(byB.Id));
+        var api = await CreateService(userE).DeleteAsync(byB.Id, AuditVia.Api);
 
         Assert.Equal(ProjectOwnerRules.DeleteOwnTodoOnlyMessage, web.Message);
         Assert.Equal(ProjectOwnerRules.DeleteOwnTodoOnlyMessage, api.Message);
@@ -462,17 +447,6 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
     {
         await context.MyUser.Where(x => x.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsExternal, true));
         context.ChangeTracker.Clear();
-    }
-
-    private TodoRepository CreateRepository(int userId)
-    {
-        var access = TestProjectAccess.User(context, userId);
-        var actor = TestAuditActor.Fixed(userId, $"user{userId}");
-        return new TodoRepository(
-            context,
-            access,
-            TestAuditLogs.CreateService(context, actor),
-            TestTodoChanges.CreateRecorder(context, access, actor, notifier));
     }
 
     // ───────── 通知服務 ─────────
@@ -677,17 +651,16 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ApiRepository_AddSubtaskAcrossProjects_ShouldThrowValidationError()
+    public async Task AddSubtaskAcrossProjects_ViaApi_ShouldBeRejected()
     {
         var parent = await AddTodoAsync("完成報表", project1);
-        var access = TestProjectAccess.Admin(context, userA);
-        var actor = TestAuditActor.Fixed(userA, "a");
-        var repository = new TodoRepository(context, access, TestAuditLogs.CreateService(context, actor), TestTodoChanges.CreateRecorder(context, access, actor, notifier));
+        var model = NewModel("畫統計圖", project2);
+        model.ParentTodoId = parent.Id;
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.AddAsync(
-            new Todo { Title = "畫統計圖", ProjectId = project2, ParentTodoId = parent.Id, Status = "待辦", Priority = "中" }));
+        var result = await CreateService(userA, isAdmin: true).AddAsync(model, AuditVia.Api);
 
-        Assert.Contains("同一個專案", error.Message);
+        Assert.False(result.Success);
+        Assert.Contains("同一個專案", result.Message);
     }
 
     // ───────── 已完成＝封存（1.0.46） ─────────
@@ -742,17 +715,13 @@ public sealed class TodoChangeAndNotificationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ArchivedProject_ApiRepository_ShouldThrowValidationError()
+    public async Task ArchivedProject_ViaApi_ShouldBeRejected()
     {
         await SetProjectStatusAsync(project1, ProjectAdapterModel.ArchivedStatus);
-        var access = TestProjectAccess.User(context, userA);
-        var actor = TestAuditActor.Fixed(userA, "a");
-        var repository = new TodoRepository(context, access, TestAuditLogs.CreateService(context, actor), TestTodoChanges.CreateRecorder(context, access, actor, notifier));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.AddAsync(
-            new Todo { Title = "新的", ProjectId = project1, Status = "待辦", Priority = "中" }));
+        var result = await CreateService(userA).AddAsync(NewModel("新的", project1), AuditVia.Api);
 
-        Assert.Equal(ProjectArchiveRules.ArchivedMessage, error.Message);
+        Assert.Equal(ProjectArchiveRules.ArchivedMessage, result.Message);
     }
 
     [Theory]

@@ -193,6 +193,64 @@ public class TodoService
         return result;
     }
 
+    /// <summary>
+    /// 對外 API 的待辦搜尋（<c>POST api/Todo/search</c>，1.1.18 從 <c>TodoRepository.GetPagedAsync</c> 搬來，行為不變）：
+    /// **平面**清單，主待辦與子項目一樣逐筆分頁；關鍵字比對標題、描述、負責人；可依專案、狀態、優先度篩選；
+    /// 預設依更新時間新到舊。畫面的清單（只分頁主層、子項目跟著主待辦）是 <see cref="GetAsync(DataRequest)"/>。
+    /// </summary>
+    public async Task<(List<TodoAdapterModel> Items, int TotalCount)> SearchFlatAsync(MeetingRecord.Dtos.Commons.TodoSearchRequestDto request)
+    {
+        var access = await projectAccess.GetAsync();
+        var query = access.Filter(context.Todo.AsNoTracking())
+            .Include(x => x.Project)
+            .Include(x => x.Meeting)
+            .Include(x => x.Parent)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(request.Keyword))
+        {
+            query = query.Where(x =>
+                x.Title.Contains(request.Keyword) ||
+                (x.Description != null && x.Description.Contains(request.Keyword)) ||
+                (x.Owner != null && x.Owner.Contains(request.Keyword)));
+        }
+
+        if (request.ProjectId.HasValue)
+        {
+            query = query.Where(x => x.ProjectId == request.ProjectId.Value);
+        }
+
+        if (!string.IsNullOrEmpty(request.Status))
+        {
+            query = query.Where(x => x.Status == request.Status);
+        }
+
+        if (!string.IsNullOrEmpty(request.Priority))
+        {
+            query = query.Where(x => x.Priority == request.Priority);
+        }
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "title" => request.SortDescending ? query.OrderByDescending(x => x.Title) : query.OrderBy(x => x.Title),
+            "duedate" => request.SortDescending ? query.OrderByDescending(x => x.DueDate) : query.OrderBy(x => x.DueDate),
+            "priority" => request.SortDescending ? query.OrderByDescending(x => x.Priority) : query.OrderBy(x => x.Priority),
+            "status" => request.SortDescending ? query.OrderByDescending(x => x.Status) : query.OrderBy(x => x.Status),
+            "owner" => request.SortDescending ? query.OrderByDescending(x => x.Owner) : query.OrderBy(x => x.Owner),
+            "createdat" => request.SortDescending ? query.OrderByDescending(x => x.CreatedAt) : query.OrderBy(x => x.CreatedAt),
+            "updatedat" => request.SortDescending ? query.OrderByDescending(x => x.UpdatedAt) : query.OrderBy(x => x.UpdatedAt),
+            _ => query.OrderByDescending(x => x.UpdatedAt),
+        };
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync();
+        access.HideInvisibleSourceMeetings(items);
+        return (Mapper.Map<List<TodoAdapterModel>>(items), totalCount);
+    }
+
     public async Task<TodoAdapterModel> GetAsync(int id)
     {
         Logger.LogDebug("Loading todo by id. TodoId={TodoId}", id);
@@ -232,6 +290,22 @@ public class TodoService
             }
 
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
+        }
+
+        // 來源會議要看得到、而且屬於同一個專案（0.4.114，1.1.18 從 TodoRepository 搬來，所有入口都適用）：
+        // 否則可以把看不到的會議掛上來，之後讀回的會議標題就洩漏了那場會議。畫面上來源會議只會由 AI 抽待辦帶入（同專案）。
+        if (paraObject.MeetingId is { } sourceMeetingId)
+        {
+            var sourceMeeting = await context.Meeting.AsNoTracking()
+                .Where(x => x.Id == sourceMeetingId)
+                .Select(x => new { x.ProjectId, x.CreatedByUserId })
+                .FirstOrDefaultAsync();
+            if (sourceMeeting is null
+                || !(await projectAccess.GetAsync()).CanViewMeeting(sourceMeeting.ProjectId, sourceMeeting.CreatedByUserId)
+                || sourceMeeting.ProjectId != paraObject.ProjectId)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到指定的來源會議，或它不屬於這個專案。");
+            }
         }
 
         // 1.0.46：已完成（封存）的專案唯讀，管理者不受限。
@@ -281,6 +355,7 @@ public class TodoService
             CleanTrackingHelper.Clean<Todo>(context);
             changeRecorder.Publish(recipients);
 
+            paraObject.Id = itemParameter.Id; // API 要回新建的那筆（1.1.18）
             await AuditAsync(AuditActions.TodoCreate, itemParameter.Id, $"title={itemParameter.Title}; projectId={itemParameter.ProjectId}; via={via}");
             Logger.LogInformation("Todo created successfully. TodoId={TodoId}, Title={TodoTitle}", itemParameter.Id, itemParameter.Title);
             return VerifyRecordResultFactory.Build(true);
@@ -294,7 +369,7 @@ public class TodoService
         }
     }
 
-    public async Task<VerifyRecordResult> UpdateAsync(TodoAdapterModel paraObject)
+    public async Task<VerifyRecordResult> UpdateAsync(TodoAdapterModel paraObject, string via = AuditVia.Web)
     {
         Logger.LogInformation("Updating todo. TodoId={TodoId}, Title={TodoTitle}", paraObject.Id, paraObject.Title);
 
@@ -351,19 +426,19 @@ public class TodoService
             context.Entry(itemData).State = EntityState.Modified;
 
             // 1.0.44：異動紀錄與通知和待辦同一次存檔；item 是存檔前的舊值。
-            var recipients = await changeRecorder.StageAsync(item, itemData, AuditVia.Web, note: paraObject.DueDateChangeNote);
+            var recipients = await changeRecorder.StageAsync(item, itemData, via, note: paraObject.DueDateChangeNote);
 
             // 1.0.45：換了主待辦，新舊主待辦的異動紀錄各記一筆。
             if (item.ParentTodoId != itemData.ParentTodoId)
             {
                 if (item.ParentTodoId is { } oldParent)
                 {
-                    await changeRecorder.StageSubtaskAsync(oldParent, item.ProjectId, itemData.Title, added: false, AuditVia.Web);
+                    await changeRecorder.StageSubtaskAsync(oldParent, item.ProjectId, itemData.Title, added: false, via);
                 }
 
                 if (itemData.ParentTodoId is { } newParent)
                 {
-                    await changeRecorder.StageSubtaskAsync(newParent, itemData.ProjectId, itemData.Title, added: true, AuditVia.Web);
+                    await changeRecorder.StageSubtaskAsync(newParent, itemData.ProjectId, itemData.Title, added: true, via);
                 }
             }
 
@@ -378,7 +453,7 @@ public class TodoService
             }
 
             var moved = item.ProjectId != itemData.ProjectId ? $"; movedFrom={item.ProjectId}" : string.Empty;
-            await AuditAsync(AuditActions.TodoUpdate, itemData.Id, $"title={itemData.Title}; projectId={itemData.ProjectId}{moved}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.TodoUpdate, itemData.Id, $"title={itemData.Title}; projectId={itemData.ProjectId}{moved}; via={via}");
             Logger.LogInformation("Todo updated successfully. TodoId={TodoId}, Title={TodoTitle}", itemData.Id, itemData.Title);
             return VerifyRecordResultFactory.Build(true);
         }
@@ -603,7 +678,7 @@ public class TodoService
     /// <summary>
     /// 切換完成狀態（清單上的勾選框）。完成與否只寫 Status 一個欄位。
     /// </summary>
-    public async Task<VerifyRecordResult> SetCompletedAsync(int id, bool isCompleted)
+    public async Task<VerifyRecordResult> SetCompletedAsync(int id, bool isCompleted, string via = AuditVia.Web)
     {
         Logger.LogInformation("Setting todo completion. TodoId={TodoId}, IsCompleted={IsCompleted}", id, isCompleted);
 
@@ -640,12 +715,12 @@ public class TodoService
                 : TodoAdapterModel.StatusOptions[1];
             item.UpdatedAt = DateTime.Now;
 
-            var recipients = await changeRecorder.StageAsync(before, item, AuditVia.Web);
+            var recipients = await changeRecorder.StageAsync(before, item, via);
             await context.SaveChangesAsync();
             CleanTrackingHelper.Clean<Todo>(context);
             changeRecorder.Publish(recipients);
 
-            await AuditAsync(isCompleted ? AuditActions.TodoComplete : AuditActions.TodoReopen, id, $"title={item.Title}; status={item.Status}");
+            await AuditAsync(isCompleted ? AuditActions.TodoComplete : AuditActions.TodoReopen, id, $"title={item.Title}; status={item.Status}; via={via}");
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)
@@ -657,7 +732,7 @@ public class TodoService
         }
     }
 
-    public async Task<VerifyRecordResult> DeleteAsync(int id)
+    public async Task<VerifyRecordResult> DeleteAsync(int id, string via = AuditVia.Web)
     {
         Logger.LogInformation("Deleting todo. TodoId={TodoId}", id);
 
@@ -699,7 +774,7 @@ public class TodoService
             context.Entry(item).State = EntityState.Deleted;
             if (item.ParentTodoId is { } parentId)
             {
-                await changeRecorder.StageSubtaskAsync(parentId, item.ProjectId, item.Title, added: false, AuditVia.Web);
+                await changeRecorder.StageSubtaskAsync(parentId, item.ProjectId, item.Title, added: false, via);
             }
 
             var recipients = await changeRecorder.StageDeletedAsync(item);
@@ -708,7 +783,7 @@ public class TodoService
             changeRecorder.Publish(recipients);
 
             var children = childCount > 0 ? $"; children={childCount}" : string.Empty;
-            await AuditAsync(AuditActions.TodoDelete, id, $"title={item.Title}; projectId={item.ProjectId}{children}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.TodoDelete, id, $"title={item.Title}; projectId={item.ProjectId}{children}; via={via}");
             Logger.LogInformation("Todo deleted successfully. TodoId={TodoId}, Title={TodoTitle}", id, item.Title);
             return VerifyRecordResultFactory.Build(true);
         }

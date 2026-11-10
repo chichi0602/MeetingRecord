@@ -152,7 +152,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TeamService>();
         services.AddScoped<PromptTemplateService>();
         services.AddScoped<TodoService>();
-        services.AddScoped<TodoRepository>();
 
         // 待辦異動紀錄與站內通知（1.0.44）：改待辦的每條路徑都經 TodoChangeRecorder；
         // 通知器是 Singleton（跨連線廣播「誰有新通知」），通知服務只動自己的通知。

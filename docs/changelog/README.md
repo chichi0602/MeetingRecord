@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.82
+- 文件版本：7.83
 - 文件狀態：維護中
-- 現行系統版本：1.1.17
+- 現行系統版本：1.1.18
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/10
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M3 待辦 API（分支 `wasm-migration`）：`TodoController` 改走 `TodoService`（`TodoRepository` 刪除），回應只加欄位、搜尋維持平面；新增清單樹、勾選完成、負責人面板、異動紀錄等 7 支畫面用端點（1.1.18）| [2026-11-10-WASM遷移M3-待辦API](2026-11-10-WASM遷移M3-待辦API.md) |
 | WASM 遷移 M3 共用元件搬到 WASM 專案（分支 `wasm-migration`）：拖放上傳區、Markdown 編輯器、專案範圍切換與四個前端互動類別搬到 Client，`MarkdownRenderer`、`TextSearchHelper` 搬到 Share（1.1.17）| [2026-11-10-WASM遷移M3-共用元件搬到Client](2026-11-10-WASM遷移M3-共用元件搬到Client.md) |
 | WASM 遷移 M3 上傳工作階段 API（分支 `wasm-migration`）：新增建立、查狀態、取消上傳的 API，存檔在伺服器背景以上傳者身分執行；上傳檢查抽成 `CheckMediaUploadAsync`（1.1.16）| [2026-11-10-WASM遷移M3-上傳工作階段API](2026-11-10-WASM遷移M3-上傳工作階段API.md) |
 | WASM 遷移 M3 背景工作進度（分支 `wasm-migration`）：進度面板規則抽到伺服器、新增 `api/v1/jobs` 與 `JobsChanged` 推播，面板搬到 WASM 專案、WASM 頁也有進度面板（1.1.15）| [2026-11-10-WASM遷移M3-背景工作進度](2026-11-10-WASM遷移M3-背景工作進度.md) |

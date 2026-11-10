@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.22
+- 文件版本：1.23
 - 文件狀態：已實作
-- 現行系統版本：1.1.16
+- 現行系統版本：1.1.18
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -53,7 +53,9 @@
 
 **背景工作進度**（1.1.15，`JobController`，WASM 頁右下角進度面板用）：`GET api/v1/jobs`（只需登入；回 `List<BackgroundJobDto>`，只含呼叫者資料範圍內的會議的上傳、轉錄、會議紀錄生成工作，進行中排前面）；`POST api/v1/jobs/{meetingId}/cancel?kind=Transcription|Draft`（會議紀錄 Edit；上傳中的轉錄工作會以「上傳」種類取消）；`POST api/v1/jobs/{meetingId}/dismiss?kind=…`、`POST api/v1/jobs/dismiss-all`（只需登入，關閉通知、工作照跑；關閉是全域的，比照 Server 頁面板）。看不到或已結束的工作回 404，`kind` 不對回 400。推播 `AppHub.JobsChanged`（不帶資料、節流 0.5 秒）提醒前端重查。
 
-> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`、`TodoRepository` 與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
+**待辦事項**（1.1.18，`TodoController` 改走 `TodoService`）：既有五支（`GET {id}`、`POST search`、`POST`、`PUT {id}`、`DELETE {id}`）路由、權限、回應形狀不變，`TodoDto` 只多帶欄位：`projectStatus`、`createdByUserId`、`parentTitle`、`children`、`childrenTotal`／`childrenCompleted`、`dueDateChangedAt`／`dueDateChangeText`（後四項只有清單樹會帶）、`canDelete`（呼叫者能不能刪，畫面用）。`POST search` 照舊是**平面**清單（子項目也是一筆）。畫面用的新端點：`POST api/v1/Todo/tree`（只分頁主層、子項目跟著主待辦，內容 `TodoTreeRequestDto`，含 `projectScope` Active／Archived／All）、`PUT {id}/completed`（edit；失敗訊息放 `errorMessage`）、`GET owners?projectId&scope`、`GET by-owner?owner&projectId&scope`、`GET {id}/changes`、`GET parent-candidates?projectId&excludeId`（create 或 edit 任一）、`GET projects/selectable`；除註明者外都要 view。看不到的待辦一律 404。
+
+> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`、`MeetingRepository`（待辦 1.1.18 起直接走 `TodoService`）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >
 > **專案的團隊與分類（0.4.102）**：`ProjectCreateUpdateDto`／`ProjectDto` 多了選填的 `primaryTeamId`、`collaboratorTeamIds`、`categories`，專案的 GET／搜尋結果會帶回團隊 Id。
 > - `POST api/Project` 沒給 `primaryTeamId` 時，用建立者所屬、Id 最小的團隊當主責；建立者不屬於任何團隊時回 **400**「請先加入團隊，或指定主責團隊。」
@@ -79,7 +81,7 @@
 - `PUT` 與 `MeetingRepository.UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位，API 用戶端無法覆寫背景轉錄寫入的狀態。
 - `DELETE` 走 `MeetingService.DeleteAsync`（0.4.115）：和畫面同一套，一併清影音檔、逐字稿與 AI 問答對話；轉錄或會議紀錄生成進行中回 **400**。以前由控制器自己清兩個實體檔，對話檔留在磁碟上。
 - **`DELETE api/Meeting/{id}` 1.0.47 起要求 `會議紀錄:edit`（以前是 `delete`）**：刪除只限上傳者與管理者，由 `MeetingService.DeleteAsync` 把關，上傳者的角色只要能編輯就能刪自己上傳的（與畫面一致）。不是上傳者回 **400** `ValidationError`「只有上傳者或管理者可以刪除這筆會議紀錄。」；看不到回 404；沒有 `edit` 回 403。只有 `delete` 沒有 `edit` 的自訂角色從此呼叫不了這支 API。刪除會保留從這場會議抽出的待辦（`MeetingId` 改成 null）。**1.0.52 起專案負責人也能刪**該專案底下任何人的會議，擋下的訊息改為「只有上傳者或專案負責人可以刪除這筆會議紀錄。」。
-- **`DELETE api/Todo/{id}` 1.0.52 起要求 `待辦事項:edit`（以前是 `delete`）**：刪除只限專案負責人與管理者（`TodoRepository.DeleteAsync`，與畫面一致），不是負責人回 **400** `ValidationError`「只有專案負責人可以刪除待辦。」；看不到 404；沒有 `edit` 回 403。主待辦連同子項目一起刪。
+- **`DELETE api/Todo/{id}` 1.0.52 起要求 `待辦事項:edit`（以前是 `delete`）**：刪除只限專案負責人與管理者（`TodoService.DeleteAsync`，1.1.18 起 API 與畫面同一份），不是負責人回 **400** `ValidationError`「只有專案負責人可以刪除待辦。」；看不到 404；沒有 `edit` 回 403。主待辦連同子項目一起刪。
 - **`PUT api/Todo/{id}` 改期限要附原因（1.0.55）**：`dueDate` 的日期與原本不同時，`dueDateChangeNote` 必填（≤500），否則 **400**「改期限請填寫原因。」；原因寫進異動紀錄並附在通知後面。甲方帳號（`MyUser.IsExternal`）`DELETE` 只能刪自己 `POST` 建立的待辦，否則 **400**「甲方帳號只能刪除自己建立的待辦。」。
 - `POST` 一律由資料庫配號，不照抄用戶端的 `id`（0.4.115，待辦、專案同）。
 - 待辦的 `status` 必須是 待辦／進行中／已完成、`priority` 必須是 低／中／高，否則 **400**（0.4.115）。

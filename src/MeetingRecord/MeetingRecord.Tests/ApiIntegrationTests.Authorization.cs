@@ -66,7 +66,22 @@ public sealed partial class ApiIntegrationTests
         ["Meeting.Create"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Create),
         ["Meeting.Update"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
         ["Meeting.Delete"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
+        // 1.1.18：待辦改走 TodoService，並多了畫面用的端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
+        ["Todo.GetById"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        ["Todo.Search"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        ["Todo.Create"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.Create),
+        ["Todo.Update"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.Edit),
+        ["Todo.Delete"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.Edit),
+        ["Todo.Tree"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        ["Todo.SetCompleted"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.Edit),
+        ["Todo.Owners"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        ["Todo.ByOwner"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        ["Todo.Changes"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        ["Todo.SelectableProjects"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
     };
+
+    /// <summary>待辦授權測試：種子待辦 → 它的專案（修改時本文要帶專案）。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> SeededTodoProjects = new();
 
     public static TheoryData<string> GuardedEndpointNames => [.. GuardedEndpoints.Keys];
 
@@ -237,6 +252,11 @@ public sealed partial class ApiIntegrationTests
     private async Task<int> SeedTargetAsync(string endpoint, int userId)
     {
         var (controller, action) = SplitEndpoint(endpoint);
+        if (controller == "Todo")
+        {
+            return await SeedTodoAsync(action, userId);
+        }
+
         if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories")
         {
             return 0;
@@ -290,11 +310,41 @@ public sealed partial class ApiIntegrationTests
         }
     }
 
+    /// <summary>
+    /// 待辦（1.1.18）：呼叫者所在團隊主責、而且由他負責的專案（刪除只限專案負責人），新增時回專案編號、其他回待辦編號。
+    /// </summary>
+    private async Task<int> SeedTodoAsync(string action, int userId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+        var suffix = Guid.NewGuid().ToString("N");
+        var team = new Team { Name = $"待辦團隊-{suffix}", IsEnabled = true };
+        db.UserTeam.Add(new UserTeam { MyUserId = userId, Team = team });
+        var project = new Project { Title = $"待辦專案-{suffix}", Status = "進行中", Owner = "負責人", OwnerUserId = userId };
+        project.Teams.Add(new ProjectTeam { Team = team, IsPrimary = true });
+        db.Project.Add(project);
+        await db.SaveChangesAsync();
+        if (action == "Create")
+        {
+            return project.Id;
+        }
+
+        var todo = new Todo { Title = $"待辦-{suffix}", ProjectId = project.Id, Status = "待辦", Priority = "中", Owner = "王小明" };
+        db.Todo.Add(todo);
+        await db.SaveChangesAsync();
+        SeededTodoProjects[todo.Id] = project.Id;
+        return todo.Id;
+    }
+
     private static Task<HttpResponseMessage> SendEndpointAsync(HttpClient client, string endpoint, int targetId)
     {
         var (controller, action) = SplitEndpoint(endpoint);
         var baseUrl = $"/api/{controller}";
         var suffix = Guid.NewGuid().ToString("N");
+        if (controller == "Todo")
+        {
+            return SendTodoEndpointAsync(client, action, targetId, suffix);
+        }
 
         return action switch
         {
@@ -311,6 +361,28 @@ public sealed partial class ApiIntegrationTests
             "AddPreset" => client.PostAsJsonAsync($"{baseUrl}/presets/single", new { name = AuthorizationPresetName }),
             "EnabledCategories" => client.GetAsync($"{baseUrl}/categories/enabled"),
             _ => throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null),
+        };
+    }
+
+    private static Task<HttpResponseMessage> SendTodoEndpointAsync(HttpClient client, string action, int targetId, string suffix)
+    {
+        const string baseUrl = "/api/Todo";
+        TodoCreateUpdateDto Body(int id, int projectId) => new() { Id = id, Title = $"待辦-{suffix}", ProjectId = projectId, Status = "待辦", Priority = "中" };
+        return action switch
+        {
+            "GetById" => client.GetAsync($"{baseUrl}/{targetId}"),
+            "Search" => client.PostAsJsonAsync($"{baseUrl}/search", new { pageIndex = 1, pageSize = 10 }),
+            // 沒權杖的 401 案例 targetId 是 1、沒有種子專案：帶 1 也只會在權限那一關就被擋下。
+            "Create" => client.PostAsJsonAsync(baseUrl, Body(0, targetId)),
+            "Update" => client.PutAsJsonAsync($"{baseUrl}/{targetId}", Body(targetId, SeededTodoProjects.GetValueOrDefault(targetId, 1))),
+            "Delete" => client.DeleteAsync($"{baseUrl}/{targetId}"),
+            "Tree" => client.PostAsJsonAsync($"{baseUrl}/tree", new { pageIndex = 1, pageSize = 10 }),
+            "SetCompleted" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/completed", new { isCompleted = true }),
+            "Owners" => client.GetAsync($"{baseUrl}/owners"),
+            "ByOwner" => client.GetAsync($"{baseUrl}/by-owner?owner=" + Uri.EscapeDataString("王小明")),
+            "Changes" => client.GetAsync($"{baseUrl}/{targetId}/changes"),
+            "SelectableProjects" => client.GetAsync($"{baseUrl}/projects/selectable"),
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
         };
     }
 

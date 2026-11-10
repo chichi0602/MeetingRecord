@@ -159,6 +159,95 @@ public class ProjectService
         return result;
     }
 
+    /// <summary>
+    /// 對外 API 的搜尋（1.1.24 從 <c>ProjectRepository</c> 搬來，行為不變）：關鍵字比對名稱、負責人與狀態完全相同、
+    /// 開始日期與完成度區間；沒指定排序時依更新時間由新到舊。只回看得到的專案。
+    /// </summary>
+    public async Task<(List<ProjectAdapterModel> Items, int TotalCount)> SearchFlatAsync(MeetingRecord.Dtos.Commons.ProjectSearchRequestDto request)
+    {
+        IQueryable<Project> query = (await projectAccess.GetAsync()).Filter(context.Project.AsNoTracking())
+            .Include(x => x.Teams).ThenInclude(x => x.Team);
+
+        if (!string.IsNullOrEmpty(request.Keyword))
+        {
+            query = query.Where(p => p.Title.Contains(request.Keyword));
+        }
+
+        if (!string.IsNullOrEmpty(request.Owner))
+        {
+            query = query.Where(p => p.Owner == request.Owner);
+        }
+
+        if (!string.IsNullOrEmpty(request.Status))
+        {
+            query = query.Where(p => p.Status == request.Status);
+        }
+
+        if (request.StartDateFrom is { } from)
+        {
+            query = query.Where(p => p.StartDate >= from);
+        }
+
+        if (request.StartDateTo is { } to)
+        {
+            query = query.Where(p => p.StartDate <= to);
+        }
+
+        if (request.CompletionPercentageMin is { } min)
+        {
+            query = query.Where(p => p.CompletionPercentage >= min);
+        }
+
+        if (request.CompletionPercentageMax is { } max)
+        {
+            query = query.Where(p => p.CompletionPercentage <= max);
+        }
+
+        // 沒指定排序時也要有固定順序（0.4.114），否則 Skip/Take 分頁結果不穩定。
+        query = string.IsNullOrEmpty(request.SortBy)
+            ? query.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.Id)
+            : request.SortBy.ToLowerInvariant() switch
+            {
+                "title" => request.SortDescending ? query.OrderByDescending(p => p.Title) : query.OrderBy(p => p.Title),
+                "startdate" => request.SortDescending ? query.OrderByDescending(p => p.StartDate) : query.OrderBy(p => p.StartDate),
+                "enddate" => request.SortDescending ? query.OrderByDescending(p => p.EndDate) : query.OrderBy(p => p.EndDate),
+                "status" => request.SortDescending ? query.OrderByDescending(p => p.Status) : query.OrderBy(p => p.Status),
+                "completionpercentage" => request.SortDescending ? query.OrderByDescending(p => p.CompletionPercentage) : query.OrderBy(p => p.CompletionPercentage),
+                "createdat" => request.SortDescending ? query.OrderByDescending(p => p.CreatedAt) : query.OrderBy(p => p.CreatedAt),
+                "updatedat" => request.SortDescending ? query.OrderByDescending(p => p.UpdatedAt) : query.OrderBy(p => p.UpdatedAt),
+                _ => query.OrderByDescending(p => p.UpdatedAt),
+            };
+
+        var totalCount = await query.CountAsync();
+
+        // 頁碼、筆數下限保護（0.4.114）：0 或負數會讓 Skip 變負數而回 500。
+        request.PageIndex = Math.Max(1, request.PageIndex);
+        request.PageSize = Math.Clamp(request.PageSize, 1, 200);
+        var items = await query.Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize).ToListAsync();
+        return (Mapper.Map<List<ProjectAdapterModel>>(items), totalCount);
+    }
+
+    /// <summary>
+    /// 對外 API 新增專案只帶負責人姓名時（1.0.52 以前的呼叫端；1.1.24 從 <c>ProjectRepository</c> 搬來）：
+    /// 在專案團隊的啟用帳號裡找，剛好一位才採用，找不到回 null（未指定）。團隊不合法也回 null，由新增時的檢查擋下並說明原因。
+    /// </summary>
+    public async Task<int?> MatchOwnerByNameAsync(string? ownerName, int? primaryTeamId, IEnumerable<int>? collaboratorTeamIds)
+    {
+        if (string.IsNullOrWhiteSpace(ownerName))
+        {
+            return null;
+        }
+
+        var access = await projectAccess.GetAsync();
+        var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(null, primaryTeamId, collaboratorTeamIds ?? []));
+        if (teams.Error is not null)
+        {
+            return null;
+        }
+
+        return (await ProjectOwnerRules.MatchByNameAsync(context, ownerName, teams))?.Id;
+    }
+
     public async Task<ProjectAdapterModel> GetAsync(int id)
     {
         Logger.LogDebug("Loading project by id. ProjectId={ProjectId}", id);
@@ -184,7 +273,16 @@ public class ProjectService
         return Mapper.Map<ProjectAdapterModel>(item);
     }
 
-    public async Task<VerifyRecordResult> AddAsync(ProjectAdapterModel paraObject, IEnumerable<ProjectUploadFileInput>? uploadFiles = null)
+    /// <param name="via">入口（稽核用）：API 呼叫傳 <see cref="AuditVia.Api"/>（1.1.24）。</param>
+    /// <param name="legacyOwnerName">
+    /// 只給對外 API 用（1.1.24 從 <c>ProjectRepository</c> 搬來的相容規則）：1.0.52 以前的呼叫端只帶負責人姓名，
+    /// 對不到帳號時（<see cref="ProjectAdapterModel.OwnerUserId"/> 是 null）照舊建立、保留這段姓名當「未指定（原：…）」；畫面一律要選帳號，不傳。
+    /// </param>
+    public async Task<VerifyRecordResult> AddAsync(
+        ProjectAdapterModel paraObject,
+        IEnumerable<ProjectUploadFileInput>? uploadFiles = null,
+        string via = AuditVia.Web,
+        string? legacyOwnerName = null)
     {
         Logger.LogInformation("Creating project. Title={Title}, Owner={Owner}", paraObject.Title, paraObject.Owner);
 
@@ -203,14 +301,22 @@ public class ProjectService
             }
 
             // 1.0.52：負責人從專案團隊裡啟用中的帳號選，姓名快照由這裡填。
-            var owner = await ProjectOwnerRules.ResolveAsync(context, paraObject.OwnerUserId, teams);
-            if (owner.Error is not null)
+            if (paraObject.OwnerUserId is null && !string.IsNullOrWhiteSpace(legacyOwnerName))
             {
-                return VerifyRecordResultFactory.Build(false, owner.Error);
+                itemParameter.OwnerUserId = null;
+                itemParameter.Owner = legacyOwnerName.Trim();
             }
+            else
+            {
+                var owner = await ProjectOwnerRules.ResolveAsync(context, paraObject.OwnerUserId, teams);
+                if (owner.Error is not null)
+                {
+                    return VerifyRecordResultFactory.Build(false, owner.Error);
+                }
 
-            itemParameter.OwnerUserId = owner.Id;
-            itemParameter.Owner = owner.Name;
+                itemParameter.OwnerUserId = owner.Id;
+                itemParameter.Owner = owner.Name;
+            }
 
             itemParameter.Teams = [];
             ProjectTeamWriter.Apply(itemParameter, teams);
@@ -221,7 +327,7 @@ public class ProjectService
             // 回填 Id（0.4.114）：畫面用它選取剛建立的專案；附件失敗時也靠它切成編輯模式，重送才不會再建一筆。
             paraObject.Id = itemParameter.Id;
 
-            await AuditAsync(AuditActions.ProjectCreate, itemParameter.Id, $"title={itemParameter.Title}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.ProjectCreate, itemParameter.Id, $"title={itemParameter.Title}; via={via}");
 
             var (saveFilesResult, savedFiles) = await SaveNewFilesAsync(itemParameter, uploadFiles);
             if (!saveFilesResult.Success)
@@ -247,7 +353,8 @@ public class ProjectService
     public async Task<VerifyRecordResult> UpdateAsync(
         ProjectAdapterModel paraObject,
         IEnumerable<ProjectUploadFileInput>? uploadFiles = null,
-        IEnumerable<int>? removedFileIds = null)
+        IEnumerable<int>? removedFileIds = null,
+        string via = AuditVia.Web)
     {
         Logger.LogInformation("Updating project. ProjectId={ProjectId}, Title={Title}", paraObject.Id, paraObject.Title);
 
@@ -335,7 +442,7 @@ public class ProjectService
             currentItem.UpdatedAt = paraObject.UpdatedAt;
 
             await context.SaveChangesAsync();
-            await AuditAsync(AuditActions.ProjectUpdate, currentItem.Id, $"title={currentItem.Title}; via={AuditVia.Web}");
+            await AuditAsync(AuditActions.ProjectUpdate, currentItem.Id, $"title={currentItem.Title}; via={via}");
 
             var (saveFilesResult, savedFiles) = await SaveNewFilesAsync(currentItem, uploadFiles);
             if (!saveFilesResult.Success)
@@ -475,7 +582,8 @@ public class ProjectService
         return Task.FromResult(VerifyRecordResultFactory.Build(true));
     }
 
-    public async Task<ProjectFileDownloadResult?> GetFileDownloadAsync(int projectFileId)
+    /// <param name="via">入口（1.1.24）：API 下載傳 <see cref="AuditVia.Api"/>，稽核備註多一段 <c>via=Api</c>；畫面不傳，備註維持原樣。</param>
+    public async Task<ProjectFileDownloadResult?> GetFileDownloadAsync(int projectFileId, string? via = null)
     {
         var file = await context.ProjectFile
             .AsNoTracking()
@@ -493,7 +601,7 @@ public class ProjectService
             return null;
         }
 
-        await AuditAsync(AuditActions.ProjectFileDownload, file.ProjectId, $"file={file.OriginalFileName}; fileId={file.Id}; size={file.FileSize}");
+        await AuditAsync(AuditActions.ProjectFileDownload, file.ProjectId, $"file={file.OriginalFileName}; fileId={file.Id}; size={file.FileSize}" + (via is null ? string.Empty : $"; via={via}"));
 
         return new ProjectFileDownloadResult
         {

@@ -37,28 +37,6 @@ public class AutoMapping : Profile
             .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
             .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)))
             .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToStored(s.Categories)));
-        CreateMap<Project, ProjectDto>()
-            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)))
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
-            .ForMember(d => d.PrimaryTeamId, o => o.MapFrom(s => s.Teams.Where(t => t.IsPrimary).Select(t => (int?)t.TeamId).FirstOrDefault()))
-            .ForMember(d => d.CollaboratorTeamIds, o => o.MapFrom(s => s.Teams.Where(t => !t.IsPrimary).Select(t => t.TeamId).ToList()));
-        CreateMap<ProjectDto, Project>()
-            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)))
-            .ForMember(d => d.Categories, o => o.MapFrom(s => s.Categories == null ? null : TagStringHelper.ToStored(s.Categories)))
-            .ForMember(d => d.Teams, o => o.Ignore());
-        // 團隊不在這裡對應：ProjectRepository 依規則自己寫 ProjectTeam（主責必填、非管理者限自己的團隊）。
-        CreateMap<Project, ProjectCreateUpdateDto>()
-            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToList(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToList(s.Participants)))
-            .ForMember(d => d.Categories, o => o.MapFrom(s => TagStringHelper.ToList(s.Categories)))
-            .ForMember(d => d.PrimaryTeamId, o => o.Ignore())
-            .ForMember(d => d.CollaboratorTeamIds, o => o.Ignore());
-        CreateMap<ProjectCreateUpdateDto, Project>()
-            .ForMember(d => d.GlossaryTerms, o => o.MapFrom(s => TagStringHelper.ToStored(s.GlossaryTerms)))
-            .ForMember(d => d.Participants, o => o.MapFrom(s => TagStringHelper.ToStored(s.Participants)))
-            .ForMember(d => d.Categories, o => o.MapFrom(s => s.Categories == null ? null : TagStringHelper.ToStored(s.Categories)));
         CreateMap<ProjectFile, ProjectFileAdapterModel>();
         CreateMap<ProjectFileAdapterModel, ProjectFile>();
         #endregion

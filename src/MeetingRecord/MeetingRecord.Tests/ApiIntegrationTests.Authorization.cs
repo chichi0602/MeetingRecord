@@ -10,6 +10,8 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Auths;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Models;
+using MeetingRecord.Dtos.Projects;
+using MeetingRecord.Dtos.Uploads;
 using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
@@ -87,7 +89,21 @@ public sealed partial class ApiIntegrationTests
         ["Todo.ByOwner"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.Changes"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.SelectableProjects"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
+        // 1.1.24：專案改走 ProjectService，並多了畫面用的端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
+        ["Project.GetById"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["Project.Search"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["Project.Create"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Create),
+        ["Project.Update"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
+        ["Project.Delete"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
+        ["Project.Selectable"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["Project.LastSelected"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["Project.SaveLastSelected"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
+        ["Project.CreateForm"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Create),
+        ["Project.UpdateForm"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
     };
+
+    /// <summary>專案授權測試：種子團隊或專案 → (呼叫者, 主責團隊)。新增要指定負責人帳號，修改要帶原本的主責團隊。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (int UserId, int TeamId)> SeededProjects = new();
 
     /// <summary>待辦授權測試：種子待辦 → 它的專案（修改時本文要帶專案）。</summary>
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> SeededTodoProjects = new();
@@ -189,6 +205,51 @@ public sealed partial class ApiIntegrationTests
         }
     }
 
+    /// <summary>
+    /// 專案表單用的選項與附件上傳（1.1.24，<c>[HasPermission(專案項目, anyOf: create, edit)]</c>）：只在新增或修改表單裡用到，
+    /// 只有檢視權限要 403 並留稽核；有新增或修改其中之一就成功。
+    /// </summary>
+    [Theory]
+    [InlineData("GET", "/api/Project/teams/primary")]
+    [InlineData("GET", "/api/Project/teams/collaborator")]
+    [InlineData("GET", "/api/Project/owner-candidates")]
+    [InlineData("POST", "/api/v1/uploads/project-attachments")]
+    public async Task ProjectFormEndpoints_ShouldRequireCreateOrEdit(string method, string url)
+    {
+        var page = MagicObjectHelper.角色_專案項目;
+        Task<HttpResponseMessage> SendAsync(HttpClient client) => method == "GET"
+            ? client.GetAsync(url)
+            : client.PostAsJsonAsync(url, new UploadSessionRequestDto { Purpose = UploadPurposes.ProjectAttachment, FileName = "a.pdf", Size = 10 });
+
+        using (var anonymous = factory.CreateClient())
+        using (var response = await SendAsync(anonymous))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var viewer = await CreateApiUserAsync(PermissionKey.For(page, PermissionActions.View), PermissionKey.For(page, PermissionActions.Delete));
+        using (var client = await CreateBearerClientAsync(viewer))
+        using (var response = await SendAsync(client))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var denied = await db.AuditLog.AsNoTracking().SingleAsync(x => x.Action == AuditActions.PermissionDenied && x.ActorAccount == viewer.Account);
+            Assert.Equal($"缺少權限：{PermissionKey.For(page, PermissionActions.Create)} 或 {PermissionKey.For(page, PermissionActions.Edit)}; via=Api", denied.Detail);
+        }
+
+        foreach (var action in new[] { PermissionActions.Create, PermissionActions.Edit })
+        {
+            var user = await CreateApiUserAsync(PermissionKey.For(page, action));
+            using var client = await CreateBearerClientAsync(user);
+            using var response = await SendAsync(client);
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"{url} 只有 {action} 時回 {(int)response.StatusCode}");
+        }
+    }
+
     [Fact]
     public async Task MeetingApi_OtherTeamsProjectMeeting_ShouldBeNotFound_EvenWithFullPermissions()
     {
@@ -264,6 +325,11 @@ public sealed partial class ApiIntegrationTests
         if (controller == "Todo")
         {
             return await SeedTodoAsync(action, userId);
+        }
+
+        if (controller == "Project")
+        {
+            return await SeedProjectAsync(action, userId);
         }
 
         if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories"
@@ -346,6 +412,57 @@ public sealed partial class ApiIntegrationTests
         return todo.Id;
     }
 
+    /// <summary>
+    /// 專案（1.1.24）：呼叫者所屬團隊主責、由他負責的專案。新增類回團隊編號（當主責團隊），其他回專案編號；
+    /// 不需要目標的（搜尋、清單、上次選的）也建一份，讓結果不是空的。
+    /// </summary>
+    private async Task<int> SeedProjectAsync(string action, int userId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+        var suffix = Guid.NewGuid().ToString("N");
+        var team = new Team { Name = $"專案團隊-{suffix}", IsEnabled = true };
+        db.UserTeam.Add(new UserTeam { MyUserId = userId, Team = team });
+        var project = new Project { Title = $"授權專案-{suffix}", Status = "進行中", Owner = "負責人", OwnerUserId = userId, StartDate = DateTime.Today, EndDate = DateTime.Today };
+        project.Teams.Add(new ProjectTeam { Team = team, IsPrimary = true });
+        db.Project.Add(project);
+        await db.SaveChangesAsync();
+        var targetId = action is "Create" or "CreateForm" ? team.Id : project.Id;
+        SeededProjects[targetId] = (userId, team.Id);
+        return targetId;
+    }
+
+    private static Task<HttpResponseMessage> SendProjectEndpointAsync(HttpClient client, string action, int targetId, string suffix)
+    {
+        const string baseUrl = "/api/Project";
+        // 沒權杖的 401 案例沒有種子資料：帶 0／null 也只會在權限那一關就被擋下。
+        var (ownerUserId, teamId) = SeededProjects.GetValueOrDefault(targetId);
+        ProjectCreateUpdateDto Body(int id) => new()
+        {
+            Id = id, Title = $"授權專案-{suffix}", StartDate = DateTime.Today, EndDate = DateTime.Today, Status = "進行中",
+            Owner = "授權測試", OwnerUserId = ownerUserId == 0 ? null : ownerUserId, PrimaryTeamId = teamId == 0 ? null : teamId,
+        };
+        ProjectFormDto Form(int id) => new()
+        {
+            Id = id, Title = $"授權專案-{suffix}", Status = "進行中", OwnerUserId = ownerUserId == 0 ? null : ownerUserId,
+            PrimaryTeamId = teamId == 0 ? null : teamId,
+        };
+        return action switch
+        {
+            "GetById" => client.GetAsync($"{baseUrl}/{targetId}"),
+            "Search" => client.PostAsJsonAsync($"{baseUrl}/search", new { pageIndex = 1, pageSize = 10 }),
+            "Create" => client.PostAsJsonAsync(baseUrl, Body(0)),
+            "Update" => client.PutAsJsonAsync($"{baseUrl}/{targetId}", Body(targetId)),
+            "Delete" => client.DeleteAsync($"{baseUrl}/{targetId}"),
+            "Selectable" => client.GetAsync($"{baseUrl}/selectable?includeArchived=true"),
+            "LastSelected" => client.GetAsync($"{baseUrl}/last-selected"),
+            "SaveLastSelected" => client.PutAsJsonAsync($"{baseUrl}/last-selected", new LastSelectedProjectDto { ProjectId = targetId }),
+            "CreateForm" => client.PostAsJsonAsync($"{baseUrl}/form", Form(0)),
+            "UpdateForm" => client.PutAsJsonAsync($"{baseUrl}/{targetId}/form", Form(targetId)),
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
+        };
+    }
+
     private static Task<HttpResponseMessage> SendEndpointAsync(HttpClient client, string endpoint, int targetId)
     {
         var (controller, action) = SplitEndpoint(endpoint);
@@ -354,6 +471,11 @@ public sealed partial class ApiIntegrationTests
         if (controller == "Todo")
         {
             return SendTodoEndpointAsync(client, action, targetId, suffix);
+        }
+
+        if (controller == "Project")
+        {
+            return SendProjectEndpointAsync(client, action, targetId, suffix);
         }
 
         return action switch

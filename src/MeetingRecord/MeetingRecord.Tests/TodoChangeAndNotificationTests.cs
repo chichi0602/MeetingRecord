@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
-using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Notifications;
 using MeetingRecord.Business.Services.Other;

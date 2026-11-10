@@ -23,7 +23,7 @@ namespace MeetingRecord.Web.Controllers;
 [Route("api/v1/uploads")]
 [ApiController]
 [Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]
-public sealed class UploadSessionController(MeetingService meetingService, MeetingMediaUploadJobs uploadJobs, ChunkedUploadStore store) : ControllerBase
+public sealed class UploadSessionController(MeetingService meetingService, MeetingMediaUploadJobs uploadJobs, ProjectAttachmentUploads attachmentUploads, ChunkedUploadStore store) : ControllerBase
 {
     /// <summary>
     /// 建立上傳工作階段。新增會議時附檔（要「新增」權限）與修改時換檔（要「修改」權限）都走這支，所以任一即可；
@@ -63,7 +63,39 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
         }));
     }
 
-    /// <summary>查這趟上傳的狀態；結束後保留 10 分鐘。</summary>
+    /// <summary>
+    /// 專案附件（1.1.24）：先傳到暫存檔，存專案（<c>POST api/v1/Project/form</c>／<c>PUT …/{id}/form</c>）時帶 <c>uploadIds</c>。
+    /// 新增專案附檔要「新增」權限、修改時加附件要「修改」權限，所以任一即可；附件規則（封存、資料範圍）在存專案時由服務層把關。
+    /// </summary>
+    [HttpPost("project-attachments")]
+    [HasPermission(MagicObjectHelper.角色_專案項目, new[] { PermissionActions.Create, PermissionActions.Edit })]
+    public ActionResult<ApiResult<UploadSessionDto>> CreateProjectAttachment([FromBody] UploadSessionRequestDto request)
+    {
+        if (UserClaims.GetUserId(User) is not { } userId)
+        {
+            return Unauthorized(ApiResult<UploadSessionDto>.UnauthorizedResult("無法識別使用者身分。"));
+        }
+
+        if (request.Size < 0 || string.IsNullOrWhiteSpace(request.FileName))
+        {
+            return BadRequest(ApiResult<UploadSessionDto>.FailureResult("檔案資訊不正確。"));
+        }
+
+        if (request.Size > ProjectService.MaxUploadFileSize)
+        {
+            return BadRequest(ApiResult<UploadSessionDto>.FailureResult($"{request.FileName} 超過 1GB 限制"));
+        }
+
+        var upload = attachmentUploads.Start(userId, request);
+        return Ok(ApiResult<UploadSessionDto>.SuccessResult(new UploadSessionDto
+        {
+            UploadId = upload.UploadId,
+            ChunkSize = ChunkedUploadStore.ChunkSize,
+            ChunkCount = upload.ChunkCount,
+        }));
+    }
+
+    /// <summary>查這趟上傳的狀態（會議影音檔結束後保留 10 分鐘；專案附件保留到存檔或 24 小時）。</summary>
     [HttpGet("{uploadId:guid}")]
     public ActionResult<ApiResult<UploadStatusDto>> Get(Guid uploadId)
     {
@@ -72,8 +104,13 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
             return Unauthorized(ApiResult<UploadStatusDto>.UnauthorizedResult("無法識別使用者身分。"));
         }
 
-        return uploadJobs.TryGet(uploadId, userId, out var job)
-            ? Ok(ApiResult<UploadStatusDto>.SuccessResult(job.ToDto()))
+        if (uploadJobs.TryGet(uploadId, userId, out var job))
+        {
+            return Ok(ApiResult<UploadStatusDto>.SuccessResult(job.ToDto()));
+        }
+
+        return attachmentUploads.TryGet(uploadId, userId, out var attachment)
+            ? Ok(ApiResult<UploadStatusDto>.SuccessResult(attachment.ToDto()))
             : NotFound(ApiResult<UploadStatusDto>.NotFoundResult("找不到這趟上傳。"));
     }
 
@@ -86,12 +123,19 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
             return Unauthorized(ApiResult.UnauthorizedResult("無法識別使用者身分。"));
         }
 
-        if (!uploadJobs.TryGet(uploadId, userId, out var job))
+        if (uploadJobs.TryGet(uploadId, userId, out var job))
+        {
+            job.Cancellation.Cancel();
+        }
+        else if (attachmentUploads.TryGet(uploadId, userId, out var attachment))
+        {
+            attachment.Cancellation.Cancel();
+        }
+        else
         {
             return NotFound(ApiResult.NotFoundResult("找不到這趟上傳。"));
         }
 
-        job.Cancellation.Cancel();
         return Ok(ApiResult.SuccessResult("已要求取消上傳。"));
     }
 
@@ -107,7 +151,7 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
             return Unauthorized(ApiResult.UnauthorizedResult("無法識別使用者身分。"));
         }
 
-        if (!uploadJobs.TryGet(uploadId, userId, out _))
+        if (!uploadJobs.TryGet(uploadId, userId, out _) && !attachmentUploads.TryGet(uploadId, userId, out _))
         {
             return NotFound(ApiResult.NotFoundResult("找不到這趟上傳。"));
         }

@@ -1,8 +1,8 @@
 ﻿# 專案項目 PRD
 
-- 文件版本：4.23
+- 文件版本：4.24
 - 文件狀態：已實作
-- 現行系統版本：1.1.22
+- 現行系統版本：1.1.24
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.31 頁面全面改版）
 - 最後核對日期：2026/11/10
 
@@ -10,7 +10,7 @@
 > - 每個專案恰好一個**主責團隊**（必填）加 0～多個**協作團隊**（`ProjectTeam.IsPrimary`）。使用者所屬的任一團隊是專案的主責或協作團隊就看得到；管理者看全部；**沒有公開專案**。
 > - 表單「主責團隊」單選：管理者列全部啟用中的團隊、一般使用者只列自己所屬的；**新專案不預設主責**（0.4.114），一定要自己選，沒選由驗證擋下——以前預設帶第一個團隊卻沒顯示在畫面上，專案會默默存到使用者沒選的團隊。一般使用者只能把主責設成自己的團隊，但**編輯時主責沒改就原樣保留**，協作團隊的人也能存檔。**1.0.26 起主責下拉沒有任何選項時，欄位下方會出現引導**：有「團隊清單」新增權限的人（含管理者）看到「請先到資料定義 → 團隊清單新增團隊並加入成員」，連結開新頁籤（表單不會遺失），旁邊有「重新載入」可直接重抓選項；沒有權限的人看到「你目前不屬於任何團隊，請聯絡管理者」。以前新系統一個團隊都沒有時，下拉是空的，使用者無從得知要先去哪裡建。
 > - 表單「協作團隊」多選：全部啟用中的團隊，任何人都能選；主責不重複列入。
-> - 規則在 `ProjectAccess.ResolveProjectTeams`，驗證與寫入在 `ProjectTeamWriter`，UI（`ProjectService`）與 API（`ProjectRepository`）共用。錯誤訊息：「請選擇主責團隊。」「主責團隊只能選擇自己所屬的團隊。」「找不到選擇的主責團隊。」
+> - 規則在 `ProjectAccess.ResolveProjectTeams`，驗證與寫入在 `ProjectTeamWriter`，UI 與 API 都經 `ProjectService`（1.1.24 起）。錯誤訊息：「請選擇主責團隊。」「主責團隊只能選擇自己所屬的團隊。」「找不到選擇的主責團隊。」
 > - 表單「分類」多選（啟用中的分類，存 `Project.Categories`），不影響可見性；專案選擇列右側有分類篩選（0.4.106 起與團隊、狀態篩選並列），縮小下拉清單（`ProjectService.GetAsync` 的 `CategoryFilters`）。
 > - 摘要列顯示主責團隊、協作團隊、分類。
 > - 編輯專案內容**只看角色的動作權限**（`edit`）。**1.0.47 起改團隊設定另限主責團隊成員**（見下方「主責團隊管團隊設定（1.0.47）」）；**1.0.52 起「負責人」改成帳號下拉，刪除專案與底下的會議、待辦、附件限負責人**（見下方「專案負責人（1.0.52）」）。附件下載、AI 問答、抽出待辦都跟著專案可見性。判斷一律經 `ProjectAccessService`。
@@ -88,7 +88,8 @@
 
 ## 四、內部系統運作
 
-- 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectRepository`（與 UI 的 Service 為兩條路徑，皆回 `ApiResult`）。
+- 資料流：`ProjectPage.razor` → `ProjectViewView`（`.razor.cs`）→ `ProjectService` → `BackendDBContext.Project`。REST API 走 `ProjectController` → `ProjectService`（1.1.24 起與 UI 同一套規則，`ProjectRepository` 已刪除；回 `ApiResult`）。畫面用的表單、附件、選項端點見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- 1.1.24 起 API 同名改成允許（以前 409），與畫面一致；畫面要用的表單整筆存檔（含附件）、選擇器、上次選的專案、團隊與負責人選項、附件下載都有 API，給專案頁搬到 WASM（1.1.26）用。
 - 讀取：清單 `GetAsync(DataRequest)` 使用 `AsNoTracking`；單筆 `GetAsync(int)` 以 `Include(x => x.Files)` 帶附件。
 - 編輯前處理：開啟修改視窗時以 `ProjectService.GetAsync(id)` 重新取得資料副本（非重用清單物件），並清空待上傳／待移除清單。
 - AI 產生會議紀錄：`MeetingService.RequestDraftAsync(meetingId, projectId, promptTemplateId)` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，通過後寫入 `Meeting.ProjectId` 與提示詞快照並排入 `IMeetingDraftQueue`，實際生成由背景 worker 執行（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。 **0.4.71 起多一個選填的 `attendees` 參數**（插在 `promptTemplateId` 之後、`CancellationToken` 之前），清洗後以快照寫入 `Meeting.DraftAttendees`，上限 50 人。刻意**不檢查勾選的人是否真的在名冊內**——UI 只提供名冊選項，加檢查只會製造「別人改了名冊就整筆退回」的假失敗。實際的提示詞組裝見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)。
@@ -113,7 +114,7 @@
 - **專案負責人（1.0.52）**：使用者要求「專案負責人要是下拉選單，並且要是啟用帳號，身為負責人才可以刪除紀錄」。
   - 資料：`Project.OwnerUserId`（可空外鍵 → `MyUser`，SetNull）才是負責人；`Project.Owner` 留著當姓名快照（存檔時由服務層填，給 API `owner`、清單搜尋與排序用）。升級時 migration `AddProjectOwnerUser` 把舊的手打文字對到帳號：姓名或帳號完全相同、而且剛好一位才填，其餘留空（見 [資料模型與資料庫](../architecture/資料模型與資料庫.md)）。
   - 表單：「負責人」是可搜尋的下拉（打姓名或帳號都找得到，選項顯示「姓名（帳號）」），候選人是表單上目前選的**主責＋協作團隊裡啟用中的帳號**（`ProjectService.GetOwnerCandidatesAsync` → `ProjectOwnerRules.GetCandidatesAsync`）；改了主責或協作團隊就重新載入，原負責人不在新清單裡就清空、要重選。新增專案時，自己是候選人就預設帶自己；編輯時不自動帶。還沒選主責團隊時顯示「請先選擇主責團隊」。對不到帳號的舊資料在欄位下方提示「原負責人：XXX（找不到對應的帳號，請重新選擇）」。
-  - 驗證（UI `ProjectService` 與 API `ProjectRepository` 共用 `ProjectOwnerRules`）：沒選回「請選擇負責人。」；不是團隊裡啟用中的帳號回「負責人必須是專案團隊裡啟用中的帳號，請重新選擇。」。修改時負責人與團隊都沒變就照原樣保留——舊資料沒有負責人、編輯時沒選，就維持未指定（團隊有改也不強迫補）；有負責人而團隊改了，要重新驗證。
+  - 驗證（UI 與 API 都經 `ProjectService`，共用 `ProjectOwnerRules`）：沒選回「請選擇負責人。」；不是團隊裡啟用中的帳號回「負責人必須是專案團隊裡啟用中的帳號，請重新選擇。」。修改時負責人與團隊都沒變就照原樣保留——舊資料沒有負責人、編輯時沒選，就維持未指定（團隊有改也不強迫補）；有負責人而團隊改了，要重新驗證。
   - **誰能換負責人**：主責團隊成員、目前的負責人、管理者（`ProjectOwnerRules.CanChangeOwner`），否則回「只有主責團隊的成員或目前的負責人可以變更負責人。」。畫面上對其他人停用並顯示同一句提示。原因是負責人有刪除權，不擋的話協作團隊的人可以把自己設成負責人。協作團隊的人仍可改其他內容，負責人照原樣保留。
   - **刪除只限負責人與管理者**（`ProjectAccess.IsProjectOwner`，依 `OwnedProjectIds`）：
     - 刪除專案：`ProjectService.DeleteAsync` 依序擋看不到（「找不到要刪除的專案資料。」）、不是負責人（「只有專案負責人可以刪除專案。」）、已完成（封存）（「這個專案已完成（封存），請先重新開啟再修改。」）；API 看不到回 404，後兩種回 400。工具列「刪除專案」按鈕在有 `專案項目:edit` 時出現，只有負責人且專案不是唯讀時可按。
@@ -137,7 +138,7 @@
 | AutoMapper | Project 的兩組 `ForMember`（`TagStringHelper` 轉換） |
 | ProjectService | 關鍵字搜尋、分類／團隊過濾、優先級排序、優先級驗證、`UpdateAsync` 逐欄寫入，以及 **4 處團隊權限判斷**；`IRecordAccessScopeProvider` 注入隨之移除 |
 | 其他 service | `MeetingService.RequestDraftAsync` 與 `TodoService.BeforeAddCheckAsync` 的**專案**團隊守門 |
-| API | `ProjectRepository` 搜尋與排序、`ProjectController` log 參數、`CombinedSearchHelper` 排序 |
+| API | `ProjectRepository` 搜尋與排序（1.1.24 搬成 `ProjectService.SearchFlatAsync`）、`ProjectController` log 參數、`CombinedSearchHelper` 排序（1.1.24 刪除） |
 | 資料庫 | migration `RemoveProjectDescriptionPriorityCategoriesTeams`（四個 `DropColumn`） |
 | 測試 | `ProjectServiceTeamAccessTests` 整檔刪除；`TodoServiceTests` 的專案越界測試刪除 |
 
@@ -147,7 +148,7 @@
 
 ### 稽核（1.0.34）
 
-- 網頁（`ProjectService`）與 API（`ProjectRepository`）的新增、修改、刪除都寫 `Project.Create`／`Update`／`Delete`，摘要帶 `title` 與 `via=Web`／`via=Api`；API 刪除經 `ProjectService.DeleteAsync(id, via)`。
+- 網頁與 API 的新增、修改、刪除都經 `ProjectService`（1.1.24 起；以前 API 走 `ProjectRepository`），都寫 `Project.Create`／`Update`／`Delete`，摘要帶 `title` 與 `via=Web`／`via=Api`；API 刪除經 `ProjectService.DeleteAsync(id, via)`。
 - 附件一檔一筆：`Project.FileUpload`／`FileDelete`（`file=檔名; size=位元組`），下載寫 `Project.FileDownload`。
 - 看不到的專案被嘗試修改或刪除時寫 `Permission.Denied`（`reason=DataScope; op=Update／Delete`），對使用者仍當成不存在。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 

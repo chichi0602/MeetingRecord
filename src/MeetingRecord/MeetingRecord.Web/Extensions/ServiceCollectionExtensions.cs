@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.AiChat;
 using MeetingRecord.Business.Services.TodoExtraction;
-using MeetingRecord.Business.Repositories;
 using MeetingRecord.Business.Services.Dashboard;
 using MeetingRecord.Business.Services.Diagnostics;
 using MeetingRecord.Business.Services.DataAccess;
@@ -147,7 +146,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MyUserService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ProjectService>();
-        services.AddScoped<ProjectRepository>();
         services.AddScoped<CategoryService>();
         services.AddScoped<TeamService>();
         services.AddScoped<PromptTemplateService>();
@@ -172,6 +170,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Web.Components.Commons.IAiChatSource, MeetingRecord.Web.AiChat.ServerAiChatSource>();
         // 1.1.16：WASM 頁的會議影音檔上傳，讀檔存檔在伺服器背景跑（規則仍在 MeetingService）。
         services.AddSingleton<MeetingRecord.Web.Uploads.MeetingMediaUploadJobs>();
+        services.AddSingleton<MeetingRecord.Web.Uploads.ProjectAttachmentUploads>();
         services.AddScoped<MeetingService>();
         services.AddScoped<MeetingFileStore>();
         services.AddScoped<DashboardService>();

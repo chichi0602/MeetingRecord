@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.26
+- 文件版本：1.27
 - 文件狀態：已實作
-- 現行系統版本：1.1.23
+- 現行系統版本：1.1.24
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/10
 
@@ -57,9 +57,11 @@
 
 **會議紀錄**（1.1.20，`MeetingController` 改走 `MeetingService`）：既有五支路由、權限、回應形狀不變，`MeetingDto` 只多帶欄位（`projectId`、`projectTitle`、`createdByUserId`、`hasMedia`、`hasTranscript`、`canRetryTranscription`、`draftStatus`、`draftError`、`draftPromptTemplateName`、`draftCompletedAt`、`hasDraft`、`canGenerateDraft`、`isUploader`、`canDelete`；`draftContent` 只有 `GET {id}` 帶），`MeetingCreateUpdateDto` 多了 `categoryNames`（有帶就以它為準，比照提示詞）。`POST search` 照舊。**外部行為變更**：`PUT` 對已完成（封存）專案的會議改為 400（與畫面一致，管理者除外）。畫面用的新端點：`POST list`（分類篩選、畫面欄位排序，view）、`GET {id}/linked-todos`（edit）、`POST {id}/retranscribe`（edit）、`POST {id}/draft`（產生會議紀錄，edit，會花 AI 費用）、`PUT {id}/draft`（修改全文，edit）、`PUT {id}/project`（歸屬專案，edit）、`GET {id}/transcript`（view）、`GET {id}/transcript/file`（.txt 含 BOM，export，寫稽核）、`POST {id}/transcript/copied`（瀏覽器複製後寫稽核，export）、`POST {id}/draft/pdf`（可帶還沒存的內容，export，寫稽核）、`GET projects/selectable`（附與會人員名冊）、`GET prompt-templates/selectable`、`GET categories/enabled`（後三支 view，不借用其他頁的權限）。看不到的會議一律 404；服務層擋下回 400，新端點訊息放 `errorMessage`。
 
+**專案項目**（1.1.24，`ProjectController` 改走 `ProjectService`，`ProjectRepository` 已刪除）：既有五支路由、權限、回應形狀不變，相容規則照舊（新增沒帶主責用自己 Id 最小的團隊、只帶負責人姓名時找同名帳號、對不到仍建立並留下姓名；修改時沒帶的團隊與負責人保留，名詞、名冊、分類沒帶或空的也保留）；**同名改成允許**（以前 409）。`ProjectDto` 只多帶欄位：`primaryTeamName`、`collaboratorTeamNames`、`isArchived`、`files`（只有單筆帶）、呼叫者的 `isProjectOwner`／`canManageTeams`／`canChangeOwner`。畫面用的新端點：`GET selectable?includeArchived=`（View）、`GET`／`PUT last-selected`（View）、`GET teams/primary`、`GET teams/collaborator?include=`、`GET owner-candidates?primaryTeamId=&collaboratorTeamIds=`（Create 或 Edit 任一）、`POST form`（Create）與 `PUT {id}/form`（Edit）——整筆覆寫、日期可留空、帶 `uploadIds`（附件，見四之一）與 `removedFileIds`（只限專案負責人），新增時專案已建立但附件存不進去回 400 也帶 `projectId`——以及 `GET files/{fileId}`（View，附件下載，稽核 `via=Api`）。
+
 **AI 問答**（1.1.21，`AiChatController`，路由 `api/v1/ai-chat/{project|meeting}/{targetId}`）：`GET conversations`、`POST conversations`（開新對話，回 Id）、`PUT conversations/{id}/title`（edit）、`DELETE conversations/{id}`（delete）、`GET conversations/{id}/messages`、`PUT conversations/{id}/messages/{index}`（edit；帶原本的角色與內容，對不上回 409）、`POST conversations/{id}/ask`（multipart：`question`＋0～5 個 `files`，**串流**）、`POST conversations/{id}/messages/{index}/regenerate`（edit，**串流**）、`GET conversations/{id}/attachments/{storedName}`（`download=true` 寫稽核）、`POST conversations/{id}/pdf`（export；`messageIndex` 有值＝單則，沒值＝整段，內容由伺服器讀）。權限依範圍（`AiChatPermissionAttribute`：專案看專案項目，會議看會議紀錄或專案項目），未註明者要 view。**串流格式**：`application/x-ndjson`，每行一筆 `AiChatStreamEventDto`——零到多筆 `delta`（新產生的文字），最後一筆 `done`（附完整結果）或 `error`（附原因）；在第一段文字產生之前就失敗（看不到 404、附件不合規定或額度用完 400）照一般 API 回應。服務層的錯誤原文放 `errorMessage`。
 
-> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：`ProjectRepository`（待辦 1.1.18、會議 1.1.20 起直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
+> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：API（待辦 1.1.18、會議 1.1.20、專案 1.1.24 起都直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >
 > **專案的團隊與分類（0.4.102）**：`ProjectCreateUpdateDto`／`ProjectDto` 多了選填的 `primaryTeamId`、`collaboratorTeamIds`、`categories`，專案的 GET／搜尋結果會帶回團隊 Id。
 > - `POST api/Project` 沒給 `primaryTeamId` 時，用建立者所屬、Id 最小的團隊當主責；建立者不屬於任何團隊時回 **400**「請先加入團隊，或指定主責團隊。」
@@ -122,6 +124,7 @@
 | 查狀態（1.1.16） | `GET api/v1/uploads/{uploadId}` | 回 `{ state: Uploading/Succeeded/Cancelled/Failed, message, meetingDeleted, cancelTooLate }`；只認擁有者，別人的 404；結束後保留 10 分鐘 |
 | 取消（1.1.16） | `DELETE api/v1/uploads/{uploadId}` | 等同 Server 頁的「取消上傳」：新增時附的檔連會議一起刪（建好就取消、服務層還沒開始收檔時也一樣）；檔案已寫完則來不及取消、照樣排入轉錄 |
 | 回報失敗（1.1.23） | `POST api/v1/uploads/{uploadId}/fail` | 內容 `{ message }`。瀏覽器送不下去（重試用完、登入失效）時呼叫，伺服器立刻結束那趟上傳、會議保留（同 Server 頁），不必等 2 分鐘逾時；只認擁有者，別人的回 404 |
+| 專案附件（1.1.24） | `POST api/v1/uploads/project-attachments` | 專案項目「新增」或「修改」任一。內容同建立工作階段（`purpose: "ProjectAttachment"`、`fileName`、`contentType`、`size`），超過 1 GB 回 400。伺服器把分塊寫進暫存檔；查狀態、取消、回報失敗沿用上面三支。傳完（`Succeeded`）後把 `uploadId` 帶進 `POST／PUT api/v1/Project/…/form`，存檔成功才刪暫存檔 |
 
 專案附件的上傳用途等專案頁搬到 WASM 時再加（1.1.21）。
 

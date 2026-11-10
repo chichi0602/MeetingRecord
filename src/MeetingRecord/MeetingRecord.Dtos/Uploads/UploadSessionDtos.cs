@@ -1,9 +1,12 @@
 namespace MeetingRecord.Dtos.Uploads;
 
-/// <summary>上傳的用途（1.1.16）。目前只有會議影音檔；專案附件等專案頁搬到 WASM 時再加（1.1.21）。</summary>
+/// <summary>上傳的用途（1.1.16）。</summary>
 public static class UploadPurposes
 {
     public const string MeetingMedia = "MeetingMedia";
+
+    /// <summary>專案附件（1.1.24，<c>POST api/v1/uploads/project-attachments</c>）：先傳到暫存檔，存專案時再帶編號。</summary>
+    public const string ProjectAttachment = "ProjectAttachment";
 }
 
 /// <summary>建立上傳工作階段（<c>POST api/v1/uploads</c>，1.1.16）。</summary>

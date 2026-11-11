@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.48
+- 文件版本：1.49
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.43
+- 現行系統版本：1.1.44
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -273,7 +273,7 @@ flowchart LR
 | **M2 一般 CRUD 頁** | 分類、團隊、提示詞、使用者管理、角色管理、個人資料、變更密碼、儀表板 | M | 對應 E2E 情境兩版皆通過；新端點全部有授權測試。**✅ 1.1.4～1.1.14 完成** |
 | **M3 專案／會議／待辦** | 三個核心頁：分塊上傳、下載、PDF、背景工作進度與取消、通知鈴、待辦異動紀錄、甲方規則（**併入 AI 問答與待辦抽取**） | XL | 同上，加 L4 的上傳／推播情境。**✅ 1.1.15～1.1.27 完成** |
 | **M4 使用說明** | 使用說明頁與 AI 助理（AI 問答、待辦抽取、會議紀錄生成已在 M3 隨頁面搬完） | S | 同上，加串流與停止情境；額度與用量帳本對帳一致。**✅ 1.1.28～1.1.31 完成** |
-| **M5 管理與監控** | 稽核紀錄、AI 對話紀錄、Token 用量、系統例外紀錄、日誌檢視、日誌等級、資料庫用量、系統健康監控 | L | 同上；非管理者打這些 API 全部被擋 |
+| **M5 管理與監控** | 稽核紀錄、AI 對話紀錄、Token 用量、系統例外紀錄、日誌檢視、日誌等級、資料庫用量、系統健康監控 | L | 同上；非管理者打這些 API 全部被擋。**✅ 1.1.32～1.1.44 完成** |
 | **M6 收尾** | 移除 Server 互動模式與 `ReconnectModal`、改寫原始碼掃描測試、效能調校、更新所有相關文件 | M | L1～L6 全部達標，產出最終測試報告 |
 
 規模僅供相對比較（S＜M＜L＜XL），M1 結束後依實際端點數重估工期。
@@ -519,20 +519,34 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 系統例外（二）頁面 `/system-exceptions` | 1.1.41 | ✅ 完成；頁面搬到 Client、全部動作走 API；AI 分析在瀏覽器讀串流、關窗＝中斷請求，送出內容由伺服器組；剪貼簿組字 `ExceptionLogClipboardText` 搬到 `Dtos/Diagnostics`；新增 EXC-01，MON-01／02 照過 |
 | 日誌檢視 `/logs`（API＋頁面） | 1.1.42 | ✅ 完成；`MonitoringController` 加 `logs/meta`、`query`、`export`、`ai-analysis`（串流）、`ai-analysis/pdf`，匯出與 AI 分析都由伺服器依同一組條件重查、不收前端給的日誌；頁面搬到 Client；`AiLogPromptBuilder` 搬到 Dtos；AI 串流 DTO 改成通用的 `DiagnosticAi…`，Client 讀串流抽成 `DiagnosticAiStream`；Server 的 `Views/Monitoring` 清空；新增 `LogViewerApiTests`、LOG-01 |
 | 稽核紀錄 `/audit-logs`（API＋頁面）＋ L4 調整 | 1.1.43 | ✅ 完成；新 `AuditLogController`（`api/v1/audit-logs`，`[AdminOnly]`）6 支，清除類稽核照舊在刪除之後；頁面搬到 Client——**最後一個應用程式的 Server 頁**；`AuditLogAdapterModel`／`AuditLogQuery` 搬到 `Dtos/AuditLogs`；L4-05 改成 WASM 頁斷網 10 秒後自動恢復、L4-08 的目標改成 `/not-found`；新增 `AuditLogApiTests` |
+| M5 里程碑報告 | 1.1.44 | ✅ 完成；[M5 報告](../testing/2026-11-11-M5-里程碑測試報告-1.1.43.md)（跑在 M5 最後一版 1.1.43）：L1 1945、L2 260、L3 110 過 1 略過、L4 10 全過；新開 50 支端點；WASM 下載量 `_framework` 全部 `.br` 合計 5.18 MB，只下載一個語系檔約 4.83 MB |
 
 ## 十一、下一步
 
-M0～M4 已完成（見「十、之二」～「十、之五」與各里程碑報告）。IIS 測試機驗證、前端錯誤回報 API 仍待補；效能調校在 M6（下載量已接近 5 MB 門檻、有快取的再次載入超過 1.5 秒門檻）。
+M0～M5 已完成（見「十、之二」～「十、之六」與各里程碑報告）：**應用程式的頁面全部改由 WASM 執行**。伺服器還留著 Blazor Server 的互動模式，只服務首頁開場畫面、`/not-found` 與範本殘留頁。
 
-**M5 規劃（管理與監控，8 頁）**：剩下的 Server 頁都在這裡——稽核紀錄 `/audit-logs`、AI 對話紀錄 `/ai-call-logs`、Token 用量 `/token-usage`、資料庫用量 `/database-usage`、系統例外 `/system-exceptions`、日誌 `/logs`、日誌等級 `/log-level-setting`、系統健康 `/system-health`。
-- 共通：權限多為只限管理者或監控權限（照各頁現行判斷，API 用 `[AdminOnly]` 或 `[HasPermission]`）；匯出 CSV、清除、刪除等動作由伺服器寫稽核；照 M2／M3 做法每頁先開 API、再搬頁，原有 MON／ADM 端對端一行不改照過。
-- 要特別處理的：
-  - 日誌與系統例外的「AI 分析」是串流（`DiagnosticAiService`）：用 `NdjsonStreamer`，服務改經 `IAiCallerProvider`（1.1.28 已註明）；
-  - AI 連線測試（`AiConnectionTestService`）同樣改經 `IAiCallerProvider`；
-  - 日誌等級即時生效、資料庫用量與系統健康讀伺服器狀態，維持在伺服器計算、API 只回結果；
-  - 圖表元件已在 Client（1.1.12）。
-- **L4-05 與 L4-08** 在 M5 搬完最後一頁時就沒有「還沒遷移的 Server 頁」可用：1.1.43 定案——L4-05 改成在 WASM 頁斷網 10 秒、恢復後同一頁仍可操作（推播通道重連仍由 L4-10 驗）；L4-08 往舊版頁的目標改成仍由伺服器處理的 `/not-found`。
-- 預估約 10～12 版（每頁 API 與頁面多半可以一版做完；串流與日誌類較大），最後出 M5 里程碑報告。
-- 之後 **M6 收尾**：移除 Server 互動模式與 `ReconnectModal`、效能調校（下載量、快取再次載入）、IIS 驗證、最終報告。
+**M6 收尾規劃**（照 M2～M5 做法：每版從 main 開短分支，做完等使用者 commit）：
+
+1. **拆除 Server 互動模式**：
+   - 首頁開場畫面 `/` 與 `/not-found` 改成 WASM 頁或靜態頁；
+   - 拿掉 Server 的 Router（`Routes.razor`）、`MainLayout`、`ReconnectModal`、`ApplicationCircuitHandler`、`LoggingErrorBoundary`、`AddInteractiveServerComponents`；
+   - 刪除範本殘留（`Counter`、`Weather`、`RoleViewViewSample`）；
+   - `WasmRoutes` 與兩邊 Router 的切換邏輯一併簡化（不再有兩種頁面）。
+2. **前端錯誤回報改走 API**：目前 `BrowserErrorReporter` 經 Blazor 連線回報，WASM 頁收不到；改成 API，並依帳號限流（M1 延後的項目）。
+3. **服務層清理**：只為 Blazor Server 存在的設施（`CurrentUserService` 在 circuit 裡的設定、`AuthenticationStateHelper` 的頁面守門等）評估移除或改名，`IAiCallerProvider`、`IAuditActorProvider` 只留 API 那條路。
+4. **原始碼掃描與規範改寫**：
+   - 掃 `Components/Views/**` 的守門測試改成掃 `Web.Client/Pages/**`；
+   - 開發慣例速查、架構總覽、CLAUDE.md 裡只適用 Blazor Server 的規則改寫，例如：
+     - 「檢視編輯前 `Clone()`」；
+     - 「Update／Delete 前清追蹤」；
+     - 「DbContext 每條連線」。
+5. **效能調校（L5）**：
+   - 下載量：只下載一個語系檔約 4.83 MB，貼近 5 MB 門檻，評估延遲載入少用的組件、語系檔與修剪設定；
+   - 有快取的再次載入：目前超過 1.5 秒門檻；
+   - 量 API p95、伺服器記憶體，複查越權與 CSRF。
+6. **IIS 測試機驗證**（需要使用者協助）。
+7. **最終報告**：L1～L5 全部達標，第七節 L6 人工驗收由使用者在瀏覽器實際操作後簽核。
+
+另有一件要使用者決定：遠端分支 `origin/wasm-migration` 停在 1.1.27，M3 之後都直接合回 main，這條分支要不要刪除。
 
 > 返回 [planning 索引](README.md)

@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.37
+- 文件版本：1.38
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.32
+- 現行系統版本：1.1.33
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -508,6 +508,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 步驟 | 版本 | 狀態 |
 |------|------|------|
 | 資料庫用量 `/database-usage` | 1.1.32 | ✅ 完成；新 `MonitoringController`（`api/v1/monitoring`，`[AdminOnly]`）兩支：`database-usage`、`storage-usage`；報表型別搬到 `Dtos/Diagnostics`；MON-01／02 照過 |
+| 日誌等級設定 `/log-level-setting` | 1.1.33 | ✅ 完成；`MonitoringController` 加 `log-level` GET／PUT 與 `restore`，稽核改由伺服器寫；`LogModels` 整檔搬到 `Dtos/Diagnostics`（後面系統健康、日誌檢視共用）；MON-01／02 照過 |
 
 ## 十一、下一步
 

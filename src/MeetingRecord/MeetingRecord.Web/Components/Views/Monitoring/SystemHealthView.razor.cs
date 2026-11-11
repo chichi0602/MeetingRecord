@@ -6,6 +6,7 @@ using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Components.Views.Monitoring;
 

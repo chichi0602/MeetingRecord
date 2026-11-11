@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Diagnostics;
 

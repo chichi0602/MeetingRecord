@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeetingRecord.Web.Diagnostics;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Tests;
 

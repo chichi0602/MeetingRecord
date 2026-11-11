@@ -7,6 +7,7 @@ using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Caching;
 using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Health;
 

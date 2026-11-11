@@ -4,6 +4,7 @@ using NLog.Config;
 using NLog.Targets;
 using NLogLevel = NLog.LogLevel;
 using NLogManager = NLog.LogManager;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Tests;
 

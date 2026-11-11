@@ -1,10 +1,10 @@
 ﻿# 日誌等級設定 PRD
 
-- 文件版本：1.0
+- 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.120
+- 現行系統版本：1.1.33
 - 首次實作版本：0.4.120（移植自 NET10-Blazor-Starter）
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -18,6 +18,8 @@
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
 | `/log-level-setting` | 系統管理 → 監控與診斷 → 日誌等級設定（id 38） | **只限管理者**（不在角色權限目錄，`SidebarMenuService.AdminOnlyMenuIds`） | 系統管理員／維運 |
+
+1.1.33 起是 WASM 頁，資料走 API：`GET api/v1/monitoring/log-level`、`PUT api/v1/monitoring/log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400）、`POST api/v1/monitoring/log-level/restore`（`MonitoringController`，`[AdminOnly]`）。
 
 ## 三、畫面與欄位
 
@@ -35,11 +37,11 @@
 3. 還原：把系統預設等級套回同一條規則，清掉覆寫。
 4. `nlog.config` 被重新載入（`autoReload="true"`）時：補回被清掉的 `BasePath`／`LogFilenamePrefix` 變數、重讀系統預設等級、再把覆寫套回去。
 5. 框架規則（`Microsoft.Hosting.Lifetime`、`Microsoft.*`、`System.*`）在 `nlog.config` 設為 `final`，所以調低等級只會讓應用程式日誌變多，不會引來框架日誌洪水。
-6. 套用與還原各寫一筆 `AuditLog`：`LogLevel.Apply`／`LogLevel.Restore`，TargetType `NLog`、TargetId `logger:*`，Detail 記「由 X 調整為 Y（僅執行期有效）」。
+6. 套用與還原各寫一筆 `AuditLog`：`LogLevel.Apply`／`LogLevel.Restore`，TargetType `NLog`、TargetId `logger:*`，Detail 記「由 X 調整為 Y（僅執行期有效）」。1.1.33 起由 API（`MonitoringController`）寫，Detail 另加 `; via=Api`。
 
 ## 五、權限與安全
 
-- 管理者限定：頁面以 `AuthenticationStateHelper.CheckIsAdmin()` 守門（套用、還原方法內再檢查一次）；側邊欄由 `AdminOnlyMenuIds` 排除非管理者，不看權限鍵。
+- 管理者限定：頁面以 `PermissionView.IsAdmin` 守門（1.1.33 前是 `CheckIsAdmin()`），API 是 `[AdminOnly]`（非管理者 403 並留稽核）；側邊欄由 `AdminOnlyMenuIds` 排除非管理者，不看權限鍵。
 - 權限判定完成前不渲染任何內容。
 - 不寫任何檔案，重新啟動即回到 `nlog.config` 的值。
 
@@ -53,12 +55,14 @@
 
 - `MeetingRecord.Tests/LogLevelRuntimeStateTests.cs`（移植自 Starter）：初始化讀到設定檔的預設等級、套用只改應用程式規則不動框架規則、還原與「沒有覆寫時還原回 false」、拒絕 Any／Unknown、找不到萬用規則時降級為不可用、**用專案真正的 `nlog.config` 驗證調到 Debug 只影響應用程式日誌**、`LogLevelRank` 與 NLog 序位一致。
 - `MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`：選單 id 38 在「監控與診斷」底下、名稱與路由正確、屬管理者限定且不在權限目錄。
+- `MeetingRecord.Tests/MonitoringApiTests.cs`（1.1.33）：未登入 401、非管理者 403；套用後生效等級改變、還原回預設；稽核 `via=Api`；「不限」與「無法解析」回 400。
 - 實跑：套用 Debug 後日誌檔開始出現 DEBUG 行；還原後回到 INFO；稽核表各有一筆。
 
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogLevelRuntimeState.cs`（`Initialize`、`Apply`、`RestoreDefault`、`OnConfigurationChanged`）
-- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogModels.cs`（`LogLevelRank`、`LogLevelRankHelper`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/LogLevelSettingPage.razor`、`Components/Views/Monitoring/LogLevelSettingView.razor(.cs/.css)`
+- `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（`LogLevelRank`、`LogLevelRankHelper`；1.1.33 從 Web 搬來）、`LogLevelDtos.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs`、`src/MeetingRecord/MeetingRecord.Web.Client/Api/MonitoringApi.cs`（1.1.33）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/LogLevelSettingPage.razor(.cs/.css)`（1.1.33 起 WASM；以前是 Server 的 `LogLevelSettingPage` → `LogLevelSettingView`）
 - `src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 執行期日誌等級`）、`nlog.config`
 - 交叉連結：[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[系統健康監控 PRD](系統健康監控-prd.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)

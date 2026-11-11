@@ -1,5 +1,10 @@
+@page "/log-level-setting"
 @using MeetingRecord.Dtos.Dashboards
-@using MeetingRecord.Web.Diagnostics
+@using MeetingRecord.Dtos.Diagnostics
+@using MeetingRecord.Web.Components.Commons.Charts
+
+@* 日誌等級設定（1.1.33 搬到 WASM）：由 Blazor Server 的 LogLevelSettingView 改寫，畫面不變；資料改走監控 API。 *@
+<PageTitle>日誌等級設定</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
 @if (!isAccessChecked)
@@ -9,7 +14,7 @@ else if (!string.IsNullOrEmpty(RoleMessage))
 {
     <div class="log-level-denied">@RoleMessage</div>
 }
-else if (!LogLevelState.IsAvailable)
+else if (!isAvailable)
 {
     <div class="log-level-warning">
         <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="error_outline" />

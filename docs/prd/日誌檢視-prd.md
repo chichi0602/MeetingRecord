@@ -1,10 +1,10 @@
 ﻿# 日誌檢視 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：0.4.122
+- 現行系統版本：1.1.33
 - 首次實作版本：0.4.121（移植自 NET10-Blazor-Starter；AI 分析改走本專案的供應商與用量帳本）
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -69,7 +69,7 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogQueryService.cs`、`LogModels.cs`、`NLogFilePathResolver.cs`、`AiLogPromptBuilder.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogQueryService.cs`、`NLogFilePathResolver.cs`、`AiLogPromptBuilder.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（1.1.33 從 Web 搬來）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Diagnostics/DiagnosticAiService.cs`、`AiDiagnosticPrompts.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Export/DiagnosticReportExporter.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/LogViewerPage.razor`、`Components/Views/Monitoring/LogViewerView.razor(.cs/.css)`

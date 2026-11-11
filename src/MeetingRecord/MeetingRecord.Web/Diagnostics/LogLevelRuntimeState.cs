@@ -3,6 +3,7 @@
 using NLog.Config;
 using NLogLevel = NLog.LogLevel;
 using NLogManager = NLog.LogManager;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Diagnostics;
 

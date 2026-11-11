@@ -79,6 +79,8 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(HelpAssistantStreamEventDto))]
 [JsonSerializable(typeof(ApiResult<DatabaseUsageReport>), TypeInfoPropertyName = "DatabaseUsageResult")]
 [JsonSerializable(typeof(ApiResult<StorageUsageReport>), TypeInfoPropertyName = "StorageUsageResult")]
+[JsonSerializable(typeof(ApiResult<LogLevelStateDto>), TypeInfoPropertyName = "LogLevelStateResult")]
+[JsonSerializable(typeof(LogLevelApplyRequestDto))]
 [JsonSerializable(typeof(TodoCreateUpdateDto))]
 [JsonSerializable(typeof(TodoCompletedRequestDto))]
 [JsonSerializable(typeof(ApiResult<PagedResult<TodoDto>>), TypeInfoPropertyName = "TodoPageResult")]

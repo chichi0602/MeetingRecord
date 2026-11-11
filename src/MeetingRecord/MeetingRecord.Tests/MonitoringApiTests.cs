@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
     {
         "/api/v1/monitoring/database-usage",
         "/api/v1/monitoring/storage-usage",
+        "/api/v1/monitoring/log-level",
     };
 
     [Theory]
@@ -75,6 +77,62 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
         Assert.NotEmpty(report.Directories);
         Assert.All(report.Directories, x => Assert.False(string.IsNullOrWhiteSpace(x.Label)));
         Assert.NotNull(report.Warnings);
+    }
+
+    /// <summary>1.1.33：套用與還原日誌等級，稽核由伺服器寫（以前是畫面寫）。</summary>
+    [Fact]
+    public async Task LogLevel_ApplyAndRestore_ShouldChangeTheRuntimeLevel_AndAudit()
+    {
+        using var client = await LoginAdminAsync();
+        var before = (await ReadAsync<LogLevelStateDto>(await client.GetAsync("/api/v1/monitoring/log-level"))).Data!;
+        Assert.True(before.IsAvailable, "測試主機要讀得到 nlog.config 的 <logger name=\"*\"> 規則");
+        var target = before.EffectiveLevel == LogLevelRank.Error ? LogLevelRank.Warn : LogLevelRank.Error;
+
+        try
+        {
+            using (var applied = await client.PutAsJsonAsync("/api/v1/monitoring/log-level", new LogLevelApplyRequestDto { Level = target }))
+            {
+                Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+                var state = (await ReadAsync<LogLevelStateDto>(applied)).Data!;
+                Assert.Equal(target, state.EffectiveLevel);
+                Assert.True(state.HasOverride);
+            }
+
+            using (var restored = await client.PostAsync("/api/v1/monitoring/log-level/restore", null))
+            {
+                Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+                var state = (await ReadAsync<LogLevelStateDto>(restored)).Data!;
+                Assert.False(state.HasOverride);
+                Assert.Equal(state.SystemDefaultLevel, state.EffectiveLevel);
+            }
+        }
+        finally
+        {
+            await client.PostAsync("/api/v1/monitoring/log-level/restore", null);
+        }
+
+        using var scope = factory.Services.CreateScope();
+        var audits = await scope.ServiceProvider.GetRequiredService<BackendDBContext>().AuditLog.AsNoTracking()
+            .Where(x => x.Action == AuditActions.LogLevelApply || x.Action == AuditActions.LogLevelRestore)
+            .OrderBy(x => x.Id).ToListAsync();
+        var apply = audits.Last(x => x.Action == AuditActions.LogLevelApply);
+        Assert.Equal("NLog", apply.TargetType);
+        Assert.Contains($"調整為 {LogLevelRankHelper.ToLevelText(target)}", apply.Detail);
+        Assert.EndsWith("via=Api", apply.Detail);
+        Assert.Contains(audits, x => x.Action == AuditActions.LogLevelRestore && x.Id > apply.Id);
+    }
+
+    [Theory]
+    [InlineData(LogLevelRank.Any)]
+    [InlineData(LogLevelRank.Unknown)]
+    public async Task LogLevel_ShouldRejectNonRealLevels(LogLevelRank level)
+    {
+        using var client = await LoginAdminAsync();
+
+        using var response = await client.PutAsJsonAsync("/api/v1/monitoring/log-level", new LogLevelApplyRequestDto { Level = level });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False((await ReadAsync<LogLevelStateDto>(await client.GetAsync("/api/v1/monitoring/log-level"))).Data!.HasOverride);
     }
 
     private async Task<HttpClient> LoginAdminAsync()

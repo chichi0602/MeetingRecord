@@ -4,6 +4,8 @@
 # 情境編號、標題、人物取自端對端測試原始碼上的 [Trait("Scenario"/"Title"/"Persona", ...)]。
 #
 # 遷移分支的里程碑報告（1.1.3）：-Milestone M1（M2…）只換標題與檔名（「M1 里程碑報告」「…-M1-里程碑測試報告-版本.md」），內容同一套。
+# -Milestone M6（1.1.51）是遷移的最終報告：全部頁面都在瀏覽器執行、Server 版已移除，所以不再並列兩版；
+# 端對端矩陣的結果欄就是本版（WASM），檔名「…-M6-WASM遷移最終測試報告-版本.md」。
 #
 # 用法（通常由 Run-E2E.ps1 呼叫）：
 #   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-WasmE2ETrx wasm-e2e.trx] [-Milestone M1] [-L5Json l5-build.json] [-OutputPath 檔案]
@@ -123,7 +125,8 @@ if ($l5.Count -gt 0) { $counts["L5 非功能"] = Count-Outcomes $l5 }
 $failedTotal = ($counts.Values | Measure-Object -Property Failed -Sum).Sum
 $lastLayer = if ($l5.Count -gt 0) { "L5" } else { "L4" }
 $conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～$lastLayer 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
-$kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } elseif ($Milestone -eq "M0") { "M0 基準報告（只有 Server 版）" } else { "$Milestone 里程碑報告（Server 版＋已遷移的 WASM 頁）" }
+$isFinal = $Milestone -eq "M6"
+$kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } elseif ($isFinal) { "M6 最終報告（遷移完成，全部頁面在瀏覽器執行）" } elseif ($Milestone -eq "M0") { "M0 基準報告（只有 Server 版）" } else { "$Milestone 里程碑報告（Server 版＋已遷移的 WASM 頁）" }
 
 $sb = [System.Text.StringBuilder]::new()
 function Line([string]$text = "") { [void]$sb.AppendLine($text) }
@@ -143,8 +146,14 @@ Line
 Line "| 項目 | 內容 |"
 Line "|------|------|"
 Line "| 結論 | $conclusion |"
-Line "| Server 版本 | $version，commit ``$commit``$dirty |"
-Line "| WASM 版本 | $(if ($hasWasm) { '見 WASM 端 .trx' } else { '—（尚未遷移）' }) |"
+if ($isFinal) {
+    Line "| 版本 | $version，commit ``$commit``$dirty |"
+    Line "| 頁面 | 全部在瀏覽器執行（Blazor WebAssembly）；伺服器只靜態算繪登入、登出與錯誤頁，Blazor Server 互動模式已移除（1.1.46） |"
+}
+else {
+    Line "| Server 版本 | $version，commit ``$commit``$dirty |"
+    Line "| WASM 版本 | $(if ($hasWasm) { '見 WASM 端 .trx' } else { '—（尚未遷移）' }) |"
+}
 Line "| 測試日期 | $today |"
 Line "| 執行環境 | Windows $([Environment]::OSVersion.Version)、.NET SDK $dotnetVersion、Microsoft Edge $edgeVersion（Playwright 無頭模式） |"
 Line "| 網站與資料 | 以 publish 輸出、E2E 環境啟動（假 AI，不呼叫付費 API）；獨立 SQLite 與臨時資料夾，種子資料見 ``E2ESeeder`` |"
@@ -161,7 +170,14 @@ if ($l5.Count -eq 0) { Line "| L5 非功能 | — | — | — | 本次未執行 
 Line
 Line "## 3. E2E 對照矩陣"
 Line
-Line "| 情境 | 說明 | 頁面 | 人物 | Server | WASM | 備註 |"
+if ($isFinal) {
+    Line "Server 版已移除，結果欄就是本版（WASM）；情境與 M0 基準同一套，遷移期間依 WASM 行為調整或新增的情境見各里程碑報告。"
+    Line
+    Line "| 情境 | 說明 | 頁面 | 人物 | 結果 | — | 備註 |"
+}
+else {
+    Line "| 情境 | 說明 | 頁面 | 人物 | Server | WASM | 備註 |"
+}
 Line "|------|------|------|------|--------|------|------|"
 $wasmByName = @{}
 foreach ($r in $wasm) { $wasmByName[(Get-MethodKey $r.Name) + "|" + (Get-Argument $r.Name)] = $r }
@@ -255,7 +271,7 @@ if ($failedTotal -gt 0) {
 }
 
 if ([string]::IsNullOrEmpty($OutputPath)) {
-    $label = if ($hasWasm) { "WASM遷移最終測試報告" } elseif ($Milestone -eq "M0") { "M0-基準測試報告" } else { "$Milestone-里程碑測試報告" }
+    $label = if ($hasWasm) { "WASM遷移最終測試報告" } elseif ($isFinal) { "M6-WASM遷移最終測試報告" } elseif ($Milestone -eq "M0") { "M0-基準測試報告" } else { "$Milestone-里程碑測試報告" }
     $OutputPath = Join-Path $repoRoot ("docs/testing/" + (Get-Date -Format "yyyy-MM-dd") + "-$label-$versionNumber.md")
 }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null

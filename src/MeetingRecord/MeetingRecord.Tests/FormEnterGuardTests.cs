@@ -9,6 +9,7 @@ namespace MeetingRecord.Tests;
 /// 或在下拉的搜尋框按 Enter 選項目，會被外層表單當成「送出」，打的值還沒套用就存檔了。</item>
 /// <item>Enter 與「確定」一律走 <c>FormSubmitGate</c>——以前 Enter 先 <c>Task.Delay(200)</c> 等回寫、等候不在存檔防護裡，
 /// 等候期間再按「確定」或長按 Enter 會新增兩筆。</item>
+/// <item>1.1.34：存檔一開頭先確認視窗還開著（<c>if (!modalVisible) return;</c>）——關窗動畫期間又按「確定」會新增兩筆。</item>
 /// </list>
 /// </summary>
 public sealed partial class FormEnterGuardTests
@@ -64,6 +65,19 @@ public sealed partial class FormEnterGuardTests
         Assert.Matches(@"OnModalOKHandleAsync\(MouseEventArgs args\)\s*=>\s*submitGate\.RunAsync\(", code);
         Assert.Matches(@"submitGate\.RunAsync\(\w+, FormSubmitGate\.EnterSettleDelay\)", code);
         Assert.DoesNotContain("Task.Delay(200)", code);
+    }
+
+    /// <summary>
+    /// 1.1.34（端對端 TDO-10 偶發、TDO-11 穩定重現）：存檔一開頭要先確認視窗還開著。WASM 頁事件處理整段跑完才重繪，
+    /// 存檔成功時「關窗」與「閘門放開」同一次生效，關窗動畫期間「確定」又按得到，沒有這個檢查同一筆會新增兩次。
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CrudForms))]
+    public void Save_ShouldIgnoreAClosedForm(string form)
+    {
+        var code = File.ReadAllText(ViewPath(form + ".razor.cs"));
+
+        Assert.Matches(@"private async Task SaveModalAsync\(\)\s*\{\s*(//[^\n]*\n\s*)*if \(!modalVisible\)\s*\{\s*return;", code);
     }
 
     [Fact]

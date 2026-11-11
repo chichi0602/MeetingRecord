@@ -626,6 +626,13 @@ public partial class MeetingPage : IDisposable
     /// </summary>
     private async Task SaveModalAsync()
     {
+        // 1.1.34：視窗已經關了就不再存。存檔成功時「關窗」與「不再存檔中」在同一次重繪才生效，
+        // 關窗動畫期間「確定」又按得到，沒有這行同一筆會再存一次（新增兩筆）。
+        if (!modalVisible)
+        {
+            return;
+        }
+
         // 這次存檔才新增出來的會議，上傳被取消時連會議一起刪（1.0.37）；下面新增成功後 isNewRecordMode 會被改掉，要先記下。
         var createdInThisSave = isNewRecordMode;
 

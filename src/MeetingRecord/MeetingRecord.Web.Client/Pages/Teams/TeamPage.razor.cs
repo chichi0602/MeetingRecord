@@ -278,6 +278,13 @@ namespace MeetingRecord.Web.Client.Pages.Teams
 
         private async Task SaveModalAsync()
         {
+            // 1.1.34：視窗已經關了就不再存。存檔成功時「關窗」與「不再存檔中」在同一次重繪才生效，
+            // 關窗動畫期間「確定」又按得到，沒有這行同一筆會再存一次（新增兩筆）。
+            if (!modalVisible)
+            {
+                return;
+            }
+
             if (LocalEditContext?.Validate() == false)
             {
                 foreach (var error in LocalEditContext.GetValidationMessages())

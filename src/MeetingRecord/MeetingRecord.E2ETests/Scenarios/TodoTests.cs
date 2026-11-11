@@ -231,6 +231,41 @@ public sealed class TodoTests(E2EAppFixture app) : E2ETestBase(app)
         Assert.Equal(1, await db.Todo.CountAsync(x => x.Title == title));
     }
 
+    [E2EFact]
+    [Trait("Scenario", "TDO-11")]
+    [Trait("Title", "存檔後重新載入較慢時，關窗途中再按「確定」不會再存一次")]
+    [Trait("Page", "待辦事項")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task Todo_ClickOkAgainWhileClosing_ShouldCreateOnlyOne()
+    {
+        // 1.1.34：TDO-10 在全套跑時偶爾新增兩筆。WASM 頁事件處理整段跑完才重繪，「關窗」與「不再存檔中」在同一次重繪生效，
+        // 視窗關閉動畫期間「確定」又可以按，這一下會把同一筆再存一次。放慢存檔後的重新載入，讓這個時間點穩定出現。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/todos", "待辦事項");
+        var title = Unique("E2E 關窗連按");
+
+        await ToolbarButton(page, "新增").ClickAsync();
+        await PickAsync(page, SelectByLabel(page, "所屬專案"), E2ESeedData.SharedProject);
+        await page.GetByPlaceholder("請輸入待辦標題").FillAsync(title);
+        await page.RouteAsync("**/api/v1/Todo/tree", async route =>
+        {
+            await Task.Delay(1500);
+            await route.ContinueAsync();
+        });
+
+        var ok = page.Locator(".ant-modal-wrap:visible .ant-modal-footer .ant-btn-primary").Last;
+        var handle = await ok.ElementHandleAsync();
+        await ok.ClickAsync();
+        // 第二下：等存檔中（按鈕轉圈）結束的那一刻立刻再按——這時視窗正要關。
+        await page.WaitForFunctionAsync("b => !b.classList.contains('ant-btn-loading')", handle, new() { Timeout = 10_000, PollingInterval = 10 });
+        await handle.EvaluateAsync("b => b.click()");
+        await Expect(Notice(page, "新增成功")).ToBeVisibleAsync();
+        await page.WaitForTimeoutAsync(3000);
+
+        await using var db = App.CreateDbContext();
+        Assert.Equal(1, await db.Todo.CountAsync(x => x.Title == title));
+    }
+
     /// <summary>在「E2E 共同專案」新增一筆待辦，回傳標題（搜尋框已填這個標題）。</summary>
     private async Task<string> CreateTodoAsync(IPage page, string prefix, string? exactTitle = null, DateTime? dueDate = null)
     {

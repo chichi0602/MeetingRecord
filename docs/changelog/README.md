@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.112
+- 文件版本：7.113
 - 文件狀態：維護中
-- 現行系統版本：1.1.47
+- 現行系統版本：1.1.48
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M6 守門測試與規範改寫（分支 `wasm-migration-m6-guards-docs`）：掃描測試加「至少掃到 N 個」的下限；開發慣例速查、架構總覽、CLAUDE.md 裡只適用 Blazor Server 的規則改寫成 WASM＋API 的現況（1.1.48）| [2026-11-11-WASM遷移M6-守門測試與規範改寫](2026-11-11-WASM遷移M6-守門測試與規範改寫.md) |
 | WASM 遷移 M6 前端錯誤回報 API（分支 `wasm-migration-m6-client-errors`）：瀏覽器錯誤改走 `POST api/v1/client-errors`（登入者、依帳號限流），WASM 頁的 JS 錯誤終於送得到系統例外紀錄；新增端對端 ERR-01（1.1.47）| [2026-11-11-WASM遷移M6-前端錯誤回報API](2026-11-11-WASM遷移M6-前端錯誤回報API.md) |
 | WASM 遷移 M6 拆除 Server 互動模式（分支 `wasm-migration-m6-remove-server`）：拿掉 Blazor Server 互動模式與 circuit、`MainLayout`、`ReconnectModal`、錯誤邊界、三個 Server 資料來源與範例檔；伺服器只靜態算繪登入、登出與錯誤頁；`AuthenticationStateHelper` 只剩純函式（1.1.46）| [2026-11-11-WASM遷移M6-拆除Server互動模式](2026-11-11-WASM遷移M6-拆除Server互動模式.md) |
 | WASM 遷移 M6 首頁與找不到頁（分支 `wasm-migration-m6-home-notfound`）：`/` 與 `/not-found` 搬到 WASM，`WasmRoutes` 反過來改成 `ServerPageRoutes`（只剩登入、登出、錯誤頁，靜態算繪）；錯誤頁改靜態；刪除開場畫面與範本頁；新增端對端 NAV-01（1.1.45）| [2026-11-11-WASM遷移M6-首頁與找不到頁](2026-11-11-WASM遷移M6-首頁與找不到頁.md) |

@@ -16,7 +16,7 @@ namespace MeetingRecord.Tests;
 ///
 /// <para>
 /// 規則：<c>&lt;Selection&gt;</c> 要嘛無條件出現，要嘛包在 <c>@if (屬性名)</c> 裡，而且那個屬性只由
-/// <c>AuthenticationStateHelper.CheckAccessAction(...)</c>（WASM 頁是 <c>PermissionView.Can(...)</c>，1.1.7）組成（權限在頁面存活期間不會變）。
+/// <c>PermissionView.Can(...)</c> 組成（權限在頁面存活期間不會變；1.1.46 前 Server 頁用 <c>AuthenticationStateHelper.CheckAccessAction(...)</c>，已隨 Server 頁移除）。
 /// 不能勾的列用 <c>Disabled</c> 擋，不要用拿掉整欄的方式。
 /// </para>
 /// </summary>
@@ -26,11 +26,13 @@ public sealed partial class TableSelectionColumnTests
     public void SelectionColumn_ShouldNotBeToggledByData()
     {
         var offenders = new List<string>();
+        var selectionCount = 0;
         foreach (var razorPath in ComponentSourceRoots.EnumerateFiles("*.razor"))
         {
             var markup = RazorCommentPattern().Replace(File.ReadAllText(razorPath), string.Empty);
             foreach (Match selection in SelectionTagPattern().Matches(markup))
             {
+                selectionCount++;
                 var before = markup[..selection.Index];
                 var lastIf = IfConditionPattern().Matches(before).LastOrDefault();
 
@@ -49,10 +51,12 @@ public sealed partial class TableSelectionColumnTests
             }
         }
 
+        // 1.1.48：掃描範圍錯了時，零個勾選欄也會「通過」。1.1.48 時有 10 個。
+        Assert.True(selectionCount >= 8, $"只掃到 {selectionCount} 個勾選欄，掃描範圍可能錯了。");
         Assert.True(
             offenders.Count == 0,
-            "以下表格的勾選欄會跟著資料出現／消失，AntDesign 1.6 會在清掉 Selection 時丟 NullReferenceException 並拖垮整個伺服器行程。"
-            + "請改成只看權限（CheckAccessAction；WASM 頁 PermissionView.Can）的條件，不能勾的列用 Disabled：\n" + string.Join("\n", offenders));
+            "以下表格的勾選欄會跟著資料出現／消失，AntDesign 1.6 會在清掉 Selection 時丟 NullReferenceException（Blazor Server 時期會拖垮整個伺服器行程）。"
+            + "請改成只看權限（PermissionView.Can）的條件，不能勾的列用 Disabled：\n" + string.Join("\n", offenders));
     }
 
     [Fact]
@@ -61,10 +65,11 @@ public sealed partial class TableSelectionColumnTests
         // 規則本身的回歸測試：1.0.53 的三種寫法要被擋下，權限屬性要放行。
         const string code = """
             private bool ShowSelection => meetingAdapterModels.Any(CanDelete);
-            private bool CanDelete => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
-            private bool CanBatch => AuthenticationStateHelper.CheckAccessAction(A, B)
-                || AuthenticationStateHelper.CheckAccessAction(A, C);
+            private bool CanDelete => PermissionView.Can(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
+            private bool CanBatch => PermissionView.Can(A, B)
+                || PermissionView.Can(A, C);
             private bool CanDeleteWasm => PermissionView.Can(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
+            private bool CanDeleteOld => AuthenticationStateHelper.CheckAccessAction(MagicObjectHelper.角色_分類清單, PermissionActions.Delete);
             private bool ShowWasm => PermissionView.Can(A, B) && rows.Count > 0;
             """;
 
@@ -75,6 +80,7 @@ public sealed partial class TableSelectionColumnTests
         Assert.True(IsPermissionOnly("CanBatch", code));
         Assert.True(IsPermissionOnly("CanDeleteWasm", code));
         Assert.False(IsPermissionOnly("ShowWasm", code));
+        Assert.False(IsPermissionOnly("CanDeleteOld", code));   // 1.1.46 起 Server 頁的寫法已不存在，不再放行
     }
 
     private static bool IsPermissionOnly(string condition, string codeBehind)
@@ -101,7 +107,7 @@ public sealed partial class TableSelectionColumnTests
     [GeneratedRegex(@"@if\s*\((?<condition>(?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)")]
     private static partial Regex IfConditionPattern();
 
-    [GeneratedRegex(@"(?:AuthenticationStateHelper\.CheckAccessAction|PermissionView\.Can)\([^()]*\)")]
+    [GeneratedRegex(@"PermissionView\.Can\([^()]*\)")]
     private static partial Regex PermissionCallPattern();
 
     [GeneratedRegex(@"^[\s()!|&]*$")]

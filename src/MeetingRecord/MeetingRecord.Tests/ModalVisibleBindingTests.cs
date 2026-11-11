@@ -20,6 +20,7 @@ public sealed class ModalVisibleBindingTests
     public void WasmModalsWithOkButton_ShouldNotUseTwoWayVisibleBinding()
     {
         var violations = new List<string>();
+        var okModalCount = 0;
         foreach (var file in Directory.EnumerateFiles(ComponentSourceRoots.WebClient, "*.razor", SearchOption.AllDirectories)
                      .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
         {
@@ -28,6 +29,11 @@ public sealed class ModalVisibleBindingTests
             {
                 // 去掉 Razor 註解再判斷（說明文字裡會提到 @bind-Visible）。
                 var attrs = Regex.Replace(match.Groups["attrs"].Value, @"@\*.*?\*@", string.Empty, RegexOptions.Singleline);
+                if (attrs.Contains("OnOk", StringComparison.Ordinal))
+                {
+                    okModalCount++;
+                }
+
                 if (attrs.Contains("OnOk", StringComparison.Ordinal) && attrs.Contains("@bind-Visible", StringComparison.Ordinal))
                 {
                     var line = source[..match.Index].Count(c => c == '\n') + 1;
@@ -36,6 +42,8 @@ public sealed class ModalVisibleBindingTests
             }
         }
 
+        // 1.1.48：掃描範圍錯了時，零個視窗也會「通過」。1.1.48 時有 11 個有確定鈕的 WASM 視窗。
+        Assert.True(okModalCount >= 8, $"只掃到 {okModalCount} 個有確定鈕的視窗，掃描範圍可能錯了。");
         Assert.True(violations.Count == 0, "以下 WASM 視窗有確定鈕卻用 @bind-Visible（伺服器擋下時視窗會被關掉）：\n" + string.Join("\n", violations));
     }
 

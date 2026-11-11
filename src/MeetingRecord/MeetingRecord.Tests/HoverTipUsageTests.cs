@@ -16,14 +16,17 @@ public sealed partial class HoverTipUsageTests
     [Fact]
     public void Components_ShouldNotUseAntDesignTooltip()
     {
-        var offenders = ComponentSourceRoots.EnumerateFiles("*.razor")
+        var files = ComponentSourceRoots.EnumerateFiles("*.razor").ToList();
+        // 1.1.48：掃描範圍錯了（例如資料夾搬走）時，零個檔案也會「通過」。1.1.48 時有 56 個 razor 檔。
+        Assert.True(files.Count >= 40, $"只掃到 {files.Count} 個 razor 檔，掃描範圍可能錯了。");
+        var offenders = files
             .Where(path => AntTooltipPattern().IsMatch(RazorCommentPattern().Replace(File.ReadAllText(path), string.Empty)))
             .Select(Path.GetFileName)
             .ToList();
 
         Assert.True(
             offenders.Count == 0,
-            $"以下檔案用了 AntDesign 的 Tooltip，請改用 <HoverTip>（Blazor Server 下提示框會卡在畫面上）：{string.Join("、", offenders)}");
+            $"以下檔案用了 AntDesign 的 Tooltip，請改用 <HoverTip>（AntDesign 的提示框會卡在畫面上，0.4.x～1.0.38 Blazor Server 時期多次回報）：{string.Join("、", offenders)}");
     }
 
     [Fact]
@@ -31,8 +34,13 @@ public sealed partial class HoverTipUsageTests
     {
         // 可排序欄位的表頭內建「按一下依遞增排序」提示，用的也是 AntDesign Tooltip，同樣會卡住（1.0.38 使用者回報）。
         // 1.6.0 只有欄位層級的開關，所以每個 Sortable 都要配一個 ShowSorterTooltip="false"。
-        var offenders = ComponentSourceRoots.EnumerateFiles("*.razor")
+        var files = ComponentSourceRoots.EnumerateFiles("*.razor")
             .Select(path => (Name: Path.GetFileName(path), Markup: RazorCommentPattern().Replace(File.ReadAllText(path), string.Empty)))
+            .ToList();
+        // 1.1.48 時有 43 個可排序欄位；掃到太少代表範圍錯了。
+        var sortableCount = files.Sum(file => BareSortablePattern().Matches(file.Markup).Count);
+        Assert.True(sortableCount >= 30, $"只掃到 {sortableCount} 個可排序欄位，掃描範圍可能錯了。");
+        var offenders = files
             .Where(file => BareSortablePattern().Matches(file.Markup).Count
                            != file.Markup.Split("ShowSorterTooltip=\"false\"").Length - 1)
             .Select(file => file.Name)

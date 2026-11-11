@@ -30,9 +30,22 @@ public static class WasmRoutes
         "/system-health", // 1.1.35 系統健康監控
         "/token-usage", // 1.1.37 Token 用量
         "/ai-usage", // 1.1.37 Token 用量（1.0.30 前的舊網址）
+        "/ai-call-logs", // 1.1.39 AI 對話紀錄
     };
 
-    /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>
+    /// <param name="path">
+    /// 以 <c>/</c> 開頭的路徑；查詢字串與錨點會被忽略（1.1.39）——Router 的 <c>NavigationContext.Path</c> 帶著查詢字串，
+    /// 以前 <c>/ai-call-logs?callId=…</c> 被當成 Server 頁，WASM 端強制整頁重載、伺服器又送回 WASM 頁，無限重載。
+    /// </param>
     public static bool IsWasm(string? path)
-        => !string.IsNullOrEmpty(path) && Paths.Contains(path.Length > 1 ? path.TrimEnd('/') : path);
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        var end = path.IndexOfAny(['?', '#']);
+        var pathOnly = end >= 0 ? path[..end] : path;
+        return Paths.Contains(pathOnly.Length > 1 ? pathOnly.TrimEnd('/') : pathOnly);
+    }
 }

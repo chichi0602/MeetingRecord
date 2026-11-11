@@ -61,7 +61,7 @@
 
     private Task OnNavigateAsync(NavigationContext context)
     {
-        // context.Path 是不含查詢字串的相對路徑；整頁載入時用 NavigationManager.Uri（已是目標網址）保留查詢字串。
+        // context.Path 會帶查詢字串（IsWasm 會忽略，1.1.39）；整頁載入時用 NavigationManager.Uri（已是目標網址）保留查詢字串。
         if (!WasmRoutes.IsWasm("/" + context.Path))
         {
             NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true, replace: true);

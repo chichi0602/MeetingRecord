@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.43
+- 文件版本：1.44
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.38
+- 現行系統版本：1.1.39
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -514,6 +514,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | Token 用量（一）API | 1.1.36 | ✅ 完成；新 `AiUsageController`（`api/v1/ai-usage`，`[AdminOnly]`）10 支：總覽、篩選選項、統計、明細分頁、單筆、CSV、PDF（伺服器產生）、刪除、清除此日之前、全部清除，稽核改由伺服器寫；`AiUsageModels`、額度型別搬到 `Dtos/AiUsage`，篩選選項的 tuple 改成 `AiUsageUserOption`，CSV 欄位搬到 `AiUsageCsv`；頁面下一版搬 |
 | Token 用量（二）頁面 `/token-usage` | 1.1.37 | ✅ 完成；頁面與分組表搬到 Client，格式化搬到 `Share/Helpers/AiUsageFormatter`、上限值到 `AiUsageConstants`；途中抓到 `ClientJsonContext` 別名跟型別撞名（整頁炸掉），SYSLIB1031 升級成錯誤並加 `ClientJsonContextTests`；新增 AIM-01，MON-01／02 照過 |
 | AI 對話紀錄（一）API | 1.1.38 | ✅ 完成；新 `AiCallLogController`（`api/v1/ai-call-logs`，`[AdminOnly]`）11 支：設定、篩選選項、清單、以呼叫識別碼找、明細（查看寫稽核）、JSON、PDF、CSV、刪除、清除此日之前、全部清除；AI 對話紀錄型別從 Models 搬到 `Dtos/AiCallLogs`，明細區塊組法抽成 `AiCallLogBlocks`、CSV 欄位搬到 `AiCallLogCsv`；頁面下一版搬 |
+| AI 對話紀錄（二）頁面 `/ai-call-logs` | 1.1.39 | ✅ 完成；頁面搬到 Client、全部動作走 API；途中修正**帶查詢字串的 WASM 頁無限重載**（`NavigationContext.Path` 帶查詢字串，`WasmRoutes.IsWasm` 改成忽略 `?`／`#`），加 `WasmRoutesTests`；新增 AIM-02；MON-01 的 `/ai-call-logs` 改檢查「清除此日之前」（舊文字側邊選單也有） |
 
 ## 十一、下一步
 

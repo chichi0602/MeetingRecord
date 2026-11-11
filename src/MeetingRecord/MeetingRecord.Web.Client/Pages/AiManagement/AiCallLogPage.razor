@@ -1,7 +1,10 @@
-@using MeetingRecord.Business.Helpers
-@using MeetingRecord.Models.Systems
+@page "/ai-call-logs"
 @using MeetingRecord.Dtos.AiCallLogs
 @using MeetingRecord.Share.Enums
+@using MeetingRecord.Share.Helpers
+
+@* AI 對話紀錄（1.1.39 搬到 WASM）：由 Blazor Server 的 AiCallLogView 改寫，畫面不變；資料改走 api/v1/ai-call-logs。 *@
+<PageTitle>AI 對話紀錄</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
 @if (!isAccessChecked)

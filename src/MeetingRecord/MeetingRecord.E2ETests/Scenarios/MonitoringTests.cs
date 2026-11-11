@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MeetingRecord.E2ETests.Infrastructure;
 
 namespace MeetingRecord.E2ETests.Scenarios;
@@ -15,7 +15,7 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
         { "/database-usage", "檔案儲存用量" },
         { "/system-exceptions", "全部清除" },
         { "/token-usage", "篩選分析" },
-        { "/ai-call-logs", "AI 對話紀錄" },
+        { "/ai-call-logs", "清除此日之前" }, // 1.1.39：原本的「AI 對話紀錄」側邊選單也有，頁面壞了也照過
         { "/audit-logs", "發生時間" },
     };
 
@@ -95,6 +95,59 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
         while (!await db.AuditLog.AnyAsync(x => x.Action == "AiUsage.Export" && x.Detail!.EndsWith("via=Api")))
         {
             Assert.True(DateTime.UtcNow < deadline, "匯出 CSV 要由伺服器寫稽核");
+            await Task.Delay(300);
+        }
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "AIM-02")]
+    [Trait("Title", "AI 對話紀錄（WASM 頁）：從呼叫識別碼直接開明細、查看與刪除的稽核由伺服器寫")]
+    [Trait("Page", "AI 對話紀錄")]
+    [Trait("Persona", "管理者")]
+    public async Task AiCallLog_DeepLinkAndDelete_ShouldWork()
+    {
+        // 1.1.39 AI 對話紀錄頁搬到 WASM：明細、刪除改走 api/v1/ai-call-logs，查看也要由伺服器寫稽核（內容含逐字稿）。
+        var model = $"e2e-call-{Guid.NewGuid():N}"[..20];
+        var callId = Guid.NewGuid();
+        int id;
+        await using (var seed = App.CreateDbContext())
+        {
+            var row = new MeetingRecord.AccessDatas.Models.AiCallLog
+            {
+                CallId = callId,
+                OccurredAt = DateTime.Now,
+                Feature = MeetingRecord.Share.Enums.AiUsageFeature.AiChat,
+                Outcome = MeetingRecord.Share.Enums.AiUsageOutcome.Succeeded,
+                Provider = "Fake",
+                Model = model,
+                RelatedInfo = model,
+            };
+            seed.AiCallLog.Add(row);
+            await seed.SaveChangesAsync();
+            id = row.Id;
+        }
+
+        var page = await LoginAsAsync(Seed.Admin);
+        await page.GotoAsync($"/ai-call-logs?callId={callId:D}");
+
+        // 沒有內容檔：明細照樣打得開，只顯示摘要與提示。
+        var detail = page.Locator(".ant-modal-wrap:visible").Filter(new() { HasText = callId.ToString() });
+        await Expect(detail).ToBeVisibleAsync();
+        await Expect(detail.GetByText("內容檔不存在")).ToBeVisibleAsync();
+        await detail.Locator(".ant-modal-close").ClickAsync();
+        await Expect(detail).ToBeHiddenAsync();
+
+        await RowAction(Row(page, model), "刪除").ClickAsync();
+        await ConfirmAsync(page, "刪除");
+        await Expect(Row(page, model)).ToHaveCountAsync(0);
+
+        await using var db = App.CreateDbContext();
+        var targetId = id.ToString();
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!(await db.AuditLog.AnyAsync(x => x.Action == "AiCallLog.View" && x.TargetId == targetId && x.Detail!.EndsWith("via=Api"))
+                 && await db.AuditLog.AnyAsync(x => x.Action == "AiCallLog.Delete" && x.TargetId == targetId && x.Detail!.EndsWith("via=Api"))))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "查看與刪除都要由伺服器寫稽核");
             await Task.Delay(300);
         }
     }

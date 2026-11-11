@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Accounts;
+using MeetingRecord.Dtos.AiCallLogs;
 using MeetingRecord.Dtos.AiChats;
 using MeetingRecord.Dtos.AiUsage;
 using MeetingRecord.Dtos.Commons;
@@ -93,6 +94,12 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(AiUsageFilter))]
 [JsonSerializable(typeof(AiUsageQuery))]
 [JsonSerializable(typeof(AiUsagePurgeRequestDto))]
+[JsonSerializable(typeof(ApiResult<AiCallLogMetaDto>), TypeInfoPropertyName = "AiCallLogMetaResult")]
+[JsonSerializable(typeof(ApiResult<AiCallLogFilterOptions>), TypeInfoPropertyName = "AiCallLogFilterOptionsResult")]
+[JsonSerializable(typeof(ApiResult<PagedResult<AiCallLogAdapterModel>>), TypeInfoPropertyName = "AiCallLogPageResult")]
+[JsonSerializable(typeof(ApiResult<AiCallLogDetail>), TypeInfoPropertyName = "AiCallLogDetailResult")]
+[JsonSerializable(typeof(AiCallLogQuery))]
+[JsonSerializable(typeof(AiCallLogPurgeRequestDto))]
 [JsonSerializable(typeof(TodoCreateUpdateDto))]
 [JsonSerializable(typeof(TodoCompletedRequestDto))]
 [JsonSerializable(typeof(ApiResult<PagedResult<TodoDto>>), TypeInfoPropertyName = "TodoPageResult")]

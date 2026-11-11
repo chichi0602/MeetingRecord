@@ -1,80 +1,42 @@
-using System.Text;
 using AntDesign;
 using AntDesign.TableModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.Export;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Models.AdapterModel;
-using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.AiCallLogs;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
 using MeetingRecord.Web.Components.Commons;
-using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
-using MeetingRecord.Dtos.AiCallLogs;
 
-namespace MeetingRecord.Web.Components.Views.AiManagement;
+namespace MeetingRecord.Web.Client.Pages.AiManagement;
 
 /// <summary>
-/// AI 對話紀錄（1.0.30，移植自 NET10-Blazor-Starter 的 /ai-call-logs，畫面依本專案規範）。**只限管理者**。
+/// AI 對話紀錄（1.0.30，移植自 NET10-Blazor-Starter 的 /ai-call-logs，畫面依本專案規範；1.1.39 從 Blazor Server 的 AiCallLogView
+/// 搬到 WASM，畫面不變）。**只限管理者**。
 ///
 /// <para>資料由 <c>AiCallGateway</c> 在每次付費 AI 呼叫時寫入（1.0.29 起）。本頁負責查詢、明細（完整送出內容與回應）、
-/// 匯出 CSV（不含內容）、下載 JSON、匯出 PDF 與刪除／清除。⚠️ 內容含會議逐字稿與 AI 問答全文：查看明細也寫稽核。</para>
+/// 匯出 CSV（不含內容）、下載 JSON、匯出 PDF 與刪除／清除，全部走 <c>api/v1/ai-call-logs</c>（1.1.38）。
+/// ⚠️ 內容含會議逐字稿與 AI 問答全文：查看明細也寫稽核——由伺服器寫，這裡不寫。</para>
 /// </summary>
-public partial class AiCallLogView : ComponentBase
+public partial class AiCallLogPage : ComponentBase
 {
-    private const string PdfContentType = "application/pdf";
-    private const string JsonContentType = "application/json";
-
     private const int MaxDisplayCharacters = AiCallLogBlocks.MaxDisplayCharacters;
 
-    [Parameter]
+    /// <summary>從 Token 用量的明細跳過來時帶的呼叫識別碼（<c>/ai-call-logs?callId=…</c>）。</summary>
+    [SupplyParameterFromQuery(Name = "callId")]
     public string? CallId { get; set; }
 
-    [Inject]
-    private AiCallLogService AiCallLogService { get; set; } = default!;
-
-    [Inject]
-    private IOptionsMonitor<AiCallLogSettings> CallLogOptions { get; set; } = default!;
-
-    [Inject]
-    private IPdfRenderer PdfRenderer { get; set; } = default!;
-
-    [Inject]
-    private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
-
-    [Inject]
-    private ClipboardInterop ClipboardInterop { get; set; } = default!;
-
-    [Inject]
-    private IAuditLogService AuditLogService { get; set; } = default!;
-
-    [Inject]
-    private CurrentUserService CurrentUserService { get; set; } = default!;
-
-    [Inject]
-    private ModalService ModalService { get; set; } = default!;
-
-    [Inject]
-    private MessageService MessageService { get; set; } = default!;
-
-    [Inject]
-    private NotificationService NotificationService { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
-
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = default!;
-
-    [Inject]
-    private ILogger<AiCallLogView> Logger { get; set; } = default!;
+    [Inject] private AiCallLogApi AiCallLogApi { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
+    [Inject] private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
+    [Inject] private ClipboardInterop ClipboardInterop { get; set; } = default!;
+    [Inject] private ModalService ModalService { get; set; } = default!;
+    [Inject] private MessageService MessageService { get; set; } = default!;
+    [Inject] private NotificationService NotificationService { get; set; } = default!;
+    [Inject] private ILogger<AiCallLogPage> Logger { get; set; } = default!;
 
     private string RoleMessage { get; set; } = string.Empty;
 
@@ -92,6 +54,7 @@ public partial class AiCallLogView : ComponentBase
     private string keyword = string.Empty;
     private DateTime? purgeBefore;
     private AiCallLogFilterOptions filterOptions = new([], []);
+    private AiCallLogMetaDto? meta;
     private string sortField = string.Empty;
     private bool? sortDescending;
 
@@ -108,29 +71,30 @@ public partial class AiCallLogView : ComponentBase
     private AiCallLogViewMode viewMode = AiCallLogViewMode.Conversation;
     private bool renderMarkdown = true;
 
-    private string RetentionText => CallLogOptions.CurrentValue.Enabled
-        ? $"紀錄保留 {CallLogOptions.CurrentValue.RetentionDays} 天，每天自動清除。"
-        : $"目前已停用記錄（AiCallLogSettings:Enabled = false），既有紀錄仍保留 {CallLogOptions.CurrentValue.RetentionDays} 天。";
+    private string RetentionText => meta is null
+        ? string.Empty
+        : meta.Enabled
+            ? $"紀錄保留 {meta.RetentionDays} 天，每天自動清除。"
+            : $"目前已停用記錄（AiCallLogSettings:Enabled = false），既有紀錄仍保留 {meta.RetentionDays} 天。";
+
+    private int MaxExportRows => meta?.MaxExportRows ?? 10_000;
 
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            return;
-        }
-
+        // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過，走到這裡一定是有效的登入者。
+        await PermissionView.LoadAsync();
         isAccessChecked = true;
 
-        // 只限管理者：權限鍵刻意不在角色權限目錄裡。判定前不讀任何資料。
-        if (!AuthenticationStateHelper.CheckIsAdmin())
+        // 只限管理者：權限鍵刻意不在角色權限目錄裡。判定前不讀任何資料。API 也是 [AdminOnly]。
+        if (!PermissionView.IsAdmin)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/ai-call-logs");
+            await PageAccessApi.RecordPageDeniedAsync("/ai-call-logs");
             Logger.LogWarning("AI call log view denied because the current user is not an administrator.");
             return;
         }
 
+        await LoadMetaAsync();
         await LoadFilterOptionsAsync();
         await ReloadAsync();
     }
@@ -145,7 +109,13 @@ public partial class AiCallLogView : ComponentBase
 
         deepLinkHandled = true;
 
-        var id = Guid.TryParse(CallId, out var callId) ? await AiCallLogService.FindIdByCallIdAsync(callId) : null;
+        int? id = null;
+        if (Guid.TryParse(CallId, out var callId))
+        {
+            var result = await AiCallLogApi.FindIdByCallIdAsync(callId);
+            id = result.Success ? result.Data : null;
+        }
+
         if (id is null)
         {
             _ = MessageService.WarningAsync("找不到這次呼叫的對話紀錄：可能已超過保留天數被清除、已手動刪除，或當時停用了記錄。");
@@ -157,15 +127,29 @@ public partial class AiCallLogView : ComponentBase
 
     // ───────── 查詢 ─────────
 
+    private async Task LoadMetaAsync()
+    {
+        var result = await AiCallLogApi.GetMetaAsync();
+        if (result.Success)
+        {
+            meta = result.Data;
+        }
+        else
+        {
+            Logger.LogWarning("Failed to load AI call log settings: {Message}", ApiClient.ErrorText(result));
+        }
+    }
+
     private async Task LoadFilterOptionsAsync()
     {
-        try
+        var result = await AiCallLogApi.GetFilterOptionsAsync();
+        if (result.Success && result.Data is { } options)
         {
-            filterOptions = await AiCallLogService.GetFilterOptionsAsync();
+            filterOptions = options;
         }
-        catch (Exception ex)
+        else
         {
-            Logger.LogError(ex, "Failed to load AI call log filter options.");
+            Logger.LogWarning("Failed to load AI call log filter options: {Message}", ApiClient.ErrorText(result));
         }
     }
 
@@ -181,9 +165,7 @@ public partial class AiCallLogView : ComponentBase
         await ReloadAsync();
     }
 
-    /// <summary>
-    /// 重新載入目前頁。開頭的早退不可省：兩次載入重疊會讓同一個 circuit 的 DbContext 被並行使用。
-    /// </summary>
+    /// <summary>重新載入目前頁。重疊時忽略。</summary>
     private async Task ReloadAsync()
     {
         if (isLoading)
@@ -196,25 +178,26 @@ public partial class AiCallLogView : ComponentBase
 
         try
         {
-            var result = await AiCallLogService.GetAsync(BuildQuery(_pageIndex, _pageSize));
-            rows = result.Result.ToList();
-            _total = result.Count;
+            var result = await AiCallLogApi.SearchAsync(BuildQuery(_pageIndex, _pageSize));
+            if (!result.Success || result.Data is not { } page)
+            {
+                _ = MessageService.ErrorAsync($"載入 AI 對話紀錄失敗：{ApiClient.ErrorText(result)}");
+                rows = [];
+                _total = 0;
+                return;
+            }
+
+            rows = page.Items.ToList();
+            _total = page.TotalCount;
 
             // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照 TodoViewView）。
             if (rows.Count == 0 && _total > 0 && _pageIndex > 1)
             {
                 _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);
-                result = await AiCallLogService.GetAsync(BuildQuery(_pageIndex, _pageSize));
-                rows = result.Result.ToList();
-                _total = result.Count;
+                result = await AiCallLogApi.SearchAsync(BuildQuery(_pageIndex, _pageSize));
+                rows = result.Data?.Items.ToList() ?? [];
+                _total = result.Data?.TotalCount ?? 0;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load AI call logs.");
-            _ = MessageService.ErrorAsync($"載入 AI 對話紀錄失敗：{ex.Message}");
-            rows = [];
-            _total = 0;
         }
         finally
         {
@@ -263,6 +246,7 @@ public partial class AiCallLogView : ComponentBase
 
     private Task OnViewAsync(AiCallLogAdapterModel row) => OpenDetailAsync(row.Id);
 
+    /// <summary>讀明細。伺服器回傳時就寫了查看稽核（內容含逐字稿與問答全文）。</summary>
     private async Task OpenDetailAsync(int id)
     {
         if (isDetailLoading)
@@ -276,25 +260,24 @@ public partial class AiCallLogView : ComponentBase
 
         try
         {
-            detail = await AiCallLogService.GetDetailAsync(id);
-            if (detail is null)
+            var result = await AiCallLogApi.GetDetailAsync(id);
+            if (result.StatusCode == 404 || (result.Success && result.Data is null))
             {
                 detailVisible = false;
                 _ = MessageService.WarningAsync("找不到這筆 AI 對話紀錄，可能已被刪除。");
                 return;
             }
 
+            if (!result.Success)
+            {
+                detailVisible = false;
+                _ = MessageService.ErrorAsync($"讀取明細失敗：{ApiClient.ErrorText(result)}");
+                return;
+            }
+
+            detail = result.Data!;
             viewMode = AiCallLogViewMode.Conversation;
             renderMarkdown = AiCallLogBlocks.Build(detail, AiCallLogViewMode.Conversation).All(x => x.Content.Length <= MaxDisplayCharacters);
-
-            // 內容含逐字稿與問答全文：誰在什麼時候看了哪一筆要留下來。
-            await WriteAuditAsync(AuditActions.AiCallLogView, detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}; feature={detail.Row.Feature}");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load AI call log detail. Id={Id}", id);
-            _ = MessageService.ErrorAsync($"讀取明細失敗：{ex.Message}");
-            detailVisible = false;
         }
         finally
         {
@@ -333,15 +316,8 @@ public partial class AiCallLogView : ComponentBase
         isExporting = true;
         try
         {
-            var fileName = $"MeetingRecord.Web-ai-call-{detail.Row.CallId:N}.json";
-            await FileDownloadInterop.SaveBytesAsync(fileName, Encoding.UTF8.GetBytes(detail.RawJson), JsonContentType);
-            await WriteAuditAsync(AuditActions.AiCallLogDownloadJson, detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "AI call log JSON download failed. Id={Id}", detail.Row.Id);
-            _ = MessageService.ErrorAsync($"下載失敗：{ex.Message}");
+            var download = await AiCallLogApi.DownloadJsonAsync(detail.Row.Id);
+            await SaveDownloadAsync(download, "下載失敗");
         }
         finally
         {
@@ -362,38 +338,8 @@ public partial class AiCallLogView : ComponentBase
 
         try
         {
-            var exportedAt = DateTime.Now;
-            var row = detail.Row;
-            var html = DiagnosticReportExporter.BuildHtml(
-                "AI 對話紀錄",
-                [
-                    ("時間", row.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")),
-                    ("功能", row.FeatureText),
-                    ("結果", row.OutcomeText),
-                    ("使用者", row.UserName ?? "（系統）"),
-                    ("關聯說明", row.RelatedInfo ?? "—"),
-                    ("供應商／模型", $"{row.Provider}／{row.Model}"),
-                    ("用量與費用", UsageText),
-                    ("耗時", row.ElapsedText),
-                    ("呼叫識別碼", row.CallId.ToString()),
-                    ("匯出者", CurrentUserService.CurrentUser.Account),
-                ],
-                detail.Content.Response.Text,
-                "附錄：送出內容",
-                string.Join("\n\n", AiCallLogBlocks.Build(detail, AiCallLogViewMode.Request).Select(x => $"【{x.Label}】\n{x.Content}")),
-                exportedAt);
-
-            var pdf = await PdfRenderer.RenderAsync(html);
-            var fileName = DiagnosticReportExporter.BuildFileName("AI對話紀錄", exportedAt);
-            await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-
-            await WriteAuditAsync(AuditActions.AiCallLogExportPdf, row.Id.ToString(), $"callId={row.CallId:N}; bytes={pdf.Length}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "AI call log PDF export failed. Id={Id}", detail.Row.Id);
-            _ = MessageService.ErrorAsync($"匯出 PDF 失敗：{ex.Message}");
+            var download = await AiCallLogApi.ExportPdfAsync(detail.Row.Id);
+            await SaveDownloadAsync(download, "匯出 PDF 失敗");
         }
         finally
         {
@@ -402,7 +348,7 @@ public partial class AiCallLogView : ComponentBase
         }
     }
 
-    // ───────── 匯出、刪除、清除 ─────────
+    // ───────── 匯出、刪除、清除（伺服器執行、伺服器寫稽核） ─────────
 
     private async Task OnExportAsync()
     {
@@ -414,22 +360,11 @@ public partial class AiCallLogView : ComponentBase
         isLoading = true;
         try
         {
-            var items = await AiCallLogService.GetForExportAsync(BuildQuery(1, AiCallLogService.MaxExportRows));
-            var bytes = CsvExport.ToCsv(AiCallLogCsv.Columns, items);
-            var fileName = $"MeetingRecord.Web-ai-call-logs-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
-            await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
-
-            await WriteAuditAsync(AuditActions.AiCallLogExport, "*", $"format=csv; rows={items.Count}");
-            NotifyDownloaded(fileName);
-            if (items.Count >= AiCallLogService.MaxExportRows)
+            var download = await AiCallLogApi.ExportCsvAsync(BuildQuery(1, MaxExportRows));
+            if (await SaveDownloadAsync(download, "匯出失敗") && _total >= MaxExportRows)
             {
-                _ = MessageService.WarningAsync($"只匯出最新 {AiCallLogService.MaxExportRows:N0} 筆，請縮小查詢條件。");
+                _ = MessageService.WarningAsync($"只匯出最新 {MaxExportRows:N0} 筆，請縮小查詢條件。");
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "AI call log export failed.");
-            _ = MessageService.ErrorAsync($"匯出失敗：{ex.Message}");
         }
         finally
         {
@@ -440,7 +375,7 @@ public partial class AiCallLogView : ComponentBase
 
     private async Task OnDeleteAsync(AiCallLogAdapterModel row)
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -460,17 +395,22 @@ public partial class AiCallLogView : ComponentBase
             return;
         }
 
-        var result = await AiCallLogService.DeleteAsync(row.Id);
+        var result = await AiCallLogApi.DeleteAsync(row.Id);
         if (result.Success)
         {
-            await WriteAuditAsync(AuditActions.AiCallLogDelete, row.Id.ToString(), $"callId={row.CallId:N}; feature={row.Feature}");
             _ = MessageService.SuccessAsync("刪除成功");
-            await ReloadAsync();
+        }
+        else if (result.StatusCode == 404)
+        {
+            _ = MessageService.WarningAsync("這筆紀錄已不存在。");
         }
         else
         {
-            _ = MessageService.ErrorAsync(result.Message);
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
+
+        await ReloadAsync();
     }
 
     #region 多選刪除（1.0.53）
@@ -483,7 +423,7 @@ public partial class AiCallLogView : ComponentBase
     private async Task OnBatchDeleteAsync()
     {
         var items = selectedRows.ToList();
-        if (items.Count == 0 || isBatchDeleting || isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (items.Count == 0 || isBatchDeleting || isLoading)
         {
             return;
         }
@@ -505,17 +445,11 @@ public partial class AiCallLogView : ComponentBase
         isBatchDeleting = true;
         try
         {
-            // 比照單筆：每刪成一筆就記一筆稽核。
+            // 逐筆呼叫刪除（伺服器每刪成一筆就記一筆稽核，比照單筆）。
             var result = await BatchRunner.RunAsync(items, x => $"{x.OccurredAt:yyyy-MM-dd HH:mm:ss} {x.FeatureText}", async x =>
             {
-                var r = await AiCallLogService.DeleteAsync(x.Id);
-                if (!r.Success)
-                {
-                    return r.Message;
-                }
-
-                await WriteAuditAsync(AuditActions.AiCallLogDelete, x.Id.ToString(), $"callId={x.CallId:N}; feature={x.Feature}");
-                return null;
+                var deleted = await AiCallLogApi.DeleteAsync(x.Id);
+                return deleted.Success ? null : deleted.StatusCode == 404 ? "找不到這筆紀錄" : ApiClient.ErrorText(deleted);
             });
             Logger.LogInformation("Batch AI call log delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
             BatchResultNotifier.Notify(NotificationService, result, "刪除");
@@ -532,13 +466,14 @@ public partial class AiCallLogView : ComponentBase
 
     private async Task OnPurgeAsync()
     {
-        if (isLoading || purgeBefore is null || !AuthenticationStateHelper.CheckIsAdmin())
+        if (purgeBefore is null)
         {
-            if (purgeBefore is null)
-            {
-                _ = MessageService.WarningAsync("請先選擇日期。");
-            }
+            _ = MessageService.WarningAsync("請先選擇日期。");
+            return;
+        }
 
+        if (isLoading)
+        {
             return;
         }
 
@@ -558,24 +493,21 @@ public partial class AiCallLogView : ComponentBase
             return;
         }
 
-        try
+        var result = await AiCallLogApi.PurgeAsync(before);
+        if (!result.Success)
         {
-            var removed = await AiCallLogService.PurgeBeforeAsync(before);
-            await WriteAuditAsync(AuditActions.AiCallLogPurge, "*", $"before={before:yyyy-MM-dd}; rows={removed}");
-            _ = MessageService.SuccessAsync($"已清除 {removed:N0} 筆。");
-            _pageIndex = 1;
-            await ReloadAsync();
+            _ = MessageService.ErrorAsync($"清除失敗：{ApiClient.ErrorText(result)}");
+            return;
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to purge AI call logs.");
-            _ = MessageService.ErrorAsync($"清除失敗：{ex.Message}");
-        }
+
+        _ = MessageService.SuccessAsync($"已清除 {result.Data:N0} 筆。");
+        _pageIndex = 1;
+        await ReloadAsync();
     }
 
     private async Task OnClearAllAsync()
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -595,18 +527,30 @@ public partial class AiCallLogView : ComponentBase
             return;
         }
 
-        var result = await AiCallLogService.ClearAllAsync();
-        if (result.Success)
+        var result = await AiCallLogApi.ClearAllAsync();
+        if (!result.Success)
         {
-            await WriteAuditAsync(AuditActions.AiCallLogClearAll, "*", result.Message);
-            _ = MessageService.SuccessAsync("已清空全部 AI 對話紀錄");
-            _pageIndex = 1;
-            await OnRefreshAsync();
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
-        else
+
+        _ = MessageService.SuccessAsync("已清空全部 AI 對話紀錄");
+        _pageIndex = 1;
+        await OnRefreshAsync();
+    }
+
+    /// <summary>把伺服器產生的檔案存到瀏覽器；失敗就顯示「{失敗前綴}：原因」。回傳是否成功。</summary>
+    private async Task<bool> SaveDownloadAsync(ApiDownload download, string failurePrefix)
+    {
+        if (!download.Success || download.Content is null)
         {
-            _ = MessageService.ErrorAsync(result.Message);
+            _ = MessageService.ErrorAsync($"{failurePrefix}：{download.Error}");
+            return false;
         }
+
+        await FileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+        NotifyDownloaded(download.FileName!);
+        return true;
     }
 
     private void NotifyDownloaded(string fileName)
@@ -617,18 +561,4 @@ public partial class AiCallLogView : ComponentBase
             NotificationType = NotificationType.Warning,
             Placement = NotificationPlacement.BottomRight,
         });
-
-    /// <summary>稽核只記編號與識別碼，<b>不記內容</b>（內容是逐字稿等敏感全文）。</summary>
-    private Task WriteAuditAsync(string action, string targetId, string detail)
-    {
-        var currentUser = CurrentUserService.CurrentUser;
-        return AuditLogService.WriteAsync(
-            action,
-            success: true,
-            actorUserId: currentUser.Id,
-            actorAccount: currentUser.Account,
-            targetType: "AiCallLog",
-            targetId: targetId,
-            detail: detail);
-    }
 }

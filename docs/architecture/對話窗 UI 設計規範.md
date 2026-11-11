@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.19
+- 文件版本：1.20
 - 文件狀態：已實作
-- 現行系統版本：1.1.37
+- 現行系統版本：1.1.39
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/11
 
@@ -102,7 +102,7 @@
 | 用量明細（唯讀，1.0.31） | `Web.Client/Pages/AiManagement/TokenUsagePage.razor`（1.1.37 前是 `Views/AiManagement/TokenUsageView.razor`） | `form-modal-standard` |
 | 角色維護 | `Web.Client/Pages/Admins/RoleViewPage.razor`（1.1.11 起 WASM） | `form-modal-large` |
 | 專案維護 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-large` |
-| AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
+| AI 對話紀錄明細（唯讀，1.0.30） | `Web.Client/Pages/AiManagement/AiCallLogPage.razor`（1.1.39 前是 `Views/AiManagement/AiCallLogView.razor`） | `form-modal-large` |
 | 稽核明細（唯讀，1.0.32） | `Views/Admins/AuditLogView.razor` | `form-modal-large` |
 | 會議紀錄維護（含影音上傳） | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `meeting-view-modal` |
 | 會議紀錄與逐字稿（檢視＋編修） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
@@ -246,7 +246,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 - `OkText` 寫**動作本身**（「刪除」「取代並開始轉錄」「覆蓋並重新產生」），不寫「確定」。
 - 一律 `MaskClosable = false`。
 - **`Danger` 跟著「覆蓋或刪除」走，不跟著「花錢」走。**會刪掉或覆蓋既有資料時才套紅色確認鈕。非破壞性的方向不套，例如啟用膠囊；停用則要套。
-- 例：「AI 對話紀錄」（1.0.30，`AiCallLogView`）的三個刪除動作都套 `Danger`，內容都註明「無法復原。Token 用量不受影響。」：
+- 例：「AI 對話紀錄」（1.0.30，1.1.39 起 `AiCallLogPage`）的三個刪除動作都套 `Danger`，內容都註明「無法復原。Token 用量不受影響。」：
 
   | 動作 | 標題 | `OkText` |
   |---|---|---|

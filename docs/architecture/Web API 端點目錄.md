@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.34
+- 文件版本：1.35
 - 文件狀態：已實作
-- 現行系統版本：1.1.36
+- 現行系統版本：1.1.38
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/11
 
@@ -70,6 +70,8 @@
 **監控與診斷**（WASM 遷移 M5，`MonitoringController`，`api/v1/monitoring`，**整個 Controller `[AdminOnly]`**，非管理者 403 並留稽核）：1.1.32 `GET database-usage`（`DatabaseUsageReport`：SQLite 檔案、頁面配置、各資料表；讀取失敗時報表帶 `errorMessage`）、`GET storage-usage`（`StorageUsageReport`：各外部目錄大小與檔案數、各磁碟可用空間；影音目錄可能很大，所以和上一支分開）；1.1.33 `GET log-level`（`LogLevelStateDto`：是否可調整、生效等級、系統預設、是否覆寫）、`PUT log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400；NLog 設定讀不到 500）、`POST log-level/restore`，套用與還原的稽核 `LogLevel.Apply/Restore` 由伺服器寫（`via=Api`）；1.1.35 `GET health`（`SystemHealthReport`，失敗 500）、`GET logs/recent-warnings`（最近 24 小時 WARN 以上最新 200 筆、時間正序）、`POST ai-connection-test`（實際呼叫文字生成與語音轉錄，**會產生費用**；回兩個 `AiConnectionProbeResult`，稽核 `AiConnection.Test` 由伺服器寫）。
 
 **Token 用量**（WASM 遷移 M5，1.1.36，`AiUsageController`，`api/v1/ai-usage`，**整個 Controller `[AdminOnly]`**）：`GET overview`（本月概況、全系統上限、每人上限前五名、`perUserLimit`、`retentionDays`、`maxExportRows`）、`GET filter-options`、`POST report`（內容 `AiUsageFilter`：`from`、`toExclusive`、`feature`、`userId`、`model`、`outcome`）、`POST rows`（`AiUsageQuery`：`filter`、`currentPage`、`pageSize`、`sortAscending`）、`GET {id}`（明細＋同次呼叫的 AI 對話紀錄編號，不存在 404）、`POST export/csv`（伺服器產生，最多 10,000 筆）、`POST export/pdf`（伺服器產生，匯出者是 API 呼叫者）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，刪除該日之前、不含當天，回筆數）、`POST clear-all`（回筆數）。匯出、刪除、清除的稽核 `AiUsage.*` 由伺服器寫（`via=Api`）。
+
+**AI 對話紀錄**（WASM 遷移 M5，1.1.38，`AiCallLogController`，`api/v1/ai-call-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（是否記錄、保留天數、CSV 上限）、`GET filter-options`、`POST search`（`AiCallLogQuery`：起訖時間、功能、結果、使用者、模型、關鍵字、分頁與排序，回 `PagedResult<AiCallLogAdapterModel>`）、`GET by-call-id/{callId}`（找不到 404）、`GET {id}`（`AiCallLogDetail`：列、內容、用量、同一趟工作；**查看就寫稽核 `AiCallLog.View`**）、`GET {id}/json`（內容檔原文）、`POST {id}/pdf`、`POST export/csv`（只有中繼資料、不含內容，最多 10,000 筆）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，回筆數）、`POST clear-all`。稽核只記編號與識別碼、不記內容（`via=Api`）。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：API（待辦 1.1.18、會議 1.1.20、專案 1.1.24 起都直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

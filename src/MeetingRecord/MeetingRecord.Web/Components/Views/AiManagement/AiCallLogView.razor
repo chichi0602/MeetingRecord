@@ -1,5 +1,6 @@
 @using MeetingRecord.Business.Helpers
 @using MeetingRecord.Models.Systems
+@using MeetingRecord.Dtos.AiCallLogs
 @using MeetingRecord.Share.Enums
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
@@ -35,7 +36,7 @@ else
 
             <Select TItem="string" TItemValue="string" @bind-Value="userFilter" Style="width: 140px;">
                 <SelectOption TItemValue="string" TItem="string" Value="@("")" Label="使用者：不限" />
-                @foreach (var (userId, userName) in filterOptions.Users)
+                @foreach (var (userId, userName) in filterOptions.Users.Select(x => (x.UserId, x.UserName)))
                 {
                     <SelectOption TItemValue="string" TItem="string" Value="@userId.ToString()" Label="@userName" />
                 }
@@ -215,10 +216,10 @@ else
             else
             {
                 <div class="call-log-view-switch">
-                    <RadioGroup TValue="ViewMode" @bind-Value="viewMode" ButtonStyle="RadioButtonStyle.Outline">
-                        <Radio RadioButton TValue="ViewMode" Value="ViewMode.Conversation">完整對話</Radio>
-                        <Radio RadioButton TValue="ViewMode" Value="ViewMode.Request">送出內容</Radio>
-                        <Radio RadioButton TValue="ViewMode" Value="ViewMode.Response">回應</Radio>
+                    <RadioGroup TValue="AiCallLogViewMode" @bind-Value="viewMode" ButtonStyle="RadioButtonStyle.Outline">
+                        <Radio RadioButton TValue="AiCallLogViewMode" Value="AiCallLogViewMode.Conversation">完整對話</Radio>
+                        <Radio RadioButton TValue="AiCallLogViewMode" Value="AiCallLogViewMode.Request">送出內容</Radio>
+                        <Radio RadioButton TValue="AiCallLogViewMode" Value="AiCallLogViewMode.Response">回應</Radio>
                     </RadioGroup>
                     <Switch @bind-Value="renderMarkdown" CheckedChildren="Markdown" UnCheckedChildren="純文字" />
                 </div>

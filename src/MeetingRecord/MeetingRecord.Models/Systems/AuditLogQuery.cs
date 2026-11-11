@@ -3,7 +3,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Models.Systems;
 
 /// <summary>
-/// 稽核紀錄頁的查詢條件（1.0.32）。比照 <see cref="AiCallLogQuery"/>：自己的專用查詢型別。
+/// 稽核紀錄頁的查詢條件（1.0.32）。比照 <c>AiCallLogQuery</c>：自己的專用查詢型別。
 /// ⚠️ 時間一律是<b>伺服器本地時間</b>；轉成 UTC 比對由 <c>AuditLogQueryService</c> 負責（資料庫存 UTC）。
 /// </summary>
 public class AuditLogQuery

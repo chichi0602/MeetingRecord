@@ -1,10 +1,10 @@
 ﻿# AI 對話紀錄 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.0.53
+- 現行系統版本：1.1.38
 - 首次實作版本：1.0.29（記錄）、1.0.30（頁面）；移植自 NET10-Blazor-Starter 的 /ai-call-logs
-- 最後核對日期：2026/10/20
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -26,6 +26,8 @@ AI 的花費在「Token 用量」看得到，但「當時送了什麼、AI 回�
 | --- | --- | --- | --- |
 | `/ai-call-logs` | 系統管理 → AI 管理（id 62）→ AI 對話紀錄（id 63，`forum`） | **只限管理者**（`CheckIsAdmin()`＋`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄） | 系統管理員 |
 | `/ai-call-logs?callId=…` | 從 Token 用量明細窗的「查看 AI 對話紀錄」跳過來（1.0.31 起），直接開啟同一個呼叫識別碼的那一筆 | 同上 | 系統管理員 |
+
+REST API（1.1.38，只限管理者）：`api/v1/ai-call-logs` 的 `GET meta`、`GET filter-options`、`POST search`、`GET by-call-id/{callId}`、`GET {id}`（查看寫稽核）、`GET {id}/json`、`POST {id}/pdf`、`POST export/csv`、`DELETE {id}`、`POST purge`、`POST clear-all`，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。頁面 1.1.39 搬到 WASM。
 
 ## 三、畫面與欄位
 
@@ -122,7 +124,8 @@ AI 的花費在「Token 用量」看得到，但「當時送了什麼、AI 回�
 
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiCallGateway.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/AiCallLogService.cs`、`Services/Other/AiCallLogFileStore.cs`
-- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/AiCallLog.cs`、`Models/Systems/AiCallLogModels.cs`、`AiCallLogQuery.cs`、`AiCallLogSettings.cs`
+- `src/MeetingRecord/MeetingRecord.AccessDatas/Models/AiCallLog.cs`、`src/MeetingRecord/MeetingRecord.Models/Systems/AiCallLogSettings.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/AiCallLogs/`（`AiCallLogModels.cs`、`AiCallLogQuery.cs`、`AiCallLogAdapterModel.cs`、`AiCallLogBlocks.cs`、`AiCallLogApiDtos.cs`，1.1.38 從 Models 搬來）
+- API：`src/MeetingRecord/MeetingRecord.Web/Controllers/AiCallLogController.cs`（1.1.38）、CSV 欄位 `src/MeetingRecord/MeetingRecord.Web/Export/AiCallLogCsv.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/AiManagement/AiCallLogPage.razor`、`Components/Views/AiManagement/AiCallLogView.razor(.cs/.css)`
 - `src/MeetingRecord/MeetingRecord.Web/BackgroundServices/AiLogRetentionBackgroundService.cs`
 - 交叉連結：[Token 用量 PRD](Token用量-prd.md)、[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[正式部署與安全檢查清單](../operations/正式部署與安全檢查清單.md)

@@ -10,6 +10,7 @@ using MeetingRecord.Business.Factories;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Dtos.AiCallLogs;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -188,8 +189,8 @@ public class AiCallLogService : IAiCallLogRecorder
         return new AiCallLogFilterOptions(
             users
                 .GroupBy(x => x.UserId!.Value)
-                .Select(g => (g.Key, g.OrderByDescending(x => x.OccurredAt).Select(x => x.UserName).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? $"#{g.Key}"))
-                .OrderBy(x => x.Item2, StringComparer.CurrentCulture)
+                .Select(g => new AiCallLogUserOption(g.Key, g.OrderByDescending(x => x.OccurredAt).Select(x => x.UserName).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? $"#{g.Key}"))
+                .OrderBy(x => x.UserName, StringComparer.CurrentCulture)
                 .ToList(),
             models.Where(x => !string.IsNullOrWhiteSpace(x)).ToList());
     }

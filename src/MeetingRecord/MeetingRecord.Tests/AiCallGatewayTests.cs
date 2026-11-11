@@ -9,6 +9,7 @@ using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Dtos.AiCallLogs;
 
 namespace MeetingRecord.Tests;
 

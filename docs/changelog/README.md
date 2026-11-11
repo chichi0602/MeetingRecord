@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.102
+- 文件版本：7.103
 - 文件狀態：維護中
-- 現行系統版本：1.1.37
+- 現行系統版本：1.1.38
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M5 AI 對話紀錄 API（分支 `wasm-migration-m5-ai-call-log-api`）：新增只限管理者的 `api/v1/ai-call-logs` 11 支（清單、明細查看寫稽核、JSON／PDF／CSV 由伺服器產生、刪除與清除）；型別從 Models 搬到 Dtos（1.1.38）| [2026-11-11-WASM遷移M5-AI對話紀錄API](2026-11-11-WASM遷移M5-AI對話紀錄API.md) |
 | WASM 遷移 M5 Token 用量頁（分支 `wasm-migration-m5-token-usage-page`）：`/token-usage` 搬到 WASM，畫面不變；途中修正 WASM 端 JSON 別名撞名（整頁炸掉），SYSLIB1031 升級成錯誤並加守門測試；新增端對端 AIM-01（1.1.37）| [2026-11-11-WASM遷移M5-Token用量頁](2026-11-11-WASM遷移M5-Token用量頁.md) |
 | WASM 遷移 M5 Token 用量 API（分支 `wasm-migration-m5-token-usage-api`）：新增只限管理者的 `api/v1/ai-usage` 10 支（總覽、統計、明細、CSV／PDF 由伺服器產生、刪除與清除），稽核改由伺服器寫；用量與額度型別搬到 Dtos（1.1.36）| [2026-11-11-WASM遷移M5-Token用量API](2026-11-11-WASM遷移M5-Token用量API.md) |
 | WASM 遷移 M5 系統健康監控（分支 `wasm-migration-m5-system-health`）：`/system-health` 搬到 WASM，畫面不變；`api/v1/monitoring/health`、`logs/recent-warnings`、`ai-connection-test`，測試 AI 連線的稽核改由伺服器寫、用量記到呼叫者（1.1.35）| [2026-11-11-WASM遷移M5-系統健康監控](2026-11-11-WASM遷移M5-系統健康監控.md) |

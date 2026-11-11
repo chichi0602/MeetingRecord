@@ -1,10 +1,11 @@
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Models.Systems;
+// 1.1.38（WASM 遷移 M5）：從 Models 搬來，AI 對話紀錄 API 與 WASM 頁共用。
+namespace MeetingRecord.Dtos.AiCallLogs;
 
 /// <summary>
-/// AI 對話紀錄的查詢條件（1.0.30）。比照 <see cref="ExceptionLogQuery"/>：自己的專用查詢型別，不重用 <see cref="DataRequest"/>。
+/// AI 對話紀錄的查詢條件（1.0.30）。比照 <c>ExceptionLogQuery</c>：自己的專用查詢型別，不重用 <c>DataRequest</c>。
 /// </summary>
 public class AiCallLogQuery
 {
@@ -37,9 +38,13 @@ public class AiCallLogQuery
 }
 
 /// <summary>篩選下拉的選項：資料庫裡實際出現過的使用者與模型。</summary>
+/// <remarks>1.1.38 起使用者改用 <see cref="AiCallLogUserOption"/>（以前是 tuple，JSON 序列化不出來）。</remarks>
 public sealed record AiCallLogFilterOptions(
-    IReadOnlyList<(int UserId, string UserName)> Users,
+    IReadOnlyList<AiCallLogUserOption> Users,
     IReadOnlyList<string> Models);
+
+/// <summary>篩選下拉的一位使用者（1.1.38）。</summary>
+public sealed record AiCallLogUserOption(int UserId, string UserName);
 
 /// <summary>同一次呼叫在用量帳本裡的那一列（明細窗顯示用量與費用）。</summary>
 public sealed record AiCallLogUsage(

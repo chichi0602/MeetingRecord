@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using MeetingRecord.Share.Enums;
 
-namespace MeetingRecord.Models.AdapterModel;
+// 1.1.38（WASM 遷移 M5）：從 Models 搬來，AI 對話紀錄 API 與 WASM 頁共用。
+namespace MeetingRecord.Dtos.AiCallLogs;
 
 /// <summary>
 /// AI 對話紀錄的畫面繫結模型（1.0.30）。本頁唯讀，因此不需要 ICloneable。
@@ -48,9 +50,11 @@ public class AiCallLogAdapterModel
     public string? ContentFile { get; set; }
 
     /// <summary>功能的中文名稱。</summary>
+    [JsonIgnore]
     public string FeatureText => AiUsageFeatureText.Describe(Feature);
 
     /// <summary>結果的中文名稱；回應不完整時加註。</summary>
+    [JsonIgnore]
     public string OutcomeText => Outcome switch
     {
         AiUsageOutcome.Succeeded => "成功",
@@ -59,11 +63,13 @@ public class AiCallLogAdapterModel
     };
 
     /// <summary>耗時：一秒內顯示毫秒，否則顯示秒。</summary>
+    [JsonIgnore]
     public string ElapsedText => ElapsedMilliseconds < 1000
         ? $"{ElapsedMilliseconds} ms"
         : $"{ElapsedMilliseconds / 1000d:0.0} 秒";
 
     /// <summary>對象：會議或專案編號。</summary>
+    [JsonIgnore]
     public string TargetText => MeetingId is { } meetingId
         ? $"會議 #{meetingId}"
         : ProjectId is { } projectId

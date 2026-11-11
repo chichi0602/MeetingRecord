@@ -19,6 +19,7 @@ using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeetingRecord.Web.Uploads;
+using MeetingRecord.Dtos.AiCallLogs;
 
 namespace MeetingRecord.Tests;
 

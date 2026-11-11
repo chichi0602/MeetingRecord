@@ -14,6 +14,7 @@ using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
+using MeetingRecord.Dtos.AiCallLogs;
 
 namespace MeetingRecord.Web.Components.Views.AiManagement;
 
@@ -28,39 +29,7 @@ public partial class AiCallLogView : ComponentBase
     private const string PdfContentType = "application/pdf";
     private const string JsonContentType = "application/json";
 
-    /// <summary>單一區塊顯示的字元上限；超過時改成純文字並截斷（完整內容請下載 JSON）。</summary>
-    internal const int MaxDisplayCharacters = 200_000;
-
-    /// <summary>CSV 欄位：只有中繼資料，**不含送出內容與回應**（那是逐字稿等敏感全文）。</summary>
-    public static readonly IReadOnlyList<CsvColumn<AiCallLogAdapterModel>> CsvColumns =
-    [
-        new("時間", x => x.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")),
-        new("功能", x => x.FeatureText),
-        new("結果", x => x.OutcomeText),
-        new("供應商", x => x.Provider),
-        new("模型", x => x.Model),
-        new("使用者", x => x.UserName),
-        new("會議Id", x => x.MeetingId?.ToString()),
-        new("專案Id", x => x.ProjectId?.ToString()),
-        new("關聯說明", x => x.RelatedInfo),
-        new("HTTP", x => x.HttpStatus?.ToString()),
-        new("耗時ms", x => x.ElapsedMilliseconds.ToString()),
-        new("送出字元", x => x.RequestCharacters.ToString()),
-        new("回應字元", x => x.ResponseCharacters.ToString()),
-        new("錯誤", x => x.ErrorMessage),
-        new("呼叫識別碼", x => x.CallId.ToString()),
-    ];
-
-    /// <summary>明細窗的檢視方式。</summary>
-    internal enum ViewMode
-    {
-        Conversation,
-        Request,
-        Response,
-    }
-
-    /// <summary>明細窗裡的一個區塊。</summary>
-    internal sealed record DisplayBlock(string Label, string Content, bool IsAssistant);
+    private const int MaxDisplayCharacters = AiCallLogBlocks.MaxDisplayCharacters;
 
     [Parameter]
     public string? CallId { get; set; }
@@ -136,7 +105,7 @@ public partial class AiCallLogView : ComponentBase
     private bool isDetailLoading;
     private bool isExporting;
     private AiCallLogDetail? detail;
-    private ViewMode viewMode = ViewMode.Conversation;
+    private AiCallLogViewMode viewMode = AiCallLogViewMode.Conversation;
     private bool renderMarkdown = true;
 
     private string RetentionText => CallLogOptions.CurrentValue.Enabled
@@ -315,8 +284,8 @@ public partial class AiCallLogView : ComponentBase
                 return;
             }
 
-            viewMode = ViewMode.Conversation;
-            renderMarkdown = BuildBlocks(detail, ViewMode.Conversation).All(x => x.Content.Length <= MaxDisplayCharacters);
+            viewMode = AiCallLogViewMode.Conversation;
+            renderMarkdown = AiCallLogBlocks.Build(detail, AiCallLogViewMode.Conversation).All(x => x.Content.Length <= MaxDisplayCharacters);
 
             // 內容含逐字稿與問答全文：誰在什麼時候看了哪一筆要留下來。
             await WriteAuditAsync(AuditActions.AiCallLogView, detail.Row.Id.ToString(), $"callId={detail.Row.CallId:N}; feature={detail.Row.Feature}");
@@ -336,101 +305,11 @@ public partial class AiCallLogView : ComponentBase
 
     private void OnDetailCancel() => detailVisible = false;
 
-    /// <summary>
-    /// 依檢視方式組出要顯示的區塊。轉錄沒有訊息，送出內容改顯示檔名、時長與段落。
-    /// 抽成 internal static 純函式以便單元測試。
-    /// </summary>
-    internal static IReadOnlyList<DisplayBlock> BuildBlocks(AiCallLogDetail detail, ViewMode mode)
-    {
-        var content = detail.Content;
-        if (content is null)
-        {
-            return [];
-        }
+    private IReadOnlyList<AiCallLogDisplayBlock> CurrentBlocks => detail is null ? [] : AiCallLogBlocks.Build(detail, viewMode);
 
-        var blocks = new List<DisplayBlock>();
-        if (mode != ViewMode.Response)
-        {
-            if (content.Request.Kind == AiCallLogRequest.TranscriptionKind)
-            {
-                blocks.Add(new DisplayBlock("送出的音訊", DescribeTranscriptionRequest(content.Request), IsAssistant: false));
-            }
-            else
-            {
-                foreach (var message in content.Request.Messages)
-                {
-                    blocks.Add(new DisplayBlock(message.Role == "system" ? "系統指示" : "送出內容", message.Content, IsAssistant: false));
-                }
+    private static string Truncate(string text) => AiCallLogBlocks.Truncate(text);
 
-                if (content.Request.Images.Count > 0)
-                {
-                    blocks.Add(new DisplayBlock(
-                        "附帶圖片",
-                        string.Join("\n", content.Request.Images.Select((x, i) => $"{i + 1}. {x.MediaType}，{FileSizeFormatter.Describe(x.Bytes)}（只記類型與大小，未保存圖片）")),
-                        IsAssistant: false));
-                }
-            }
-        }
-
-        if (mode != ViewMode.Request)
-        {
-            var label = content.Response.IsPartial ? "回應（未完成，只有已收到的部分）" : "回應";
-            blocks.Add(new DisplayBlock(label, string.IsNullOrEmpty(content.Response.Text) ? "（沒有內容）" : content.Response.Text, IsAssistant: true));
-        }
-
-        return blocks;
-    }
-
-    internal static string DescribeTranscriptionRequest(AiCallLogRequest request)
-    {
-        var builder = new StringBuilder();
-        builder.Append($"檔案：{request.FileName}");
-        if (request.SegmentIndex is { } index && request.SegmentCount is { } count)
-        {
-            builder.Append($"（第 {index}/{count} 段）");
-        }
-
-        if (request.AudioSeconds is { } seconds)
-        {
-            builder.Append($"\n時長：約 {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}" + (request.IsAudioDurationEstimated ? "（推估）" : string.Empty));
-        }
-
-        builder.Append("\n（音訊本身不保存，只記錄檔名、時長與轉出的文字。）");
-        return builder.ToString();
-    }
-
-    private IReadOnlyList<DisplayBlock> CurrentBlocks => detail is null ? [] : BuildBlocks(detail, viewMode);
-
-    private static string Truncate(string text)
-        => text.Length <= MaxDisplayCharacters
-            ? text
-            : text[..MaxDisplayCharacters] + $"\n\n……（內容共 {text.Length:N0} 字，只顯示前 {MaxDisplayCharacters:N0} 字；完整內容請下載 JSON）";
-
-    private string UsageText
-    {
-        get
-        {
-            if (detail?.Usage is not { } usage)
-            {
-                return "用量帳本查不到同一次呼叫（帳本可能已被清除）。";
-            }
-
-            var amount = usage.EstimatedCost is { } cost
-                ? usage.ExchangeRate is { } rate
-                    ? $"約 {usage.ConvertedCurrency} {cost * rate:N2}（{usage.Currency} {cost:0.######}）"
-                    : $"{usage.Currency} {cost:0.######}"
-                : "未定價";
-
-            var quantity = usage.AudioSeconds is { } seconds
-                ? $"音訊 {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}" + (usage.IsAudioDurationEstimated ? "（推估）" : string.Empty)
-                : usage.InputTokens is null
-                    ? "供應商沒有回報用量"
-                    : $"輸入 {usage.InputTokens:N0}／輸出 {usage.OutputTokens:N0} tokens"
-                      + (usage.CachedInputTokens is > 0 ? $"（其中快取 {usage.CachedInputTokens:N0}）" : string.Empty);
-
-            return $"{quantity}；{amount}";
-        }
-    }
+    private string UsageText => AiCallLogBlocks.DescribeUsage(detail?.Usage);
 
     private async Task OnCopyBlockAsync(string text)
     {
@@ -501,7 +380,7 @@ public partial class AiCallLogView : ComponentBase
                 ],
                 detail.Content.Response.Text,
                 "附錄：送出內容",
-                string.Join("\n\n", BuildBlocks(detail, ViewMode.Request).Select(x => $"【{x.Label}】\n{x.Content}")),
+                string.Join("\n\n", AiCallLogBlocks.Build(detail, AiCallLogViewMode.Request).Select(x => $"【{x.Label}】\n{x.Content}")),
                 exportedAt);
 
             var pdf = await PdfRenderer.RenderAsync(html);
@@ -536,7 +415,7 @@ public partial class AiCallLogView : ComponentBase
         try
         {
             var items = await AiCallLogService.GetForExportAsync(BuildQuery(1, AiCallLogService.MaxExportRows));
-            var bytes = CsvExport.ToCsv(CsvColumns, items);
+            var bytes = CsvExport.ToCsv(AiCallLogCsv.Columns, items);
             var fileName = $"MeetingRecord.Web-ai-call-logs-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
 

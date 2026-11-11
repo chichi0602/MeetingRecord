@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.42
+- 文件版本：1.43
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.37
+- 現行系統版本：1.1.38
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -513,6 +513,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 系統健康監控 `/system-health` | 1.1.35 | ✅ 完成；`MonitoringController` 加 `health`、`logs/recent-warnings`、`ai-connection-test`（稽核改由伺服器寫）；`SystemHealthModels`、`AiConnectionProbeResult` 搬到 `Dtos/Diagnostics`；`AiConnectionTestService` 改經 `IAiCallerProvider`；MON-01／02 照過 |
 | Token 用量（一）API | 1.1.36 | ✅ 完成；新 `AiUsageController`（`api/v1/ai-usage`，`[AdminOnly]`）10 支：總覽、篩選選項、統計、明細分頁、單筆、CSV、PDF（伺服器產生）、刪除、清除此日之前、全部清除，稽核改由伺服器寫；`AiUsageModels`、額度型別搬到 `Dtos/AiUsage`，篩選選項的 tuple 改成 `AiUsageUserOption`，CSV 欄位搬到 `AiUsageCsv`；頁面下一版搬 |
 | Token 用量（二）頁面 `/token-usage` | 1.1.37 | ✅ 完成；頁面與分組表搬到 Client，格式化搬到 `Share/Helpers/AiUsageFormatter`、上限值到 `AiUsageConstants`；途中抓到 `ClientJsonContext` 別名跟型別撞名（整頁炸掉），SYSLIB1031 升級成錯誤並加 `ClientJsonContextTests`；新增 AIM-01，MON-01／02 照過 |
+| AI 對話紀錄（一）API | 1.1.38 | ✅ 完成；新 `AiCallLogController`（`api/v1/ai-call-logs`，`[AdminOnly]`）11 支：設定、篩選選項、清單、以呼叫識別碼找、明細（查看寫稽核）、JSON、PDF、CSV、刪除、清除此日之前、全部清除；AI 對話紀錄型別從 Models 搬到 `Dtos/AiCallLogs`，明細區塊組法抽成 `AiCallLogBlocks`、CSV 欄位搬到 `AiCallLogCsv`；頁面下一版搬 |
 
 ## 十一、下一步
 

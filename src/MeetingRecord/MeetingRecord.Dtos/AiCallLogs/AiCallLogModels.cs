@@ -1,7 +1,7 @@
-using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Share.Enums;
 
-namespace MeetingRecord.Models.Systems;
+// 1.1.38（WASM 遷移 M5）：從 Models 搬來，AI 對話紀錄 API 與 WASM 頁共用。
+namespace MeetingRecord.Dtos.AiCallLogs;
 
 /// <summary>
 /// AI 對話紀錄的內容檔（1.0.29）。**屬性名稱就是檔案格式**，改名會讓舊檔讀不回來；新增欄位只能往後加。

@@ -7,7 +7,8 @@ using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
-using MeetingRecord.Web.Components.Views.AiManagement;
+using MeetingRecord.Web.Export;
+using MeetingRecord.Dtos.AiCallLogs;
 
 namespace MeetingRecord.Tests;
 
@@ -293,7 +294,7 @@ public sealed class AiCallLogServiceTests : IAsyncDisposable
 
         var options = await service.GetFilterOptionsAsync();
 
-        Assert.Equal([(7, "王小明")], options.Users);
+        Assert.Equal([new AiCallLogUserOption(7, "王小明")], options.Users);
         Assert.Equal(["gpt-4o-mini", "gpt-5.6-sol"], options.Models);
     }
 
@@ -301,7 +302,7 @@ public sealed class AiCallLogServiceTests : IAsyncDisposable
     public void View_CsvColumns_ShouldNotContainTheContent()
     {
         // 匯出只有中繼資料：內容是逐字稿與問答全文，要看請進明細窗（有稽核）。
-        var headers = AiCallLogView.CsvColumns.Select(x => x.Header).ToList();
+        var headers = AiCallLogCsv.Columns.Select(x => x.Header).ToList();
 
         Assert.Contains("呼叫識別碼", headers);
         Assert.DoesNotContain(headers, x => x.Contains("內容") || x.Contains("回應文字") || x.Contains("Prompt"));
@@ -314,12 +315,12 @@ public sealed class AiCallLogServiceTests : IAsyncDisposable
         entry.Request.Images.Add(new AiCallLogImage { MediaType = "image/png", Bytes = 2048 });
         var detail = new AiCallLogDetail(new AiCallLogAdapterModel(), entry, "{}", null, []);
 
-        var conversation = AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Conversation);
+        var conversation = AiCallLogBlocks.Build(detail, AiCallLogViewMode.Conversation);
         Assert.Equal(["系統指示", "送出內容", "附帶圖片", "回應"], conversation.Select(x => x.Label));
         Assert.True(conversation[^1].IsAssistant);
 
-        Assert.DoesNotContain(AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Request), x => x.IsAssistant);
-        Assert.Equal("會議紀錄草稿", Assert.Single(AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Response)).Content);
+        Assert.DoesNotContain(AiCallLogBlocks.Build(detail, AiCallLogViewMode.Request), x => x.IsAssistant);
+        Assert.Equal("會議紀錄草稿", Assert.Single(AiCallLogBlocks.Build(detail, AiCallLogViewMode.Response)).Content);
     }
 
     [Fact]
@@ -336,7 +337,7 @@ public sealed class AiCallLogServiceTests : IAsyncDisposable
         };
         var detail = new AiCallLogDetail(new AiCallLogAdapterModel(), entry, "{}", null, []);
 
-        var request = Assert.Single(AiCallLogView.BuildBlocks(detail, AiCallLogView.ViewMode.Request));
+        var request = Assert.Single(AiCallLogBlocks.Build(detail, AiCallLogViewMode.Request));
 
         Assert.Contains("part-001.mp3（第 2/3 段）", request.Content);
         Assert.Contains("00:15:00", request.Content);

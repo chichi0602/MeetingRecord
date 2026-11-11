@@ -9,6 +9,7 @@ using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Dtos.AiUsage;
+using MeetingRecord.Dtos.AiCallLogs;
 
 namespace MeetingRecord.Business.Services.AiUsage;
 

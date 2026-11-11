@@ -1,5 +1,5 @@
 using System.Text;
-using MeetingRecord.Models.AdapterModel;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Components.Views.Monitoring
 {

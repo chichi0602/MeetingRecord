@@ -31,19 +31,22 @@ public class DiagnosticAiService
     private readonly AiCallGateway gateway;
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<DiagnosticAiService> logger;
+    private readonly IAiCallerProvider? callerProvider;
 
     public DiagnosticAiService(
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         IOptions<LlmSettings> llmSettings,
         AiCallGateway gateway,
         CurrentUserService currentUserService,
-        ILogger<DiagnosticAiService> logger)
+        ILogger<DiagnosticAiService> logger,
+        IAiCallerProvider? callerProvider = null)
     {
         this.textGenerationProviders = textGenerationProviders;
         this.llmSettings = llmSettings;
         this.gateway = gateway;
         this.currentUserService = currentUserService;
         this.logger = logger;
+        this.callerProvider = callerProvider;
     }
 
     /// <summary>是否能呼叫 AI。畫面用它決定 AI 按鈕要不要停用。</summary>
@@ -86,7 +89,8 @@ public class DiagnosticAiService
         var started = DateTime.UtcNow;
 
         // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理。
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        // 1.1.40：經 IAiCallerProvider 取觸發者——WASM 頁經 API 分析時 CurrentUserService 是空的。
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
         var generated = await gateway.GenerateAsync(
             provider,
             new AiCallContext(feature, userId, userName, RelatedInfo: relatedInfo),

@@ -6,6 +6,7 @@ using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using System.Diagnostics;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Extensions;
 

@@ -2,6 +2,7 @@
 using MeetingRecord.Business.Services.Notifications;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Web.Diagnostics;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.BackgroundServices;
 

@@ -1,10 +1,10 @@
 ﻿# 系統例外紀錄 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.0.53
+- 現行系統版本：1.1.40
 - 首次實作版本：0.4.122（移植自 NET10-Blazor-Starter；不含 Email 告警、AI 例外分析只做單次分析）
-- 最後核對日期：2026/10/20
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -19,6 +19,8 @@
 | --- | --- | --- | --- |
 | `/system-exceptions` | 系統管理 → 監控與診斷 → 系統例外紀錄（id 39） | **只限管理者**（不在角色權限目錄，`SidebarMenuService.AdminOnlyMenuIds`） | 系統管理員／維運 |
 | 各頁的錯誤畫面 | — | 所有使用者 | 看到「錯誤追蹤碼」並回報給管理者 |
+
+REST API（1.1.40，只限管理者）：`api/v1/exception-logs` 的 `GET meta`、`POST search`、`GET {id}/stack-trace`、`POST stack-traces`、`POST export/csv`、`DELETE {id}`、`POST purge`、`POST clear-all`、`POST {id}/ai-analysis`（串流）、`POST {id}/ai-analysis/pdf`，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。AI 分析送出的內容由伺服器依例外編號組（不含帳號），不收前端的值。頁面 1.1.41 搬到 WASM。
 
 ## 三、畫面與欄位
 
@@ -47,11 +49,11 @@
 5. **其他來源**：`LoggingErrorBoundary`（`Routes.razor` 兩層：頁面、浮層）；`ProcessExceptionHooks`（未觀察的 Task 例外記為「系統」；程序層級未處理例外寫補登檔）；`BrowserErrorReporter`（登入後 `MainLayout` 註冊，瀏覽器的 `error`／`unhandledrejection` 經 circuit 回報，每 circuit 每分鐘最多 10 筆，忽略外掛腳本）。
 6. **啟動失敗補登**：`Program.cs` 的 catch（排除 `HostAbortedException`，`dotnet ef` 不會留假紀錄）先寫 `ExceptionPath/pending/*.json`；下次成功啟動、Migration 之後匯入並刪檔。
 7. **保留期限**：`ExceptionLogRetentionBackgroundService` 啟動先跑一次、之後每 24 小時，刪除「最後發生」（本地時間）超過 `LogRetentionSettings:ExceptionLogDays` 天的紀錄與堆疊檔；0＝不清。
-8. **AI**：`AiExceptionPromptBuilder` 組使用者訊息（只寫「有／無登入使用者」），系統提示詞 `AiDiagnosticPrompts.ExceptionAnalysis`，經 `DiagnosticAiService` 呼叫並記入 AI 用量（`AiUsageFeature.ExceptionAnalysis = 6`「AI 例外分析」，成功／失敗／取消都記）。1.0.29 起 `DiagnosticAiService` 經 `AiCallGateway`，同時以同一個 CallId 記進 AI 對話紀錄（完整送出內容與回應，關聯說明「例外紀錄 #N（例外類型）」）；送出前檢查 AI 用量上限。
+8. **AI**：`AiExceptionPromptBuilder` 組使用者訊息（只寫「有／無登入使用者」），系統提示詞 `AiDiagnosticPrompts.ExceptionAnalysis`，經 `DiagnosticAiService` 呼叫並記入 AI 用量（1.1.40 起觸發者經 `IAiCallerProvider` 取，經 API 呼叫也記得到人）（`AiUsageFeature.ExceptionAnalysis = 6`「AI 例外分析」，成功／失敗／取消都記）。1.0.29 起 `DiagnosticAiService` 經 `AiCallGateway`，同時以同一個 CallId 記進 AI 對話紀錄（完整送出內容與回應，關聯說明「例外紀錄 #N（例外類型）」）；送出前檢查 AI 用量上限。
 
 ## 五、權限與安全
 
-- 管理者限定：頁面以 `CheckIsAdmin()` 守門（刪除、清除、AI 方法內再檢查），判定前不渲染；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
+- 管理者限定：頁面以 `CheckIsAdmin()` 守門（刪除、清除、AI 方法內再檢查），判定前不渲染；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。API 整個 Controller `[AdminOnly]`（1.1.40）。
 - 管線防遞迴：寫入器、`ExceptionLogService.RecordAsync`、堆疊檔與補登檔存放**不使用 ILogger**（只用 NLog InternalLogger），寫入期間全程抑制收集。
 - 紀錄只存帳號與 UserId（首次遇到的人），不存姓名；AI 分析**不送帳號與 UserId**。CSV 有防公式注入。
 - 稽核：`ExceptionLog.Delete／Purge／ClearAll／Export／AiAnalyze／AiAnalyzeExportPdf／AutoPurge`，只記編號、筆數、字數、模型與耗時，不記例外內容。
@@ -70,6 +72,7 @@
 
 - 移植：`ExceptionSignatureTests`、`ExceptionLogServiceTests`（合併計次、只寫一次堆疊檔、溢位列、不拋例外、刪除／清空／清除連同檔案、篩選與排序）、`ExceptionLogProviderTests`（只收 Error 以上且有例外、樣板、情境、自身記錄器與抑制、佇列滿、同一實例只收一次）、`ExceptionLogWriterTests`（關機清空、逾時、寫入失敗計數）、`ProcessExceptionHooksTests`、`CrashMarkerStoreTests`、`BrowserErrorReporterTests`、`ExceptionLogClipboardTextTests`、`AiExceptionPromptBuilderTests`（不含帳號）、`TraceCodeTests`。
 - 新增：`ExceptionLogRetentionBackgroundServiceTests`（本地時間門檻、0 不清、有刪才寫稽核）；整合測試 `ExceptionLogProvider_ShouldBeRegisteredAlongsideNLog`、`UnhandledApiException_ShouldBeRecordedInExceptionLog_WithTraceCodeAndAccount`（API 例外寫入一筆 WebAPI 紀錄，追蹤碼＝`ApiResult.TraceId`、帳號、頁面＝路由樣板）；`AiUsageFeatureTests`（6）；`DiagnosticReportExporterTests`（例外分析提示詞不含追問）；`MonitoringMenuRegistrationTests`（id 39）。
+- 1.1.40 API：`ExceptionLogApiTests`（授權 401／403、清單與堆疊、CSV、AI 分析串流與不含帳號、中斷記取消、PDF、刪除與清除，稽核 `via=Api`）、`ExceptionLogApiWithoutAiTests`（AI 未設定回 400）。
 - 實跑：`dotnet ef migrations list` 後 `Exception/pending` 沒有補登檔；啟動後 API 回應的 TraceId 與日誌第 2 欄是同一組 8 碼。
 
 ## 八、相關程式與文件
@@ -78,6 +81,7 @@
 - `src/MeetingRecord/MeetingRecord.Web/Components/LoggingErrorBoundary.cs`、`Routes.razor`、`ApplicationCircuitHandler.cs`、`Layout/MainLayout.razor.cs`、`wwwroot/js/client-error-reporter.js`
 - `src/MeetingRecord/MeetingRecord.Web/Extensions/ApplicationBuilderExtensions.cs`（`UseHttpRequestLogging`、`UseExceptionContextUser`）、`Auth/RequestActorResolver.cs`、`BackgroundServices/ExceptionLogRetentionBackgroundService.cs`、`Program.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ExceptionLogService.cs`、`Services/Other/ExceptionStackFileStore.cs`、`Helpers/ExceptionSignature.cs`
+- API（1.1.40）：`src/MeetingRecord/MeetingRecord.Web/Controllers/ExceptionLogController.cs`、`Web/Export/ExceptionLogCsv.cs`、`Web/Diagnostics/ExceptionAiFailure.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/`（`ExceptionLogAdapterModel.cs`、`ExceptionLogQuery.cs`、`ExceptionLogApiDtos.cs`，1.1.40 從 Models 搬來）；來源分類 `src/MeetingRecord/MeetingRecord.Share/Helpers/ExceptionSources.cs`（1.1.40 從 `ExceptionLogEntry.cs` 搬來）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/ExceptionLog.cs`、`Migrations/20261014052712_AddExceptionLog.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/ExceptionLogPage.razor`、`Components/Views/Monitoring/ExceptionLogView.razor(.cs/.css)`、`ExceptionLogClipboardText.cs`、`Web/Export/CsvExport.cs`
 - 交叉連結：[日誌檢視 PRD](日誌檢視-prd.md)、[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[Token 用量 PRD](Token用量-prd.md)、[AI 對話紀錄 PRD](AI對話紀錄-prd.md)（每次 AI 例外分析的送出內容與回應）

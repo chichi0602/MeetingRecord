@@ -4,6 +4,7 @@ using MeetingRecord.AccessDatas;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.BackgroundServices;
 

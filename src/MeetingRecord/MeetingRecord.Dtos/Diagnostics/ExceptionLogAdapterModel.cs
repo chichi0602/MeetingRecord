@@ -1,7 +1,9 @@
-﻿namespace MeetingRecord.Models.AdapterModel;
+﻿using System.Text.Json.Serialization;
+
+namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>
-/// 系統例外紀錄的畫面繫結模型。本頁唯讀，因此不需要 ICloneable
+/// 系統例外紀錄的畫面繫結模型（1.1.40 從 Models 搬到 Dtos，API 回傳）。本頁唯讀，因此不需要 ICloneable
 /// （Clone() 是為了「編輯前隔離，避免雙向繫結污染來源資料」而存在，這裡沒有編輯）。
 /// </summary>
 public class ExceptionLogAdapterModel
@@ -38,6 +40,7 @@ public class ExceptionLogAdapterModel
     public string? LastTraceId { get; set; }
 
     /// <summary>型別全名太長，清單只顯示最後一節（例如 NullReferenceException）。</summary>
+    [JsonIgnore]
     public string ShortExceptionType
     {
         get

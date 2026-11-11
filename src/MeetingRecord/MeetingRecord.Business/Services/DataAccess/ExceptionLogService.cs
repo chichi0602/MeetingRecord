@@ -8,6 +8,8 @@ using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 
@@ -266,6 +268,16 @@ public class ExceptionLogService
         List<ExceptionLog> records = await dataSource.ToListAsync();
         result.Result = Mapper.Map<List<ExceptionLogAdapterModel>>(records);
         return result;
+    }
+
+    /// <summary>讀一列（1.1.40，API 的 AI 分析與刪除稽核用）；不存在回 null。</summary>
+    public async Task<ExceptionLogAdapterModel?> GetByIdAsync(int id)
+    {
+        var item = await context.ExceptionLog
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        return item is null ? null : Mapper.Map<ExceptionLogAdapterModel>(item);
     }
 
     /// <summary>讀取堆疊全文。檔案不存在時回 null，由畫面顯示友善訊息。</summary>

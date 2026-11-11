@@ -15,6 +15,7 @@ using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Components.Views.Monitoring;
 
@@ -30,22 +31,6 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
     /// <summary>複製全部（每筆含完整堆疊）超過這個筆數先確認。</summary>
     private const int CopyAllConfirmThreshold = 100;
-
-    /// <summary>CSV 欄位（含帳號：這份是管理者自己下載的，不會送給 AI）。</summary>
-    public static readonly IReadOnlyList<CsvColumn<ExceptionLogAdapterModel>> CsvColumns =
-    [
-        new("最後發生", x => x.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")),
-        new("次數", x => x.OccurrenceCount.ToString()),
-        new("例外類型", x => x.ExceptionType),
-        new("訊息", x => x.Message),
-        new("來源", x => x.Source),
-        new("頁面", x => x.Page),
-        new("操作", x => x.Operation),
-        new("記錄器", x => x.LoggerName),
-        new("使用者", x => x.Account),
-        new("首次發生", x => x.FirstOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")),
-        new("最後追蹤碼", x => x.LastTraceId),
-    ];
 
     private enum AiState
     {
@@ -400,7 +385,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         try
         {
             var result = await ExceptionLogService.GetAsync(BuildFullQuery());
-            var bytes = CsvExport.ToCsv(CsvColumns, result.Result);
+            var bytes = CsvExport.ToCsv(ExceptionLogCsv.Columns, result.Result);
             var fileName = $"MeetingRecord.Web-exceptions-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
 
@@ -722,9 +707,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             }
 
             await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(), $"chars={prompt.Length}; 失敗：{ex.GetType().Name}", success: false);
-            ShowAiFailure(ex.Message.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase)
-                ? "這筆例外的內容（多半是堆疊）超過模型的內容上限，無法送交 AI 分析。"
-                : $"AI 分析未完成：{ex.Message}");
+            ShowAiFailure(ExceptionAiFailure.Describe(ex));
         }
     }
 

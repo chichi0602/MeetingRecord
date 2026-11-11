@@ -1,11 +1,11 @@
 ﻿using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Models.Systems;
+namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>
-/// 系統例外紀錄的查詢條件。
+/// 系統例外紀錄的查詢條件（1.1.40 從 Models 搬到 Dtos，API 用）。
 ///
-/// 刻意不重用共用的 <see cref="DataRequest"/>：那支是 CRUD 清單頁共用的，
+/// 刻意不重用共用的 <c>DataRequest</c>：那支是 CRUD 清單頁共用的，
 /// 加入時間範圍／來源／帳號只會讓每個頁面都背著用不到的欄位。
 /// 作法比照「日誌檢視」的 LogQueryRequest（也是自己的專用查詢型別）。
 /// </summary>
@@ -17,7 +17,7 @@ public class ExceptionLogQuery
     /// <summary>結束時間，比對 LastOccurredAt。</summary>
     public DateTime? EndTime { get; set; }
 
-    /// <summary>來源，空字串表示不限。見 <see cref="ExceptionSources"/>。</summary>
+    /// <summary>來源，空字串表示不限。見 <see cref="ExceptionSources"/>（Share）。</summary>
     public string Source { get; set; } = string.Empty;
 
     /// <summary>使用者帳號，部分比對。</summary>

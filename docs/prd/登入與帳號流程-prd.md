@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：1.1.13
+- 現行系統版本：1.1.46
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -72,7 +72,7 @@
 - `MeetingRecord.Tests/MyUserServiceLoginTests.cs`：新舊雜湊登入、舊雜湊自動升級、密碼錯誤、5 次失敗鎖定並拒絕正確密碼、成功後歸零、鎖定到期放行、成功／失敗稽核。
 - `MeetingRecord.Tests/MyUserServicePasswordTests.cs`：`ChangeOwnPasswordAsync` 正確／錯誤舊密碼、空白新密碼、確認不一致、`support` 帳號被拒。
 - `MeetingRecord.Tests/SecurePasswordHasherTests.cs`：自述式雜湊、非決定性、新舊格式驗證與要求 rehash。
-- `MeetingRecord.Tests/AuthenticationStateHelperTests.cs`：未驗證／無效 Sid／查無使用者／停用／無角色／壞 RoleJson 導向登出、需改密碼導向、多角色聯集初始化。
+- `MeetingRecord.Tests/PermissionRulesTests.cs`（1.1.46 起取代 `AuthenticationStateHelperTests`）：`UserSessionService` 判斷查無使用者／停用／無角色（各帶登出原因）、需改密碼、正常；預設角色的頁面與動作權限。導向由 WASM 的 `WasmLayout` 依 Session API 結果處理（`CookieApiTests`）。
 - `MeetingRecord.Tests/TotpServiceTests.cs`：TOTP 產碼／驗證（骨架，預設關閉）。
 
 ## 八、相關程式與文件

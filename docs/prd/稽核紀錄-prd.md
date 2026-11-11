@@ -1,8 +1,8 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
-- 現行系統版本：1.1.43
+- 現行系統版本：1.1.46
 - 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
 - 最後核對日期：2026/11/11
 
@@ -170,7 +170,7 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
 
 - `AuditLogQueryServiceTests`：排序與分頁、本地／UTC 轉換（篩選、顯示、清除門檻）、每種篩選、匯出、動作選項、清除與全部清除、顯示文字。
 - `AuditLogServiceTests`：寫入、失敗不拋例外、**不會順便存掉呼叫端未存的變更**、IP 寫入、取 IP 失敗仍寫入。
-- `ClientIpProviderTests`：連線 IP 優先、IPv4-mapped 轉換、沒有連線時為 null。
+- `ClientIpProviderTests`：HTTP 請求的連線 IP、IPv4-mapped 轉換、沒有連線時為 null（1.1.46 拿掉 Blazor 連線 IP）。
 - `AuditLogRetentionBackgroundServiceTests`：過期才刪、刪完才寫 `Audit.AutoPurge`、0 天不清、沒有可刪不寫。
 - `AuditActionsConventionTests`：每個代碼都有中文名稱且符合 `名詞.動作`；原始碼不得以字串常值寫稽核。
 - `AuditLogMenuRegistrationTests`：選單位置、名稱、網址、圖示、只限管理者、非管理者即使有同名權限也看不到。
@@ -187,7 +187,7 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
   - `AuditEventsTests`：管理者重設密碼、首次登入改密碼（成功與目前密碼錯誤）、對話窗改密碼、設定 API 密碼、啟停用、加入／移出團隊。
   - `ExternalLoginServiceTests`：連結既有帳號、自動建立、既有連結不寫。
   - `LogoutAuditTests`：強制登出原因白名單、主動登出、未登入不寫。
-  - `AuthenticationStateHelperTests`：踢出時導向帶原因的登出頁、`RecordPageAccessDeniedAsync`。
+  - `AuthenticationStateHelperTests`：踢出時導向帶原因的登出頁、`RecordPageAccessDeniedAsync`（1.1.46 隨 Blazor Server 頁移除；登出原因改由 `PermissionRulesTests` 驗 `UserSessionService`，頁面拒絕稽核走 `PageAccessApi`）。
   - `PageAccessDeniedAuditTests`：每個拒絕分支都有寫稽核。
 
 ## 八、相關程式與文件

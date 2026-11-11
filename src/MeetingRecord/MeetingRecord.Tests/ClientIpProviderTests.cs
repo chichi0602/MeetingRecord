@@ -8,33 +8,11 @@ namespace MeetingRecord.Tests;
 public sealed class ClientIpProviderTests
 {
     [Fact]
-    public void GetClientIp_WithoutCircuitIp_ShouldUseHttpContextConnection()
+    public void GetClientIp_ShouldUseHttpContextConnection()
     {
         var provider = new ClientIpProvider(Accessor("198.51.100.7"));
 
         Assert.Equal("198.51.100.7", provider.GetClientIp());
-    }
-
-    /// <summary>互動式 Blazor 的事件裡沒有可靠的 HttpContext：連線建立時記下的 IP 優先。</summary>
-    [Fact]
-    public void GetClientIp_WithCircuitIp_ShouldPreferIt()
-    {
-        var provider = new ClientIpProvider(Accessor("198.51.100.7"));
-
-        provider.SetCircuitClientIp(IPAddress.Parse("203.0.113.5"));
-
-        Assert.Equal("203.0.113.5", provider.GetClientIp());
-    }
-
-    [Fact]
-    public void SetCircuitClientIp_WithNull_ShouldKeepThePreviousValue()
-    {
-        var provider = new ClientIpProvider(Accessor(null));
-        provider.SetCircuitClientIp(IPAddress.Parse("203.0.113.5"));
-
-        provider.SetCircuitClientIp(null);
-
-        Assert.Equal("203.0.113.5", provider.GetClientIp());
     }
 
     [Fact]

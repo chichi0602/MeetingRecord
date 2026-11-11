@@ -64,9 +64,6 @@ public sealed class SidebarMenuService
         this.cacheService = cacheService;
     }
 
-    public Task<IReadOnlyList<SidebarMenuItemModel>> LoadAuthorizedMenuItemsAsync(AuthenticationStateHelper authenticationStateHelper)
-        => LoadAuthorizedMenuItemsAsync(authenticationStateHelper.CheckAccessPage, authenticationStateHelper.CheckIsAdmin());
-
     /// <summary>
     /// 依指定的權限判斷載入選單（1.1.0）：Session 選單 API 用 <see cref="AuthenticationStateHelper.CanAccessPage"/> 與權限鍵直接判斷，
     /// 不經 Blazor 連線的 CurrentUserService。規則與網頁側邊欄同一套。

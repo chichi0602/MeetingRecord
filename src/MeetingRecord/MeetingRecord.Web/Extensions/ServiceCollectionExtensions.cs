@@ -120,13 +120,12 @@ public static class ServiceCollectionExtensions
         // AddApplicationServices 在它之後呼叫，順序正確，不要把這行搬到更前面。
         services.AddSingleton<ILoggerProvider, ExceptionLogProvider>();
         #endregion
-        services.AddScoped<AuthenticationStateHelper>();
         services.AddScoped<UserSessionService>();
         services.AddScoped<CurrentUserService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<AuditLogQueryService>();
 
-        // 來源 IP（1.0.32）：⚠️ 介面必須解析到同一個實例，circuit handler 記下的 IP 寫稽核時才讀得到。
+        // 來源 IP（1.0.32）：一個 HTTP 請求一份（1.1.46 起不再有 Blazor 連線記下的 IP）。
         services.AddScoped<ClientIpProvider>();
         services.AddScoped<IClientIpProvider>(sp => sp.GetRequiredService<ClientIpProvider>());
 
@@ -162,16 +161,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MeetingRecord.Business.Services.Notifications.UserNotificationService>();
         // 1.1.2（WASM 遷移 M1）：把「誰有新通知」轉送到 AppHub，WASM 前端靠它即時更新未讀數。
         services.AddHostedService<MeetingRecord.Web.Hubs.HubNotificationBridge>();
-        // 1.1.6：通知鈴（放在 WASM 專案、兩種頁面共用）在 Server 頁的資料來源。
-        services.AddScoped<MeetingRecord.Web.Components.Commons.INotificationSource, MeetingRecord.Web.Notifications.ServerNotificationSource>();
-        // 1.1.15（WASM 遷移 M3）：背景工作進度。規則只有一份（BackgroundJobBoard），Server 頁面板與 JobController 共用；
+        // 1.1.15（WASM 遷移 M3）：背景工作進度。規則只有一份（BackgroundJobBoard），JobController 用；
         // 進度變動節流後推給 AppHub，WASM 頁的面板據此重查。
         services.AddScoped<MeetingRecord.Web.Jobs.BackgroundJobBoard>();
-        services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, MeetingRecord.Web.Jobs.ServerJobProgressSource>();
         services.AddHostedService<MeetingRecord.Web.Hubs.JobProgressHubBridge>();
-        // 1.1.22：AI 問答視窗（放在 WASM 專案、兩種頁面共用）在 Server 頁的資料來源；匯出與讀附件的邏輯與 API 共用一份。
+        // 1.1.22：AI 問答的匯出與讀附件（AiChatController 用）。
         services.AddScoped<MeetingRecord.Web.AiChat.AiChatOperations>();
-        services.AddScoped<MeetingRecord.Web.Components.Commons.IAiChatSource, MeetingRecord.Web.AiChat.ServerAiChatSource>();
         // 1.1.16：WASM 頁的會議影音檔上傳，讀檔存檔在伺服器背景跑（規則仍在 MeetingService）。
         services.AddSingleton<MeetingRecord.Web.Uploads.MeetingMediaUploadJobs>();
         services.AddSingleton<MeetingRecord.Web.Uploads.ProjectAttachmentUploads>();
@@ -191,10 +186,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAiCallLogRecorder>(sp => sp.GetRequiredService<AiCallLogService>());
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.IAiQuotaService, MeetingRecord.Business.Services.AiUsage.AiQuotaService>();
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiCallGateway>();
-        services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
-        services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
-        services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();
-        services.AddScoped<MeetingRecord.Web.Services.TodoAutoFitInterop>();
         // 分塊上傳（1.0.59）：工作階段登記處是全站共用的；網頁元件用的入口一條連線一個。
         services.AddSingleton<MeetingRecord.Web.Uploads.ChunkedUploadStore>();
         // 使用說明的內容（1.1.29）：內嵌資源讀一次就快取，給 api/v1/help 用（1.1.30 起頁面是 WASM）。
@@ -203,7 +194,6 @@ public static class ServiceCollectionExtensions
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();
         services.AddScoped<ProjectAccessService>();
-        services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, MeetingRecord.Web.Components.ApplicationCircuitHandler>();
 
         return services;
     }

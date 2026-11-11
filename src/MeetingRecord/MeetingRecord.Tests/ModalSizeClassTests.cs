@@ -31,13 +31,9 @@ public sealed class ModalSizeClassTests
     ];
 
     /// <summary>
-    /// 沒有掛進任何路由、也沒有被任何元件引用的示範檔（<c>RoleViewViewSample</c>）。
-    /// 它是先前就存在的死程式碼，不在本次範圍內，但留著會讓下面兩條規則永遠是紅的。
+    /// 不受下面兩條規則約束的檔案。以前放沒掛路由的示範檔 <c>RoleViewViewSample</c>，1.1.46 已刪除，目前沒有例外。
     /// </summary>
-    private static readonly HashSet<string> ExcludedFiles =
-    [
-        "RoleViewViewSample.razor",
-    ];
+    private static readonly HashSet<string> ExcludedFiles = [];
 
     [Fact]
     public void EveryModal_ShouldDeclareExactlyOneSizeClass()

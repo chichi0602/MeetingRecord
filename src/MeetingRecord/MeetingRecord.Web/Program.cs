@@ -86,19 +86,12 @@ namespace MeetingRecord.Web
 
                 #region 系統使用服務
                 // Add services to the container.
+                // 1.1.46（WASM 遷移 M6）：應用程式的頁面全部是 WASM，Blazor Server 互動模式（AddInteractiveServerComponents、
+                // circuit、10 MB 的 Hub 訊息上限）一併移除；伺服器只靜態算繪登入、登出與錯誤頁。
                 builder.Services.AddRazorComponents()
-                // 1.1.1（WASM 遷移 M1）：逐頁切換，WasmRoutes 裡的頁面改在瀏覽器執行。
-                .AddInteractiveWebAssemblyComponents()
-                .AddInteractiveServerComponents()
-                .AddHubOptions(hubOptions =>
-                {
-                    // Blazor Server SignalR 預設 MaximumReceiveMessageSize 為 32KB；長文字（如大段
-                    // 描述/摘要）由 AntDesign TextArea 同步回伺服器時會超過上限 → circuit 中斷 →
-                    // 反覆重連（畫面閃爍）。提高至 10MB 以容納長內容。
-                    hubOptions.MaximumReceiveMessageSize = 10 * 1024 * 1024;
-                });
+                .AddInteractiveWebAssemblyComponents();
 
-                // 1.1.2（WASM 遷移 M1）：WASM 前端的推播通道 AppHub（Blazor Server 本身的連線另外由 AddInteractiveServerComponents 處理）。
+                // 1.1.2（WASM 遷移 M1）：WASM 前端的推播通道 AppHub（通知鈴、背景工作進度）。
                 builder.Services.AddSignalR();
                 builder.Services.AddControllers(options =>
                 {
@@ -647,7 +640,6 @@ namespace MeetingRecord.Web
                     Predicate = check => check.Tags.Contains("ready")
                 });
                 app.MapRazorComponents<App>()
-                    .AddInteractiveServerRenderMode()
                     .AddInteractiveWebAssemblyRenderMode()
                     .AddAdditionalAssemblies(typeof(MeetingRecord.Web.Client._Imports).Assembly);
                 #endregion

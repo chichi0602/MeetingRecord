@@ -12,22 +12,20 @@ namespace MeetingRecord.Tests;
 /// </para>
 ///
 /// <para>
-/// 1.1.5（WASM 遷移）起外觀抽成共用的 <c>AppShell</c>：Server 頁的 <c>MainLayout</c> 與 WASM 頁的 <c>WasmLayout</c> 都用它。
-/// 全站樣式與錯誤提示列掛在 AppShell；通知鈴與進度面板是 Server 頁才有的元件，由 MainLayout 經插槽傳進去。
+/// 1.1.5（WASM 遷移）起外觀抽成共用的 <c>AppShell</c>，全站樣式與錯誤提示列掛在 AppShell；通知鈴與進度面板由版面經插槽傳進去。
+/// 1.1.46 起 Server 頁的 <c>MainLayout</c> 已移除，只剩 WASM 頁的 <c>WasmLayout</c>。
 /// </para>
 /// </summary>
 public sealed partial class LayoutMountTests
 {
     [Theory]
-    [InlineData("MeetingRecord.Web/Components/Layout/MainLayout.razor", "<AppShell", "共用外框")]
-    [InlineData("MeetingRecord.Web/Components/Layout/MainLayout.razor", "<BackgroundJobProgressPanel", "右下角的上傳／轉錄／會議紀錄生成進度面板")]
-    [InlineData("MeetingRecord.Web/Components/Layout/MainLayout.razor", "<NotificationBell", "右上角的站內通知鈴鐺（1.0.44）")]
     [InlineData("MeetingRecord.Web.Client/Components/Layout/AppShell.razor", "<FormModalHelper", "全站對話框外框樣式")]
     [InlineData("MeetingRecord.Web.Client/Components/Layout/AppShell.razor", "id=\"blazor-error-ui\"", "Blazor 未處理錯誤時的提示列")]
     [InlineData("MeetingRecord.Web.Client/Components/Layout/AppShell.razor", "@NotificationContent", "通知鈴插槽")]
     [InlineData("MeetingRecord.Web.Client/Components/Layout/AppShell.razor", "@OverlayContent", "進度面板插槽")]
     [InlineData("MeetingRecord.Web.Client/Layout/WasmLayout.razor", "<AppShell", "共用外框")]
-    [InlineData("MeetingRecord.Web.Client/Layout/WasmLayout.razor", "<BackgroundJobProgressPanel", "右下角的進度面板（1.1.15）")]
+    [InlineData("MeetingRecord.Web.Client/Layout/WasmLayout.razor", "<BackgroundJobProgressPanel", "右下角的上傳／轉錄／會議紀錄生成進度面板（1.1.15）")]
+    [InlineData("MeetingRecord.Web.Client/Layout/WasmLayout.razor", "<NotificationBell", "右上角的站內通知鈴鐺（1.0.44）")]
     public void Layout_ShouldMount(string relativePath, string marker, string purpose)
     {
         // 註解掉的不算——那正是「看起來還在、其實沒有渲染」的樣子。

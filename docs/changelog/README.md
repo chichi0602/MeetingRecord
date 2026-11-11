@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.110
+- 文件版本：7.111
 - 文件狀態：維護中
-- 現行系統版本：1.1.45
+- 現行系統版本：1.1.46
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M6 拆除 Server 互動模式（分支 `wasm-migration-m6-remove-server`）：拿掉 Blazor Server 互動模式與 circuit、`MainLayout`、`ReconnectModal`、錯誤邊界、三個 Server 資料來源與範例檔；伺服器只靜態算繪登入、登出與錯誤頁；`AuthenticationStateHelper` 只剩純函式（1.1.46）| [2026-11-11-WASM遷移M6-拆除Server互動模式](2026-11-11-WASM遷移M6-拆除Server互動模式.md) |
 | WASM 遷移 M6 首頁與找不到頁（分支 `wasm-migration-m6-home-notfound`）：`/` 與 `/not-found` 搬到 WASM，`WasmRoutes` 反過來改成 `ServerPageRoutes`（只剩登入、登出、錯誤頁，靜態算繪）；錯誤頁改靜態；刪除開場畫面與範本頁；新增端對端 NAV-01（1.1.45）| [2026-11-11-WASM遷移M6-首頁與找不到頁](2026-11-11-WASM遷移M6-首頁與找不到頁.md) |
 | WASM 遷移 M5 里程碑報告（分支 `wasm-migration-m5-report`）：M5 全套跑在 1.1.43，報告入庫；09 號 M5 標完成、寫 M6 收尾規劃（1.1.44）| [2026-11-11-WASM遷移M5-里程碑報告](2026-11-11-WASM遷移M5-里程碑報告.md) |
 | WASM 遷移 M5 稽核紀錄（分支 `wasm-migration-m5-audit-logs`）：`/audit-logs` 搬到 WASM——最後一個應用程式的 Server 頁；新增只限管理者的 `api/v1/audit-logs`（清除類稽核照舊在刪除之後）；端對端 L4-05 改成 WASM 頁斷網 10 秒後自動恢復、L4-08 目標改成 `/not-found`（1.1.43）| [2026-11-11-WASM遷移M5-稽核紀錄](2026-11-11-WASM遷移M5-稽核紀錄.md) |

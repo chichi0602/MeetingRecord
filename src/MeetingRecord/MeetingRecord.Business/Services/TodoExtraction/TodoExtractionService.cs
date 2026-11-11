@@ -43,6 +43,7 @@ public class TodoExtractionService
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<TodoExtractionService> logger;
     private readonly ProjectAccessService projectAccess;
+    private readonly IAiCallerProvider? callerProvider;
 
     public TodoExtractionService(
         BackendDBContext context,
@@ -51,8 +52,10 @@ public class TodoExtractionService
         AiCallGateway gateway,
         CurrentUserService currentUserService,
         ILogger<TodoExtractionService> logger,
-        ProjectAccessService projectAccess)
+        ProjectAccessService projectAccess,
+        IAiCallerProvider? callerProvider = null)
     {
+        this.callerProvider = callerProvider;
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
         this.llmSettings = llmSettings;
@@ -106,8 +109,9 @@ public class TodoExtractionService
         var userPrompt = BuildUserPrompt(meeting.DraftContent, meeting.MeetingDate, openTodos);
 
         // onDelta 傳 null：輸出是 JSON，逐字顯示對使用者沒有意義。
-        // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理（這條路徑走在使用者的請求裡，拿得到 CurrentUserService）。
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理。
+        // 1.1.28：觸發者經 IAiCallerProvider 取——WASM 頁經 API 抽待辦時 CurrentUserService 是空的。
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
         var generated = await gateway.GenerateAsync(
             provider,
             new AiCallContext(

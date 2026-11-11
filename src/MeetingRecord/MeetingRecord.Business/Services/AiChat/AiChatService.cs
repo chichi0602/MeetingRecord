@@ -71,6 +71,7 @@ public class AiChatService
     private readonly ILogger<AiChatService> logger;
     private readonly ProjectAccessService projectAccess;
     private readonly IAuditLogService auditLogService;
+    private readonly IAiCallerProvider? callerProvider;
 
     public AiChatService(
         BackendDBContext context,
@@ -83,7 +84,8 @@ public class AiChatService
         AiCallGateway gateway,
         ILogger<AiChatService> logger,
         ProjectAccessService projectAccess,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        IAiCallerProvider? callerProvider = null)
     {
         this.context = context;
         this.textGenerationProviders = textGenerationProviders;
@@ -96,6 +98,7 @@ public class AiChatService
         this.logger = logger;
         this.projectAccess = projectAccess;
         this.auditLogService = auditLogService;
+        this.callerProvider = callerProvider;
     }
 
     /// <summary>
@@ -505,7 +508,7 @@ public class AiChatService
         // ⚠️ 「重新產生答案」也會走到這裡，所以帳本的呼叫次數會**高於**儀表板的「AI 問答次數」——
         //    後者是數對話檔裡的提問行，而重新產生是覆寫原訊息、不增行。
         // 1.0.29：記帳、AI 對話紀錄、用量上限都由 gateway 處理；已達上限時拋 AiQuotaExceededException。
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
         var generated = await gateway.GenerateAsync(
             provider,
             new AiCallContext(
@@ -746,16 +749,9 @@ public class AiChatService
         return sources;
     }
 
+    /// <summary>訊息的作者名稱：姓名 → 帳號（1.1.28 起經 API 提問也認得，以前是空的）。</summary>
     private string? ResolveCurrentUserName()
-    {
-        var user = currentUserService.CurrentUser;
-
-        return !string.IsNullOrWhiteSpace(user.Name)
-            ? user.Name
-            : !string.IsNullOrWhiteSpace(user.Account)
-                ? user.Account
-                : null;
-    }
+        => AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider).UserName;
 
     /// <summary>依 <c>LlmSettings.DefaultProvider</c> 挑出供應商，形狀比照 <c>MeetingDraftJobRunner</c>。</summary>
     private ITextGenerationProvider ResolveProvider()

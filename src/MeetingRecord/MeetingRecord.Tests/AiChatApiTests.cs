@@ -199,6 +199,27 @@ public sealed class AiChatApiTests(AiChatTestApplicationFactory factory) : IClas
         Assert.Contains(details, x => x!.Contains(manual));
     }
 
+    [Fact]
+    public async Task Ask_ShouldAttributeUsageToTheCaller()
+    {
+        // 1.1.28：經 API 提問時，用量帳本要記到呼叫者（每人額度靠它）。以前服務層只看 CurrentUserService，API 呼叫時是空的。
+        var world = await SeedAsync([MagicObjectHelper.角色_會議紀錄]);
+        using var client = await LoginAsync(world.Account);
+        var baseUrl = $"/api/v1/ai-chat/meeting/{world.MeetingId}";
+        var conversationId = await CreateConversationAsync(client, baseUrl);
+        using (var response = await AskAsync(client, $"{baseUrl}/conversations/{conversationId}/ask", "誰問的？"))
+        {
+            Assert.Equal(AiChatStreamEventDto.Done, (await ReadEventsAsync(response))[^1].Type);
+        }
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+        var userId = await db.MyUser.Where(x => x.Account == world.Account).Select(x => x.Id).SingleAsync();
+        var log = await db.AiUsageLog.AsNoTracking().Where(x => x.MeetingId == world.MeetingId).OrderByDescending(x => x.Id).FirstAsync();
+        Assert.Equal(userId, log.UserId);
+        Assert.False(string.IsNullOrWhiteSpace(log.UserName));
+    }
+
     private sealed record World(string Account, int ProjectId, int MeetingId, int HiddenMeetingId);
 
     /// <summary>使用者所在團隊主責的專案、專案底下一場有會議紀錄的會議；另一場別人上傳、未歸屬的會議（看不到）。</summary>

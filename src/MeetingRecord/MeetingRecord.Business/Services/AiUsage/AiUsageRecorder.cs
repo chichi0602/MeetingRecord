@@ -67,6 +67,13 @@ public static class AiUsageAttribution
 
         return (user.Id, name);
     }
+
+    /// <summary>
+    /// 有 <paramref name="caller"/>（正式執行時一定有）就問它——它也認得 API 請求；
+    /// 沒有（直接 new 服務的單元測試）才退回只看 <paramref name="user"/>。1.1.28。
+    /// </summary>
+    public static (int? UserId, string? UserName) Resolve(CurrentUser? user, IAiCallerProvider? caller)
+        => caller?.GetCaller() ?? Resolve(user);
 }
 
 /// <summary>

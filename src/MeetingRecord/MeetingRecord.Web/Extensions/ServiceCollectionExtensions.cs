@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.AiChat;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.TodoExtraction;
 using MeetingRecord.Business.Services.Dashboard;
 using MeetingRecord.Business.Services.Diagnostics;
@@ -131,6 +132,9 @@ public static class ServiceCollectionExtensions
 
         // 稽核的目前操作者（1.0.34）：Blazor 用 CurrentUserService，API 從 claims 取。
         services.AddScoped<IAuditActorProvider, AuditActorProvider>();
+
+        // AI 呼叫的觸發者（1.1.28）：同上，API 請求從 claims 取——用量帳本與每人額度靠它。
+        services.AddScoped<IAiCallerProvider, AiCallerProvider>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IRbacBackfillService, RbacBackfillService>();
         services.AddScoped<DefaultRoleSeeder>();

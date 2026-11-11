@@ -43,6 +43,7 @@ public class MeetingService
     private readonly IAiQuotaService quotaService;
     private readonly IAuditLogService auditLogService;
     private readonly IJobCancellationRegistry cancellationRegistry;
+    private readonly IAiCallerProvider? callerProvider;
 
     /// <summary>
     /// 使用者取消上傳時 <see cref="SaveMediaAsync"/> 回傳的訊息（1.0.37）。
@@ -71,8 +72,10 @@ public class MeetingService
         AiCallLogService aiCallLogService,
         IAiQuotaService quotaService,
         IAuditLogService auditLogService,
-        IJobCancellationRegistry cancellationRegistry)
+        IJobCancellationRegistry cancellationRegistry,
+        IAiCallerProvider? callerProvider = null)
     {
+        this.callerProvider = callerProvider;
         this.context = context;
         Mapper = mapper;
         Logger = logger;
@@ -94,14 +97,15 @@ public class MeetingService
     /// 組出背景工作的請求，把「是誰按的」一起帶進佇列。
     ///
     /// <para>
-    /// ⚠️ 必須在這裡取使用者。這支跑在 Blazor circuit 裡，CurrentUserService 是填好的；
-    /// 但背景服務為每筆工作自建的 scope 裡它是空白物件（Id=0），
+    /// ⚠️ 必須在這裡取使用者。這支跑在使用者的請求裡（Blazor circuit 或 API），拿得到觸發者；
+    /// 但背景服務為每筆工作自建的 scope 裡 CurrentUserService 是空白物件（Id=0），
     /// 等到 runner 才去問，用量帳本的「誰」就永遠是空的。
+    /// 1.1.28：經 <see cref="IAiCallerProvider"/> 取，API 請求（WASM 頁）也認得。
     /// </para>
     /// </summary>
     private MeetingJobRequest BuildJobRequest(int meetingId)
     {
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
 
         return new MeetingJobRequest(meetingId, userId, userName);
     }
@@ -515,7 +519,7 @@ public class MeetingService
     /// </summary>
     private async Task<string?> CheckQuotaAsync(CancellationToken cancellationToken)
     {
-        var (userId, _) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        var (userId, _) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
         var blocked = await quotaService.CheckAsync(userId, cancellationToken);
         return blocked is null ? null : AiQuotaExceededException.BuildMessage(blocked);
     }

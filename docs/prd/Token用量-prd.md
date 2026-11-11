@@ -1,10 +1,10 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.5
+- 文件版本：2.6
 - 文件狀態：已實作
-- 現行系統版本：1.1.12
+- 現行系統版本：1.1.28
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/11
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -138,7 +138,7 @@
 - `RecordAsync` **永不拋例外**（寫不進去只記 log，不能讓使用者的工作失敗），一律以 `CancellationToken.None` 存檔（取消的呼叫照樣花了錢）。
 - 金額由 `AiUsagePricing.EstimateTokenCost`／`EstimateAudioCost` 依 `Model` 查 `LlmSettings.Pricing` 算出；連同單價（`InputPricePerMillion`、`OutputPricePerMillion`、`AudioPricePerMinute`）、`Currency`、`ExchangeRate`、`ConvertedCurrency` 一起寫入當下的**快照**——明細窗顯示的就是這些快照。
 - 匯率只讀 `ExchangeRateCache.Current`（同步欄位）；匯率的 `BaseCurrency` 與 `LlmSettings.Currency` 不同時整組留空。
-- 使用者歸屬：`AiUsageAttribution.Resolve(CurrentUser)`，`Id <= 0` 視為無人。背景工作（生成、轉錄）的觸發者在**入列那一刻**由 `MeetingJobRequest` 帶進佇列，recorder 刻意不注入 `CurrentUserService`（背景 scope 會解析成空白使用者且不報錯）。
+- 使用者歸屬：`AiUsageAttribution.Resolve(CurrentUser, IAiCallerProvider)`，`Id <= 0` 視為無人。1.1.28 起經 `IAiCallerProvider`（`Web/Auth/AiCallerProvider`）：Blazor 頁看 `CurrentUserService`，API 請求從 claims 取（Cookie 記姓名、JWT 記帳號）；以前只看 `CurrentUserService`，M3 起經 API（WASM 頁）的 AI 呼叫使用者是空的、每人額度不計入。背景工作（生成、轉錄）的觸發者在**入列那一刻**由 `MeetingJobRequest` 帶進佇列，recorder 刻意不注入 `CurrentUserService`（背景 scope 會解析成空白使用者且不報錯）。
 - 串流用量：`AzureOpenAiTextGenerationProvider` 送 `stream_options.include_usage = true`，每個片段**先取 usage（`ExtractUsage`）再檢查 delta**——帶用量的那一片 `choices` 是空陣列。轉錄時長由 FFmpeg 以 `-loglevel info -nostats` 輸出、`MediaDurationParser` 解析 `Duration:`，取不到時以位元組回推並標 `IsAudioDurationEstimated`。
 
 ### 用量上限（1.0.29；1.0.31 起本頁顯示）

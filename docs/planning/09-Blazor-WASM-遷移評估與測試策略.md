@@ -1,10 +1,10 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.32
-- 文件狀態：已啟動遷移（分支 `wasm-migration`，M1、M2、M3 完成，IIS 測試機驗證待補，下一步 M4）
-- 現行系統版本：1.1.27
+- 文件版本：1.33
+- 文件狀態：已啟動遷移（M0～M3 已合回 main；M4 在分支 `wasm-migration-m4` 進行中，IIS 測試機驗證待補）
+- 現行系統版本：1.1.28
 - 首次實作版本：不適用
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/11
 
 使用者要求：
 
@@ -113,6 +113,7 @@
 ### 4.2 「目前使用者」的取得方式 🔴
 
 - `CurrentUserService` 現在每條 circuit 填一次，Business 服務（`RecordAccessScopeProvider`、`AuditActorProvider`、`HelpAssistantService`、權限檢查…）直接讀它。改成每次 API 請求都要從 Cookie claims 解析並填入——`RecordAccessScopeProvider` 已經有從 `Sid` claim 建立範圍的路徑（`Web/Auth/RecordAccessScopeProvider.cs`），可以以它為基礎。
+- ⚠️ **1.1.28 補記**：M3 搬頁時漏了 AI 呼叫者——`AiChatService`、`TodoExtractionService`、`MeetingService` 取帳本使用者只看 `CurrentUserService`，經 API 時是空的，每人額度擋不住。改經 `IAiCallerProvider`（API 從 claims 取）。後續把頁面搬到 WASM 時，服務裡任何讀 `CurrentUserService` 的地方都要檢查。
 - `AuthenticationStateHelper` 放在 Business 層卻相依 Blazor 的 `AuthenticationStateProvider`／`NavigationManager`，這本來就不太對；遷移時把「導向」與「查使用者狀態」拆開：狀態判斷留在伺服器，導向交給 WASM。
 - 帳號被停用、沒有角色、需要強制改密碼時，現在是 `NavigateTo(forceLoad)` 導走。改成 API 回應明確的狀態碼與原因（包在 `ApiResult`），WASM 端統一攔截處理；⚠️ 「未認證」仍只能導向 `/Auths/Login`，不可導向會呼叫 `SignOutAsync` 的頁面（§4 既有規則）。
 - 權限有變動時：現在登入時載入一次；WASM 也一樣以 Session 端點載入，**但 API 每次請求都以伺服器端的權威來源判斷**，前端快取過期只會造成「按鈕多顯示一顆、按了回 403」，不會造成越權。
@@ -488,14 +489,25 @@ M0 產出「基準報告」（只有 Server 欄），M6 產出「最終報告」
 | 專案頁面 `/projects`（含待辦抽取視窗） | 1.1.26 | ✅ 完成；`ProjectPage`、`TodoExtractionModal` 搬到 Web.Client，附件經 `ProjectAttachmentUploader`；伺服器補可選逐字稿的會議紀錄狀態、專案頁自己的分類與團隊篩選選項；`BrowserFileUploader` 與 Server 端上傳攔截移除；PRJ、AI 系列照過，L4-05／08 改用使用說明頁 |
 | M3 里程碑報告 | 1.1.27 | ✅ 完成；[M3 報告](../testing/2026-11-10-M3-里程碑測試報告-1.1.27.md)：L1 1874、L2 257、L3 104 過 1 略過、L4 10 全過；新開 65 支端點；WASM 下載量 Brotli 合計 5.0 MB（只下載一個語系檔約 4.65 MB） |
 
+## 十、之五 M4 進度（使用說明頁，1.1.28 起，分支 `wasm-migration-m4`）
+
+M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等使用者 commit。
+
+| 步驟 | 版本 | 狀態 |
+|------|------|------|
+| AI 呼叫者歸屬修正（M3 缺陷） | 1.1.28 | ✅ 完成；經 API 呼叫 AI 時用量帳本記不到人、每人額度擋不住，改經 `IAiCallerProvider`（API 從 claims 取）；AI 問答、待辦抽取、會議重新轉錄與產生會議紀錄 |
+| 使用說明 API（說明內容、AI 助理串流） | 1.1.29 | 待做 |
+| `/help` 頁搬到 WASM | 1.1.30 | 待做 |
+| M4 里程碑報告 | 1.1.31 | 待做 |
+
 ## 十一、下一步
 
-M0～M3 已完成（見「十、之二」～「十、之四」與各里程碑報告）。IIS 測試機驗證、前端錯誤回報 API 仍待補；效能調校在 M6（下載量已接近 5 MB 門檻、有快取的再次載入超過 1.5 秒門檻）。
+M0～M3 已完成（見「十、之二」～「十、之四」與各里程碑報告），M4 進行中（見「十、之五」）。IIS 測試機驗證、前端錯誤回報 API 仍待補；效能調校在 M6（下載量已接近 5 MB 門檻、有快取的再次載入超過 1.5 秒門檻）。
 
-**M4 規劃（使用說明頁，預估 3 版）**：
-- **1.1.28 使用說明 API**：AI 助理提問改成串流 API（比照 AI 問答的 NDJSON；停止＝取消請求，伺服器要停止呼叫 AI）、額度與用量帳本照舊；說明內容（`HelpManual`）若要給 WASM 用就搬到 Share 或改由 API 提供；稽核改由伺服器寫。授權測試與 L2（串流內容完整、停止後不再記帳、額度用完的訊息）。
-- **1.1.29 `/help` 頁搬到 WASM**：`HelpView` 與前端互動（搜尋高亮、目錄捲動、對話自動捲到底）搬到 Client；AI-02 一行不改照過，新增停止串流的端對端。L4-05、L4-08 要的「還沒遷移的 Server 頁」改用 M5 的頁面（例如稽核紀錄）。
-- **1.1.30 M4 里程碑報告**。
+**M4 規劃（使用說明頁，預估 4 版；1.1.28 先修 M3 留下的 AI 呼叫者歸屬缺陷）**：
+- **1.1.29 使用說明 API**：AI 助理提問改成串流 API（比照 AI 問答的 NDJSON；停止＝取消請求，伺服器要停止呼叫 AI）、額度與用量帳本照舊；說明內容（`HelpManual`）若要給 WASM 用就搬到 Share 或改由 API 提供；稽核改由伺服器寫；`HelpAssistantService` 改經 `IAiCallerProvider`。授權測試與 L2（串流內容完整、停止後不再記帳、額度用完的訊息）。
+- **1.1.30 `/help` 頁搬到 WASM**：`HelpView` 與前端互動（搜尋高亮、目錄捲動、對話自動捲到底）搬到 Client；AI-02 一行不改照過，新增停止串流的端對端。L4-05、L4-08 要的「還沒遷移的 Server 頁」改用 M5 的頁面（例如稽核紀錄）。
+- **1.1.31 M4 里程碑報告**。
 - 之後 **M5 管理與監控**（稽核紀錄、AI 對話紀錄、AI 用量、Token 用量、資料庫用量、日誌、日誌等級、系統例外、系統健康，約 9 頁、只限管理者或監控權限）、**M6 收尾**（移除 Server 互動模式與 `ReconnectModal`、L4-05 改測 WASM 推播、效能調校、最終報告）。
 
 > 返回 [planning 索引](README.md)

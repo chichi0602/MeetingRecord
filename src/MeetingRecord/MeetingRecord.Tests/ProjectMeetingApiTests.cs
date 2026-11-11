@@ -137,6 +137,12 @@ public sealed class ProjectMeetingApiTests(AiChatTestApplicationFactory factory)
             Assert.Equal(HttpStatusCode.OK, extract.StatusCode);
             var result = (await ReadAsync<TodoExtractionResultDto>(extract)).Data!;
             Assert.Contains(result.Items, x => x.Title == E2EFakeAi.ExtractedTodoTitle);
+
+            // 1.1.28：用量帳本記到呼叫者（以前經 API 是空的，每人額度擋不住）。
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+            var userId = await db.MyUser.Where(x => x.Account == world.Account).Select(x => x.Id).SingleAsync();
+            Assert.Equal(userId, (await db.AiUsageLog.AsNoTracking().Where(x => x.MeetingId == world.MeetingId).OrderByDescending(x => x.Id).FirstAsync()).UserId);
         }
 
         using (var add = await client.PostAsJsonAsync("/api/v1/todo-extraction/todos", new ExtractedTodoAddRequestDto

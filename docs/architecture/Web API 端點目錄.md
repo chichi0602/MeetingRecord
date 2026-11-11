@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.37
+- 文件版本：1.38
 - 文件狀態：已實作
-- 現行系統版本：1.1.42
+- 現行系統版本：1.1.43
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/11
 
@@ -74,6 +74,8 @@
 **AI 對話紀錄**（WASM 遷移 M5，1.1.38，`AiCallLogController`，`api/v1/ai-call-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（是否記錄、保留天數、CSV 上限）、`GET filter-options`、`POST search`（`AiCallLogQuery`：起訖時間、功能、結果、使用者、模型、關鍵字、分頁與排序，回 `PagedResult<AiCallLogAdapterModel>`）、`GET by-call-id/{callId}`（找不到 404）、`GET {id}`（`AiCallLogDetail`：列、內容、用量、同一趟工作；**查看就寫稽核 `AiCallLog.View`**）、`GET {id}/json`（內容檔原文）、`POST {id}/pdf`、`POST export/csv`（只有中繼資料、不含內容，最多 10,000 筆）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，回筆數）、`POST clear-all`。稽核只記編號與識別碼、不記內容（`via=Api`）。
 
 **系統例外**（WASM 遷移 M5，1.1.40，`ExceptionLogController`，`api/v1/exception-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（保留天數、手動清除天數、上限 5,000、AI 能不能用）、`POST search`（`ExceptionLogQuery`，回 `PagedResult<ExceptionLogAdapterModel>`；「複製全部」頁大小帶上限）、`GET {id}/stack-trace`（堆疊與 AI 送出字數，列不存在 404）、`POST stack-traces`（`{ ids }`，最多 5,000）、`POST export/csv`、`DELETE {id}`（不存在 404）、`POST purge`（天數由伺服器設定決定）、`POST clear-all`、`POST {id}/ai-analysis`（**串流** `application/x-ndjson`，事件 `delta`／`done`（含結果、模型、說明行）／`error`；送出內容由伺服器依編號組、不含帳號；中斷請求＝取消，帳本記 Cancelled；AI 未設定或第一段前失敗回 400）、`POST {id}/ai-analysis/pdf`（`{ markdown, meta }`，附錄由伺服器重組）。稽核同畫面、不記例外內容（`via=Api`）。
+
+**稽核紀錄**（WASM 遷移 M5，1.1.43，`AuditLogController`，`api/v1/audit-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（自動清除天數、手動清除天數、CSV 上限）、`GET actions`（出現過的動作代碼）、`POST search`（`AuditLogQuery`：本地時間起訖、動作、結果、操作者帳號、IP 前綴、關鍵字、分頁與時間排序，回 `PagedResult<AuditLogAdapterModel>`）、`POST export/csv`（最多 10,000 筆）、`POST purge`（天數由伺服器設定決定）、`POST clear-all`。**沒有單筆刪除**。匯出與清除的稽核由伺服器寫，清除類在刪除**之後**寫（`via=Api`）。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：API（待辦 1.1.18、會議 1.1.20、專案 1.1.24 起都直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

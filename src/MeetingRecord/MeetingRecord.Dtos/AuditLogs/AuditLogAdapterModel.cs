@@ -1,9 +1,10 @@
+using System.Text.Json.Serialization;
 using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Models.AdapterModel;
+namespace MeetingRecord.Dtos.AuditLogs;
 
 /// <summary>
-/// 稽核紀錄頁的畫面繫結模型（1.0.32）。本頁唯讀，不需要 ICloneable。
+/// 稽核紀錄頁的畫面繫結模型（1.0.32；1.1.43 從 Models 搬到 Dtos，API 回傳）。本頁唯讀，不需要 ICloneable。
 /// ⚠️ <see cref="OccurredAt"/> 已由查詢服務轉成<b>伺服器本地時間</b>；資料庫存的是 UTC（<see cref="OccurredAtUtc"/>）。
 /// </summary>
 public class AuditLogAdapterModel
@@ -33,14 +34,18 @@ public class AuditLogAdapterModel
     public string? ClientIp { get; set; }
 
     /// <summary>動作的中文名稱；對照表沒有就顯示代碼。</summary>
+    [JsonIgnore]
     public string ActionDisplayName => AuditActions.Describe(Action);
 
     /// <summary>動作類別（代碼第一個 <c>.</c> 之前），畫面依此上色。</summary>
+    [JsonIgnore]
     public string ActionCategory => AuditActions.CategoryOf(Action);
 
+    [JsonIgnore]
     public string SuccessText => Success ? "成功" : "失敗";
 
     /// <summary>操作者：<c>帳號（Id=N）</c>；系統排程或匿名顯示「（系統／匿名）」。</summary>
+    [JsonIgnore]
     public string ActorDisplay => (ActorAccount, ActorUserId) switch
     {
         ({ Length: > 0 } account, { } id) => $"{account}（Id={id}）",
@@ -50,6 +55,7 @@ public class AuditLogAdapterModel
     };
 
     /// <summary>目標：<c>類型#識別</c>；都沒有時顯示「—」。</summary>
+    [JsonIgnore]
     public string TargetDisplay => (TargetType, TargetId) switch
     {
         ({ Length: > 0 } type, { Length: > 0 } id) => $"{type}#{id}",

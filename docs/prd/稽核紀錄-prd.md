@@ -1,10 +1,10 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
-- 現行系統版本：1.0.43
+- 現行系統版本：1.1.43
 - 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
-- 最後核對日期：2026/10/16
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -43,7 +43,9 @@
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
-| `/audit-logs` | 系統管理 → 帳號與權限（id 35）→ 稽核紀錄（id 40，`fact_check`） | **只限管理者**（`CheckIsAdmin()`＋`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄，不能勾給角色） | 系統管理員 |
+| `/audit-logs` | 系統管理 → 帳號與權限（id 35）→ 稽核紀錄（id 40，`fact_check`） | **只限管理者**（1.1.43 起 WASM 頁以 `PermissionView.IsAdmin` 判斷、API `[AdminOnly]`；`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄，不能勾給角色） | 系統管理員 |
+
+REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`GET actions`、`POST search`、`POST export/csv`、`POST purge`、`POST clear-all`（沒有單筆刪除），匯出與清除的稽核由伺服器寫（清除類在刪除之後，`via=Api`），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。1.1.43 起頁面是 WASM 頁——最後一個應用程式的 Server 頁。
 
 ## 三、畫面與欄位
 
@@ -172,6 +174,7 @@
 - `AuditLogRetentionBackgroundServiceTests`：過期才刪、刪完才寫 `Audit.AutoPurge`、0 天不清、沒有可刪不寫。
 - `AuditActionsConventionTests`：每個代碼都有中文名稱且符合 `名詞.動作`；原始碼不得以字串常值寫稽核。
 - `AuditLogMenuRegistrationTests`：選單位置、名稱、網址、圖示、只限管理者、非管理者即使有同名權限也看不到。
+- `AuditLogApiTests`（1.1.43）：API 授權（401／403）、清單與動作選項、CSV 與稽核、清除 N 天前、全部清除後只剩「清空」自己這一筆。
 - 1.0.34：
   - `BusinessAuditEventsTests`（11 則）：專案（含逐檔附件、下載、API 刪除 via、資料範圍擋下）、待辦（含完成／重開、AI 抽出、擋下）、團隊與分類（同步只在有增減時記）、提示詞（不含本文、預設範本一筆）、AI 問答（自動建立不記、擋下）。
   - `MeetingServiceTests` 新增 5 則：新增修改刪除的操作者與 via、影音上傳、歸屬與移出、草稿只記字數、擋下上傳。
@@ -191,9 +194,10 @@
 
 - `Share/Helpers/AuditActions.cs`、`AccessDatas/Models/AuditLog.cs`、`Migrations/*_AddAuditLogClientIpAndIndexes.cs`
 - `Business/Services/Other/AuditLogService.cs`、`IClientIpProvider.cs`、`Business/Services/DataAccess/AuditLogQueryService.cs`
-- `Models/Systems/AuditLogQuery.cs`、`LogRetentionSettings.cs`、`Models/AdapterModel/AuditLogAdapterModel.cs`
+- `Dtos/AuditLogs/AuditLogQuery.cs`、`AuditLogAdapterModel.cs`、`AuditLogApiDtos.cs`（1.1.43 從 Models 搬來）、`Models/Systems/LogRetentionSettings.cs`
+- API（1.1.43）：`Web/Controllers/AuditLogController.cs`、`Web/Export/AuditLogCsv.cs`
 - `Web/Auth/ClientIpProvider.cs`、`Web/Components/ApplicationCircuitHandler.cs`、`Web/BackgroundServices/AuditLogRetentionBackgroundService.cs`
-- `Web/Components/Pages/Admins/AuditLogPage.razor`、`Views/Admins/AuditLogView.razor(.cs/.css)`
+- 頁面（1.1.43 起 WASM）：`Web.Client/Pages/Admins/AuditLogPage.razor(.cs/.css)`、`Web.Client/Api/AuditLogApi.cs`（以前是 Server 的 `AuditLogPage` → `AuditLogView`）
 - 1.0.43：`Web/Components/Views/Helps/HelpView.razor.cs`（`OnAskAssistantAsync` 寫 `Help.AiAsk`）
 - 1.0.34：`Business/Services/Other/IAuditActorProvider.cs`、`Web/Auth/AuditActorProvider.cs`；`ProjectService`、`MeetingService`、`TodoService`、`TeamService`、`CategoryService`、`PromptTemplateService`、`AiChatService` 與對應的 Repository；`MeetingViewView`、`ProjectViewView`、`AiChatModal`、`TodoExtractionModal`
 - 1.0.33：`Share/Helpers/AuditVia.cs`（`AuditVia`、`LogoutReasons`）、`MyUserServiceLogin`、`Login.razor.cs`、`Logout.razor.cs`、`AuthController`、`ExternalAuthController`、`ExternalLoginService`、`MyUserService`、`AuthenticationStateHelper`、`HasPermissionAttribute`、17 個頁面的拒絕分支

@@ -5,6 +5,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Factories;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Dtos.AuditLogs;
 
 namespace MeetingRecord.Business.Services.DataAccess;
 

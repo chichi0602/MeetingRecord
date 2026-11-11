@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Dtos.AuditLogs;
 
 namespace MeetingRecord.Tests;
 
@@ -214,8 +214,8 @@ public sealed class AuditLogQueryServiceTests : IAsyncDisposable
     [Fact]
     public void AdapterModel_ShouldDescribeActorTargetAndAction()
     {
-        var system = new MeetingRecord.Models.AdapterModel.AuditLogAdapterModel { Action = AuditActions.AuditAutoPurge, TargetType = "AuditLog", TargetId = "*" };
-        var user = new MeetingRecord.Models.AdapterModel.AuditLogAdapterModel { Action = "Legacy.Retired", ActorUserId = 3, ActorAccount = "alice" };
+        var system = new AuditLogAdapterModel { Action = AuditActions.AuditAutoPurge, TargetType = "AuditLog", TargetId = "*" };
+        var user = new AuditLogAdapterModel { Action = "Legacy.Retired", ActorUserId = 3, ActorAccount = "alice" };
 
         Assert.Equal("（系統／匿名）", system.ActorDisplay);
         Assert.Equal("AuditLog#*", system.TargetDisplay);

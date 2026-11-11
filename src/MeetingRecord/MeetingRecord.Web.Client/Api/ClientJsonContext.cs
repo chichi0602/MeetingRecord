@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Accounts;
 using MeetingRecord.Dtos.AiCallLogs;
 using MeetingRecord.Dtos.AiChats;
+using MeetingRecord.Dtos.AuditLogs;
 using MeetingRecord.Dtos.AiUsage;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Dashboards;
@@ -110,6 +111,9 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(DiagnosticAiPdfRequestDto))]
 [JsonSerializable(typeof(LogQueryRequest))]
 [JsonSerializable(typeof(LogAiPdfRequestDto))]
+[JsonSerializable(typeof(ApiResult<AuditLogMetaDto>), TypeInfoPropertyName = "AuditLogMetaResult")]
+[JsonSerializable(typeof(ApiResult<PagedResult<AuditLogAdapterModel>>), TypeInfoPropertyName = "AuditLogPageResult")]
+[JsonSerializable(typeof(AuditLogQuery))]
 [JsonSerializable(typeof(ApiResult<LogViewerMetaDto>), TypeInfoPropertyName = "LogViewerMetaResult")]
 [JsonSerializable(typeof(TodoCreateUpdateDto))]
 [JsonSerializable(typeof(TodoCompletedRequestDto))]

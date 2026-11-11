@@ -1,80 +1,36 @@
 using AntDesign;
 using AntDesign.TableModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Models.AdapterModel;
-using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.AuditLogs;
 using MeetingRecord.Share.Helpers;
-using MeetingRecord.Web.Export;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
 using MeetingRecord.Web.Services;
 
-namespace MeetingRecord.Web.Components.Views.Admins;
+namespace MeetingRecord.Web.Client.Pages.Admins;
 
 /// <summary>
-/// 稽核紀錄（1.0.32，移植自 NET10-Blazor-Starter 的 /audit-logs，畫面依本專案規範）。**只限管理者**。
+/// 稽核紀錄（1.0.32，移植自 NET10-Blazor-Starter 的 /audit-logs，畫面依本專案規範；1.1.43 從 Blazor Server 的 AuditLogView
+/// 搬到 WASM，畫面不變——這是最後一個應用程式的 Server 頁）。**只限管理者**。
 ///
-/// <para>資料由 <c>IAuditLogService</c> 在各業務流程寫入。本頁負責查詢、明細、匯出 CSV、清除 N 天前與全部清除；
-/// 刻意<b>沒有</b>單筆刪除。匯出與清除本身也寫稽核，而且清除類一律在刪除<b>之後</b>才寫，這筆才會留在清空後的表裡。</para>
-/// <para>時間：資料庫存 UTC，畫面一律是伺服器本地時間；轉換集中在 <see cref="AuditLogQueryService"/>。</para>
+/// <para>資料由伺服器的 <c>IAuditLogService</c> 在各業務流程寫入。本頁負責查詢、明細、匯出 CSV、清除 N 天前與全部清除，
+/// 全部走 <c>api/v1/audit-logs</c>；刻意<b>沒有</b>單筆刪除。匯出與清除本身也寫稽核（伺服器寫，清除類在刪除<b>之後</b>）。</para>
+/// <para>時間：資料庫存 UTC，畫面一律是伺服器本地時間；轉換集中在伺服器的 <c>AuditLogQueryService</c>。</para>
 /// </summary>
-public partial class AuditLogView : ComponentBase
+public partial class AuditLogPage : ComponentBase
 {
     private const string ResultSuccess = "success";
     private const string ResultFailed = "failed";
 
-    /// <summary>CSV 欄位。來源 IP 放最後。</summary>
-    public static readonly IReadOnlyList<CsvColumn<AuditLogAdapterModel>> CsvColumns =
-    [
-        new("發生時間（本地）", x => x.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")),
-        new("結果", x => x.SuccessText),
-        new("動作名稱", x => x.ActionDisplayName),
-        new("動作代碼", x => x.Action),
-        new("操作者帳號", x => x.ActorAccount),
-        new("操作者Id", x => x.ActorUserId?.ToString()),
-        new("目標類型", x => x.TargetType),
-        new("目標識別", x => x.TargetId),
-        new("摘要", x => x.Detail),
-        new("來源IP", x => x.ClientIp),
-    ];
-
-    [Inject]
-    private AuditLogQueryService AuditLogQueryService { get; set; } = default!;
-
-    [Inject]
-    private IAuditLogService AuditLogService { get; set; } = default!;
-
-    [Inject]
-    private IOptionsMonitor<LogRetentionSettings> RetentionOptions { get; set; } = default!;
-
-    [Inject]
-    private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
-
-    [Inject]
-    private CurrentUserService CurrentUserService { get; set; } = default!;
-
-    [Inject]
-    private ModalService ModalService { get; set; } = default!;
-
-    [Inject]
-    private MessageService MessageService { get; set; } = default!;
-
-    [Inject]
-    private NotificationService NotificationService { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
-
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = default!;
-
-    [Inject]
-    private ILogger<AuditLogView> Logger { get; set; } = default!;
+    [Inject] private AuditLogApi AuditLogApi { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
+    [Inject] private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
+    [Inject] private ModalService ModalService { get; set; } = default!;
+    [Inject] private MessageService MessageService { get; set; } = default!;
+    [Inject] private NotificationService NotificationService { get; set; } = default!;
+    [Inject] private ILogger<AuditLogPage> Logger { get; set; } = default!;
 
     private string RoleMessage { get; set; } = string.Empty;
 
@@ -93,7 +49,7 @@ public partial class AuditLogView : ComponentBase
 
     /// <summary>
     /// 按「查詢」當下凍結的條件：換頁、排序與匯出都用這一份，
-    /// 輸入框改了但還沒按查詢時，畫面與匯出的內容才不會對不上（比照 TokenUsageView）。
+    /// 輸入框改了但還沒按查詢時，畫面與匯出的內容才不會對不上（比照 Token 用量）。
     /// </summary>
     private AuditLogQuery appliedFilter = new();
     private bool? sortDescending;
@@ -103,33 +59,45 @@ public partial class AuditLogView : ComponentBase
     private int _pageSize = MagicObjectHelper.PageSize;
     private int _total;
 
+    private AuditLogMetaDto? meta;
+
     // ───────── 明細 ─────────
     private bool detailVisible;
     private AuditLogAdapterModel? detail;
 
-    private int PurgeDays => RetentionOptions.CurrentValue.ManualAuditLogDays;
+    private int PurgeDays => meta?.PurgeDays ?? 365;
 
-    private string RetentionText => RetentionOptions.CurrentValue.AuditLogDays > 0
-        ? $"超過 {RetentionOptions.CurrentValue.AuditLogDays} 天的紀錄每天自動清除。"
-        : "目前不自動清除（LogRetentionSettings:AuditLogDays = 0）。";
+    private int MaxExportRows => meta?.MaxExportRows ?? 10_000;
+
+    private string RetentionText => meta is null
+        ? string.Empty
+        : meta.RetentionDays > 0
+            ? $"超過 {meta.RetentionDays} 天的紀錄每天自動清除。"
+            : "目前不自動清除（LogRetentionSettings:AuditLogDays = 0）。";
 
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
+        // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過，走到這裡一定是有效的登入者。
+        await PermissionView.LoadAsync();
+        isAccessChecked = true;
+
+        // 只限管理者：頁面不在角色權限目錄裡。判定前不讀任何資料。API 也是 [AdminOnly]。
+        if (!PermissionView.IsAdmin)
         {
+            RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
+            await PageAccessApi.RecordPageDeniedAsync("/audit-logs");
+            Logger.LogWarning("Audit log view denied because the current user is not an administrator.");
             return;
         }
 
-        isAccessChecked = true;
-
-        // 只限管理者：頁面不在角色權限目錄裡。判定前不讀任何資料。
-        if (!AuthenticationStateHelper.CheckIsAdmin())
+        var metaResult = await AuditLogApi.GetMetaAsync();
+        if (metaResult.Success)
         {
-            RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/audit-logs");
-            Logger.LogWarning("Audit log view denied because the current user is not an administrator.");
-            return;
+            meta = metaResult.Data;
+        }
+        else
+        {
+            Logger.LogWarning("Failed to load audit log settings: {Message}", ApiClient.ErrorText(metaResult));
         }
 
         appliedFilter = BuildFilter();
@@ -141,13 +109,14 @@ public partial class AuditLogView : ComponentBase
 
     private async Task LoadActionOptionsAsync()
     {
-        try
+        var result = await AuditLogApi.GetActionsAsync();
+        if (result.Success && result.Data is { } actions)
         {
-            actionOptions = await AuditLogQueryService.GetDistinctActionsAsync();
+            actionOptions = actions;
         }
-        catch (Exception ex)
+        else
         {
-            Logger.LogError(ex, "Failed to load audit log action options.");
+            Logger.LogWarning("Failed to load audit log action options: {Message}", ApiClient.ErrorText(result));
         }
     }
 
@@ -164,9 +133,7 @@ public partial class AuditLogView : ComponentBase
         await ReloadAsync();
     }
 
-    /// <summary>
-    /// 重新載入目前頁。開頭的早退不可省：兩次載入重疊會讓同一個 circuit 的 DbContext 被並行使用。
-    /// </summary>
+    /// <summary>重新載入目前頁。重疊時忽略。</summary>
     private async Task ReloadAsync()
     {
         if (isLoading)
@@ -179,25 +146,26 @@ public partial class AuditLogView : ComponentBase
 
         try
         {
-            var result = await AuditLogQueryService.GetAsync(BuildQuery(_pageIndex, _pageSize));
-            rows = result.Result.ToList();
-            _total = result.Count;
+            var result = await AuditLogApi.SearchAsync(BuildQuery(_pageIndex, _pageSize));
+            if (!result.Success || result.Data is not { } page)
+            {
+                _ = MessageService.ErrorAsync($"載入稽核紀錄失敗：{ApiClient.ErrorText(result)}");
+                rows = [];
+                _total = 0;
+                return;
+            }
 
-            // 清除後停在已不存在的頁：夾回最後一頁重載（比照 AiCallLogView）。
+            rows = page.Items.ToList();
+            _total = page.TotalCount;
+
+            // 清除後停在已不存在的頁：夾回最後一頁重載（比照 AI 對話紀錄）。
             if (rows.Count == 0 && _total > 0 && _pageIndex > 1)
             {
                 _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);
-                result = await AuditLogQueryService.GetAsync(BuildQuery(_pageIndex, _pageSize));
-                rows = result.Result.ToList();
-                _total = result.Count;
+                result = await AuditLogApi.SearchAsync(BuildQuery(_pageIndex, _pageSize));
+                rows = result.Data?.Items.ToList() ?? [];
+                _total = result.Data?.TotalCount ?? 0;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load audit logs.");
-            _ = MessageService.ErrorAsync($"載入稽核紀錄失敗：{ex.Message}");
-            rows = [];
-            _total = 0;
         }
         finally
         {
@@ -274,7 +242,7 @@ public partial class AuditLogView : ComponentBase
 
     private void OnDetailCancel() => detailVisible = false;
 
-    // ───────── 匯出、清除 ─────────
+    // ───────── 匯出、清除（伺服器執行、伺服器寫稽核） ─────────
 
     private async Task OnExportAsync()
     {
@@ -286,22 +254,19 @@ public partial class AuditLogView : ComponentBase
         isLoading = true;
         try
         {
-            var items = await AuditLogQueryService.GetForExportAsync(BuildQuery(1, AuditLogQueryService.MaxExportRows));
-            var bytes = CsvExport.ToCsv(CsvColumns, items);
-            var fileName = $"MeetingRecord-audit-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
-            await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
-
-            await WriteSelfAuditAsync(AuditActions.AuditExport, $"format=csv; rows={items.Count}");
-            NotifyDownloaded(fileName);
-            if (items.Count >= AuditLogQueryService.MaxExportRows)
+            var download = await AuditLogApi.ExportCsvAsync(BuildQuery(1, MaxExportRows));
+            if (!download.Success || download.Content is null)
             {
-                _ = MessageService.WarningAsync($"只匯出最新 {AuditLogQueryService.MaxExportRows:N0} 筆，請縮小查詢條件。");
+                _ = MessageService.ErrorAsync($"匯出失敗：{download.Error}");
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Audit log export failed.");
-            _ = MessageService.ErrorAsync($"匯出失敗：{ex.Message}");
+
+            await FileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+            NotifyDownloaded(download.FileName!);
+            if (_total >= MaxExportRows)
+            {
+                _ = MessageService.WarningAsync($"只匯出最新 {MaxExportRows:N0} 筆，請縮小查詢條件。");
+            }
         }
         finally
         {
@@ -312,7 +277,7 @@ public partial class AuditLogView : ComponentBase
 
     private async Task OnPurgeAsync()
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -333,23 +298,21 @@ public partial class AuditLogView : ComponentBase
             return;
         }
 
-        var result = await AuditLogQueryService.PurgeAsync(days);
-        if (result.Success)
+        var result = await AuditLogApi.PurgeAsync();
+        if (!result.Success)
         {
-            await WriteSelfAuditAsync(AuditActions.AuditPurge, $"days={days}; {result.Message}");
-            _ = MessageService.SuccessAsync(result.Message);
-            _pageIndex = 1;
-            await OnRefreshAsync();
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
-        else
-        {
-            _ = MessageService.ErrorAsync(result.Message);
-        }
+
+        _ = MessageService.SuccessAsync(result.Message);
+        _pageIndex = 1;
+        await OnRefreshAsync();
     }
 
     private async Task OnClearAllAsync()
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -369,18 +332,16 @@ public partial class AuditLogView : ComponentBase
             return;
         }
 
-        var result = await AuditLogQueryService.ClearAllAsync();
-        if (result.Success)
+        var result = await AuditLogApi.ClearAllAsync();
+        if (!result.Success)
         {
-            await WriteSelfAuditAsync(AuditActions.AuditClearAll, result.Message);
-            _ = MessageService.SuccessAsync("已清空全部稽核紀錄");
-            _pageIndex = 1;
-            await OnRefreshAsync();
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
-        else
-        {
-            _ = MessageService.ErrorAsync(result.Message);
-        }
+
+        _ = MessageService.SuccessAsync("已清空全部稽核紀錄");
+        _pageIndex = 1;
+        await OnRefreshAsync();
     }
 
     private void NotifyDownloaded(string fileName)
@@ -391,18 +352,4 @@ public partial class AuditLogView : ComponentBase
             NotificationType = NotificationType.Warning,
             Placement = NotificationPlacement.BottomRight,
         });
-
-    /// <summary>本頁自己的稽核（匯出、清除）。⚠️ 清除類必須在刪除之後才呼叫。</summary>
-    private Task WriteSelfAuditAsync(string action, string detailText)
-    {
-        var currentUser = CurrentUserService.CurrentUser;
-        return AuditLogService.WriteAsync(
-            action,
-            success: true,
-            actorUserId: currentUser.Id > 0 ? currentUser.Id : null,
-            actorAccount: currentUser.Id > 0 ? currentUser.Account : null,
-            targetType: "AuditLog",
-            targetId: "*",
-            detail: detailText);
-    }
 }

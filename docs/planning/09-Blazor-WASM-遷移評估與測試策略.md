@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.47
+- 文件版本：1.48
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.42
+- 現行系統版本：1.1.43
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -518,6 +518,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 系統例外（一）API | 1.1.40 | ✅ 完成；新 `ExceptionLogController`（`api/v1/exception-logs`，`[AdminOnly]`）10 支：設定、清單、堆疊、一次讀多列堆疊、CSV、刪除、清除 N 天前、全部清除、**AI 例外分析串流**（伺服器依編號組提示詞、不含帳號，中斷＝取消）、分析 PDF；`DiagnosticAiService` 改經 `IAiCallerProvider`；`ExceptionLogAdapterModel`／`ExceptionLogQuery` 搬到 `Dtos/Diagnostics`、`ExceptionSources` 搬到 Share；頁面下一版搬 |
 | 系統例外（二）頁面 `/system-exceptions` | 1.1.41 | ✅ 完成；頁面搬到 Client、全部動作走 API；AI 分析在瀏覽器讀串流、關窗＝中斷請求，送出內容由伺服器組；剪貼簿組字 `ExceptionLogClipboardText` 搬到 `Dtos/Diagnostics`；新增 EXC-01，MON-01／02 照過 |
 | 日誌檢視 `/logs`（API＋頁面） | 1.1.42 | ✅ 完成；`MonitoringController` 加 `logs/meta`、`query`、`export`、`ai-analysis`（串流）、`ai-analysis/pdf`，匯出與 AI 分析都由伺服器依同一組條件重查、不收前端給的日誌；頁面搬到 Client；`AiLogPromptBuilder` 搬到 Dtos；AI 串流 DTO 改成通用的 `DiagnosticAi…`，Client 讀串流抽成 `DiagnosticAiStream`；Server 的 `Views/Monitoring` 清空；新增 `LogViewerApiTests`、LOG-01 |
+| 稽核紀錄 `/audit-logs`（API＋頁面）＋ L4 調整 | 1.1.43 | ✅ 完成；新 `AuditLogController`（`api/v1/audit-logs`，`[AdminOnly]`）6 支，清除類稽核照舊在刪除之後；頁面搬到 Client——**最後一個應用程式的 Server 頁**；`AuditLogAdapterModel`／`AuditLogQuery` 搬到 `Dtos/AuditLogs`；L4-05 改成 WASM 頁斷網 10 秒後自動恢復、L4-08 的目標改成 `/not-found`；新增 `AuditLogApiTests` |
 
 ## 十一、下一步
 
@@ -530,7 +531,7 @@ M0～M4 已完成（見「十、之二」～「十、之五」與各里程碑報
   - AI 連線測試（`AiConnectionTestService`）同樣改經 `IAiCallerProvider`；
   - 日誌等級即時生效、資料庫用量與系統健康讀伺服器狀態，維持在伺服器計算、API 只回結果；
   - 圖表元件已在 Client（1.1.12）。
-- **L4-05 與 L4-08** 在 M5 搬完最後一頁時就沒有「還沒遷移的 Server 頁」可用：L4-05 改測 WASM 推播（M6 原本的規劃提前），L4-08 改成驗「沒有舊版頁可以切」或移除（屆時再決定）。
+- **L4-05 與 L4-08** 在 M5 搬完最後一頁時就沒有「還沒遷移的 Server 頁」可用：1.1.43 定案——L4-05 改成在 WASM 頁斷網 10 秒、恢復後同一頁仍可操作（推播通道重連仍由 L4-10 驗）；L4-08 往舊版頁的目標改成仍由伺服器處理的 `/not-found`。
 - 預估約 10～12 版（每頁 API 與頁面多半可以一版做完；串流與日誌類較大），最後出 M5 里程碑報告。
 - 之後 **M6 收尾**：移除 Server 互動模式與 `ReconnectModal`、效能調校（下載量、快取再次載入）、IIS 驗證、最終報告。
 

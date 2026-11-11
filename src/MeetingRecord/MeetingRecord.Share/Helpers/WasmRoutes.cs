@@ -33,6 +33,7 @@ public static class WasmRoutes
         "/ai-call-logs", // 1.1.39 AI 對話紀錄
         "/system-exceptions", // 1.1.41 系統例外紀錄
         "/logs", // 1.1.42 日誌檢視
+        "/audit-logs", // 1.1.43 稽核紀錄（最後一個應用程式的 Server 頁）
     };
 
     /// <param name="path">

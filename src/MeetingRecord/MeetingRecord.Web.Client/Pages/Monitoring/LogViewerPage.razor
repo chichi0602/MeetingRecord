@@ -1,6 +1,9 @@
-@using MeetingRecord.Business.Helpers
-@using MeetingRecord.Web.Diagnostics
+@page "/logs"
 @using MeetingRecord.Dtos.Diagnostics
+@using MeetingRecord.Share.Helpers
+
+@* 日誌檢視（1.1.42 搬到 WASM）：由 Blazor Server 的 LogViewerView 改寫，畫面不變；資料改走 api/v1/monitoring/logs。 *@
+<PageTitle>日誌檢視</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
 @if (!isAccessChecked)
@@ -161,9 +164,9 @@ else
                 </div>
 
                 <dl class="log-ai-meta">
-                    @foreach (var (label, value) in aiMeta)
+                    @foreach (var line in aiMeta)
                     {
-                        <div class="log-ai-meta-row"><dt>@label</dt><dd>@value</dd></div>
+                        <div class="log-ai-meta-row"><dt>@line.Label</dt><dd>@line.Value</dd></div>
                     }
                 </dl>
 

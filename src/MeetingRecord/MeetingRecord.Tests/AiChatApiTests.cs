@@ -17,8 +17,8 @@ using MeetingRecord.Web.Testing;
 
 namespace MeetingRecord.Tests;
 
-/// <summary>換上假 AI（端對端用的那一套）與假 PDF 的測試主機，AI 問答 API 用。</summary>
-public sealed class AiChatTestApplicationFactory : ApiTestApplicationFactory
+/// <summary>換上假 AI（端對端用的那一套）與假 PDF 的測試主機，AI 問答 API 用。1.1.42 起可繼承（日誌檢視 API 再換上假日誌）。</summary>
+public class AiChatTestApplicationFactory : ApiTestApplicationFactory
 {
     protected override Dictionary<string, string?> CreateSettings()
     {

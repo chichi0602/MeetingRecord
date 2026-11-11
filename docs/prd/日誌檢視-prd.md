@@ -1,8 +1,8 @@
 ﻿# 日誌檢視 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：1.1.33
+- 現行系統版本：1.1.42
 - 首次實作版本：0.4.121（移植自 NET10-Blazor-Starter；AI 分析改走本專案的供應商與用量帳本）
 - 最後核對日期：2026/11/11
 
@@ -18,6 +18,8 @@
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
 | `/logs` | 系統管理 → 監控與診斷 → 日誌檢視（id 37） | **只限管理者**（不在角色權限目錄，`SidebarMenuService.AdminOnlyMenuIds`） | 系統管理員／維運 |
+
+1.1.42 起是 WASM 頁，資料走 API（`MonitoringController`，`[AdminOnly]`）：`GET api/v1/monitoring/logs/meta`、`POST logs/query`、`POST logs/export`（伺服器依同一組條件重查產生 .log）、`POST logs/ai-analysis`（串流；伺服器重查、取最新 100 筆，不收前端給的日誌）、`POST logs/ai-analysis/pdf`，稽核由伺服器寫（`via=Api`），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 
 ## 三、畫面與欄位
 
@@ -45,7 +47,7 @@
 
 ## 五、權限與安全
 
-- 管理者限定：頁面以 `CheckIsAdmin()` 守門（AI 分析方法內再檢查一次），判定完成前不渲染、不讀任何日誌；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
+- 管理者限定：頁面以管理者判斷守門（1.1.42 起 WASM 頁用 `PermissionView.IsAdmin`；查詢、匯出、AI 由 API 的 `[AdminOnly]` 擋），判定完成前不渲染、不讀任何日誌；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
 - 日誌路徑只來自設定，使用者無法指定檔名。
 - AI 分析會把日誌原文送到外部 AI 服務：先跳費用確認並寫明可能含敏感內容；系統提示詞要求把日誌視為資料、不執行其中的指令，且不輸出 HTML、圖片、連結。
 - 稽核：`LogViewer.Export`、`LogViewer.AiAnalyze`（成功／失敗／取消）、`LogViewer.AiAnalyzeExportPdf`；只記筆數、字數、模型與耗時，**不記日誌內容**。
@@ -63,14 +65,16 @@
 
 - `MeetingRecord.Tests/LogQueryServiceTests.cs`（移植自 Starter，18 則）：欄位解析、TraceId 篩選、續行合併、訊息含 `|`、最低等級、關鍵字（含續行、不分大小寫）、取最新 N 筆且時間正序、跨日檔案、區間與筆數夾住、結束時間之後排除、檔案時間戳過舊仍讀得到、格式不符保留、未設定／目錄不存在／區間無檔案。
 - `MeetingRecord.Tests/LogTimeRangesTests.cs`、`AiLogPromptBuilderTests.cs`（移植）：快捷區間；只取最新 N 筆、時間正序、不截斷、換行 LF、上限夾住。
+- 1.1.42：`LogViewerApiTests`（授權 403、查詢、匯出 .log 與稽核、AI 分析串流用伺服器重查的日誌、PDF、沒有日誌回 400）；端對端 LOG-01（WASM 頁匯出與 AI 分析、稽核由伺服器寫）。
 - `MeetingRecord.Tests/DiagnosticAiServiceTests.cs`：成功串流並記帳（Feature=5、token、使用者）、失敗記 Failed、取消記 Cancelled、未設定或找不到供應商時不可用。
 - `MeetingRecord.Tests/DiagnosticReportExporterTests.cs`：報告 HTML 內容、逸出、檔名、提示詞含防注入規則且只用 LF；`AiUsageFeatureTests`：每個功能別都有顯示文字、數值永不重編。
 - `MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`：id 37 的位置、名稱、路由與管理者限定。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogQueryService.cs`、`NLogFilePathResolver.cs`、`AiLogPromptBuilder.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（1.1.33 從 Web 搬來）
+- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogQueryService.cs`、`NLogFilePathResolver.cs`、`LogAiFailure.cs`（1.1.42）；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（1.1.33 從 Web 搬來）、`AiLogPromptBuilder.cs`（1.1.42 從 Web 搬來）、`DiagnosticAiDtos.cs`（1.1.42）
+- API：`src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs` 的 `logs/…`（1.1.42）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Diagnostics/DiagnosticAiService.cs`、`AiDiagnosticPrompts.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Export/DiagnosticReportExporter.cs`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/LogViewerPage.razor`、`Components/Views/Monitoring/LogViewerView.razor(.cs/.css)`
+- 頁面（1.1.42 起 WASM）：`src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/LogViewerPage.razor(.cs/.css)`、`src/MeetingRecord/MeetingRecord.Web.Client/Api/MonitoringApi.cs`、`Api/DiagnosticAiStream.cs`（以前是 Server 的 `LogViewerPage` → `LogViewerView`）
 - 交叉連結：[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[日誌等級設定 PRD](日誌等級設定-prd.md)、[系統例外紀錄 PRD](系統例外紀錄-prd.md)、[Token 用量 PRD](Token用量-prd.md)、[AI 對話紀錄 PRD](AI對話紀錄-prd.md)（每次 AI 日誌分析的送出內容與回應）

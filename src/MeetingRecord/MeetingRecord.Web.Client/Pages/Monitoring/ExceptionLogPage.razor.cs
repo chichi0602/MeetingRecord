@@ -80,7 +80,7 @@ public partial class ExceptionLogPage : ComponentBase, IDisposable
     private string aiMarkdown = string.Empty;
     private string aiErrorMessage = string.Empty;
     private int aiElapsedSeconds;
-    private List<ExceptionAiMetaLineDto> aiMeta = [];
+    private List<DiagnosticAiMetaLineDto> aiMeta = [];
 
     private bool aiAvailable => meta?.AiAvailable == true;
 
@@ -724,7 +724,7 @@ public partial class ExceptionLogPage : ComponentBase, IDisposable
 
         try
         {
-            var download = await ExceptionLogApi.ExportAiPdfAsync(detailItem.Id, new ExceptionAiPdfRequestDto { Markdown = aiMarkdown, Meta = aiMeta });
+            var download = await ExceptionLogApi.ExportAiPdfAsync(detailItem.Id, new DiagnosticAiPdfRequestDto { Markdown = aiMarkdown, Meta = aiMeta });
             await SaveDownloadAsync(download, "匯出 PDF 失敗");
         }
         finally

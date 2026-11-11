@@ -1,8 +1,8 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.21
+- 文件版本：1.22
 - 文件狀態：已實作
-- 現行系統版本：1.1.41
+- 現行系統版本：1.1.42
 - 首次實作版本：0.4.118
 - 最後核對日期：2026/11/11
 
@@ -281,7 +281,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 | 抽出待辦 | `ProjectPage`（開窗**之前**的按鈕上） | 確認抽出待辦（會產生費用） | **永不**套（只產生候選） |
 | AI 問答：修改提問後重新產生答案 | `AiChatModal` | 確認重新產生答案（會產生費用） | 套（會覆蓋原本的回答） |
 | AI 問答：送出新問題 | `AiChatModal.OnAskAsync` | — | 刻意不確認，這是唯一沒有確認框的付費入口 |
-| AI 日誌分析（0.4.121） | `LogViewerView.OnAiAnalyzeAsync`（開窗**之前**） | 確認執行 AI 日誌分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
+| AI 日誌分析（0.4.121） | `LogViewerPage.OnAiAnalyzeAsync`（1.1.42 前是 `LogViewerView`；開窗**之前**） | 確認執行 AI 日誌分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
 | AI 例外分析（0.4.122） | `ExceptionLogPage.OnAiAnalyzeAsync`（1.1.41 前是 `ExceptionLogView`；明細窗按鈕，開窗**之前**） | 確認執行 AI 例外分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
 
 三個位置陷阱：

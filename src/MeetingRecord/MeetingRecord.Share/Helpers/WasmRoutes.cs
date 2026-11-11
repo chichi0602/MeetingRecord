@@ -32,6 +32,7 @@ public static class WasmRoutes
         "/ai-usage", // 1.1.37 Token 用量（1.0.30 前的舊網址）
         "/ai-call-logs", // 1.1.39 AI 對話紀錄
         "/system-exceptions", // 1.1.41 系統例外紀錄
+        "/logs", // 1.1.42 日誌檢視
     };
 
     /// <param name="path">

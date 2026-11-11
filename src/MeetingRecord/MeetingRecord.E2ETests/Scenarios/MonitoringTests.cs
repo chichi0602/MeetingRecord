@@ -201,4 +201,36 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
             await Task.Delay(300);
         }
     }
+
+    [E2EFact]
+    [Trait("Scenario", "LOG-01")]
+    [Trait("Title", "日誌檢視（WASM 頁）：匯出 .log 與 AI 分析由伺服器重查產生，稽核由伺服器寫")]
+    [Trait("Page", "日誌檢視")]
+    [Trait("Persona", "管理者")]
+    public async Task LogViewer_ExportAndAiAnalysis_ShouldWork()
+    {
+        // 1.1.42 日誌檢視搬到 WASM：查詢、匯出、AI 分析改走 api/v1/monitoring/logs；伺服器依同一組條件重查，不收前端給的日誌。
+        // 測試主機的 NLog 寫在這次執行自己的資料夾，啟動與請求都會留下日誌，預設的「最近 1 小時」一定查得到。
+        var page = await LoginAsAsync(Seed.Admin);
+        await page.GotoAsync("/logs");
+        await Expect(page.Locator("tr.ant-table-row").First).ToBeVisibleAsync();
+
+        var fileName = await DownloadAsync(page, () => ToolbarButton(page, "匯出").ClickAsync());
+        Assert.EndsWith(".log", fileName);
+
+        await ToolbarButton(page, "AI 分析").ClickAsync();
+        await ConfirmAsync(page, "開始分析");
+        var result = page.Locator(".ant-modal-wrap:visible").Filter(new() { HasText = "AI 日誌分析結果" });
+        await Expect(result.GetByText("E2E 假 AI 回應").First).ToBeVisibleAsync();
+        await Expect(result.GetByText("查詢區間").First).ToBeVisibleAsync();
+
+        await using var db = App.CreateDbContext();
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!(await db.AuditLog.AnyAsync(x => x.Action == "LogViewer.Export" && x.Detail!.EndsWith("via=Api"))
+                 && await db.AuditLog.AnyAsync(x => x.Action == "LogViewer.AiAnalyze" && x.Success && x.Detail!.EndsWith("via=Api"))))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "匯出與 AI 分析的稽核要由伺服器寫");
+            await Task.Delay(300);
+        }
+    }
 }

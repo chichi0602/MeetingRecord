@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.46
+- 文件版本：1.47
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.41
+- 現行系統版本：1.1.42
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -517,6 +517,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | AI 對話紀錄（二）頁面 `/ai-call-logs` | 1.1.39 | ✅ 完成；頁面搬到 Client、全部動作走 API；途中修正**帶查詢字串的 WASM 頁無限重載**（`NavigationContext.Path` 帶查詢字串，`WasmRoutes.IsWasm` 改成忽略 `?`／`#`），加 `WasmRoutesTests`；新增 AIM-02；MON-01 的 `/ai-call-logs` 改檢查「清除此日之前」（舊文字側邊選單也有） |
 | 系統例外（一）API | 1.1.40 | ✅ 完成；新 `ExceptionLogController`（`api/v1/exception-logs`，`[AdminOnly]`）10 支：設定、清單、堆疊、一次讀多列堆疊、CSV、刪除、清除 N 天前、全部清除、**AI 例外分析串流**（伺服器依編號組提示詞、不含帳號，中斷＝取消）、分析 PDF；`DiagnosticAiService` 改經 `IAiCallerProvider`；`ExceptionLogAdapterModel`／`ExceptionLogQuery` 搬到 `Dtos/Diagnostics`、`ExceptionSources` 搬到 Share；頁面下一版搬 |
 | 系統例外（二）頁面 `/system-exceptions` | 1.1.41 | ✅ 完成；頁面搬到 Client、全部動作走 API；AI 分析在瀏覽器讀串流、關窗＝中斷請求，送出內容由伺服器組；剪貼簿組字 `ExceptionLogClipboardText` 搬到 `Dtos/Diagnostics`；新增 EXC-01，MON-01／02 照過 |
+| 日誌檢視 `/logs`（API＋頁面） | 1.1.42 | ✅ 完成；`MonitoringController` 加 `logs/meta`、`query`、`export`、`ai-analysis`（串流）、`ai-analysis/pdf`，匯出與 AI 分析都由伺服器依同一組條件重查、不收前端給的日誌；頁面搬到 Client；`AiLogPromptBuilder` 搬到 Dtos；AI 串流 DTO 改成通用的 `DiagnosticAi…`，Client 讀串流抽成 `DiagnosticAiStream`；Server 的 `Views/Monitoring` 清空；新增 `LogViewerApiTests`、LOG-01 |
 
 ## 十一、下一步
 

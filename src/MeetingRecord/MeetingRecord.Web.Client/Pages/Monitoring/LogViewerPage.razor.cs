@@ -1,30 +1,24 @@
-using System.Text;
 using AntDesign;
 using AntDesign.TableModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using MeetingRecord.Business.Services.Diagnostics;
-using MeetingRecord.Business.Services.Export;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Share.Enums;
-using MeetingRecord.Share.Helpers;
-using MeetingRecord.Web.Diagnostics;
-using MeetingRecord.Web.Services;
+using Microsoft.Extensions.Logging;
 using MeetingRecord.Dtos.Diagnostics;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
+using MeetingRecord.Web.Services;
 
-namespace MeetingRecord.Web.Components.Views.Monitoring;
+namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 日誌檢視（0.4.121，移植自 NET10-Blazor-Starter）。**管理者限定**。
+/// 日誌檢視（0.4.121，移植自 NET10-Blazor-Starter；1.1.42 從 Blazor Server 的 LogViewerView 搬到 WASM，畫面不變）。**管理者限定**。
 ///
-/// <para>讀 NLog 的檔案目標（<see cref="ILogQueryService"/>），可篩選、展開堆疊、複製、匯出 .log，
-/// 並可把查詢結果中最新 100 筆送給 AI 分析（會產生費用：先確認、邊生成邊顯示、關閉視窗即取消、寫入用量帳本）。</para>
+/// <para>讀 NLog 的檔案目標（<c>api/v1/monitoring/logs/query</c>），可篩選、展開堆疊、複製、匯出 .log，
+/// 並可把查詢結果中最新 100 筆送給 AI 分析（會產生費用：先確認、邊生成邊顯示、關閉視窗即取消、寫入用量帳本）。
+/// 匯出與 AI 分析都由伺服器依同一組條件重查，不收這裡的日誌；稽核由伺服器寫。</para>
 /// </summary>
-public partial class LogViewerView : ComponentBase, IDisposable
+public partial class LogViewerPage : ComponentBase, IDisposable
 {
-    private const string PdfContentType = "application/pdf";
-    private const string LogContentType = "text/plain";
-
     /// <summary>複製全部超過這個筆數先確認——內容太大時貼上會很慢。</summary>
     private const int CopyAllConfirmThreshold = 1000;
 
@@ -47,47 +41,15 @@ public partial class LogViewerView : ComponentBase, IDisposable
         Succeeded,
     }
 
-    [Inject]
-    private ILogQueryService LogQueryService { get; set; } = default!;
-
-    [Inject]
-    private DiagnosticAiService DiagnosticAiService { get; set; } = default!;
-
-    [Inject]
-    private IPdfRenderer PdfRenderer { get; set; } = default!;
-
-    [Inject]
-    private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
-
-    [Inject]
-    private ClipboardInterop ClipboardInterop { get; set; } = default!;
-
-    [Inject]
-    private IAuditLogService AuditLogService { get; set; } = default!;
-
-    [Inject]
-    private CurrentUserService CurrentUserService { get; set; } = default!;
-
-    [Inject]
-    private ModalService ModalService { get; set; } = default!;
-
-    [Inject]
-    private MessageService MessageService { get; set; } = default!;
-
-    [Inject]
-    private NotificationService NotificationService { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
-
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = default!;
-
-    [Inject]
-    private ILogger<LogViewerView> Logger { get; set; } = default!;
+    [Inject] private MonitoringApi MonitoringApi { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
+    [Inject] private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
+    [Inject] private ClipboardInterop ClipboardInterop { get; set; } = default!;
+    [Inject] private ModalService ModalService { get; set; } = default!;
+    [Inject] private MessageService MessageService { get; set; } = default!;
+    [Inject] private NotificationService NotificationService { get; set; } = default!;
+    [Inject] private ILogger<LogViewerPage> Logger { get; set; } = default!;
 
     private string RoleMessage { get; set; } = string.Empty;
 
@@ -103,7 +65,10 @@ public partial class LogViewerView : ComponentBase, IDisposable
     private string keyword = string.Empty;
     private string traceId = string.Empty;
 
-    /// <summary>時間正序（舊→新）：匯出、複製、AI 都用這份。</summary>
+    /// <summary>目前畫面上的結果所用的條件（已夾回實際查詢的區間）。匯出與 AI 分析帶這一組，伺服器重查。</summary>
+    private LogQueryRequest? appliedQuery;
+
+    /// <summary>時間正序（舊→新）：複製、AI 確認窗的筆數與字數都用這份。</summary>
     private List<LogEntry> entriesAscending = [];
 
     /// <summary>畫面顯示用：最新在前。</summary>
@@ -120,12 +85,13 @@ public partial class LogViewerView : ComponentBase, IDisposable
     private bool isAiRunning;
     private bool isAiExporting;
     private CancellationTokenSource? aiCts;
+    private LogQueryRequest? aiQuery;
     private AiPromptBuildResult? aiPrompt;
     private string aiStreaming = string.Empty;
     private string aiMarkdown = string.Empty;
     private string aiErrorMessage = string.Empty;
     private int aiElapsedSeconds;
-    private List<(string Label, string Value)> aiMeta = [];
+    private List<DiagnosticAiMetaLineDto> aiMeta = [];
 
     private string AiButtonTitle => aiAvailable
         ? $"把本次查詢結果中最新 {AiLogPromptBuilder.MaxEntries} 筆送給 AI 整理（會產生費用）"
@@ -140,25 +106,29 @@ public partial class LogViewerView : ComponentBase, IDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            return;
-        }
-
+        // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過，走到這裡一定是有效的登入者。
+        await PermissionView.LoadAsync();
         isAccessChecked = true;
 
-        // 管理者限定：權限鍵刻意不在角色權限目錄裡，所以直接看 CheckIsAdmin。判定前不讀任何日誌。
-        if (!AuthenticationStateHelper.CheckIsAdmin())
+        // 管理者限定：權限鍵刻意不在角色權限目錄裡。判定前不讀任何日誌。API 也是 [AdminOnly]。
+        if (!PermissionView.IsAdmin)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/logs");
+            await PageAccessApi.RecordPageDeniedAsync("/logs");
             Logger.LogWarning("Log viewer denied because the current user is not an administrator.");
             return;
         }
 
-        aiAvailable = DiagnosticAiService.IsAvailable;
-        aiUnavailableReason = DiagnosticAiService.UnavailableReason;
+        var meta = await MonitoringApi.GetLogViewerMetaAsync();
+        if (meta.Success && meta.Data is { } data)
+        {
+            aiAvailable = data.AiAvailable;
+            aiUnavailableReason = data.AiUnavailableReason;
+        }
+        else
+        {
+            aiUnavailableReason = $"無法確認 AI 設定：{ApiClient.ErrorText(meta)}";
+        }
 
         endTime = DateTime.Now;
         startTime = endTime.Value.AddHours(-1);
@@ -217,7 +187,15 @@ public partial class LogViewerView : ComponentBase, IDisposable
                 TraceId = traceId ?? string.Empty,
             };
 
-            var result = await LogQueryService.QueryAsync(request);
+            var response = await MonitoringApi.QueryLogsAsync(request);
+            if (!response.Success || response.Data is not { } result)
+            {
+                statusMessage = $"查詢日誌失敗：{ApiClient.ErrorText(response)}";
+                entriesAscending = [];
+                entriesDisplay = [];
+                appliedQuery = null;
+                return;
+            }
 
             entriesAscending = result.Entries.ToList();
             entriesDisplay = Enumerable.Reverse(entriesAscending).ToList();
@@ -227,13 +205,9 @@ public partial class LogViewerView : ComponentBase, IDisposable
             // 條件被夾住時把實際查詢的區間寫回選擇器，讓畫面與結果一致。
             startTime = result.AppliedStartTime;
             endTime = result.AppliedEndTime;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Log query failed.");
-            statusMessage = $"查詢日誌失敗：{ex.GetType().Name}。";
-            entriesAscending = [];
-            entriesDisplay = [];
+            request.StartTime = result.AppliedStartTime;
+            request.EndTime = result.AppliedEndTime;
+            appliedQuery = request;
         }
         finally
         {
@@ -285,7 +259,8 @@ public partial class LogViewerView : ComponentBase, IDisposable
             }
         }
 
-        await CopyAsync(BuildRawText(), entriesAscending.Count);
+        // 與伺服器匯出的 .log 內容相同：時間正序、以換行串接原文。
+        await CopyAsync(string.Join(Environment.NewLine, entriesAscending.Select(entry => entry.Raw)), entriesAscending.Count);
     }
 
     private async Task CopyAsync(string text, int rows)
@@ -300,44 +275,28 @@ public partial class LogViewerView : ComponentBase, IDisposable
         }
     }
 
+    /// <summary>匯出 .log：伺服器依同一組條件重查產生（UTF-8 含 BOM），稽核由伺服器寫。</summary>
     private async Task OnExportAsync()
     {
-        if (entriesAscending.Count == 0)
+        if (entriesAscending.Count == 0 || appliedQuery is null)
         {
             return;
         }
 
-        try
-        {
-            var fileName = $"MeetingRecord.Web-logs-{DateTime.Now:yyyyMMdd-HHmmss}.log";
-            await FileDownloadInterop.SaveBytesAsync(fileName, Utf8WithBom(BuildRawText()), LogContentType);
-
-            Logger.LogInformation("Log export downloaded. Rows={Rows}", entriesAscending.Count);
-            await WriteAuditAsync(AuditActions.LogViewerExport, success: true, $"format=log; rows={entriesAscending.Count}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Log export failed.");
-            _ = MessageService.ErrorAsync($"匯出失敗：{ex.Message}");
-        }
+        await SaveDownloadAsync(await MonitoringApi.ExportLogsAsync(appliedQuery), "匯出失敗");
     }
 
-    /// <summary>
-    /// 匯出與「複製」共用：兩者內容必須完全一致，貼上的文字才能當成那份 .log 檔。
-    /// 服務回傳的即為時間正序，直接沿用。
-    /// </summary>
-    private string BuildRawText() => string.Join(Environment.NewLine, entriesAscending.Select(entry => entry.Raw));
-
-    /// <summary>UTF-8 含 BOM：Windows 記事本與 Excel 開中文才不會變亂碼。</summary>
-    private static byte[] Utf8WithBom(string text)
+    /// <summary>把伺服器產生的檔案存到瀏覽器；失敗就顯示「{失敗前綴}：原因」。</summary>
+    private async Task SaveDownloadAsync(ApiDownload download, string failurePrefix)
     {
-        var preamble = Encoding.UTF8.GetPreamble();
-        var body = Encoding.UTF8.GetBytes(text);
-        var bytes = new byte[preamble.Length + body.Length];
-        preamble.CopyTo(bytes, 0);
-        body.CopyTo(bytes, preamble.Length);
-        return bytes;
+        if (!download.Success || download.Content is null)
+        {
+            _ = MessageService.ErrorAsync($"{failurePrefix}：{download.Error}");
+            return;
+        }
+
+        await FileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+        NotifyDownloaded(download.FileName!);
     }
 
     private void NotifyDownloaded(string fileName)
@@ -354,7 +313,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
     private async Task OnAiAnalyzeAsync()
     {
         // 早退防連點：確認窗還開著時再按一次，不能疊出第二個確認窗或第二次呼叫。
-        if (isAiRunning || entriesAscending.Count == 0 || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isAiRunning || entriesAscending.Count == 0 || appliedQuery is null)
         {
             return;
         }
@@ -362,6 +321,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
         isAiRunning = true;
         try
         {
+            // 確認窗的筆數與字數用畫面上的結果算（同一套組字）；實際送出的內容由伺服器依同一組條件重查重組。
             var prompt = AiLogPromptBuilder.Build(entriesAscending);
             if (prompt.IsEmpty)
             {
@@ -385,12 +345,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
                 return;
             }
 
-            await RunAiAnalysisAsync(prompt);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Unhandled exception while running AI log analysis.");
-            ShowAiFailure($"AI 分析發生未預期的錯誤：{ex.Message}");
+            await RunAiAnalysisAsync(appliedQuery, prompt);
         }
         finally
         {
@@ -405,8 +360,10 @@ public partial class LogViewerView : ComponentBase, IDisposable
         }
     }
 
-    private async Task RunAiAnalysisAsync(AiPromptBuildResult prompt)
+    /// <summary>送出由伺服器依查詢條件重查組成；成功、失敗、取消的稽核都由伺服器寫。</summary>
+    private async Task RunAiAnalysisAsync(LogQueryRequest query, AiPromptBuildResult prompt)
     {
+        aiQuery = query;
         aiPrompt = prompt;
         aiStreaming = string.Empty;
         aiMarkdown = string.Empty;
@@ -423,24 +380,15 @@ public partial class LogViewerView : ComponentBase, IDisposable
 
         try
         {
-            var result = await DiagnosticAiService.AnalyzeAsync(
-                AiUsageFeature.LogAnalysis,
-                AiDiagnosticPrompts.LogAnalysis,
-                prompt.UserMessage,
-                OnAiDelta,
-                token,
-                relatedInfo: $"日誌 {startTime:yyyy-MM-dd HH:mm}～{endTime:yyyy-MM-dd HH:mm}，送出 {prompt.IncludedEntryCount}／{prompt.TotalEntryCount} 筆");
-
+            var done = await MonitoringApi.AnalyzeLogsAsync(query, OnAiDelta, token);
             if (isDisposed)
             {
                 return;
             }
 
-            aiMarkdown = result.Content;
-            aiMeta = BuildAiMeta(prompt, result);
+            aiMarkdown = done.Content ?? string.Empty;
+            aiMeta = done.Meta ?? [];
             aiState = AiState.Succeeded;
-
-            await WriteAuditAsync(AuditActions.LogViewerAiAnalyze, success: true, BuildAiAuditDetail(prompt, result.ModelName, result.Elapsed));
 
             if (prompt.DroppedByEntryLimit)
             {
@@ -449,33 +397,23 @@ public partial class LogViewerView : ComponentBase, IDisposable
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            // 使用者關掉視窗：服務已把這次記成 Cancelled，畫面不再跳錯誤。
+            // 使用者關掉視窗：請求中斷，伺服器停止呼叫 AI（帳本記成 Cancelled、稽核記「使用者取消」），畫面不再跳錯誤。
             Logger.LogInformation("AI log analysis cancelled by user.");
-            await WriteAuditAsync(AuditActions.LogViewerAiAnalyze, success: false, BuildAiAuditDetail(prompt, null, null) + "；使用者取消");
         }
         catch (Exception ex)
         {
-            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
-            {
-                Logger.LogWarning("AI log analysis blocked by AI quota.");
-            }
-            else
-            {
-                Logger.LogError(ex, "AI log analysis failed. Entries={Entries}, Characters={Characters}", prompt.IncludedEntryCount, prompt.CharacterCount);
-            }
-
-            await WriteAuditAsync(AuditActions.LogViewerAiAnalyze, success: false, BuildAiAuditDetail(prompt, null, null) + $"；失敗：{ex.GetType().Name}");
-            ShowAiFailure(DescribeFailure(ex));
+            // 訊息是伺服器給的原文（額度用完、日誌量超過上限等，見 LogAiFailure）。
+            Logger.LogWarning(ex, "AI log analysis failed.");
+            ShowAiFailure(ex is InvalidOperationException ? ex.Message : $"AI 分析未完成：{ex.Message}");
         }
     }
 
-    /// <summary>串流的增量文字；從背景執行緒呼叫，切回 circuit 再重繪。</summary>
+    /// <summary>串流的增量文字。</summary>
     private void OnAiDelta(string delta)
-        => _ = InvokeAsync(() =>
-        {
-            aiStreaming += delta;
-            StateHasChanged();
-        });
+    {
+        aiStreaming += delta;
+        StateHasChanged();
+    }
 
     private async Task RunElapsedTickerAsync(CancellationToken token)
     {
@@ -496,7 +434,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>關閉對話窗：分析中就取消（服務記 Cancelled）。</summary>
+    /// <summary>關閉對話窗：分析中就取消（中斷請求，伺服器記 Cancelled）。</summary>
     private void OnAiModalCancel()
     {
         if (isAiRunning && aiCts is not null)
@@ -510,7 +448,7 @@ public partial class LogViewerView : ComponentBase, IDisposable
 
     private void ShowAiFailure(string message)
     {
-        // 取消後供應商可能先丟出別種例外（連線被中斷），不要讓使用者關掉的視窗自己跳回來。
+        // 取消後可能先收到別種錯誤（連線被中斷），不要讓使用者關掉的視窗自己跳回來。
         if (aiCts?.IsCancellationRequested == true || isDisposed)
         {
             return;
@@ -519,49 +457,6 @@ public partial class LogViewerView : ComponentBase, IDisposable
         aiErrorMessage = message;
         aiState = AiState.Failed;
         aiModalVisible = true;
-    }
-
-    /// <summary>把常見失敗翻成使用者看得懂、知道下一步的話。</summary>
-    private static string DescribeFailure(Exception ex)
-    {
-        var message = ex.Message;
-        if (message.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("maximum context length", StringComparison.OrdinalIgnoreCase))
-        {
-            return "送出的日誌量超過模型的內容上限。請縮小時間區間、提高最低等級或減少筆數後再試。";
-        }
-
-        return $"AI 分析未完成：{message}";
-    }
-
-    private List<(string Label, string Value)> BuildAiMeta(AiPromptBuildResult prompt, DiagnosticAiResult result)
-    {
-        var rows = new List<(string, string)>
-        {
-            ("查詢區間", $"{startTime:yyyy-MM-dd HH:mm:ss} ～ {endTime:yyyy-MM-dd HH:mm:ss}"),
-            ("最低等級", string.IsNullOrEmpty(minimumLevel) ? "不限" : minimumLevel),
-        };
-
-        if (!string.IsNullOrWhiteSpace(keyword))
-        {
-            rows.Add(("關鍵字", keyword));
-        }
-
-        if (!string.IsNullOrWhiteSpace(traceId))
-        {
-            rows.Add(("TraceId", traceId));
-        }
-
-        rows.Add(("分析範圍", $"分析 {prompt.IncludedEntryCount} 筆／查詢 {prompt.TotalEntryCount} 筆"
-            + (prompt.DroppedByEntryLimit ? "（只取最新的部分）" : string.Empty)));
-        rows.Add(("使用模型", result.ModelName));
-        if (result.Usage is { } usage)
-        {
-            rows.Add(("用量", $"輸入 {usage.InputTokens:N0}　輸出 {usage.OutputTokens:N0} tokens"));
-        }
-
-        rows.Add(("耗時", $"{result.Elapsed.TotalSeconds:F1} 秒"));
-        return rows;
     }
 
     private async Task OnAiCopyAsync()
@@ -576,9 +471,10 @@ public partial class LogViewerView : ComponentBase, IDisposable
         }
     }
 
+    /// <summary>匯出 PDF：伺服器產生（附錄＝伺服器重查重組的送出內容、操作者＝呼叫者），稽核也由伺服器寫。</summary>
     private async Task OnAiExportPdfAsync()
     {
-        if (isAiExporting || aiState != AiState.Succeeded || aiPrompt is null)
+        if (isAiExporting || aiState != AiState.Succeeded || aiQuery is null)
         {
             return;
         }
@@ -588,51 +484,14 @@ public partial class LogViewerView : ComponentBase, IDisposable
 
         try
         {
-            var exportedAt = DateTime.Now;
-            var html = DiagnosticReportExporter.BuildHtml(
-                "AI 日誌分析報告",
-                [.. aiMeta, ("操作者", CurrentUserService.CurrentUser.Account)],
-                aiMarkdown,
-                "附錄：實際送出的日誌",
-                aiPrompt.UserMessage,
-                exportedAt);
-
-            var pdf = await PdfRenderer.RenderAsync(html);
-            var fileName = DiagnosticReportExporter.BuildFileName("AI日誌分析", exportedAt);
-            await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-
-            await WriteAuditAsync(AuditActions.LogViewerAiAnalyzeExportPdf, success: true, $"rows={aiPrompt.IncludedEntryCount}; bytes={pdf.Length}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "AI log analysis PDF export failed.");
-            _ = MessageService.ErrorAsync($"匯出 PDF 失敗：{ex.Message}");
+            var download = await MonitoringApi.ExportLogAiPdfAsync(new LogAiPdfRequestDto { Query = aiQuery, Markdown = aiMarkdown, Meta = aiMeta });
+            await SaveDownloadAsync(download, "匯出 PDF 失敗");
         }
         finally
         {
             isAiExporting = false;
             StateHasChanged();
         }
-    }
-
-    /// <summary>稽核只記筆數、字數與模型，不記日誌內容（日誌本身就可能含敏感資訊）。</summary>
-    private string BuildAiAuditDetail(AiPromptBuildResult prompt, string? modelName, TimeSpan? elapsed)
-        => $"送出 {prompt.IncludedEntryCount}/{prompt.TotalEntryCount} 筆、{prompt.CharacterCount} 字元"
-            + (modelName is null ? string.Empty : $"；模型 {modelName}")
-            + (elapsed is null ? string.Empty : $"；耗時 {(long)elapsed.Value.TotalMilliseconds} ms");
-
-    private Task WriteAuditAsync(string action, bool success, string detail)
-    {
-        var currentUser = CurrentUserService.CurrentUser;
-        return AuditLogService.WriteAsync(
-            action,
-            success,
-            actorUserId: currentUser.Id,
-            actorAccount: currentUser.Account,
-            targetType: "LogQuery",
-            targetId: $"{startTime:yyyyMMddHHmmss}-{endTime:yyyyMMddHHmmss}",
-            detail: detail);
     }
 
     public void Dispose()

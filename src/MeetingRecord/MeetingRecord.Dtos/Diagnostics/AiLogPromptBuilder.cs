@@ -1,7 +1,6 @@
 using System.Text;
-using MeetingRecord.Dtos.Diagnostics;
 
-namespace MeetingRecord.Web.Diagnostics;
+namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>組好的使用者訊息與送出範圍。</summary>
 public sealed class AiPromptBuildResult
@@ -24,7 +23,8 @@ public sealed class AiPromptBuildResult
 
 /// <summary>
 /// 把查詢結果組成要送給模型的使用者訊息。純函式，無 I/O、無 DI。
-/// 0.4.121 移植自 NET10-Blazor-Starter。
+/// 0.4.121 移植自 NET10-Blazor-Starter。1.1.42 從 <c>Web/Diagnostics</c> 搬到 Dtos：WASM 頁用它算確認窗的筆數與字數，
+/// 伺服器用它組實際送出的內容（依同一組查詢條件重查，不收前端給的日誌）。
 /// </summary>
 public static class AiLogPromptBuilder
 {

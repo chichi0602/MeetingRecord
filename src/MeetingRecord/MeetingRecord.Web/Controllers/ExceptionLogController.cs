@@ -26,7 +26,7 @@ namespace MeetingRecord.Web.Controllers;
 /// </para>
 ///
 /// <para>
-/// **AI 例外分析**會花錢、要邊產生邊顯示：回應是串流（一行一筆 JSON，見 <see cref="ExceptionAiStreamEventDto"/>）。
+/// **AI 例外分析**會花錢、要邊產生邊顯示：回應是串流（一行一筆 JSON，見 <see cref="DiagnosticAiStreamEventDto"/>）。
 /// 送出的內容由伺服器依例外編號自己組（<see cref="AiExceptionPromptBuilder"/>，不含帳號），不收前端的值。
 /// 前端關掉視窗＝中斷請求：請求的取消權杖傳進服務層，AI 呼叫跟著停（帳本記成 Cancelled）。
 /// </para>
@@ -198,16 +198,16 @@ public sealed class ExceptionLogController(
                 onDelta,
                 cancellationToken,
                 relatedInfo: $"例外紀錄 #{item.Id}（{item.ExceptionType}）"),
-            delta => new ExceptionAiStreamEventDto { Type = ExceptionAiStreamEventDto.Delta, Text = delta },
-            result => new ExceptionAiStreamEventDto
+            delta => new DiagnosticAiStreamEventDto { Type = DiagnosticAiStreamEventDto.Delta, Text = delta },
+            result => new DiagnosticAiStreamEventDto
             {
-                Type = ExceptionAiStreamEventDto.Done,
+                Type = DiagnosticAiStreamEventDto.Done,
                 Content = result.Content,
                 Model = result.ModelName,
                 Meta = BuildMeta(item, result),
             },
             error => new BadRequestObjectResult(ApiResult.FailureResult(ExceptionAiFailure.Describe(LogFailure(error, id, cancellationToken)))),
-            error => new ExceptionAiStreamEventDto { Type = ExceptionAiStreamEventDto.Error, Message = ExceptionAiFailure.Describe(LogFailure(error, id, cancellationToken)) },
+            error => new DiagnosticAiStreamEventDto { Type = DiagnosticAiStreamEventDto.Error, Message = ExceptionAiFailure.Describe(LogFailure(error, id, cancellationToken)) },
             cancellationToken);
 
         // 同畫面：成功記字數、模型、耗時；使用者關窗記「使用者取消」；失敗記例外型別。斷線也要記得到，所以不傳請求的取消權杖。
@@ -226,7 +226,7 @@ public sealed class ExceptionLogController(
     /// 操作者是 API 呼叫者。這一列不存在 404。寫稽核。
     /// </summary>
     [HttpPost("{id:int}/ai-analysis/pdf")]
-    public async Task<IActionResult> ExportAiPdf(int id, [FromBody] ExceptionAiPdfRequestDto request, CancellationToken cancellationToken)
+    public async Task<IActionResult> ExportAiPdf(int id, [FromBody] DiagnosticAiPdfRequestDto request, CancellationToken cancellationToken)
     {
         if (await exceptionLogService.GetByIdAsync(id) is not { } item)
         {
@@ -265,9 +265,9 @@ public sealed class ExceptionLogController(
         => AiExceptionPromptBuilder.Build(item, NullIfBlank(await exceptionLogService.GetStackTraceAsync(item.Id)));
 
     /// <summary>結果上方的說明行（同畫面）。</summary>
-    private static List<ExceptionAiMetaLineDto> BuildMeta(ExceptionLogAdapterModel item, DiagnosticAiResult result)
+    private static List<DiagnosticAiMetaLineDto> BuildMeta(ExceptionLogAdapterModel item, DiagnosticAiResult result)
     {
-        var meta = new List<ExceptionAiMetaLineDto>
+        var meta = new List<DiagnosticAiMetaLineDto>
         {
             new() { Label = "例外類型", Value = item.ExceptionType },
             new() { Label = "累計次數", Value = item.OccurrenceCount.ToString("N0") },

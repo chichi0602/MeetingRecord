@@ -107,11 +107,11 @@ public sealed class ExceptionLogApiTests(AiChatTestApplicationFactory factory) :
         Assert.Equal("application/x-ndjson", response.Content.Headers.ContentType!.MediaType);
         var events = (await response.Content.ReadAsStringAsync())
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => JsonSerializer.Deserialize<ExceptionAiStreamEventDto>(line, JsonOptions)!)
+            .Select(line => JsonSerializer.Deserialize<DiagnosticAiStreamEventDto>(line, JsonOptions)!)
             .ToList();
-        Assert.Contains(events, x => x.Type == ExceptionAiStreamEventDto.Delta);
+        Assert.Contains(events, x => x.Type == DiagnosticAiStreamEventDto.Delta);
         var done = events[^1];
-        Assert.Equal(ExceptionAiStreamEventDto.Done, done.Type);
+        Assert.Equal(DiagnosticAiStreamEventDto.Done, done.Type);
         Assert.Contains(E2EFakeAi.AnswerMarker, done.Content);
         Assert.Equal("fake", done.Model);
         Assert.Contains(done.Meta!, x => x.Label == "例外類型" && x.Value == "System.NullReferenceException");
@@ -135,7 +135,7 @@ public sealed class ExceptionLogApiTests(AiChatTestApplicationFactory factory) :
             Assert.Matches(@"^chars=\d+; model=fake; elapsedMs=\d+; via=Api$", audit.Detail);
         }
 
-        using (var pdf = await client.PostAsJsonAsync($"{Base}/{id}/ai-analysis/pdf", new ExceptionAiPdfRequestDto { Markdown = done.Content!, Meta = done.Meta! }))
+        using (var pdf = await client.PostAsJsonAsync($"{Base}/{id}/ai-analysis/pdf", new DiagnosticAiPdfRequestDto { Markdown = done.Content!, Meta = done.Meta! }))
         {
             Assert.Equal(HttpStatusCode.OK, pdf.StatusCode);
             Assert.Equal("application/pdf", pdf.Content.Headers.ContentType!.MediaType);
@@ -159,8 +159,8 @@ public sealed class ExceptionLogApiTests(AiChatTestApplicationFactory factory) :
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cts.Token));
-            var first = JsonSerializer.Deserialize<ExceptionAiStreamEventDto>((await reader.ReadLineAsync(cts.Token))!, JsonOptions)!;
-            Assert.Equal(ExceptionAiStreamEventDto.Delta, first.Type);
+            var first = JsonSerializer.Deserialize<DiagnosticAiStreamEventDto>((await reader.ReadLineAsync(cts.Token))!, JsonOptions)!;
+            Assert.Equal(DiagnosticAiStreamEventDto.Delta, first.Type);
             cts.Cancel();
         }
 

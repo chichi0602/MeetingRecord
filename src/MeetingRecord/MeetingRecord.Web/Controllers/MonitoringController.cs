@@ -1,13 +1,18 @@
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Diagnostics;
+using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Diagnostics;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Filters;
 using MeetingRecord.Web.Health;
+using MeetingRecord.Web.Streaming;
 
 namespace MeetingRecord.Web.Controllers;
 
@@ -27,8 +32,14 @@ public sealed class MonitoringController(
     ISystemHealthService systemHealthService,
     ILogQueryService logQueryService,
     AiConnectionTestService aiConnectionTestService,
+    DiagnosticAiService diagnosticAiService,
+    IPdfRenderer pdfRenderer,
+    IAuditActorProvider actorProvider,
     ILogger<MonitoringController> logger) : ControllerBase
 {
+    /// <summary>日誌檢視稽核的目標型別（同畫面）。</summary>
+    private const string LogQueryTargetType = "LogQuery";
+
     /// <summary>系統健康「最近 24 小時警告以上日誌」最多列幾筆（最新的）。更多請到「日誌檢視」。</summary>
     public const int RecentWarningTake = 200;
 
@@ -74,6 +85,139 @@ public sealed class MonitoringController(
         {
             logger.LogError(ex, "Loading recent warning logs for system health through API failed.");
             return Ok(ApiResult<LogQueryResult>.SuccessResult(new LogQueryResult { Message = $"讀取日誌失敗：{ex.GetType().Name}。" }));
+        }
+    }
+
+    /// <summary>日誌檢視頁的設定（1.1.42）：AI 日誌分析能不能用。</summary>
+    [HttpGet("logs/meta")]
+    public ActionResult<ApiResult<LogViewerMetaDto>> LogViewerMeta()
+    {
+        var available = diagnosticAiService.IsAvailable;
+        return Ok(ApiResult<LogViewerMetaDto>.SuccessResult(new LogViewerMetaDto
+        {
+            AiAvailable = available,
+            AiUnavailableReason = available ? string.Empty : diagnosticAiService.UnavailableReason,
+        }));
+    }
+
+    /// <summary>
+    /// 日誌檢視查詢（1.1.42）：讀 NLog 的檔案目標，回時間正序（舊→新），畫面自己反轉。
+    /// 條件被夾住時（區間過長、筆數過多）<c>appliedStartTime</c>／<c>appliedEndTime</c> 是實際查詢的區間；讀檔失敗時結果帶 <c>message</c>，同畫面。
+    /// </summary>
+    [HttpPost("logs/query")]
+    public async Task<ActionResult<ApiResult<LogQueryResult>>> QueryLogs([FromBody] LogQueryRequest request, CancellationToken cancellationToken)
+        => Ok(ApiResult<LogQueryResult>.SuccessResult(await RunLogQueryAsync(request, cancellationToken)));
+
+    /// <summary>
+    /// 匯出 .log（1.1.42）：伺服器依同一組條件重查、組成原文（時間正序，UTF-8 含 BOM），內容與畫面「複製」相同。
+    /// 沒有日誌回 400。稽核 <c>LogViewer.Export</c> 由伺服器寫。
+    /// </summary>
+    [HttpPost("logs/export")]
+    public async Task<IActionResult> ExportLogs([FromBody] LogQueryRequest request, CancellationToken cancellationToken)
+    {
+        var result = await RunLogQueryAsync(request, cancellationToken);
+        if (result.Entries.Count == 0)
+        {
+            return BadRequest(ApiResult.FailureResult(string.IsNullOrWhiteSpace(result.Message) ? "沒有日誌可以匯出。" : result.Message));
+        }
+
+        var bytes = Utf8WithBom(string.Join(Environment.NewLine, result.Entries.Select(entry => entry.Raw)));
+        logger.LogInformation("Log export downloaded through API. Rows={Rows}", result.Entries.Count);
+        await WriteLogAuditAsync(AuditActions.LogViewerExport, success: true, result, $"format=log; rows={result.Entries.Count}");
+        return File(bytes, "text/plain", $"MeetingRecord.Web-logs-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    }
+
+    /// <summary>
+    /// AI 日誌分析（1.1.42，會產生費用；確認窗在前端）。伺服器依同一組條件**重查**、取最新
+    /// <see cref="AiLogPromptBuilder.MaxEntries"/> 筆組成送出內容，不收前端給的日誌。回應是串流（見 <see cref="DiagnosticAiStreamEventDto"/>）；
+    /// 前端關掉視窗＝中斷請求，AI 呼叫跟著停（帳本記成 Cancelled）。AI 不能用、沒有日誌、第一段文字前就失敗回一般的 400。
+    /// 成功、失敗、取消都寫稽核（同畫面）。
+    /// </summary>
+    [HttpPost("logs/ai-analysis")]
+    public async Task AnalyzeLogs([FromBody] LogQueryRequest request, CancellationToken cancellationToken)
+    {
+        if (!diagnosticAiService.IsAvailable)
+        {
+            await new BadRequestObjectResult(ApiResult.FailureResult($"AI 分析目前無法使用：{diagnosticAiService.UnavailableReason}"))
+                .ExecuteResultAsync(ControllerContext);
+            return;
+        }
+
+        var result = await RunLogQueryAsync(request, cancellationToken);
+        var prompt = AiLogPromptBuilder.Build(result.Entries);
+        if (prompt.IsEmpty)
+        {
+            await new BadRequestObjectResult(ApiResult.FailureResult("沒有日誌可以分析，請調整查詢條件。")).ExecuteResultAsync(ControllerContext);
+            return;
+        }
+
+        var (start, end) = (result.AppliedStartTime, result.AppliedEndTime);
+        var outcome = await NdjsonStreamer.RunAsync(
+            this,
+            onDelta => diagnosticAiService.AnalyzeAsync(
+                AiUsageFeature.LogAnalysis,
+                AiDiagnosticPrompts.LogAnalysis,
+                prompt.UserMessage,
+                onDelta,
+                cancellationToken,
+                relatedInfo: $"日誌 {start:yyyy-MM-dd HH:mm}～{end:yyyy-MM-dd HH:mm}，送出 {prompt.IncludedEntryCount}／{prompt.TotalEntryCount} 筆"),
+            delta => new DiagnosticAiStreamEventDto { Type = DiagnosticAiStreamEventDto.Delta, Text = delta },
+            analysis => new DiagnosticAiStreamEventDto
+            {
+                Type = DiagnosticAiStreamEventDto.Done,
+                Content = analysis.Content,
+                Model = analysis.ModelName,
+                Meta = BuildLogAiMeta(request, result, prompt, analysis),
+            },
+            error => new BadRequestObjectResult(ApiResult.FailureResult(LogAiFailure.Describe(LogAiAnalysisFailure(error, prompt, cancellationToken)))),
+            error => new DiagnosticAiStreamEventDto { Type = DiagnosticAiStreamEventDto.Error, Message = LogAiFailure.Describe(LogAiAnalysisFailure(error, prompt, cancellationToken)) },
+            cancellationToken);
+
+        // 同畫面：成功記筆數、字數、模型、耗時；使用者關窗記「使用者取消」；失敗記例外型別。斷線也要記得到，所以不傳請求的取消權杖。
+        var detail = outcome switch
+        {
+            { Error: null, Result: { } analysis } => BuildLogAiAuditDetail(prompt, analysis.ModelName, analysis.Elapsed),
+            { Error: OperationCanceledException } when cancellationToken.IsCancellationRequested => BuildLogAiAuditDetail(prompt, null, null) + "；使用者取消",
+            { Error: { } error } => BuildLogAiAuditDetail(prompt, null, null) + $"；失敗：{error.GetType().Name}",
+            _ => BuildLogAiAuditDetail(prompt, null, null),
+        };
+        await WriteLogAuditAsync(AuditActions.LogViewerAiAnalyze, success: outcome.Error is null, result, detail);
+    }
+
+    /// <summary>
+    /// 匯出 AI 日誌分析 PDF（1.1.42）：結果與說明行由前端帶（剛收到的），附錄「實際送出的日誌」由伺服器依同一組條件重查重組，
+    /// 操作者是 API 呼叫者。稽核由伺服器寫。
+    /// </summary>
+    [HttpPost("logs/ai-analysis/pdf")]
+    public async Task<IActionResult> ExportLogAiPdf([FromBody] LogAiPdfRequestDto request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Markdown))
+        {
+            return BadRequest(ApiResult.FailureResult("沒有分析結果可以匯出。"));
+        }
+
+        try
+        {
+            var result = await RunLogQueryAsync(request.Query, cancellationToken);
+            var prompt = AiLogPromptBuilder.Build(result.Entries);
+            var exportedAt = DateTime.Now;
+            var html = DiagnosticReportExporter.BuildHtml(
+                "AI 日誌分析報告",
+                [.. request.Meta.Select(x => (x.Label, x.Value)), ("操作者", actorProvider.GetActor().Account ?? string.Empty)],
+                request.Markdown,
+                "附錄：實際送出的日誌",
+                prompt.UserMessage,
+                exportedAt);
+
+            var pdf = await pdfRenderer.RenderAsync(html, cancellationToken);
+            await WriteLogAuditAsync(AuditActions.LogViewerAiAnalyzeExportPdf, success: true, result, $"rows={prompt.IncludedEntryCount}; bytes={pdf.Length}");
+            return File(pdf, "application/pdf", DiagnosticReportExporter.BuildFileName("AI日誌分析", exportedAt));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "AI log analysis PDF export through API failed.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResult.FailureResult($"匯出 PDF 失敗：{ex.Message}", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -167,6 +311,96 @@ public sealed class MonitoringController(
         SystemDefaultLevel = logLevelState.SystemDefaultLevel,
         HasOverride = logLevelState.OverrideLevel is not null,
     };
+
+    /// <summary>查詢日誌；讀檔失敗時回帶訊息的空結果（同畫面「查詢日誌失敗：例外型別。」）。</summary>
+    private async Task<LogQueryResult> RunLogQueryAsync(LogQueryRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await logQueryService.QueryAsync(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Log query through API failed.");
+            return new LogQueryResult
+            {
+                Message = $"查詢日誌失敗：{ex.GetType().Name}。",
+                AppliedStartTime = request.StartTime,
+                AppliedEndTime = request.EndTime,
+            };
+        }
+    }
+
+    /// <summary>AI 日誌分析結果上方的說明行（同畫面）。</summary>
+    private static List<DiagnosticAiMetaLineDto> BuildLogAiMeta(LogQueryRequest request, LogQueryResult result, AiPromptBuildResult prompt, DiagnosticAiResult analysis)
+    {
+        var rows = new List<DiagnosticAiMetaLineDto>
+        {
+            new() { Label = "查詢區間", Value = $"{result.AppliedStartTime:yyyy-MM-dd HH:mm:ss} ～ {result.AppliedEndTime:yyyy-MM-dd HH:mm:ss}" },
+            new() { Label = "最低等級", Value = request.MinimumLevel == LogLevelRank.Any ? "不限" : LogLevelRankHelper.ToLevelText(request.MinimumLevel) },
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            rows.Add(new() { Label = "關鍵字", Value = request.Keyword });
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TraceId))
+        {
+            rows.Add(new() { Label = "TraceId", Value = request.TraceId });
+        }
+
+        rows.Add(new()
+        {
+            Label = "分析範圍",
+            Value = $"分析 {prompt.IncludedEntryCount} 筆／查詢 {prompt.TotalEntryCount} 筆" + (prompt.DroppedByEntryLimit ? "（只取最新的部分）" : string.Empty),
+        });
+        rows.Add(new() { Label = "使用模型", Value = analysis.ModelName });
+        if (analysis.Usage is { } usage)
+        {
+            rows.Add(new() { Label = "用量", Value = $"輸入 {usage.InputTokens:N0}　輸出 {usage.OutputTokens:N0} tokens" });
+        }
+
+        rows.Add(new() { Label = "耗時", Value = $"{analysis.Elapsed.TotalSeconds:F1} 秒" });
+        return rows;
+    }
+
+    /// <summary>同畫面：額度用完記 warning、使用者關窗只記 information、其他記 error。</summary>
+    private Exception LogAiAnalysisFailure(Exception error, AiPromptBuildResult prompt, CancellationToken cancellationToken)
+    {
+        if (error is AiQuotaExceededException)
+        {
+            logger.LogWarning("AI log analysis blocked by AI quota.");
+        }
+        else if (error is OperationCanceledException && cancellationToken.IsCancellationRequested)
+        {
+            logger.LogInformation("AI log analysis cancelled by user.");
+        }
+        else
+        {
+            logger.LogError(error, "AI log analysis failed. Entries={Entries}, Characters={Characters}", prompt.IncludedEntryCount, prompt.CharacterCount);
+        }
+
+        return error;
+    }
+
+    /// <summary>稽核只記筆數、字數與模型，不記日誌內容（日誌本身就可能含敏感資訊），同畫面。</summary>
+    private static string BuildLogAiAuditDetail(AiPromptBuildResult prompt, string? modelName, TimeSpan? elapsed)
+        => $"送出 {prompt.IncludedEntryCount}/{prompt.TotalEntryCount} 筆、{prompt.CharacterCount} 字元"
+            + (modelName is null ? string.Empty : $"；模型 {modelName}")
+            + (elapsed is null ? string.Empty : $"；耗時 {(long)elapsed.Value.TotalMilliseconds} ms");
+
+    /// <summary>日誌檢視的稽核：目標是實際查詢的區間（同畫面），另加 via=Api。</summary>
+    private Task WriteLogAuditAsync(string action, bool success, LogQueryResult result, string detail)
+        => auditLogService.WriteForCurrentUserAsync(
+            action,
+            success: success,
+            targetType: LogQueryTargetType,
+            targetId: $"{result.AppliedStartTime:yyyyMMddHHmmss}-{result.AppliedEndTime:yyyyMMddHHmmss}",
+            detail: $"{detail}; via={AuditVia.Api}");
+
+    /// <summary>UTF-8 含 BOM：Windows 記事本與 Excel 開中文才不會變亂碼。</summary>
+    private static byte[] Utf8WithBom(string text) => [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(text)];
 
     /// <summary>稽核內容同畫面（1.1.33 前由畫面寫），另加 via=Api。寫入失敗不推翻「等級已經套用」這個事實。</summary>
     private Task WriteLogLevelAuditAsync(string action, LogLevelRank previous, LogLevelRank current)

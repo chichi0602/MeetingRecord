@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Diagnostics;
 
@@ -43,44 +42,12 @@ public sealed class ExceptionLogApi(ApiClient api)
         => api.PostAsync($"{Base}/clear-all", ClientJsonContext.Default.EmptyResult);
 
     /// <summary>AI 例外分析；<paramref name="onDelta"/> 逐段回報新文字。回完成事件（結果、模型、說明行）。</summary>
-    public async Task<ExceptionAiStreamEventDto> AnalyzeAsync(int id, Action<string> onDelta, CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{Base}/{id}/ai-analysis");
-        using var response = await api.SendStreamingAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            var failure = await api.ReadFailureAsync(response, cancellationToken);
-            throw new InvalidOperationException(failure.ErrorMessage ?? failure.Message);
-        }
+    public Task<DiagnosticAiStreamEventDto> AnalyzeAsync(int id, Action<string> onDelta, CancellationToken cancellationToken)
+        => DiagnosticAiStream.ReadAsync(api, new HttpRequestMessage(HttpMethod.Post, $"{Base}/{id}/ai-analysis"), onDelta, cancellationToken);
 
-        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cancellationToken));
-        while (await reader.ReadLineAsync(cancellationToken) is { } line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            var item = JsonSerializer.Deserialize(line, ClientJsonContext.Default.ExceptionAiStreamEventDto);
-            switch (item?.Type)
-            {
-                case ExceptionAiStreamEventDto.Delta when item.Text is not null:
-                    onDelta(item.Text);
-                    break;
-                case ExceptionAiStreamEventDto.Done:
-                    return item;
-                case ExceptionAiStreamEventDto.Error:
-                    throw new InvalidOperationException(item.Message ?? "AI 分析未完成，請稍後再試。");
-            }
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        throw new InvalidOperationException("連線中斷，沒有收到完整的分析結果，請重新整理後再試。");
-    }
-
-    public Task<ApiDownload> ExportAiPdfAsync(int id, ExceptionAiPdfRequestDto request)
+    public Task<ApiDownload> ExportAiPdfAsync(int id, DiagnosticAiPdfRequestDto request)
         => api.DownloadAsync(new HttpRequestMessage(HttpMethod.Post, $"{Base}/{id}/ai-analysis/pdf")
         {
-            Content = JsonContent.Create(request, ClientJsonContext.Default.ExceptionAiPdfRequestDto),
+            Content = JsonContent.Create(request, ClientJsonContext.Default.DiagnosticAiPdfRequestDto),
         });
 }

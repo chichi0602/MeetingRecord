@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.36
+- 文件版本：1.37
 - 文件狀態：已實作
-- 現行系統版本：1.1.40
+- 現行系統版本：1.1.42
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/11
 
@@ -67,7 +67,7 @@
 
 **使用說明**（1.1.29，`HelpController`，`api/v1/help`，都要「使用說明」View，同畫面）：`GET manual`（去掉檔頭的說明 Markdown，保留 `<!-- 說明分類：… -->` 標記；另帶 `assistantAvailable`、`assistantUnavailableReason`）、`POST assistant/ask`（內容 `{ question, history: [{question, answer}], threadKey? }`；回 `application/x-ndjson` 串流，事件 `delta`／`done`（`answer`、`model`）／`error`）。問題空白、`threadKey` 不是 `help:`＋32 位小寫 16 進位、沒設定 AI 回 400；第一段文字前失敗（例如額度用完）回 400，開始後失敗送 `error`。要不要送「管理員」章節由伺服器依呼叫者判斷；中斷請求＝停止（帳本 Cancelled）；稽核 `Help.AiAsk` 由伺服器寫（`via=Api`）。
 
-**監控與診斷**（WASM 遷移 M5，`MonitoringController`，`api/v1/monitoring`，**整個 Controller `[AdminOnly]`**，非管理者 403 並留稽核）：1.1.32 `GET database-usage`（`DatabaseUsageReport`：SQLite 檔案、頁面配置、各資料表；讀取失敗時報表帶 `errorMessage`）、`GET storage-usage`（`StorageUsageReport`：各外部目錄大小與檔案數、各磁碟可用空間；影音目錄可能很大，所以和上一支分開）；1.1.33 `GET log-level`（`LogLevelStateDto`：是否可調整、生效等級、系統預設、是否覆寫）、`PUT log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400；NLog 設定讀不到 500）、`POST log-level/restore`，套用與還原的稽核 `LogLevel.Apply/Restore` 由伺服器寫（`via=Api`）；1.1.35 `GET health`（`SystemHealthReport`，失敗 500）、`GET logs/recent-warnings`（最近 24 小時 WARN 以上最新 200 筆、時間正序）、`POST ai-connection-test`（實際呼叫文字生成與語音轉錄，**會產生費用**；回兩個 `AiConnectionProbeResult`，稽核 `AiConnection.Test` 由伺服器寫）。
+**監控與診斷**（WASM 遷移 M5，`MonitoringController`，`api/v1/monitoring`，**整個 Controller `[AdminOnly]`**，非管理者 403 並留稽核）：1.1.32 `GET database-usage`（`DatabaseUsageReport`：SQLite 檔案、頁面配置、各資料表；讀取失敗時報表帶 `errorMessage`）、`GET storage-usage`（`StorageUsageReport`：各外部目錄大小與檔案數、各磁碟可用空間；影音目錄可能很大，所以和上一支分開）；1.1.33 `GET log-level`（`LogLevelStateDto`：是否可調整、生效等級、系統預設、是否覆寫）、`PUT log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400；NLog 設定讀不到 500）、`POST log-level/restore`，套用與還原的稽核 `LogLevel.Apply/Restore` 由伺服器寫（`via=Api`）；1.1.35 `GET health`（`SystemHealthReport`，失敗 500）、`GET logs/recent-warnings`（最近 24 小時 WARN 以上最新 200 筆、時間正序）、`POST ai-connection-test`（實際呼叫文字生成與語音轉錄，**會產生費用**；回兩個 `AiConnectionProbeResult`，稽核 `AiConnection.Test` 由伺服器寫）；1.1.42 日誌檢視 `GET logs/meta`（AI 能不能用）、`POST logs/query`（`LogQueryRequest` → `LogQueryResult`，時間正序、條件被夾住時回實際區間）、`POST logs/export`（伺服器依同一組條件**重查**產生 .log，UTF-8 含 BOM；沒有日誌 400）、`POST logs/ai-analysis`（**串流** `application/x-ndjson`，事件同系統例外 `DiagnosticAiStreamEventDto`；伺服器重查、取最新 100 筆，不收前端給的日誌；中斷＝取消；AI 未設定、沒有日誌、第一段前失敗回 400）、`POST logs/ai-analysis/pdf`（`{ query, markdown, meta }`，附錄由伺服器重查重組），稽核 `LogViewer.Export／AiAnalyze／AiAnalyzeExportPdf` 由伺服器寫（目標 `LogQuery`＋查詢區間，`via=Api`）。
 
 **Token 用量**（WASM 遷移 M5，1.1.36，`AiUsageController`，`api/v1/ai-usage`，**整個 Controller `[AdminOnly]`**）：`GET overview`（本月概況、全系統上限、每人上限前五名、`perUserLimit`、`retentionDays`、`maxExportRows`）、`GET filter-options`、`POST report`（內容 `AiUsageFilter`：`from`、`toExclusive`、`feature`、`userId`、`model`、`outcome`）、`POST rows`（`AiUsageQuery`：`filter`、`currentPage`、`pageSize`、`sortAscending`）、`GET {id}`（明細＋同次呼叫的 AI 對話紀錄編號，不存在 404）、`POST export/csv`（伺服器產生，最多 10,000 筆）、`POST export/pdf`（伺服器產生，匯出者是 API 呼叫者）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，刪除該日之前、不含當天，回筆數）、`POST clear-all`（回筆數）。匯出、刪除、清除的稽核 `AiUsage.*` 由伺服器寫（`via=Api`）。
 

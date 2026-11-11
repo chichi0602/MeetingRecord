@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Accounts;
 using MeetingRecord.Dtos.AiChats;
+using MeetingRecord.Dtos.AiUsage;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Dtos.Diagnostics;
@@ -84,6 +85,14 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ApiResult<SystemHealthReport>), TypeInfoPropertyName = "SystemHealthResult")]
 [JsonSerializable(typeof(ApiResult<LogQueryResult>), TypeInfoPropertyName = "LogQueryResultResult")]
 [JsonSerializable(typeof(ApiResult<List<AiConnectionProbeResult>>), TypeInfoPropertyName = "AiConnectionProbeResults")]
+[JsonSerializable(typeof(ApiResult<AiUsageOverviewDto>), TypeInfoPropertyName = "AiUsageOverviewResult")]
+[JsonSerializable(typeof(ApiResult<AiUsageFilterOptions>), TypeInfoPropertyName = "AiUsageFilterOptionsResult")]
+[JsonSerializable(typeof(ApiResult<AiUsageReport>), TypeInfoPropertyName = "AiUsageReportResult")]
+[JsonSerializable(typeof(ApiResult<AiUsagePagedResult>), TypeInfoPropertyName = "AiUsageRowsResult")]
+[JsonSerializable(typeof(ApiResult<AiUsageDetailResponseDto>), TypeInfoPropertyName = "AiUsageDetailResult")]
+[JsonSerializable(typeof(AiUsageFilter))]
+[JsonSerializable(typeof(AiUsageQuery))]
+[JsonSerializable(typeof(AiUsagePurgeRequestDto))]
 [JsonSerializable(typeof(TodoCreateUpdateDto))]
 [JsonSerializable(typeof(TodoCompletedRequestDto))]
 [JsonSerializable(typeof(ApiResult<PagedResult<TodoDto>>), TypeInfoPropertyName = "TodoPageResult")]

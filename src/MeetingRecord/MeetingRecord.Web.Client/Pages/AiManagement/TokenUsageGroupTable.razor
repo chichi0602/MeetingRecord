@@ -1,4 +1,4 @@
-@using MeetingRecord.Business.Services.AiUsage
+@using MeetingRecord.Share.Helpers
 @using MeetingRecord.Dtos.AiUsage
 
 @* Token 用量的「依使用者／依功能／依模型」三個頁籤共用（1.0.31）。順序已由服務層依金額排好，這裡不再排序。 *@
@@ -23,7 +23,7 @@
             <span class="group-number">@context.OutputTokens.ToString("N0")</span>
         </Column>
         <Column TData="double" Title="轉錄時長" Width="100" Align="ColumnAlign.Right">
-            <span class="group-number">@AiUsageMetrics.FormatAudio(context.AudioSeconds)</span>
+            <span class="group-number">@AiUsageFormatter.FormatAudio(context.AudioSeconds)</span>
         </Column>
         <Column TData="string" Title="估算金額" Width="120" Align="ColumnAlign.Right">
             <span class="group-number group-cost">@context.CostText</span>

@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.18
+- 文件版本：1.19
 - 文件狀態：已實作
-- 現行系統版本：1.1.26
+- 現行系統版本：1.1.37
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/11
 
 ## 摘要
 
@@ -99,7 +99,7 @@
 
 | 專案附件 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-standard` |
 | 抽出待辦 | `Web.Client/Pages/Projects/TodoExtractionModal.razor`（1.1.26 起） | `form-modal-standard` |
-| 用量明細（唯讀，1.0.31） | `Views/AiManagement/TokenUsageView.razor` | `form-modal-standard` |
+| 用量明細（唯讀，1.0.31） | `Web.Client/Pages/AiManagement/TokenUsagePage.razor`（1.1.37 前是 `Views/AiManagement/TokenUsageView.razor`） | `form-modal-standard` |
 | 角色維護 | `Web.Client/Pages/Admins/RoleViewPage.razor`（1.1.11 起 WASM） | `form-modal-large` |
 | 專案維護 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-large` |
 | AI 對話紀錄明細（唯讀，1.0.30） | `Views/AiManagement/AiCallLogView.razor` | `form-modal-large` |
@@ -254,7 +254,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
   | 清除此日之前 | 清除 yyyy-MM-dd 之前的 AI 對話紀錄（不含當天，連同內容檔） | 清除 |
   | 全部清除 | 清空全部 AI 對話紀錄（刪除所有紀錄與整個內容檔目錄） | 全部清除 |
 
-- 例：「Token 用量」（1.0.31，`TokenUsageView`）的三個刪除動作同樣套 `Danger`。內容都註明「AI 對話紀錄不會一起刪除；會議時數不受影響」；刪除範圍含本月時加註「本月 AI 用量上限的已用額度會跟著變少」（全部清除寫「會歸零」），因為本月的帳本就是用量上限的計算來源：
+- 例：「Token 用量」（1.0.31，1.1.37 起 `TokenUsagePage`）的三個刪除動作同樣套 `Danger`。內容都註明「AI 對話紀錄不會一起刪除；會議時數不受影響」；刪除範圍含本月時加註「本月 AI 用量上限的已用額度會跟著變少」（全部清除寫「會歸零」），因為本月的帳本就是用量上限的計算來源：
 
   | 動作 | 標題 | `OkText` |
   |---|---|---|

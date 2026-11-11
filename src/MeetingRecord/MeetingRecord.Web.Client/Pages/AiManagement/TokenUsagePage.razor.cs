@@ -2,30 +2,25 @@ using System.Globalization;
 using AntDesign;
 using AntDesign.TableModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.AiUsage;
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.Export;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Models.Systems;
+using Microsoft.Extensions.Logging;
+using MeetingRecord.Dtos.AiUsage;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
 using MeetingRecord.Web.Components.Commons;
-using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
-using MeetingRecord.Dtos.AiUsage;
 
-namespace MeetingRecord.Web.Components.Views.AiManagement;
+namespace MeetingRecord.Web.Client.Pages.AiManagement;
 
 /// <summary>
-/// Token 用量（1.0.30 由「AI 用量分析」改名並移到「系統管理 → AI 管理」）。**只限管理者**——
-/// 這一頁看得到全公司的用量與人名，而且不套團隊過濾；1.0.29 以前可勾給角色，1.0.30 起權限鍵已退役。
+/// Token 用量（1.0.30 由「AI 用量分析」改名；1.1.37 從 Blazor Server 的 TokenUsageView 搬到 WASM，畫面不變）。**只限管理者**——
+/// 這一頁看得到全公司的用量與人名，而且不套團隊過濾。
 ///
 /// <para>
-/// 1.0.31 升級（參考 NET10-Blazor-Starter 的 /token-usage，畫面依本專案規範）：上限列、篩選、
-/// 篩選範圍合計、頁籤（圖表／每日／依使用者／依功能／依模型／明細）、單筆明細（可連到 AI 對話紀錄）、
-/// CSV／PDF 匯出、刪除與清除。上方的「本月概況」固定是全部功能、本月至今，不跟著篩選走。
+/// 資料走 <c>api/v1/ai-usage</c>（1.1.36）：上限列、篩選、篩選範圍合計、頁籤（圖表／每日／依使用者／依功能／依模型／明細）、
+/// 單筆明細（可連到 AI 對話紀錄）、CSV／PDF 匯出（伺服器產生）、刪除與清除。匯出、刪除、清除的稽核由伺服器寫。
+/// 上方的「本月概況」固定是全部功能、本月至今，不跟著篩選走。
 /// </para>
 ///
 /// <para>
@@ -33,14 +28,8 @@ namespace MeetingRecord.Web.Components.Views.AiManagement;
 /// 否則使用者會以為系統在此之前都沒有花錢。
 /// </para>
 /// </summary>
-public partial class TokenUsageView : ComponentBase
+public partial class TokenUsagePage : ComponentBase
 {
-    private const string PdfContentType = "application/pdf";
-    private const string TargetType = "AiUsageLog";
-
-    /// <summary>上限列列出本月用量最高的前幾人。</summary>
-    private const int TopUserCount = 5;
-
     private const string TabCharts = "charts";
     private const string TabDaily = "daily";
     private const string TabUser = "user";
@@ -48,56 +37,15 @@ public partial class TokenUsageView : ComponentBase
     private const string TabModel = "model";
     private const string TabDetail = "detail";
 
-    [Inject]
-    private AiUsageAnalysisService AiUsageAnalysisService { get; set; } = default!;
-
-    [Inject]
-    private IAiQuotaService AiQuotaService { get; set; } = default!;
-
-    [Inject]
-    private AiCallLogService AiCallLogService { get; set; } = default!;
-
-    [Inject]
-    private IOptionsMonitor<AiQuotaSettings> QuotaOptions { get; set; } = default!;
-
-    [Inject]
-    private IOptionsMonitor<LogRetentionSettings> RetentionOptions { get; set; } = default!;
-
-    [Inject]
-    private IOptions<SystemSettings> SystemSettingsOptions { get; set; } = default!;
-
-    [Inject]
-    private IPdfRenderer PdfRenderer { get; set; } = default!;
-
-    [Inject]
-    private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
-
-    [Inject]
-    private IAuditLogService AuditLogService { get; set; } = default!;
-
-    [Inject]
-    private CurrentUserService CurrentUserService { get; set; } = default!;
-
-    [Inject]
-    private ModalService ModalService { get; set; } = default!;
-
-    [Inject]
-    private MessageService MessageService { get; set; } = default!;
-
-    [Inject]
-    private NotificationService NotificationService { get; set; } = default!;
-
-    [Inject]
-    private ILogger<TokenUsageView> Logger { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
-
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private AiUsageApi AiUsageApi { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
+    [Inject] private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
+    [Inject] private ModalService ModalService { get; set; } = default!;
+    [Inject] private MessageService MessageService { get; set; } = default!;
+    [Inject] private NotificationService NotificationService { get; set; } = default!;
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private ILogger<TokenUsagePage> Logger { get; set; } = default!;
 
     private string RoleMessage { get; set; } = string.Empty;
 
@@ -109,6 +57,9 @@ public partial class TokenUsageView : ComponentBase
     private AiUsageSummary? summary;
     private AiQuotaStatus? globalQuota;
     private IReadOnlyList<AiQuotaUserUsage> topUsers = [];
+    private int perUserLimit;
+    private int retentionDays;
+    private int maxExportRows = AiUsageConstants.MaxExportRows;
 
     // ───────── 篩選 ─────────
     private DateTime? startDate;
@@ -144,28 +95,23 @@ public partial class TokenUsageView : ComponentBase
     /// <summary>同一次呼叫的 AI 對話紀錄 Id；null 表示沒有（舊紀錄、已清除或當時停用記錄）。</summary>
     private int? detailCallLogId;
 
-    private int PerUserLimit => QuotaOptions.CurrentValue.PerUserMonthlyTwd;
+    private int PerUserLimit => perUserLimit;
 
-    private string RetentionText => RetentionOptions.CurrentValue.AiUsageLogDays > 0
-        ? $"用量紀錄保留 {RetentionOptions.CurrentValue.AiUsageLogDays} 天，每天自動清除（LogRetentionSettings:AiUsageLogDays）。"
+    private string RetentionText => retentionDays > 0
+        ? $"用量紀錄保留 {retentionDays} 天，每天自動清除（LogRetentionSettings:AiUsageLogDays）。"
         : "用量紀錄永久保留（LogRetentionSettings:AiUsageLogDays = 0）；需要時可在下方手動清除。";
 
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            Logger.LogWarning("Token usage initialization stopped because authentication check failed.");
-            return;
-        }
-
+        // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過，走到這裡一定是有效的登入者。
+        await PermissionView.LoadAsync();
         isAccessChecked = true;
 
-        // 1.0.30 起只限管理者：不再看權限鍵（舊資料庫可能殘留「AI 用量分析」的勾選）。判定前不讀任何資料。
-        if (!AuthenticationStateHelper.CheckIsAdmin())
+        // 1.0.30 起只限管理者：不再看權限鍵（舊資料庫可能殘留「AI 用量分析」的勾選）。判定前不讀任何資料。API 也是 [AdminOnly]。
+        if (!PermissionView.IsAdmin)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/token-usage");
+            await PageAccessApi.RecordPageDeniedAsync("/token-usage");
             Logger.LogWarning("Token usage denied because the current user is not an administrator.");
             return;
         }
@@ -183,13 +129,14 @@ public partial class TokenUsageView : ComponentBase
 
     private async Task LoadFilterOptionsAsync()
     {
-        try
+        var result = await AiUsageApi.GetFilterOptionsAsync();
+        if (result.Success && result.Data is { } options)
         {
-            filterOptions = await AiUsageAnalysisService.GetFilterOptionsAsync();
+            filterOptions = options;
         }
-        catch (Exception ex)
+        else
         {
-            Logger.LogError(ex, "Failed to load token usage filter options.");
+            Logger.LogWarning("Failed to load token usage filter options: {Message}", ApiClient.ErrorText(result));
         }
     }
 
@@ -212,10 +159,7 @@ public partial class TokenUsageView : ComponentBase
         await ReloadAsync();
     }
 
-    /// <summary>
-    /// 重新載入整頁：本月概況、上限、篩選範圍統計與明細目前頁。
-    /// 開頭的早退不可省：兩次載入重疊會讓同一個 circuit 的 DbContext 被並行使用。
-    /// </summary>
+    /// <summary>重新載入整頁：本月概況、上限、篩選範圍統計與明細目前頁。重疊時忽略。</summary>
     private async Task ReloadAsync()
     {
         if (isLoading)
@@ -228,15 +172,29 @@ public partial class TokenUsageView : ComponentBase
 
         try
         {
-            summary = await AiUsageAnalysisService.GetSummaryAsync();
-            await LoadQuotaAsync();
-            report = await AiUsageAnalysisService.GetReportAsync(appliedFilter);
+            var overview = await AiUsageApi.GetOverviewAsync();
+            if (!overview.Success || overview.Data is not { } data)
+            {
+                _ = MessageService.ErrorAsync($"載入 Token 用量失敗：{ApiClient.ErrorText(overview)}");
+                return;
+            }
+
+            summary = data.Summary;
+            globalQuota = data.GlobalQuota;
+            topUsers = data.TopUsers;
+            perUserLimit = data.PerUserLimit;
+            retentionDays = data.RetentionDays;
+            maxExportRows = data.MaxExportRows;
+
+            var reportResult = await AiUsageApi.GetReportAsync(appliedFilter);
+            if (!reportResult.Success)
+            {
+                _ = MessageService.ErrorAsync($"載入 Token 用量失敗：{ApiClient.ErrorText(reportResult)}");
+                return;
+            }
+
+            report = reportResult.Data;
             await LoadRowsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Loading token usage failed.");
-            _ = MessageService.ErrorAsync($"載入 Token 用量失敗：{ex.Message}");
         }
         finally
         {
@@ -245,40 +203,22 @@ public partial class TokenUsageView : ComponentBase
         }
     }
 
-    /// <summary>上限列。讀不到時只記錯誤、不擋整頁（上限是護欄，不是這一頁的主體）。</summary>
-    private async Task LoadQuotaAsync()
-    {
-        try
-        {
-            globalQuota = (await AiQuotaService.GetStatusAsync(null)).FirstOrDefault(x => x.Scope == AiQuotaScope.Global);
-            topUsers = PerUserLimit > 0 ? await AiQuotaService.GetTopUsersAsync(TopUserCount) : [];
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Loading AI quota status failed.");
-            globalQuota = null;
-            topUsers = [];
-        }
-    }
-
     private async Task LoadRowsAsync()
     {
-        var result = await AiUsageAnalysisService.GetRecentCallsAsync(
-            new AiUsageQuery(appliedFilter, pageIndex, pageSize, sortAscending));
-        rows = result.Rows;
-        total = result.TotalCount;
+        var result = await AiUsageApi.GetRowsAsync(new AiUsageQuery(appliedFilter, pageIndex, pageSize, sortAscending));
+        rows = result.Data?.Rows ?? [];
+        total = result.Data?.TotalCount ?? 0;
 
         // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照 AI 對話紀錄）。
         if (rows.Count == 0 && total > 0 && pageIndex > 1)
         {
             pageIndex = Math.Max(1, (total + pageSize - 1) / pageSize);
-            result = await AiUsageAnalysisService.GetRecentCallsAsync(
-                new AiUsageQuery(appliedFilter, pageIndex, pageSize, sortAscending));
-            rows = result.Rows;
-            total = result.TotalCount;
+            result = await AiUsageApi.GetRowsAsync(new AiUsageQuery(appliedFilter, pageIndex, pageSize, sortAscending));
+            rows = result.Data?.Rows ?? [];
+            total = result.Data?.TotalCount ?? 0;
         }
 
-        // 全選只算這一頁（1.0.53）：換頁、排序、篩選、刪除後都會走到這裡（ReloadAsync 與 OnTableChangeAsync 共用），勾選一律清掉。
+        // 全選只算這一頁（1.0.53）：換頁、排序、篩選、刪除後都會走到這裡，勾選一律清掉。
         selectedRows = [];
     }
 
@@ -298,10 +238,6 @@ public partial class TokenUsageView : ComponentBase
             var sort = queryModel.SortModel?.FirstOrDefault(x => x.SortDirection == SortDirection.Ascending || x.SortDirection == SortDirection.Descending);
             sortAscending = sort?.SortDirection == SortDirection.Ascending;
             await LoadRowsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Loading token usage rows failed.");
         }
         finally
         {
@@ -347,7 +283,7 @@ public partial class TokenUsageView : ComponentBase
         ? "不限"
         : $"{appliedFilter.From?.ToString("yyyy/MM/dd") ?? "不限"}～{appliedFilter.ToExclusive?.AddDays(-1).ToString("yyyy/MM/dd") ?? "不限"}";
 
-    /// <summary>報表表頭的篩選條件（區間以外）；沒有選的不列。</summary>
+    /// <summary>畫面上的篩選條件說明（區間以外）；沒有選的不列。PDF 報表表頭由伺服器用同一套規則組。</summary>
     private IReadOnlyList<(string Label, string Value)> DescribeFilters()
     {
         var list = new List<(string, string)>();
@@ -392,24 +328,23 @@ public partial class TokenUsageView : ComponentBase
 
         try
         {
-            detail = await AiUsageAnalysisService.GetDetailAsync(row.Id);
-            if (detail is null)
+            var result = await AiUsageApi.GetDetailAsync(row.Id);
+            if (result.StatusCode == 404 || (result.Success && result.Data?.Detail is null))
             {
                 detailVisible = false;
                 _ = MessageService.WarningAsync("找不到這筆用量紀錄，可能已被刪除。");
                 return;
             }
 
-            if (detail.CallId is { } callId)
+            if (!result.Success)
             {
-                detailCallLogId = await AiCallLogService.FindIdByCallIdAsync(callId);
+                detailVisible = false;
+                _ = MessageService.ErrorAsync($"讀取明細失敗：{ApiClient.ErrorText(result)}");
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load token usage detail. Id={Id}", row.Id);
-            _ = MessageService.ErrorAsync($"讀取明細失敗：{ex.Message}");
-            detailVisible = false;
+
+            detail = result.Data!.Detail;
+            detailCallLogId = result.Data.CallLogId;
         }
         finally
         {
@@ -435,7 +370,7 @@ public partial class TokenUsageView : ComponentBase
     private static string FormatPrice(decimal? value, string? currency, string unit)
         => value is { } price ? $"{currency} {price.ToString("0.######", CultureInfo.InvariantCulture)} / {unit}".Trim() : "—";
 
-    // ───────── 匯出 ─────────
+    // ───────── 匯出（伺服器產生、伺服器寫稽核） ─────────
 
     private async Task OnExportCsvAsync()
     {
@@ -447,22 +382,19 @@ public partial class TokenUsageView : ComponentBase
         isExporting = true;
         try
         {
-            var items = await AiUsageAnalysisService.GetForExportAsync(appliedFilter);
-            var bytes = CsvExport.ToCsv(AiUsageCsv.Columns, items);
-            var fileName = $"MeetingRecord.Web-token-usage-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
-            await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
-
-            await WriteAuditAsync(AuditActions.AiUsageExport, "*", $"format=csv; rows={items.Count}; range={RangeText}");
-            NotifyDownloaded(fileName);
-            if (items.Count >= AiUsageAnalysisService.MaxExportRows)
+            var download = await AiUsageApi.ExportCsvAsync(appliedFilter);
+            if (!download.Success || download.Content is null)
             {
-                _ = MessageService.WarningAsync($"只匯出最新 {AiUsageAnalysisService.MaxExportRows:N0} 筆，請縮小查詢條件。");
+                _ = MessageService.ErrorAsync($"匯出失敗：{download.Error}");
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Token usage CSV export failed.");
-            _ = MessageService.ErrorAsync($"匯出失敗：{ex.Message}");
+
+            await FileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+            NotifyDownloaded(download.FileName!);
+            if (report?.CallCount >= maxExportRows)
+            {
+                _ = MessageService.WarningAsync($"只匯出最新 {maxExportRows:N0} 筆，請縮小查詢條件。");
+            }
         }
         finally
         {
@@ -483,30 +415,15 @@ public partial class TokenUsageView : ComponentBase
 
         try
         {
-            var exportedAt = DateTime.Now;
+            var download = await AiUsageApi.ExportPdfAsync(appliedFilter);
+            if (!download.Success || download.Content is null)
+            {
+                _ = MessageService.ErrorAsync($"匯出 PDF 失敗：{download.Error}");
+                return;
+            }
 
-            // 多拿一筆：用來判斷明細是否超過上限、要不要在報表加註。
-            var details = await AiUsageAnalysisService.GetForExportAsync(appliedFilter, TokenUsageReportExporter.MaxDetailRows + 1);
-            var html = TokenUsageReportExporter.BuildHtml(new TokenUsageReportRequest(
-                SystemSettingsOptions.Value.SystemInformation.SystemVersion,
-                CurrentUserService.CurrentUser.Account,
-                exportedAt,
-                RangeText,
-                DescribeFilters(),
-                report,
-                details));
-
-            var pdf = await PdfRenderer.RenderAsync(html);
-            var fileName = TokenUsageReportExporter.BuildFileName(exportedAt);
-            await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-
-            await WriteAuditAsync(AuditActions.AiUsageExportPdf, "*", $"rows={report.CallCount}; range={RangeText}; bytes={pdf.Length}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Token usage PDF export failed.");
-            _ = MessageService.ErrorAsync($"匯出 PDF 失敗：{ex.Message}");
+            await FileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+            NotifyDownloaded(download.FileName!);
         }
         finally
         {
@@ -528,7 +445,7 @@ public partial class TokenUsageView : ComponentBase
 
     private async Task OnDeleteAsync(AiUsageRow row)
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -548,25 +465,21 @@ public partial class TokenUsageView : ComponentBase
             return;
         }
 
-        try
+        var result = await AiUsageApi.DeleteAsync(row.Id);
+        if (result.Success)
         {
-            if (await AiUsageAnalysisService.DeleteAsync(row.Id))
-            {
-                await WriteAuditAsync(AuditActions.AiUsageDelete, row.Id.ToString(), $"feature={row.Feature}; callId={row.CallId:N}");
-                _ = MessageService.SuccessAsync("刪除成功");
-            }
-            else
-            {
-                _ = MessageService.WarningAsync("這筆紀錄已不存在。");
-            }
+            _ = MessageService.SuccessAsync("刪除成功");
+        }
+        else if (result.StatusCode == 404)
+        {
+            _ = MessageService.WarningAsync("這筆紀錄已不存在。");
+        }
+        else
+        {
+            _ = MessageService.ErrorAsync($"刪除失敗：{ApiClient.ErrorText(result)}");
+        }
 
-            await ReloadAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to delete token usage row. Id={Id}", row.Id);
-            _ = MessageService.ErrorAsync($"刪除失敗：{ex.Message}");
-        }
+        await ReloadAsync();
     }
 
     #region 多選刪除（1.0.53）
@@ -579,7 +492,7 @@ public partial class TokenUsageView : ComponentBase
     private async Task OnBatchDeleteAsync()
     {
         var items = selectedRows.ToList();
-        if (items.Count == 0 || isBatchDeleting || isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (items.Count == 0 || isBatchDeleting || isLoading)
         {
             return;
         }
@@ -601,16 +514,11 @@ public partial class TokenUsageView : ComponentBase
         isBatchDeleting = true;
         try
         {
-            // 比照單筆：每刪成一筆就記一筆稽核。
+            // 逐筆呼叫刪除（伺服器每刪成一筆就記一筆稽核，比照單筆）。
             var result = await BatchRunner.RunAsync(items, x => $"{x.OccurredAt:yyyy-MM-dd HH:mm:ss} {x.FeatureText}", async x =>
             {
-                if (!await AiUsageAnalysisService.DeleteAsync(x.Id))
-                {
-                    return "找不到這筆紀錄";
-                }
-
-                await WriteAuditAsync(AuditActions.AiUsageDelete, x.Id.ToString(), $"feature={x.Feature}; callId={x.CallId:N}");
-                return null;
+                var deleted = await AiUsageApi.DeleteAsync(x.Id);
+                return deleted.Success ? null : deleted.StatusCode == 404 ? "找不到這筆紀錄" : ApiClient.ErrorText(deleted);
             });
             Logger.LogInformation("Batch token usage delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
             BatchResultNotifier.Notify(NotificationService, result, "刪除");
@@ -633,7 +541,7 @@ public partial class TokenUsageView : ComponentBase
             return;
         }
 
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -654,24 +562,21 @@ public partial class TokenUsageView : ComponentBase
             return;
         }
 
-        try
+        var result = await AiUsageApi.PurgeAsync(before);
+        if (!result.Success)
         {
-            var removed = await AiUsageAnalysisService.PurgeBeforeAsync(before);
-            await WriteAuditAsync(AuditActions.AiUsagePurge, "*", $"before={before:yyyy-MM-dd}; rows={removed}");
-            _ = MessageService.SuccessAsync($"已清除 {removed:N0} 筆。");
-            pageIndex = 1;
-            await OnRefreshAsync();
+            _ = MessageService.ErrorAsync($"清除失敗：{ApiClient.ErrorText(result)}");
+            return;
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to purge token usage rows.");
-            _ = MessageService.ErrorAsync($"清除失敗：{ex.Message}");
-        }
+
+        _ = MessageService.SuccessAsync($"已清除 {result.Data:N0} 筆。");
+        pageIndex = 1;
+        await OnRefreshAsync();
     }
 
     private async Task OnClearAllAsync()
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -691,19 +596,16 @@ public partial class TokenUsageView : ComponentBase
             return;
         }
 
-        try
+        var result = await AiUsageApi.ClearAllAsync();
+        if (!result.Success)
         {
-            var removed = await AiUsageAnalysisService.ClearAllAsync();
-            await WriteAuditAsync(AuditActions.AiUsageClearAll, "*", $"rows={removed}");
-            _ = MessageService.SuccessAsync($"已清空全部用量紀錄（{removed:N0} 筆）。");
-            pageIndex = 1;
-            await OnRefreshAsync();
+            _ = MessageService.ErrorAsync($"清除失敗：{ApiClient.ErrorText(result)}");
+            return;
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to clear token usage rows.");
-            _ = MessageService.ErrorAsync($"清除失敗：{ex.Message}");
-        }
+
+        _ = MessageService.SuccessAsync($"已清空全部用量紀錄（{result.Data:N0} 筆）。");
+        pageIndex = 1;
+        await OnRefreshAsync();
     }
 
     private void NotifyDownloaded(string fileName)
@@ -714,18 +616,4 @@ public partial class TokenUsageView : ComponentBase
             NotificationType = NotificationType.Warning,
             Placement = NotificationPlacement.BottomRight,
         });
-
-    /// <summary>稽核只記編號、筆數與條件。</summary>
-    private Task WriteAuditAsync(string action, string targetId, string detailText)
-    {
-        var currentUser = CurrentUserService.CurrentUser;
-        return AuditLogService.WriteAsync(
-            action,
-            success: true,
-            actorUserId: currentUser.Id,
-            actorAccount: currentUser.Account,
-            targetType: TargetType,
-            targetId: targetId,
-            detail: detailText);
-    }
 }

@@ -1,7 +1,14 @@
-@using MeetingRecord.Business.Services.AiUsage
+@page "/token-usage"
+@* 1.0.30 前的網址與書籤照樣能用。 *@
+@page "/ai-usage"
 @using MeetingRecord.Dtos.AiUsage
 @using MeetingRecord.Dtos.Dashboards
 @using MeetingRecord.Share.Enums
+@using MeetingRecord.Share.Helpers
+@using MeetingRecord.Web.Components.Commons.Charts
+
+@* Token 用量（1.1.37 搬到 WASM）：由 Blazor Server 的 TokenUsageView 改寫，畫面不變；資料改走 api/v1/ai-usage。 *@
+<PageTitle>Token 用量</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
 @if (!isAccessChecked)
@@ -193,8 +200,8 @@ else
 
         <div class="ai-usage-cards">
             <StatCard Item="@(new StatCardItem("呼叫次數", report.CallCount.ToString("N0"), report.FailedCallCount > 0 ? $"含 {report.FailedCallCount:N0} 次失敗或取消" : "全部成功", report.FailedCallCount > 0 ? ChartTone.Danger : ChartTone.Neutral))" />
-            <StatCard Item="@(new StatCardItem("token", $"{AiUsageMetrics.FormatTokens(report.InputTokens)} / {AiUsageMetrics.FormatTokens(report.OutputTokens)}", "輸入 / 輸出"))" />
-            <StatCard Item="@(new StatCardItem("轉錄時長", AiUsageMetrics.FormatAudio(report.AudioSeconds), "送進語音辨識的音訊"))" />
+            <StatCard Item="@(new StatCardItem("token", $"{AiUsageFormatter.FormatTokens(report.InputTokens)} / {AiUsageFormatter.FormatTokens(report.OutputTokens)}", "輸入 / 輸出"))" />
+            <StatCard Item="@(new StatCardItem("轉錄時長", AiUsageFormatter.FormatAudio(report.AudioSeconds), "送進語音辨識的音訊"))" />
             <StatCard Item="@(new StatCardItem("估算金額", report.CostText, report.UnpricedCallCount + report.NoRateCallCount > 0 ? $"有 {report.UnpricedCallCount + report.NoRateCallCount:N0} 筆未計入（沒單價或沒匯率）" : "依呼叫當下的單價與匯率", report.UnpricedCallCount + report.NoRateCallCount > 0 ? ChartTone.Warning : ChartTone.Neutral))" />
         </div>
 
@@ -222,15 +229,15 @@ else
                                     <span class="token-number">@day.Date.ToString("MM/dd (ddd)", System.Globalization.CultureInfo.GetCultureInfo("zh-TW"))</span>
                                     <span class="token-daily-bar"><span style="width: @(DailyBarWidth(day))%"></span></span>
                                     <span class="token-number token-daily-cost">@day.CostText</span>
-                                    <span class="token-number token-muted">@AiUsageMetrics.FormatTokens(day.InputTokens) / @AiUsageMetrics.FormatTokens(day.OutputTokens)</span>
-                                    <span class="token-number token-muted">@AiUsageMetrics.FormatAudio(day.AudioSeconds)</span>
+                                    <span class="token-number token-muted">@AiUsageFormatter.FormatTokens(day.InputTokens) / @AiUsageFormatter.FormatTokens(day.OutputTokens)</span>
+                                    <span class="token-number token-muted">@AiUsageFormatter.FormatAudio(day.AudioSeconds)</span>
                                     <span class="token-number token-muted">@day.CallCount.ToString("N0") 次</span>
                                 </div>
                             }
                         </div>
                         @if (!report.IsDailyFilled)
                         {
-                            <div class="token-muted token-daily-note">區間沒有起訖或超過 @AiUsageAnalysisService.MaxFilledDays 天，只列出有資料的日子。</div>
+                            <div class="token-muted token-daily-note">區間沒有起訖或超過 @AiUsageConstants.MaxFilledDays 天，只列出有資料的日子。</div>
                         }
                     }
                 </TabPane>
@@ -373,7 +380,7 @@ else
                 <div><dt>輸入單價</dt><dd>@FormatPrice(detail.InputPricePerMillion, detail.Currency, "百萬 token")</dd></div>
                 <div><dt>輸出單價</dt><dd>@FormatPrice(detail.OutputPricePerMillion, detail.Currency, "百萬 token")</dd></div>
                 <div><dt>音訊單價</dt><dd>@FormatPrice(detail.AudioPricePerMinute, detail.Currency, "分鐘")</dd></div>
-                <div><dt>估算金額（原幣）</dt><dd>@AiUsageMetrics.FormatAmount(detail.EstimatedCost, detail.Currency)</dd></div>
+                <div><dt>估算金額（原幣）</dt><dd>@AiUsageFormatter.FormatAmount(detail.EstimatedCost, detail.Currency)</dd></div>
                 <div><dt>當時匯率</dt><dd>@(detail.ExchangeRate is { } rate ? $"1 {detail.Currency} = {rate:0.####} {detail.ConvertedCurrency}" : "—")</dd></div>
                 <div><dt>估算金額</dt><dd class="token-number">@detail.CostText</dd></div>
                 <div><dt>呼叫識別碼</dt><dd class="token-number">@(detail.CallId?.ToString() ?? "—")</dd></div>

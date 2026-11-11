@@ -28,6 +28,8 @@ public static class WasmRoutes
         "/database-usage", // 1.1.32 資料庫用量
         "/log-level-setting", // 1.1.33 日誌等級設定
         "/system-health", // 1.1.35 系統健康監控
+        "/token-usage", // 1.1.37 Token 用量
+        "/ai-usage", // 1.1.37 Token 用量（1.0.30 前的舊網址）
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

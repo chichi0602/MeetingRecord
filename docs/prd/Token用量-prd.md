@@ -1,8 +1,8 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.7
+- 文件版本：2.8
 - 文件狀態：已實作
-- 現行系統版本：1.1.36
+- 現行系統版本：1.1.37
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
 - 最後核對日期：2026/11/11
 
@@ -49,7 +49,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/token-usage`，別名 `/ai-usage`（1.0.30 前的網址與書籤照樣能用）（`Components/Pages/AiManagement/TokenUsagePage.razor`，掛 `MainLayout`，內容在 `TokenUsageView`） |
+| UI 路由 | `/token-usage`，別名 `/ai-usage`（1.0.30 前的網址與書籤照樣能用）（1.1.37 起 WASM 頁 `Web.Client/Pages/AiManagement/TokenUsagePage.razor`；以前是 Server 的 `TokenUsagePage` → `TokenUsageView`） |
 | REST API | `api/v1/ai-usage`（1.1.36，只限管理者）：`GET overview`、`GET filter-options`、`POST report`、`POST rows`、`GET {id}`、`POST export/csv`、`POST export/pdf`、`DELETE {id}`、`POST purge`、`POST clear-all`，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。頁面 1.1.37 搬到 WASM |
 | 選單路徑 | 系統管理（`Menu.json` id=3）→ AI 管理（id=62，`psychology`，1.0.30 起）→ Token 用量（id=33，icon `toll`）。同組另有「AI 對話紀錄」（id=63）。0.4.120～1.0.29 位於「監控與診斷」（id=36）底下、名稱「AI 用量分析」、icon `monetization_on` |
 | 選單過濾 | 列在 `SidebarMenuService.AdminOnlyMenuIds`（非管理者看不到）；分組 62 列在 `GroupOnlyMenuIds`。`MenuPermissionMap` 沒有 id 33 |
@@ -150,7 +150,7 @@
 
 ### 讀取：Token 用量頁
 
-- `TokenUsageView` →（注入）`AiUsageAnalysisService`、`IAiQuotaService`、`AiCallLogService`：
+- 1.1.37 起頁面是 WASM 的 `TokenUsagePage` →（`AiUsageApi`）`api/v1/ai-usage` →（伺服器）`AiUsageAnalysisService`、`IAiQuotaService`、`AiCallLogService`：
   - `GetSummaryAsync()`：本月概況。撈上月同期起的投影（`UsageFact`），金額一律撈進記憶體加總。期間由 `AiUsageMetrics.BuildMonthToDateRanges` 算，曲線由 `AiUsageMetrics.BuildMonthToDateCumulative` 算。方法仍保留 `AiUsageFeature? feature` 參數（0.4.91 的功能連動），頁面 1.0.31 起不再傳。
   - `GetReportAsync(AiUsageFilter)`（1.0.31）：一次讀出範圍內的投影，在記憶體算合計、每日、三種分組（`AiUsageGroupRow`）與圖表切片。
   - `GetRecentCallsAsync(AiUsageQuery)`：明細分頁。`AiUsageQuery(Filter, CurrentPage, PageSize, SortAscending)`；排序 `OccurredAt` 後一律再以 `Id` 排（同一秒會寫進十幾列，不加會翻頁重複或漏列）；`Skip`／`Take` **無條件套用**。`AiUsageRow` 帶 `CallId`。
@@ -298,7 +298,7 @@
 
 ### 程式
 
-- 頁面與檢視：`src/MeetingRecord/MeetingRecord.Web/Components/Pages/AiManagement/TokenUsagePage.razor`、`src/MeetingRecord/MeetingRecord.Web/Components/Views/AiManagement/TokenUsageView.razor(.cs/.css)`（`OnInitializedAsync` 管理者檢查、`ReloadAsync`、`LoadQuotaAsync`、`LoadRowsAsync`、`OnSearchAsync`、`OnViewAsync`、`OnExportCsvAsync`、`OnExportPdfAsync`、`OnDeleteAsync`、`OnPurgeAsync`、`OnClearAllAsync`、`CsvColumns`）、`TokenUsageGroupTable.razor(.css)`（1.0.31，三個分組頁籤共用）
+- 頁面（1.1.37 起 WASM）：`src/MeetingRecord/MeetingRecord.Web.Client/Pages/AiManagement/TokenUsagePage.razor(.cs/.css)`（`OnInitializedAsync` 管理者檢查、`ReloadAsync`、`LoadRowsAsync`、`OnSearchAsync`、`OnViewAsync`、`OnExportCsvAsync`、`OnExportPdfAsync`、`OnDeleteAsync`、`OnPurgeAsync`、`OnClearAllAsync`）、`TokenUsageGroupTable.razor(.css)`（1.0.31，三個分組頁籤共用）、`src/MeetingRecord/MeetingRecord.Web.Client/Api/AiUsageApi.cs`；格式化 `src/MeetingRecord/MeetingRecord.Share/Helpers/AiUsageFormatter.cs`、上限值 `src/MeetingRecord/MeetingRecord.Dtos/AiUsage/AiUsageConstants.cs`（1.1.37）
 - 讀取服務：`src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiUsageAnalysisService.cs`（`GetSummaryAsync`、`GetReportAsync`、`GetRecentCallsAsync`、`GetDetailAsync`、`GetForExportAsync`、`GetFilterOptionsAsync`、`DeleteAsync`、`PurgeBeforeAsync`、`ClearAllAsync`、`ApplyFilter`、`BuildGroups`、`BuildDaily`、`CostView`）；型別 `src/MeetingRecord/MeetingRecord.Dtos/AiUsage/AiUsageModels.cs`（`AiUsageFilter`、`AiUsageQuery`、`AiUsageRow`、`AiUsageReport`、`AiUsageGroupRow`、`AiUsageDailyRow`、`AiUsageFilterOptions`、`AiUsageUserOption`、`AiUsageDetail`）、`AiQuotaModels.cs`（`AiQuotaStatus`、`AiQuotaScope`、`AiQuotaUserUsage`）、`AiUsageApiDtos.cs`（1.1.36 從 Business 搬來）
 - API：`src/MeetingRecord/MeetingRecord.Web/Controllers/AiUsageController.cs`（1.1.36）、CSV 欄位 `src/MeetingRecord/MeetingRecord.Web/Export/AiUsageCsv.cs`
 - PDF 報表：`src/MeetingRecord/MeetingRecord.Business/Services/Export/TokenUsageReportExporter.cs`（1.0.31，`BuildHtml`、`BuildFileName`、`MaxDetailRows`）；CSV：`src/MeetingRecord/MeetingRecord.Web/Export/CsvExport`

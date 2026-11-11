@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.41
+- 文件版本：1.42
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.36
+- 現行系統版本：1.1.37
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -512,6 +512,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 修正：存檔後關窗途中再按「確定」會新增兩筆 | 1.1.34 | ✅ 完成；1.1.33 全套時 TDO-10 偶發新增兩筆，根因是 WASM 頁「關窗」與「閘門放開」同一次重繪生效、關窗動畫期間又按得到；八個表單的 `SaveModalAsync` 開頭先確認視窗還開著，新增 TDO-11（穩定重現）與原始碼掃描 |
 | 系統健康監控 `/system-health` | 1.1.35 | ✅ 完成；`MonitoringController` 加 `health`、`logs/recent-warnings`、`ai-connection-test`（稽核改由伺服器寫）；`SystemHealthModels`、`AiConnectionProbeResult` 搬到 `Dtos/Diagnostics`；`AiConnectionTestService` 改經 `IAiCallerProvider`；MON-01／02 照過 |
 | Token 用量（一）API | 1.1.36 | ✅ 完成；新 `AiUsageController`（`api/v1/ai-usage`，`[AdminOnly]`）10 支：總覽、篩選選項、統計、明細分頁、單筆、CSV、PDF（伺服器產生）、刪除、清除此日之前、全部清除，稽核改由伺服器寫；`AiUsageModels`、額度型別搬到 `Dtos/AiUsage`，篩選選項的 tuple 改成 `AiUsageUserOption`，CSV 欄位搬到 `AiUsageCsv`；頁面下一版搬 |
+| Token 用量（二）頁面 `/token-usage` | 1.1.37 | ✅ 完成；頁面與分組表搬到 Client，格式化搬到 `Share/Helpers/AiUsageFormatter`、上限值到 `AiUsageConstants`；途中抓到 `ClientJsonContext` 別名跟型別撞名（整頁炸掉），SYSLIB1031 升級成錯誤並加 `ClientJsonContextTests`；新增 AIM-01，MON-01／02 照過 |
 
 ## 十一、下一步
 

@@ -9,7 +9,8 @@
     <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
     <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
     <!-- 1.1.5：找不到元件（少了 @using）時 Razor 只發 RZ10012 警告，元件標籤會被當成普通 HTML 原樣輸出、畫面整塊不見；升級成錯誤。 -->
-    <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
+    <!-- 1.1.37：ClientJsonContext 的 TypeInfoPropertyName 跟型別名稱撞名時只發 SYSLIB1031 警告，執行期整頁炸掉（NoMetadataForType）；升級成錯誤。 -->
+    <WarningsAsErrors>$(WarningsAsErrors);RZ10012;SYSLIB1031</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

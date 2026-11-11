@@ -36,10 +36,10 @@ public class AiUsageAnalysisService
     private const int TopCount = 8;
 
     /// <summary>每日統計補齊沒有資料的日子的最長區間；超過只列有資料的日子，免得一年列出 365 列空白。</summary>
-    public const int MaxFilledDays = 92;
+    public const int MaxFilledDays = AiUsageConstants.MaxFilledDays;
 
     /// <summary>CSV 匯出的筆數上限（同 AI 對話紀錄）。</summary>
-    public const int MaxExportRows = 10_000;
+    public const int MaxExportRows = AiUsageConstants.MaxExportRows;
 
     private readonly BackendDBContext context;
     private readonly ExchangeRateCache exchangeRates;

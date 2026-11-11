@@ -198,6 +198,9 @@ public static class ServiceCollectionExtensions
         // 分塊上傳（1.0.59）：工作階段登記處是全站共用的；網頁元件用的入口一條連線一個。
         services.AddSingleton<MeetingRecord.Web.Uploads.ChunkedUploadStore>();
         services.AddScoped<MeetingRecord.Web.Services.HelpViewInterop>();
+
+        // 使用說明的內容（1.1.29）：內嵌資源讀一次就快取，Server 說明頁與 api/v1/help 共用。
+        services.AddSingleton<MeetingRecord.Web.Helps.HelpManualProvider>();
         services.AddScoped<MeetingRecord.Business.Services.Export.IPdfRenderer, MeetingRecord.Business.Services.Export.HeadlessBrowserPdfRenderer>();
         services.AddHttpContextAccessor();
         services.AddScoped<IRecordAccessScopeProvider, RecordAccessScopeProvider>();

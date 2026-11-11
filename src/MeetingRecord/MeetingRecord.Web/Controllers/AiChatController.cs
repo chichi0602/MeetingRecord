@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Threading.Channels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRecord.Business.Services.AiChat;
@@ -11,6 +9,7 @@ using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.AiChat;
 using MeetingRecord.Web.Filters;
+using MeetingRecord.Web.Streaming;
 using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Web.Controllers;
@@ -36,7 +35,6 @@ public sealed class AiChatController(
 {
     /// <summary>服務層「看不到」的訊息：對外當成不存在。</summary>
     private const string NotVisibleMessage = "找不到這個專案或會議，可能已被刪除或沒有權限。";
-    private static readonly JsonSerializerOptions StreamJson = new(JsonSerializerDefaults.Web);
 
     /// <summary>附件總量上限：一次最多 <see cref="AiChatAttachmentPolicy.MaxAttachmentsPerQuestion"/> 個、單一文件上限 20 MB，再留一點給問題本身。</summary>
     private const long MaxAskRequestBytes = AiChatAttachmentPolicy.MaxAttachmentsPerQuestion * AiChatAttachmentPolicy.MaxDocumentBytes + 1024 * 1024;
@@ -164,93 +162,40 @@ public sealed class AiChatController(
     };
 
     /// <summary>
-    /// 串流：服務層邊產生邊回報的文字經 <see cref="Channel"/> 轉成一行一筆 JSON。
+    /// 串流（<see cref="NdjsonStreamer"/>，1.1.29 抽出與使用說明共用）。
     /// 第一段文字出來之前就失敗，照一般 API 回 404／400；開始寫回應之後失敗，送一筆 <c>error</c>。
     /// </summary>
-    private async Task StreamAsync(Func<Action<string>, Task<AiChatAnswer>> run, CancellationToken cancellationToken)
-    {
-        var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
-        var work = Task.Run(async () =>
-        {
-            try
+    private Task StreamAsync(Func<Action<string>, Task<AiChatAnswer>> run, CancellationToken cancellationToken)
+        => NdjsonStreamer.RunAsync(
+            this,
+            run,
+            delta => new AiChatStreamEventDto { Type = AiChatStreamEventDto.Delta, Text = delta },
+            answer => new AiChatStreamEventDto { Type = AiChatStreamEventDto.Done, Answer = AiChatOperations.ToDto(answer) },
+            error =>
             {
-                return await run(delta => channel.Writer.TryWrite(delta));
-            }
-            finally
-            {
-                channel.Writer.TryComplete();
-            }
-        }, CancellationToken.None);
+                if (error is InvalidOperationException invalid)
+                {
+                    return Failure(invalid);
+                }
 
-        // 等到第一段文字或工作結束，才決定要回一般錯誤還是開始串流。
-        var hasDelta = await channel.Reader.WaitToReadAsync(CancellationToken.None);
-        if (!hasDelta)
-        {
-            // 通道關了代表工作已經結束，但 Task 的狀態要等 finally 跑完才落定：先等它，再看成敗。
-            try
+                logger.LogError(error, "AI chat streaming failed before the first delta.");
+                return new ObjectResult(ApiResult.FailureResult("AI 問答發生錯誤，請稍後再試。", StatusCodes.Status500InternalServerError))
+                {
+                    StatusCode = StatusCodes.Status500InternalServerError,
+                };
+            },
+            ex =>
             {
-                await work;
-            }
-            catch
-            {
-                // 下面看 IsFaulted。
-            }
-        }
+                if (ex is not InvalidOperationException)
+                {
+                    logger.LogError(ex, "AI chat streaming failed after it started.");
+                }
 
-        if (!hasDelta && work.IsFaulted)
-        {
-            var error = work.Exception!.GetBaseException();
-            if (error is InvalidOperationException invalid)
-            {
-                await Failure(invalid).ExecuteResultAsync(ControllerContext);
-                return;
-            }
-
-            logger.LogError(error, "AI chat streaming failed before the first delta.");
-            await new ObjectResult(ApiResult.FailureResult("AI 問答發生錯誤，請稍後再試。", StatusCodes.Status500InternalServerError))
-            {
-                StatusCode = StatusCodes.Status500InternalServerError,
-            }.ExecuteResultAsync(ControllerContext);
-            return;
-        }
-
-        Response.StatusCode = StatusCodes.Status200OK;
-        Response.ContentType = "application/x-ndjson; charset=utf-8";
-        await foreach (var delta in channel.Reader.ReadAllAsync(CancellationToken.None))
-        {
-            await WriteEventAsync(new AiChatStreamEventDto { Type = AiChatStreamEventDto.Delta, Text = delta }, cancellationToken);
-        }
-
-        try
-        {
-            var answer = await work;
-            await WriteEventAsync(new AiChatStreamEventDto { Type = AiChatStreamEventDto.Done, Answer = AiChatOperations.ToDto(answer) }, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            if (ex is not InvalidOperationException)
-            {
-                logger.LogError(ex, "AI chat streaming failed after it started.");
-            }
-
-            await WriteEventAsync(new AiChatStreamEventDto
-            {
-                Type = AiChatStreamEventDto.Error,
-                Message = ex is InvalidOperationException ? ex.Message : "AI 問答發生錯誤，請稍後再試。",
-            }, cancellationToken);
-        }
-    }
-
-    private async Task WriteEventAsync(AiChatStreamEventDto item, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Response.WriteAsync(JsonSerializer.Serialize(item, StreamJson) + "\n", cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            // 使用者離開頁面、連線斷了：請求的取消權杖也傳給了服務層，產生會跟著停（不再繼續花費）。
-        }
-    }
+                return new AiChatStreamEventDto
+                {
+                    Type = AiChatStreamEventDto.Error,
+                    Message = ex is InvalidOperationException ? ex.Message : "AI 問答發生錯誤，請稍後再試。",
+                };
+            },
+            cancellationToken);
 }

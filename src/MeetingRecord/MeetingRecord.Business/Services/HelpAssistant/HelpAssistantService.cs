@@ -36,14 +36,17 @@ public class HelpAssistantService
     private readonly AiCallGateway gateway;
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<HelpAssistantService> logger;
+    private readonly IAiCallerProvider? callerProvider;
 
     public HelpAssistantService(
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
         IOptions<LlmSettings> llmSettings,
         AiCallGateway gateway,
         CurrentUserService currentUserService,
-        ILogger<HelpAssistantService> logger)
+        ILogger<HelpAssistantService> logger,
+        IAiCallerProvider? callerProvider = null)
     {
+        this.callerProvider = callerProvider;
         this.textGenerationProviders = textGenerationProviders;
         this.llmSettings = llmSettings;
         this.gateway = gateway;
@@ -87,7 +90,8 @@ public class HelpAssistantService
         var userPrompt = HelpAssistantPromptBuilder.BuildUserPrompt(manual, history, question);
         var provider = ResolveProvider();
 
-        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+        // 1.1.29：經 IAiCallerProvider 取觸發者——WASM 頁經 API 提問時 CurrentUserService 是空的。
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
         var generated = await gateway.GenerateAsync(
             provider,
             new AiCallContext(

@@ -110,6 +110,8 @@ public sealed partial class ApiIntegrationTests
         ["ProjectMeeting.UpdateDraft"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Edit),
         ["ProjectMeeting.Transcript"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         ["ProjectMeeting.TranscriptCopied"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Export),
+        // 1.1.29：使用說明。提問要假 AI，在 HelpApiTests 驗。
+        ["Help.Manual"] = (MagicObjectHelper.角色_使用說明, PermissionActions.View),
     };
 
     /// <summary>專案會議授權測試：種子會議 → 它的專案。</summary>
@@ -358,7 +360,7 @@ public sealed partial class ApiIntegrationTests
         }
 
         if (action is "Search" or "Create" or "SelectableTeams" or "Presets" or "AddPresets" or "EnabledCategories"
-            or "List" or "SelectableProjects" or "SelectablePromptTemplates")
+            or "List" or "SelectableProjects" or "SelectablePromptTemplates" or "Manual")
         {
             return 0;
         }
@@ -495,6 +497,13 @@ public sealed partial class ApiIntegrationTests
         var (controller, action) = SplitEndpoint(endpoint);
         var baseUrl = $"/api/{controller}";
         var suffix = Guid.NewGuid().ToString("N");
+        if (controller == "Help")
+        {
+            return action == "Manual"
+                ? client.GetAsync("/api/v1/help/manual")
+                : throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, null);
+        }
+
         if (controller == "Todo")
         {
             return SendTodoEndpointAsync(client, action, targetId, suffix);

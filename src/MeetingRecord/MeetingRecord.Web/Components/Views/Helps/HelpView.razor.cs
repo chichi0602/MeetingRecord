@@ -1,5 +1,3 @@
-using System.Reflection;
-using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
@@ -10,6 +8,7 @@ using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Services;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Helps;
 
 namespace MeetingRecord.Web.Components.Views.Helps;
 
@@ -18,25 +17,14 @@ namespace MeetingRecord.Web.Components.Views.Helps;
 ///
 /// <para>
 /// 內容<b>不寫在這裡</b>，而是 <c>docs/guides/系統使用說明.md</c> 那一份——
-/// 它在建置時以內嵌資源的形式被放進組件（見 <c>MeetingRecord.Web.csproj</c>）。
+/// 它在建置時以內嵌資源的形式被放進組件，由 <see cref="HelpManualProvider"/> 讀取（1.1.29 起與 API 共用）。
 /// 這樣「文件庫的使用說明」與「系統裡的使用說明」永遠是同一份內容，
 /// 不會出現改了一邊忘了另一邊的情況。
-/// </para>
-///
-/// <para>
-/// ⚠️ 刻意<b>不</b>從檔案系統讀 <c>docs/</c>：那個目錄不會被發佈到輸出目錄，
-/// 會變成「開發時看得到、上線後 404」。
 /// </para>
 /// </summary>
 public partial class HelpView : ComponentBase, IAsyncDisposable
 {
-    /// <summary>
-    /// 內嵌資源的名稱。與 csproj 的 <c>LogicalName</c> 必須一致——
-    /// 改了一邊就會在執行期變成「載入中…」永遠不消失。
-    /// </summary>
-    private const string ResourceName = "MeetingRecord.Web.系統使用說明.md";
-
-    /// <summary>解析一次（每個連線一次），之後切分類、搜尋都不重新解析。</summary>
+    /// <summary>解析好的說明（<see cref="HelpManualProvider"/> 只解析一次），之後切分類、搜尋都不重新解析。</summary>
     private HelpManual? manual;
     private string? loadError;
     private string RoleMessage = string.Empty;
@@ -182,7 +170,7 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
                 Logger.LogError(ex, "Help assistant failed.");
             }
 
-            turn.Error = DescribeAssistantFailure(ex);
+            turn.Error = HelpAssistantFailure.Describe(ex);
             outcome = $"失敗：{ex.GetType().Name}";
         }
         finally
@@ -212,23 +200,6 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
     private void OnStopAssistant() => askCts?.Cancel();
 
     private void OnClearAssistant() => assistantTurns.Clear();
-
-    private static string DescribeAssistantFailure(Exception ex)
-    {
-        if (ex is AiQuotaExceededException)
-        {
-            return ex.Message;
-        }
-
-        var message = ex.Message;
-        if (message.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("maximum context length", StringComparison.OrdinalIgnoreCase))
-        {
-            return "使用說明超過目前 AI 模型能讀的長度，請聯絡系統管理員。";
-        }
-
-        return $"AI 助理沒有回答成功：{message}";
-    }
 
     #endregion
 
@@ -367,28 +338,21 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
             return;
         }
 
-        var markdown = ReadEmbeddedManual();
-        if (markdown is null)
+        manual = HelpManualProvider.Manual;
+        if (manual is null)
         {
-            loadError = "使用說明載入失敗，請聯絡系統管理員。";
+            loadError = HelpManualProvider.LoadFailedMessage;
             return;
         }
-
-        manual = HelpManual.Parse(StripDocumentFrontMatter(markdown));
 
         assistantAvailable = HelpAssistantService.IsAvailable;
         assistantUnavailableReason = assistantAvailable
             ? string.Empty
             : $"AI 助理目前無法使用：{HelpAssistantService.UnavailableReason}";
-
-        // 標記漏了或打錯不會壞畫面（歸到第一類），但會讓章節跑錯分類——留線索給維護者，測試也會擋。
-        if (manual.UnknownMarkers.Count > 0)
-        {
-            Logger.LogWarning(
-                "Help manual sections without a valid category marker: {Sections}",
-                string.Join("、", manual.UnknownMarkers));
-        }
     }
+
+    [Inject]
+    public HelpManualProvider HelpManualProvider { get; set; } = default!;
 
     /// <summary>
     /// 切掉文件開頭的維護資訊，只留正文。
@@ -425,35 +389,5 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         }
 
         return markdown;
-    }
-
-    /// <summary>
-    /// 讀出內嵌的使用說明。
-    ///
-    /// <para>
-    /// ⚠️ <b>一定要去掉 BOM。</b><c>docs/*.md</c> 一律是 UTF-8 含 BOM（CI 強制檢查），
-    /// 不處理的話字串第一個字元會是 <c>﻿</c>，Markdig 會把第一行的
-    /// <c># 標題</c> 當成普通段落，整頁的標題層級就跑掉了。
-    /// <c>detectEncodingFromByteOrderMarks</c> 會幫我們吃掉它。
-    /// </para>
-    /// </summary>
-    private string? ReadEmbeddedManual()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-
-        using var stream = assembly.GetManifestResourceStream(ResourceName);
-        if (stream is null)
-        {
-            // 這是建置設定壞掉，不是使用者的問題——要留下線索，不要只顯示空白頁。
-            Logger.LogError(
-                "Embedded manual not found. ResourceName={ResourceName}, Available={Available}",
-                ResourceName,
-                string.Join("、", assembly.GetManifestResourceNames()));
-
-            return null;
-        }
-
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
     }
 }

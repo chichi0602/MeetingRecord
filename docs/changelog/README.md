@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.99
+- 文件版本：7.100
 - 文件狀態：維護中
-- 現行系統版本：1.1.34
+- 現行系統版本：1.1.35
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M5 系統健康監控（分支 `wasm-migration-m5-system-health`）：`/system-health` 搬到 WASM，畫面不變；`api/v1/monitoring/health`、`logs/recent-warnings`、`ai-connection-test`，測試 AI 連線的稽核改由伺服器寫、用量記到呼叫者（1.1.35）| [2026-11-11-WASM遷移M5-系統健康監控](2026-11-11-WASM遷移M5-系統健康監控.md) |
 | 修正：存檔成功、視窗關閉動畫中再按「確定」會新增兩筆（WASM 的八個表單）；存檔一開頭先確認視窗還開著，新增端對端 TDO-11（1.1.34）| [2026-11-11-修正關窗途中再按確定新增兩筆](2026-11-11-修正關窗途中再按確定新增兩筆.md) |
 | WASM 遷移 M5 日誌等級設定（分支 `wasm-migration-m5-log-level`）：`/log-level-setting` 搬到 WASM，畫面不變；`api/v1/monitoring/log-level`（GET／PUT／restore），稽核改由伺服器寫；`LogModels` 搬到 Dtos（1.1.33）| [2026-11-11-WASM遷移M5-日誌等級設定](2026-11-11-WASM遷移M5-日誌等級設定.md) |
 | WASM 遷移 M5 資料庫用量（分支 `wasm-migration-m5-database-usage`）：`/database-usage` 搬到 WASM，畫面不變；新增只限管理者的 `api/v1/monitoring`（資料庫用量、檔案儲存用量），報表型別搬到 Dtos（1.1.32）| [2026-11-11-WASM遷移M5-資料庫用量](2026-11-11-WASM遷移M5-資料庫用量.md) |

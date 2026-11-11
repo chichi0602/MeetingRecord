@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.39
+- 文件版本：1.40
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.34
+- 現行系統版本：1.1.35
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -510,6 +510,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 資料庫用量 `/database-usage` | 1.1.32 | ✅ 完成；新 `MonitoringController`（`api/v1/monitoring`，`[AdminOnly]`）兩支：`database-usage`、`storage-usage`；報表型別搬到 `Dtos/Diagnostics`；MON-01／02 照過 |
 | 日誌等級設定 `/log-level-setting` | 1.1.33 | ✅ 完成；`MonitoringController` 加 `log-level` GET／PUT 與 `restore`，稽核改由伺服器寫；`LogModels` 整檔搬到 `Dtos/Diagnostics`（後面系統健康、日誌檢視共用）；MON-01／02 照過 |
 | 修正：存檔後關窗途中再按「確定」會新增兩筆 | 1.1.34 | ✅ 完成；1.1.33 全套時 TDO-10 偶發新增兩筆，根因是 WASM 頁「關窗」與「閘門放開」同一次重繪生效、關窗動畫期間又按得到；八個表單的 `SaveModalAsync` 開頭先確認視窗還開著，新增 TDO-11（穩定重現）與原始碼掃描 |
+| 系統健康監控 `/system-health` | 1.1.35 | ✅ 完成；`MonitoringController` 加 `health`、`logs/recent-warnings`、`ai-connection-test`（稽核改由伺服器寫）；`SystemHealthModels`、`AiConnectionProbeResult` 搬到 `Dtos/Diagnostics`；`AiConnectionTestService` 改經 `IAiCallerProvider`；MON-01／02 照過 |
 
 ## 十一、下一步
 

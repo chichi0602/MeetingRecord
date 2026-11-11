@@ -5,25 +5,11 @@ using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
+using MeetingRecord.Dtos.Diagnostics;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Business.Services.Diagnostics;
-
-/// <summary>一個探測的結果（1.0.35）。</summary>
-/// <param name="Item">「文字生成」或「語音轉錄」。</param>
-/// <param name="Success">部署存在而且呼叫成功。</param>
-/// <param name="Deployment">實際送出的部署名稱；未設定時為空字串。</param>
-/// <param name="Host">端點主機；未設定時為空字串。</param>
-/// <param name="Elapsed">從送出到收到回應的時間；沒有送出時為 null。</param>
-/// <param name="Message">給管理者看的結論或失敗原因。</param>
-public sealed record AiConnectionProbeResult(
-    string Item,
-    bool Success,
-    string Deployment,
-    string Host,
-    TimeSpan? Elapsed,
-    string Message);
 
 /// <summary>
 /// 「測試 AI 連線」（1.0.35，系統健康監控頁，管理者手動按）。實際呼叫一次文字生成與語音轉錄，驗證部署存在、金鑰可用。
@@ -52,6 +38,7 @@ public class AiConnectionTestService
     private readonly AiCallGateway gateway;
     private readonly CurrentUserService currentUserService;
     private readonly ILogger<AiConnectionTestService> logger;
+    private readonly IAiCallerProvider? callerProvider;
 
     public AiConnectionTestService(
         IEnumerable<ITextGenerationProvider> textGenerationProviders,
@@ -59,8 +46,10 @@ public class AiConnectionTestService
         IOptions<LlmSettings> llmSettings,
         AiCallGateway gateway,
         CurrentUserService currentUserService,
-        ILogger<AiConnectionTestService> logger)
+        ILogger<AiConnectionTestService> logger,
+        IAiCallerProvider? callerProvider = null)
     {
+        this.callerProvider = callerProvider;
         this.textGenerationProviders = textGenerationProviders;
         this.transcriptionProviders = transcriptionProviders;
         this.llmSettings = llmSettings;
@@ -100,7 +89,7 @@ public class AiConnectionTestService
 
         return await ProbeAsync(TextItem, deployment, host, cancellationToken, async token =>
         {
-            var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+            var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
             var result = await gateway.GenerateAsync(
                 provider,
                 new AiCallContext(AiUsageFeature.ConnectionTest, userId, userName, RelatedInfo: "AI 連線測試：文字生成"),
@@ -144,7 +133,7 @@ public class AiConnectionTestService
 
         return await ProbeAsync(TranscriptionItem, deployment, host, cancellationToken, async token =>
         {
-            var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser);
+            var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
             using var audio = new MemoryStream(BuildSilentWav(TimeSpan.FromSeconds(1)));
             await gateway.TranscribeAsync(
                 provider,

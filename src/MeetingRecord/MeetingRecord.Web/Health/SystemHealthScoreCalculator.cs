@@ -1,3 +1,4 @@
+using MeetingRecord.Dtos.Diagnostics;
 namespace MeetingRecord.Web.Health;
 
 public static class SystemHealthScoreCalculator

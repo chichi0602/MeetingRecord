@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MeetingRecord.Business.Services.Diagnostics;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Diagnostics;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Filters;
+using MeetingRecord.Web.Health;
 
 namespace MeetingRecord.Web.Controllers;
 
@@ -21,8 +23,88 @@ public sealed class MonitoringController(
     IDatabaseUsageService databaseUsageService,
     StorageUsageService storageUsageService,
     LogLevelRuntimeState logLevelState,
-    IAuditLogService auditLogService) : ControllerBase
+    IAuditLogService auditLogService,
+    ISystemHealthService systemHealthService,
+    ILogQueryService logQueryService,
+    AiConnectionTestService aiConnectionTestService,
+    ILogger<MonitoringController> logger) : ControllerBase
 {
+    /// <summary>系統健康「最近 24 小時警告以上日誌」最多列幾筆（最新的）。更多請到「日誌檢視」。</summary>
+    public const int RecentWarningTake = 200;
+
+    /// <summary>
+    /// 系統健康監控（1.1.35）：跑一輪全部檢查。每次呼叫都會跑，所以任何檢查都不可呼叫付費 AI（開發慣例 §6.3）。
+    /// 失敗回 500，訊息同畫面「讀取系統健康狀態失敗：例外型別。」。
+    /// </summary>
+    [HttpGet("health")]
+    public async Task<ActionResult<ApiResult<SystemHealthReport>>> Health(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(ApiResult<SystemHealthReport>.SuccessResult(await systemHealthService.GetReportAsync(cancellationToken)));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Loading system health report through API failed.");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResult<SystemHealthReport>.FailureResult($"讀取系統健康狀態失敗：{ex.GetType().Name}。", StatusCodes.Status500InternalServerError));
+        }
+    }
+
+    /// <summary>
+    /// 系統健康「最近 24 小時警告以上日誌」（1.1.35）：最新 <see cref="RecentWarningTake"/> 筆，時間正序（舊→新），畫面自己反轉。
+    /// 讀檔失敗時結果帶 <c>message</c>，同畫面。
+    /// </summary>
+    [HttpGet("logs/recent-warnings")]
+    public async Task<ActionResult<ApiResult<LogQueryResult>>> RecentWarnings(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (start, end) = LogTimeRanges.Last(TimeSpan.FromHours(24), DateTime.Now);
+            var result = await logQueryService.QueryAsync(new LogQueryRequest
+            {
+                StartTime = start,
+                EndTime = end,
+                MinimumLevel = LogLevelRank.Warn,
+                Take = RecentWarningTake,
+            }, cancellationToken);
+            return Ok(ApiResult<LogQueryResult>.SuccessResult(result));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Loading recent warning logs for system health through API failed.");
+            return Ok(ApiResult<LogQueryResult>.SuccessResult(new LogQueryResult { Message = $"讀取日誌失敗：{ex.GetType().Name}。" }));
+        }
+    }
+
+    /// <summary>
+    /// 測試 AI 連線（1.1.35）：實際呼叫一次文字生成與語音轉錄，**會產生費用**（確認框在畫面上）。
+    /// 經 AiCallGateway，記入用量帳本、AI 對話紀錄與每月上限；稽核 <c>AiConnection.Test</c> 由伺服器寫。
+    /// </summary>
+    [HttpPost("ai-connection-test")]
+    public async Task<ActionResult<ApiResult<List<AiConnectionProbeResult>>>> TestAiConnection(CancellationToken cancellationToken)
+    {
+        List<AiConnectionProbeResult> results;
+        try
+        {
+            results = [.. await aiConnectionTestService.RunAsync(cancellationToken)];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "AI connection test failed unexpectedly.");
+            return Ok(ApiResult<List<AiConnectionProbeResult>>.SuccessResult([new AiConnectionProbeResult("測試", false, string.Empty, string.Empty, null, $"測試失敗：{ex.Message}")]));
+        }
+
+        var summary = string.Join("; ", results.Select(x => $"{x.Item}={(x.Success ? "OK" : "Fail")}"));
+        await auditLogService.WriteForCurrentUserAsync(
+            AuditActions.AiConnectionTest,
+            success: results.All(x => x.Success),
+            targetType: "LlmSettings",
+            targetId: "*",
+            detail: $"{summary}; via={AuditVia.Api}");
+        return Ok(ApiResult<List<AiConnectionProbeResult>>.SuccessResult(results));
+    }
+
     /// <summary>資料庫用量（SQLite 檔案、頁面配置、各資料表）。失敗時報表本身帶 <c>errorMessage</c>，同畫面。</summary>
     [HttpGet("database-usage")]
     public async Task<ActionResult<ApiResult<DatabaseUsageReport>>> DatabaseUsage(CancellationToken cancellationToken)

@@ -692,9 +692,9 @@ public sealed partial class ApiIntegrationTests : IClassFixture<ApiTestApplicati
         Assert.Equal(18, report.Items.Count);
         Assert.Equal(100, report.Items.Sum(item => item.Weight));
         Assert.Contains(report.Items, item => item.Category == "DataProtection");
-        Assert.Contains(report.Items, item => item.Category == "Cache" && item.Status == MeetingRecord.Web.Health.SystemHealthStatus.Healthy);
+        Assert.Contains(report.Items, item => item.Category == "Cache" && item.Status == MeetingRecord.Dtos.Diagnostics.SystemHealthStatus.Healthy);
         Assert.Contains(report.Items, item => item.Category == "ExceptionPipeline");
-        Assert.Contains(report.Items, item => item.Category == "AiQuota" && item.Status == MeetingRecord.Web.Health.SystemHealthStatus.Healthy);
+        Assert.Contains(report.Items, item => item.Category == "AiQuota" && item.Status == MeetingRecord.Dtos.Diagnostics.SystemHealthStatus.Healthy);
         Assert.DoesNotContain(report.Items, item => item.Evidence.Contains("<key", StringComparison.OrdinalIgnoreCase));
     }
 

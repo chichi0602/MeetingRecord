@@ -26,6 +26,8 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
         "/api/v1/monitoring/database-usage",
         "/api/v1/monitoring/storage-usage",
         "/api/v1/monitoring/log-level",
+        "/api/v1/monitoring/health",
+        "/api/v1/monitoring/logs/recent-warnings",
     };
 
     [Theory]
@@ -133,6 +135,62 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.False((await ReadAsync<LogLevelStateDto>(await client.GetAsync("/api/v1/monitoring/log-level"))).Data!.HasOverride);
+    }
+
+    /// <summary>1.1.35：系統健康的檢查在伺服器跑，結果經 JSON 還原後各項都在（含 required 欄位）。</summary>
+    [Fact]
+    public async Task Health_ShouldReturnTheFullReport()
+    {
+        using var client = await LoginAdminAsync();
+
+        using var response = await client.GetAsync("/api/v1/monitoring/health");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var report = (await ReadAsync<SystemHealthReport>(response)).Data!;
+        Assert.NotEmpty(report.Items);
+        Assert.InRange(report.Score, 0, 100);
+        Assert.Equal(100, report.Items.Sum(x => x.Weight));
+        Assert.All(report.Items, x => Assert.False(string.IsNullOrWhiteSpace(x.Name)));
+        Assert.Contains(report.Items, x => x.Group == SystemHealthGroups.Features);
+    }
+
+    [Fact]
+    public async Task RecentWarnings_ShouldAnswerEvenWithoutLogFiles()
+    {
+        using var client = await LoginAdminAsync();
+
+        using var response = await client.GetAsync("/api/v1/monitoring/logs/recent-warnings");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = (await ReadAsync<LogQueryResult>(response)).Data!;
+        Assert.True(result.Entries.Count <= MeetingRecord.Web.Controllers.MonitoringController.RecentWarningTake);
+        Assert.All(result.Entries, x => Assert.True(x.Rank >= LogLevelRank.Warn));
+    }
+
+    /// <summary>
+    /// 1.1.35：測試 AI 連線只限管理者，稽核由伺服器寫。這個測試主機沒有設定 AI，所以兩個探測都回「未設定」、不會真的花錢。
+    /// </summary>
+    [Fact]
+    public async Task AiConnectionTest_ShouldBeAdminOnly_AndAuditedByTheServer()
+    {
+        var (account, _) = await TestCookieLogin.CreateUserAsync(factory.Services, Password, [MagicObjectHelper.角色_會議紀錄]);
+        using (var normal = await LoginAsync(account))
+        using (var denied = await normal.PostAsync("/api/v1/monitoring/ai-connection-test", null))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        }
+
+        using var client = await LoginAdminAsync();
+        using var response = await client.PostAsync("/api/v1/monitoring/ai-connection-test", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var results = (await ReadAsync<List<AiConnectionProbeResult>>(response)).Data!;
+        Assert.Equal(2, results.Count);
+        Assert.All(results, x => Assert.False(x.Success));
+
+        using var scope = factory.Services.CreateScope();
+        var audit = await scope.ServiceProvider.GetRequiredService<BackendDBContext>().AuditLog.AsNoTracking()
+            .Where(x => x.Action == AuditActions.AiConnectionTest).OrderByDescending(x => x.Id).FirstAsync();
+        Assert.False(audit.Success);
+        Assert.Equal("LlmSettings", audit.TargetType);
+        Assert.EndsWith("via=Api", audit.Detail);
     }
 
     private async Task<HttpClient> LoginAdminAsync()

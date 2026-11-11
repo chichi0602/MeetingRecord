@@ -1,4 +1,5 @@
 using MeetingRecord.Web.Health;
+using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Tests;
 

@@ -1,4 +1,5 @@
-namespace MeetingRecord.Web.Health;
+// 1.1.35（WASM 遷移 M5）：從 Web/Health 搬來，系統健康 API 與 WASM 頁共用。
+namespace MeetingRecord.Dtos.Diagnostics;
 
 public enum SystemHealthStatus
 {

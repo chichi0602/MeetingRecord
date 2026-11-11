@@ -28,4 +28,16 @@ public sealed class MonitoringApi(ApiClient api)
     /// <summary>還原為系統預設等級（1.1.33）；稽核由伺服器寫。</summary>
     public Task<ApiResult<LogLevelStateDto>> RestoreLogLevelAsync()
         => api.PostAsync($"{Base}/log-level/restore", ClientJsonContext.Default.LogLevelStateResult);
+
+    /// <summary>系統健康：跑一輪全部檢查（1.1.35）。</summary>
+    public Task<ApiResult<SystemHealthReport>> GetHealthAsync()
+        => api.GetAsync($"{Base}/health", ClientJsonContext.Default.SystemHealthResult);
+
+    /// <summary>系統健康：最近 24 小時警告以上日誌（1.1.35），時間正序。</summary>
+    public Task<ApiResult<LogQueryResult>> GetRecentWarningsAsync()
+        => api.GetAsync($"{Base}/logs/recent-warnings", ClientJsonContext.Default.LogQueryResultResult);
+
+    /// <summary>測試 AI 連線（1.1.35）：會產生費用，呼叫前畫面要先確認；稽核由伺服器寫。</summary>
+    public Task<ApiResult<List<AiConnectionProbeResult>>> TestAiConnectionAsync()
+        => api.PostAsync($"{Base}/ai-connection-test", ClientJsonContext.Default.AiConnectionProbeResults);
 }

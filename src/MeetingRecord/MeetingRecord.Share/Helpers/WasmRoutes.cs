@@ -27,6 +27,7 @@ public static class WasmRoutes
         "/help", // 1.1.30 使用說明
         "/database-usage", // 1.1.32 資料庫用量
         "/log-level-setting", // 1.1.33 日誌等級設定
+        "/system-health", // 1.1.35 系統健康監控
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

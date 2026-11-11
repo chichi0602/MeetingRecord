@@ -1,10 +1,10 @@
 ﻿# 系統健康監控 PRD
 
-- 文件版本：3.3
+- 文件版本：3.4
 - 文件狀態：已實作
-- 現行系統版本：1.0.35
+- 現行系統版本：1.1.35
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.93 擴充為「系統健康度」，0.4.120 改名「系統健康監控」並改為只限管理者，0.4.123 改版為 17 項並重做畫面，1.0.29 新增「AI 用量上限」成為 18 項）
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -29,6 +29,8 @@
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
 | `/system-health` | 系統管理 → 監控與診斷（id 36）→ 系統健康監控（id 34） | 只限管理者（`CheckIsAdmin()`＋`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄、不能勾給角色） | 系統管理員／維運 |
+
+1.1.35 起是 WASM 頁，資料走 API（`MonitoringController`，`[AdminOnly]`）：`GET api/v1/monitoring/health`、`GET api/v1/monitoring/logs/recent-warnings`、`POST api/v1/monitoring/ai-connection-test`（稽核由伺服器寫，`via=Api`）。
 | `/health/live` | 非選單（探針） | 無（匿名） | 部署平台存活探針 |
 | `/health/ready` | 非選單（探針） | 無（匿名） | 部署平台就緒探針 |
 
@@ -58,10 +60,10 @@
 
 ## 四、內部系統運作
 
-1. **開頁**：`SystemHealthView.OnInitializedAsync` 依序執行：
-   1. `AuthenticationStateHelper.Check` 驗證登入。
-   2. `CheckIsAdmin()`：非管理者顯示「你沒有權限存取此頁面」並中止。0.4.120 起不再看權限鍵。
-   3. 呼叫 `RefreshAsync`。開頭以 `isLoading` 早退，避免同一個 circuit 的 DbContext 被並行使用。
+1. **開頁**（1.1.35 起 WASM 頁 `SystemHealthPage`）：
+   1. 登入狀態由 `WasmLayout` 處理。
+   2. `PermissionView.IsAdmin`：非管理者顯示「你沒有權限存取此頁面」並中止（經 API 寫頁面拒絕稽核）。0.4.120 起不再看權限鍵。API 也是 `[AdminOnly]`。
+   3. 呼叫 `RefreshAsync` → `GET api/v1/monitoring/health`。開頭以 `isLoading` 早退，避免重複按。
 2. **產生報告**：`ISystemHealthService.GetReportAsync`（`SystemHealthService`）依序執行 18 項檢查。判斷都放在 `SystemHealthChecks` 的純函式，服務只蒐集輸入：
    - **日誌**：`INLogFilePathResolver` 算目錄與今日檔、`FileInfo.Length`、`LogLevelRuntimeState.EffectiveLevel／OverrideLevel` → `EvaluateLogging`。0.4.123 起不讀檔內容。
    - **登入金鑰**：`ExternalFileSystem.DataProtectionKeyPath`、`key-*.xml` 檔數、`IKeyManager.GetAllKeys()` 過濾未撤銷且未過期 → `EvaluateDataProtection`。
@@ -76,7 +78,7 @@
    - `Score = round(earned/totalWeight*100)`。
 4. **燈號門檻**：`Score >= 90` 綠、`>= 70` 黃、其餘紅。狀態文字用同一組門檻對應正常／警示／異常。
 5. **警告日誌**：
-   - 第一次展開時呼叫 `ILogQueryService.QueryAsync`，條件為現在往前 24 小時、`MinimumLevel = Warn`、`Take = 200`。
+   - 第一次展開時呼叫 `GET api/v1/monitoring/logs/recent-warnings`（伺服器以 `ILogQueryService.QueryAsync` 查，條件為現在往前 24 小時、`MinimumLevel = Warn`、`Take = 200`）。
    - 結果反轉成最新在前。
    - 之後按「重新檢查」時，若區塊已展開會一併重查。
 6. **探針**：
@@ -86,7 +88,7 @@
 ## 五、權限與安全
 
 - **只限管理者**（0.4.120 起）：
-  - 頁面以 `CheckIsAdmin()` 守門，權限判定完成前不渲染任何內容。
+  - 頁面以 `PermissionView.IsAdmin` 守門（1.1.35 前是 `CheckIsAdmin()`），權限判定完成前不渲染任何內容；API 是 `[AdminOnly]`，非管理者 403 並留稽核。
   - 選單 id 34 列在 `SidebarMenuService.AdminOnlyMenuIds`。
   - 不在 `MenuPermissionMap` 與 `RolePermissionService` 權限目錄，無法勾給角色。
   - 未遮罩的日誌原文因此只有管理者看得到。
@@ -137,6 +139,7 @@
   - `SystemHealthService_ShouldResolveAndReportAll18ItemsWithoutLeakingSecrets`：從 DI 取得服務，報告 18 項（1.0.29 前為 17 項）、權重 100、快取綠燈，證據不含金鑰 XML。
   - 未登入開 `/system-health` 時，不出現「最近 24 小時警告以上日誌」與「例外紀錄管線」。
 - **`MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`**、**`RbacBackfillServiceTests.cs`**、**`MenuIconTests.cs`**：選單、退役權限鍵、圖示。
+- **`MeetingRecord.Tests/MonitoringApiTests.cs`**（1.1.35）：`health`、`logs/recent-warnings` 未登入 401、非管理者 403；完整報告經 JSON 還原後各項都在、權重 100；警告日誌最多 200 筆且都是 WARN 以上；`ai-connection-test` 只限管理者、稽核由伺服器寫（`via=Api`）。
 - **0.4.123 實跑**：未登入不外洩、探針 200、日誌沒有新 ERROR。待使用者以管理者實測：
   - 17 項分兩組（1.0.29 起 18 項）。
   - 停機時移走金鑰檔，重啟後登入金鑰的證據會變化。
@@ -146,8 +149,7 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/SystemHealthPage.razor`：薄頁。
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Monitoring/SystemHealthView.razor(.cs/.css)`：
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/SystemHealthPage.razor(.cs/.css)`（1.1.35 起 WASM；以前是 Server 的 `SystemHealthPage` → `SystemHealthView`）：
   - `RefreshAsync`：重新檢查。
   - `ToggleWarnLogsAsync`／`LoadWarnLogsAsync`：警告日誌。
   - `WarnLogTake = 200`。
@@ -158,7 +160,8 @@
 - `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthChecks.cs`：
   - `SystemHealthWeights`。
   - 判斷純函式：`EvaluateLogging`、`EvaluateDataProtection`、`EvaluateExceptionPipeline`、`ProbeCacheAsync`、`EvaluateAiProvider`、`EvaluateTranscription`、`EvaluatePdfExport`、`EvaluateExchangeRate`、`EvaluateBackgroundJobs`、`EvaluateRecentErrors`、`EvaluateAiQuota`（1.0.29）。
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs`、`SystemHealthModels.cs`、`DatabaseHealthCheck.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs`、`DatabaseHealthCheck.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/SystemHealthModels.cs`、`AiConnectionProbeResult.cs`（1.1.35 搬來）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs`（`Health`、`RecentWarnings`、`TestAiConnection`，1.1.35）
 - `src/MeetingRecord/MeetingRecord.Web/Diagnostics/`：`LoggingPipelineMonitor`、`ExceptionLogProvider`、`NLogFilePathResolver`、`LogLevelRuntimeState`、`LogQueryService`
 - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`：`AddConfiguredHealthChecks`（探針 tag `live`/`ready`）、`AddConfiguredDataProtection`、`AddConfiguredCache`。
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`AdminOnlyMenuIds`）、`MeetingRecord.Business/Services/Other/RbacBackfillService.cs`（`RetireLegacyPermissionKeysAsync`）

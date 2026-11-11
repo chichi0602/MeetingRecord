@@ -1,6 +1,8 @@
-@using MeetingRecord.Web.Diagnostics
+@page "/system-health"
 @using MeetingRecord.Dtos.Diagnostics
-@using MeetingRecord.Web.Health
+
+@* 系統健康監控（1.1.35 搬到 WASM）：由 Blazor Server 的 SystemHealthView 改寫，畫面不變；資料改走監控 API。 *@
+<PageTitle>系統健康監控</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
 @if (!isAccessChecked)
@@ -115,7 +117,7 @@ else
             <span>最近 24 小時警告以上日誌</span>
             @if (warnLogs is not null && warnLogsExpanded)
             {
-                <span class="health-muted">共 @warnLogsDisplay.Count 筆@(warnLogsDisplay.Count >= SystemHealthView.WarnLogTake ? $"（只列最新 {SystemHealthView.WarnLogTake} 筆）" : string.Empty)</span>
+                <span class="health-muted">共 @warnLogsDisplay.Count 筆@(warnLogsDisplay.Count >= SystemHealthPage.WarnLogTake ? $"（只列最新 {SystemHealthPage.WarnLogTake} 筆）" : string.Empty)</span>
             }
         </button>
 

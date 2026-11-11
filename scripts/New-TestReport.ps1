@@ -6,12 +6,16 @@
 # 遷移分支的里程碑報告（1.1.3）：-Milestone M1（M2…）只換標題與檔名（「M1 里程碑報告」「…-M1-里程碑測試報告-版本.md」），內容同一套。
 #
 # 用法（通常由 Run-E2E.ps1 呼叫）：
-#   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-WasmE2ETrx wasm-e2e.trx] [-Milestone M1] [-OutputPath 檔案]
+#   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-WasmE2ETrx wasm-e2e.trx] [-Milestone M1] [-L5Json l5-build.json] [-OutputPath 檔案]
+#
+# L5（1.1.50）：端對端 Scenario 以 L5- 開頭的情境自成一層；它們在測試輸出寫「L5METRIC|項目|門檻|實測|判定」，
+# 與 -L5Json（Run-E2E.ps1 發佈後統計的下載量、修剪警告）一起組成第五節。
 param(
     [string]$UnitTrx,
     [Parameter(Mandatory = $true)][string]$E2ETrx,
     [string]$WasmE2ETrx,
     [string]$Milestone = "M0",
+    [string]$L5Json,
     [string]$OutputPath
 )
 
@@ -28,11 +32,13 @@ function Read-Trx([string]$path) {
         $message = ""
         $err = $node.SelectSingleNode("*[local-name()='Output']/*[local-name()='ErrorInfo']/*[local-name()='Message']")
         if ($err) { $message = ($err.InnerText -split "`n")[0].Trim() }
+        $stdout = $node.SelectSingleNode("*[local-name()='Output']/*[local-name()='StdOut']")
         [pscustomobject]@{
             Name     = $node.testName
             Outcome  = $node.outcome
             Duration = $node.duration
             Message  = $message
+            StdOut   = if ($stdout) { $stdout.InnerText } else { "" }
         }
     }
 }
@@ -101,10 +107,11 @@ $today = Get-Date -Format "yyyy/MM/dd"
 $edgeVersion = try { (Get-Item "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe").VersionInfo.ProductVersion } catch { "未知" }
 $dotnetVersion = (dotnet --version).Trim()
 
-# 端對端結果再依情境編號分層：L4- 開頭是「即時與長時間」（1.0.66），其餘是 L3 對照。
-$isL4 = { param($r) $meta = $scenarioMeta[(Get-MethodKey $r.Name)]; $meta -and $meta.Scenario -like "L4-*" }
-$l4 = @($e2e | Where-Object { & $isL4 $_ })
-$l3 = @($e2e | Where-Object { -not (& $isL4 $_) })
+# 端對端結果再依情境編號分層：L4- 開頭是「即時與長時間」（1.0.66），L5- 是非功能（1.1.50），其餘是 L3 對照。
+$scenarioOf = { param($r) $meta = $scenarioMeta[(Get-MethodKey $r.Name)]; if ($meta) { $meta.Scenario } else { "" } }
+$l4 = @($e2e | Where-Object { (& $scenarioOf $_) -like "L4-*" })
+$l5 = @($e2e | Where-Object { (& $scenarioOf $_) -like "L5-*" })
+$l3 = @($e2e | Where-Object { (& $scenarioOf $_) -notlike "L4-*" -and (& $scenarioOf $_) -notlike "L5-*" })
 
 $counts = [ordered]@{
     "L1 單元／服務" = Count-Outcomes $l1
@@ -112,8 +119,10 @@ $counts = [ordered]@{
     "L3 E2E 對照"  = Count-Outcomes $l3
     "L4 即時與長時間" = Count-Outcomes $l4
 }
+if ($l5.Count -gt 0) { $counts["L5 非功能"] = Count-Outcomes $l5 }
 $failedTotal = ($counts.Values | Measure-Object -Property Failed -Sum).Sum
-$conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～L4 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
+$lastLayer = if ($l5.Count -gt 0) { "L5" } else { "L4" }
+$conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～$lastLayer 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
 $kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } elseif ($Milestone -eq "M0") { "M0 基準報告（只有 Server 版）" } else { "$Milestone 里程碑報告（Server 版＋已遷移的 WASM 頁）" }
 
 $sb = [System.Text.StringBuilder]::new()
@@ -148,7 +157,7 @@ foreach ($key in $counts.Keys) {
     $c = $counts[$key]
     Line "| $key | $($c.Total) | $($c.Passed) | $($c.Failed) | $($c.Skipped) |"
 }
-Line "| L5 非功能 | — | — | — | M0 範圍外 |"
+if ($l5.Count -eq 0) { Line "| L5 非功能 | — | — | — | 本次未執行 |" }
 Line
 Line "## 3. E2E 對照矩陣"
 Line
@@ -198,7 +207,29 @@ Line "授權守門掃描（``ApiAuthorizationConventionTests``，每支端點都
 Line
 Line "## 5. 效能（L5）"
 Line
-Line "M0 範圍外。WASM 遷移完成時依 09 號文件 §8 L5 的門檻量測：首次下載量（Brotli 後 ≤ 5 MB）、冷啟動（桌機 ≤ 4 秒、有快取 ≤ 1.5 秒）、API p95（≤ 300 ms）、伺服器記憶體、越權與 CSRF、修剪警告為 0。"
+$l5Metrics = @($l5 | ForEach-Object { $_.StdOut -split "`r?`n" } | Where-Object { $_ -like "L5METRIC|*" } | ForEach-Object { $p = $_.Split("|"); [pscustomobject]@{ Item = $p[1]; Threshold = $p[2]; Actual = $p[3]; Verdict = $p[4] } })
+$build = if (-not [string]::IsNullOrEmpty($L5Json) -and (Test-Path $L5Json)) { Get-Content -Raw -Encoding UTF8 $L5Json | ConvertFrom-Json } else { $null }
+if ($l5Metrics.Count -eq 0 -and $null -eq $build) {
+    Line "本次未量測。門檻見 09 號文件 §8 L5：首次下載量（Brotli 後 ≤ 5 MB）、冷啟動（桌機 ≤ 4 秒、有快取 ≤ 1.5 秒）、API p95（≤ 300 ms）、伺服器記憶體、越權與 CSRF、修剪警告為 0。"
+}
+else {
+    Line "門檻見 09 號文件 §8 L5。下載量與修剪警告由 ``Run-E2E.ps1`` 在發佈後統計；載入時間、API p95、記憶體由端對端 ``L5-*`` 情境量測（載入時間在頁面裡從導覽開始量到登入者名稱出現）；越權與 CSRF 看 L2。"
+    Line
+    Line "| 項目 | 門檻 | 實測 | 判定 |"
+    Line "|------|------|------|------|"
+    if ($build) {
+        Line "| WASM 首次下載量（Brotli，只下載一個語系檔） | ≤ 5 MB | $($build.downloadOneLocaleMb) MB（全部 ``.br`` 合計 $($build.downloadTotalMb) MB） | $(if ($build.downloadOneLocaleMb -le 5) { '✅' } else { '❌' }) |"
+        Line "| 發佈時的修剪警告 | 0 | $($build.trimWarnings) 則 | $(if ($build.trimWarnings -eq 0) { '✅' } else { '❌' }) |"
+    }
+    foreach ($m in $l5Metrics) {
+        Line "| $($m.Item) | $($m.Threshold) | $($m.Actual) | $($m.Verdict) |"
+    }
+    $authzOk = @($unit | Where-Object { $_.Name -match "ApiAuthorizationConventionTests|GuardedEndpoint_" -and $_.Outcome -ne "Passed" }).Count -eq 0 -and @($unit | Where-Object { $_.Name -match "GuardedEndpoint_" }).Count -gt 0
+    $csrf = @($unit | Where-Object { $_.Name -match "CookieWrite_WithoutClientHeader_ShouldBeRejectedAsCsrf" })
+    $csrfOk = $csrf.Count -gt 0 -and @($csrf | Where-Object Outcome -ne "Passed").Count -eq 0
+    Line "| 越權（跨使用者、無權限、非管理者打管理 API） | 一律擋下 | L2 授權矩陣與守門掃描 | $(if ($authzOk) { '✅' } else { '❌ 或未執行' }) |"
+    Line "| CSRF（Cookie 寫入沒帶防偽標頭） | 擋下 | ``CookieApiTests`` | $(if ($csrfOk) { '✅' } else { '❌ 或未執行' }) |"
+}
 Line
 Line "## 6. 已知且接受的差異"
 Line

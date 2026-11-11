@@ -36,6 +36,21 @@ public sealed class E2EAppFixture : IAsyncLifetime
     /// <summary>測試產生的檔案（下載、上傳用的假音檔）放這裡。</summary>
     public string WorkPath => Path.Combine(rootPath, "work");
 
+    /// <summary>自己啟動的網站目前的工作集（L5 伺服器記憶體，1.1.50）；用外部網站（<c>E2E_BASE_URL</c>）時是 null。</summary>
+    public long? ServerWorkingSetBytes
+    {
+        get
+        {
+            if (process is null || process.HasExited)
+            {
+                return null;
+            }
+
+            process.Refresh();
+            return process.WorkingSet64;
+        }
+    }
+
     /// <summary>
     /// 網站的專案附件暫存資料夾（1.0.65）。自己啟動網站時把它的 TMP／TEMP 指到 <c>rootPath/tmp</c>，才看得到也不會弄髒本機的 %TEMP%；
     /// 對外部網站測（<c>E2E_BASE_URL</c>）時不知道在哪，為 null。

@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
-using Xunit.Abstractions;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.E2ETests.Infrastructure;
 
@@ -10,7 +8,7 @@ namespace MeetingRecord.E2ETests.Scenarios;
 /// WASM 遷移 M1（1.1.1）：WASM 空殼頁 <c>/wasm</c>。遷移期間逐頁切換，已遷移的頁在瀏覽器執行、其餘仍是 Blazor Server，
 /// 兩種頁之間整頁載入。這裡驗證兩邊能互相切換、登入狀態與選單與 Server 頁一致。
 /// </summary>
-public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) : E2ETestBase(app)
+public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
 {
     public static TheoryData<string> Personas => ["管理者", "主責團隊成員", "檢視者", "甲方", "無團隊使用者"];
 
@@ -142,10 +140,10 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
 
     [E2EFact]
     [Trait("Scenario", "WASM-06")]
-    [Trait("Title", "發佈後的 WASM 頁：靜態檔有 Brotli 壓縮、推播走 WebSocket、載入時間在範圍內")]
+    [Trait("Title", "發佈後的 WASM 頁：靜態檔有 Brotli 壓縮、推播走 WebSocket")]
     [Trait("Page", "WASM 預覽")]
     [Trait("Persona", "主責團隊成員")]
-    public async Task PublishedWasm_ShouldCompress_UseWebSocket_AndLoadInTime()
+    public async Task PublishedWasm_ShouldCompress_AndUseWebSocket()
     {
         // M1 的本機部署驗證（1.1.3）：端對端網站本來就是 dotnet publish 的輸出，與部署的檔案相同。
         var page = await LoginAsAsync(Seed.Owner);
@@ -160,17 +158,9 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
             }
         };
 
-        // 首次載入：這個 context 還沒下載過 WASM 執行環境（登入頁是靜態頁）。
-        var timer = Stopwatch.StartNew();
+        // 載入時間 1.1.50 起移到 L5-01／L5-02（PerformanceTests，用真正的門檻）。
         await page.GotoAsync("/wasm");
         await Expect(page.Locator(".wasm-home-user")).ToBeVisibleAsync();
-        var firstLoad = timer.Elapsed;
-
-        // 有快取的再次載入。
-        timer.Restart();
-        await page.ReloadAsync();
-        await Expect(page.Locator(".wasm-home-user")).ToBeVisibleAsync();
-        var cachedLoad = timer.Elapsed;
 
         // 推播通道要真的走 WebSocket，不是退回 LongPolling（IIS 沒開 WebSocket 功能時會退回）。
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -186,11 +176,6 @@ public sealed class WasmShellTests(E2EAppFixture app, ITestOutputHelper output) 
         var response = await page.APIRequest.GetAsync(wasmFile, new() { Headers = new Dictionary<string, string> { ["Accept-Encoding"] = "br" } });
         Assert.True(response.Ok, $"{wasmFile} 回 {response.Status}");
         Assert.Equal("br", response.Headers.GetValueOrDefault("content-encoding"));
-
-        output.WriteLine($"WASM 首次載入 {firstLoad.TotalSeconds:F2} 秒（門檻 ≤ 4 秒）、有快取 {cachedLoad.TotalSeconds:F2} 秒（門檻 ≤ 1.5 秒）");
-        // 斷言放寬，避免本機忙時偶發失敗；正式門檻在報告裡對照實際數字。
-        Assert.True(firstLoad < TimeSpan.FromSeconds(10), $"首次載入 {firstLoad.TotalSeconds:F1} 秒，太慢");
-        Assert.True(cachedLoad < TimeSpan.FromSeconds(5), $"有快取的載入 {cachedLoad.TotalSeconds:F1} 秒，太慢");
 
         bool HasHubSocket()
         {

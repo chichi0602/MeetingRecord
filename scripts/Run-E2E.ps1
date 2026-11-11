@@ -12,6 +12,9 @@
 #   pwsh scripts/Run-E2E.ps1 -SkipUnitTests      # 只跑端對端測試
 #   pwsh scripts/Run-E2E.ps1 -Headed             # 開出瀏覽器視窗看它操作
 #   pwsh scripts/Run-E2E.ps1 -Milestone M1       # 遷移分支的里程碑報告（1.1.3），檔名「…-M1-里程碑測試報告-版本.md」
+#
+# L5（1.1.50）：發佈後統計 WASM 下載量與修剪警告（results/l5-build.json），端對端 L5-* 情境量載入時間、API p95、伺服器記憶體，
+# 一併寫進報告第五節。
 param(
     [string]$Filter = "",
     [switch]$SkipUnitTests,
@@ -29,8 +32,25 @@ $resultsPath = Join-Path $runRoot "results"
 New-Item -ItemType Directory -Force -Path $publishPath, $resultsPath | Out-Null
 
 Write-Host "== 發佈 MeetingRecord.Web 到 $publishPath"
-dotnet publish (Join-Path $solutionRoot "MeetingRecord.Web/MeetingRecord.Web.csproj") -c Release -o $publishPath --nologo -v q
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish 失敗。" }
+$publishOutput = dotnet publish (Join-Path $solutionRoot "MeetingRecord.Web/MeetingRecord.Web.csproj") -c Release -o $publishPath --nologo -v q 2>&1
+$publishExit = $LASTEXITCODE
+$publishOutput | ForEach-Object { Write-Host $_ }
+if ($publishExit -ne 0) { throw "dotnet publish 失敗。" }
+
+# L5（1.1.50）：WASM 下載量（_framework 的 Brotli 檔；ICU 語系檔只會下載其中一個，以最大的那個計）與修剪警告數。
+$framework = Join-Path $publishPath "wwwroot/_framework"
+$brotli = @(Get-ChildItem $framework -Filter "*.br" -ErrorAction SilentlyContinue)
+$icu = @($brotli | Where-Object Name -like "icudt*")
+$totalBytes = ($brotli | Measure-Object Length -Sum).Sum
+$oneLocaleBytes = $totalBytes - ($icu | Measure-Object Length -Sum).Sum + ($icu | Measure-Object Length -Maximum).Maximum
+$trimWarnings = @($publishOutput | Select-String -Pattern "warning IL\d{4}" | ForEach-Object { $_.Line.Trim() } | Sort-Object -Unique).Count
+$l5BuildJson = Join-Path $resultsPath "l5-build.json"
+[ordered]@{
+    downloadTotalMb     = [math]::Round($totalBytes / 1MB, 2)
+    downloadOneLocaleMb = [math]::Round($oneLocaleBytes / 1MB, 2)
+    trimWarnings        = $trimWarnings
+} | ConvertTo-Json | Set-Content -Encoding utf8 $l5BuildJson
+Write-Host ("== L5：WASM 下載量（Brotli）全部 {0:N2} MB、只下載一個語系檔 {1:N2} MB；修剪警告 {2} 則" -f ($totalBytes / 1MB), ($oneLocaleBytes / 1MB), $trimWarnings)
 
 $unitTrx = $null
 if (-not $SkipUnitTests -and [string]::IsNullOrEmpty($Filter)) {
@@ -61,7 +81,7 @@ $e2eTrx = Join-Path $resultsPath "e2e.trx"
 
 if (-not $NoReport -and [string]::IsNullOrEmpty($Filter)) {
     Write-Host "== 產生測試報告"
-    & (Join-Path $PSScriptRoot "New-TestReport.ps1") -UnitTrx $unitTrx -E2ETrx $e2eTrx -Milestone $Milestone
+    & (Join-Path $PSScriptRoot "New-TestReport.ps1") -UnitTrx $unitTrx -E2ETrx $e2eTrx -Milestone $Milestone -L5Json $l5BuildJson
 }
 
 Write-Host "測試結果（.trx）：$resultsPath"

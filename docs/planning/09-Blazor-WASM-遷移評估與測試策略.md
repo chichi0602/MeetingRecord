@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.54
+- 文件版本：1.55
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.49
+- 現行系統版本：1.1.50
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -364,6 +364,8 @@ flowchart LR
 | 安全 | 以一般使用者的 Cookie 直接呼叫他人資料、管理者 API、不帶 CSRF 標頭的寫入 | 全部被擋 |
 | 修剪 | Release 發佈的修剪警告 | 0 |
 
+**1.1.50 起自動量測**：`Run-E2E.ps1` 發佈後統計下載量（只下載一個語系檔）與修剪警告（`results/l5-build.json`）；端對端 `L5-01`（首次與有快取的載入，在頁面裡從導覽開始量到登入者名稱出現，有快取取 3 次中位數）、`L5-02`（一般查詢 API 在瀏覽器裡 6 支 × 10 輪的 p95）、`L5-03`（伺服器工作集，Server 版已不存在，只記錄）；越權與 CSRF 看 L2（授權矩陣、守門掃描、`CookieApiTests`）。`New-TestReport.ps1` 把它們寫成報告第五節的「門檻／實測／判定」表。⚠️ 有快取的再次載入實測 1.24～1.84 秒，時有超過 1.5 秒（主要是 .NET WASM 執行環境啟動）：使用者 2026-11-11 決定列入已知差異，報告照實判定，測試只在超過 3 秒時失敗。負載工具與多人記憶體比較不做（單一實例、內部系統）。
+
 ### L6 人工驗收清單
 
 自動測試看不出來的視覺項目：AntDesign 樣式與 `body` 前綴覆寫、scoped CSS 與 `::deep`、全站字型（微軟正黑體）、`HoverTip` 提示、Material Icons 圖示、側邊欄三層浮出選單、對話窗尺寸、z-index 堆疊。逐頁截圖與 Server 版並排比對。
@@ -530,6 +532,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 前端錯誤回報改走 API | 1.1.47 | ✅ 完成；新 `POST api/v1/client-errors`（任何登入者，依帳號限流）；`BrowserErrorReporter` 改 Singleton；WASM 端 `ClientErrorReporter` 由 `WasmLayout` 登入後註冊；新增 `ClientErrorApiTests`、ERR-01（M1 延後的項目） |
 | 守門測試補強與規範改寫 | 1.1.48 | ✅ 完成；掃描測試加「至少掃到 N 個」的下限、`TableSelectionColumnTests` 只認 `PermissionView.Can`；開發慣例速查、架構總覽（請求生命週期改成 WASM → API）、CLAUDE.md、docs 索引裡只適用 Blazor Server 的規則改寫（DbContext 一個請求一個、`Clone()` 只是畫面層的事、權限看 `PermissionView`＋API、追蹤碼與 IP 走 HTTP 請求、新頁面要有 API 與授權測試）；CSRF 由既有 `CookieApiTests` 守 |
 | 效能調校 | 1.1.49 | ✅ 完成；登入狀態與選單同時發出、AntDesign 樣式與腳本走 `@Assets`（指紋＋永久快取）、字型網域預先連線、請求日誌略過 `/_framework`、`/_content`。量測（WASM-06，各 3 次）：調整前首次 1.94～2.64 秒、有快取 1.63～1.88 秒；調整後首次 1.85～2.44 秒、有快取 1.77～1.98 秒——**沒有明顯改善**。資源時間軸顯示快取檔案 140 ms 內讀完、兩支 API 各 20～30 ms 且已同時發出，主要成本是 .NET WASM 執行環境啟動（載入框架檔到第一支 API 約 0.9 秒）；再往下要動 AOT 編譯或修剪模式（下載量變大或有破壞 AntDesign 的風險），交 1.1.50 以真正門檻量測後由使用者決定。`System.Private.Xml` 是框架帶進來的（應用程式沒用到 XML），不動 |
+| L5 非功能測試自動化 | 1.1.50 | ✅ 完成；新端對端 `PerformanceTests`（L5-01 載入時間、L5-02 API p95、L5-03 伺服器記憶體），WASM-06 拿掉計時；`Run-E2E.ps1` 統計下載量與修剪警告，`New-TestReport.ps1` 把 L5 列入各層結果並產生第五節表格。實測：首次 1.54～1.94 秒、有快取 1.47～1.70 秒（單次 1.24～1.84）、API p95 27～29 ms、伺服器工作集約 200 MB、下載 4.83 MB、修剪警告 0。有快取超過 1.5 秒時列已知差異（使用者決定），測試超過 3 秒才失敗 |
 
 ## 十一、下一步
 

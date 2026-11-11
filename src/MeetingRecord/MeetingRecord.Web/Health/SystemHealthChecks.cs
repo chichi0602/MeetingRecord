@@ -8,6 +8,7 @@ using MeetingRecord.Web.Caching;
 using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Dtos.Diagnostics;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Web.Health;
 

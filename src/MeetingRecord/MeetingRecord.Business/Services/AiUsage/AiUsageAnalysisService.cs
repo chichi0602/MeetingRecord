@@ -6,6 +6,7 @@ using MeetingRecord.Models.Systems;
 using Microsoft.Extensions.Options;
 using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Business.Services.AiUsage;
 
@@ -360,10 +361,10 @@ public class AiUsageAnalysisService
             [
                 .. users
                     .GroupBy(x => x.UserId!.Value)
-                    .Select(g => (g.Key, g.OrderByDescending(x => x.LastAt)
+                    .Select(g => new AiUsageUserOption(g.Key, g.OrderByDescending(x => x.LastAt)
                         .Select(x => x.UserName)
                         .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? $"#{g.Key}"))
-                    .OrderBy(x => x.Item2, StringComparer.CurrentCulture),
+                    .OrderBy(x => x.UserName, StringComparer.CurrentCulture),
             ],
             [.. models.Where(x => !string.IsNullOrWhiteSpace(x))]);
     }

@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.40
+- 文件版本：1.41
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.35
+- 現行系統版本：1.1.36
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -186,7 +186,7 @@ Cookie 會被瀏覽器自動帶上，所以會改資料的 API（POST／PUT／DE
 
 ### 4.10 共用型別與修剪（trimming） 🟡
 
-- 要搬到共用專案的型別：`DashboardModels`、`AiUsageModels`、`ProjectService.TeamOption`、`Web/Diagnostics/LogModels`、`DatabaseUsageModels`、`Health/SystemHealthModels`、選單模型與 `FilterAuthorizedMenuItems`。
+- 要搬到共用專案的型別：`DashboardModels`、`AiUsageModels`（1.1.36 已搬到 `Dtos/AiUsage`）、`ProjectService.TeamOption`、`Web/Diagnostics/LogModels`、`DatabaseUsageModels`、`Health/SystemHealthModels`、選單模型與 `FilterAuthorizedMenuItems`。
 - 含 `Stream` 的輸入模型（`MeetingMediaUploadInput`、`ProjectUploadFileInput`）不能序列化，要改成上傳端點的參數。
 - 依賴關係新增一條規則：**`Web.Client` 只能相依 `Dtos`／`Models`／`Share`**（用架構測試擋）。
 - WASM 發佈會修剪未用到的程式碼，反射式序列化可能在 Release 才壞掉：JSON 一律用 `System.Text.Json` source generator，修剪警告要求為 0；不要在 WASM 端用 AutoMapper。
@@ -511,6 +511,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 日誌等級設定 `/log-level-setting` | 1.1.33 | ✅ 完成；`MonitoringController` 加 `log-level` GET／PUT 與 `restore`，稽核改由伺服器寫；`LogModels` 整檔搬到 `Dtos/Diagnostics`（後面系統健康、日誌檢視共用）；MON-01／02 照過 |
 | 修正：存檔後關窗途中再按「確定」會新增兩筆 | 1.1.34 | ✅ 完成；1.1.33 全套時 TDO-10 偶發新增兩筆，根因是 WASM 頁「關窗」與「閘門放開」同一次重繪生效、關窗動畫期間又按得到；八個表單的 `SaveModalAsync` 開頭先確認視窗還開著，新增 TDO-11（穩定重現）與原始碼掃描 |
 | 系統健康監控 `/system-health` | 1.1.35 | ✅ 完成；`MonitoringController` 加 `health`、`logs/recent-warnings`、`ai-connection-test`（稽核改由伺服器寫）；`SystemHealthModels`、`AiConnectionProbeResult` 搬到 `Dtos/Diagnostics`；`AiConnectionTestService` 改經 `IAiCallerProvider`；MON-01／02 照過 |
+| Token 用量（一）API | 1.1.36 | ✅ 完成；新 `AiUsageController`（`api/v1/ai-usage`，`[AdminOnly]`）10 支：總覽、篩選選項、統計、明細分頁、單筆、CSV、PDF（伺服器產生）、刪除、清除此日之前、全部清除，稽核改由伺服器寫；`AiUsageModels`、額度型別搬到 `Dtos/AiUsage`，篩選選項的 tuple 改成 `AiUsageUserOption`，CSV 欄位搬到 `AiUsageCsv`；頁面下一版搬 |
 
 ## 十一、下一步
 

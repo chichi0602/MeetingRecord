@@ -1,7 +1,9 @@
+using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Share.Enums;
 
-namespace MeetingRecord.Business.Services.AiUsage;
+// 1.1.36（WASM 遷移 M5）：從 Business/Services/AiUsage 搬來，Token 用量 API 與 WASM 頁共用。
+namespace MeetingRecord.Dtos.AiUsage;
 
 /// <summary>
 /// 「Token 用量」頁上方「本月概況」的資料（1.0.30 前名為「AI 用量分析」，當時是整頁的資料）。
@@ -96,7 +98,7 @@ public sealed record AiUsagePagedResult(int TotalCount, IReadOnlyList<AiUsageRow
 /// 金額一律是**顯示幣別**（換算開啟時為新台幣），在記憶體加總。
 /// </summary>
 /// <param name="Cost">換算得出金額的列加總；算不出來的列不計入（筆數見 <paramref name="UnpricedCallCount"/>、<paramref name="NoRateCallCount"/>）。</param>
-/// <param name="IsDailyFilled">每日是否補齊了沒有資料的日子（區間不超過 <see cref="AiUsageAnalysisService.MaxFilledDays"/> 天才補）。</param>
+/// <param name="IsDailyFilled">每日是否補齊了沒有資料的日子（區間不超過 <c>AiUsageAnalysisService.MaxFilledDays</c> 天才補）。</param>
 public sealed record AiUsageReport(
     int CallCount,
     int FailedCallCount,
@@ -141,9 +143,13 @@ public sealed record AiUsageDailyRow(
     int NotCountedCount);
 
 /// <summary>篩選下拉的選項：帳本裡實際出現過的使用者（取最近一次的名稱）與模型。</summary>
+/// <remarks>1.1.36 起使用者改用 <see cref="AiUsageUserOption"/>（以前是 tuple，JSON 序列化不出來）。</remarks>
 public sealed record AiUsageFilterOptions(
-    IReadOnlyList<(int UserId, string UserName)> Users,
+    IReadOnlyList<AiUsageUserOption> Users,
     IReadOnlyList<string> Models);
+
+/// <summary>篩選下拉的一位使用者（1.1.36）。</summary>
+public sealed record AiUsageUserOption(int UserId, string UserName);
 
 /// <summary>
 /// 單筆用量的完整內容（1.0.31）：明細窗與 CSV 共用。單價與匯率都是**呼叫當下的快照**，改設定不影響。
@@ -178,11 +184,14 @@ public sealed record AiUsageDetail(
     string CostText,
     string? ErrorMessage)
 {
+    [JsonIgnore]
     public string FeatureText => AiUsageFeatureText.Describe(Feature);
 
+    [JsonIgnore]
     public string OutcomeText => AiUsageOutcomeText.Describe(Outcome);
 
     /// <summary>對象：會議或專案編號。</summary>
+    [JsonIgnore]
     public string TargetText => MeetingId is { } meeting ? $"會議 #{meeting}"
         : ProjectId is { } project ? $"專案 #{project}"
         : "—";

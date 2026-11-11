@@ -2,41 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Dtos.AiUsage;
 using MeetingRecord.Models.Systems;
 
 namespace MeetingRecord.Business.Services.AiUsage;
-
-/// <summary>上限的範圍。</summary>
-public enum AiQuotaScope
-{
-    /// <summary>全系統每月。</summary>
-    Global = 0,
-
-    /// <summary>每位使用者每月。</summary>
-    User = 1,
-}
-
-/// <summary>某一個上限目前的狀態。金額為換算後的目標幣別（預設新台幣）。</summary>
-public sealed record AiQuotaStatus(
-    AiQuotaScope Scope,
-    int Limit,
-    decimal Used,
-    DateTime PeriodStart,
-    DateTime ResetAt)
-{
-    /// <summary>有設上限（0＝不限制）。</summary>
-    public bool IsLimited => Limit > 0;
-
-    public bool IsReached => IsLimited && Used >= Limit;
-
-    /// <summary>用量／上限；不限制時為 0。</summary>
-    public double Ratio => IsLimited ? (double)(Used / Limit) : 0d;
-
-    /// <summary>達八成但還沒到上限。</summary>
-    public bool IsWarning => IsLimited && !IsReached && Ratio >= 0.8;
-
-    public string Label => Scope == AiQuotaScope.Global ? "全系統每月" : "每人每月";
-}
 
 /// <summary>
 /// 已達 AI 用量上限（1.0.29）。繼承 <see cref="InvalidOperationException"/>：既有「顯示錯誤訊息」的 catch 照常運作；
@@ -77,9 +46,6 @@ public interface IAiQuotaService
     /// <summary>每人每月上限下，本月用量最高的使用者（給 Token 用量頁的上限列）。</summary>
     Task<IReadOnlyList<AiQuotaUserUsage>> GetTopUsersAsync(int take, CancellationToken cancellationToken = default);
 }
-
-/// <summary>一位使用者本月的用量。</summary>
-public sealed record AiQuotaUserUsage(int UserId, string? UserName, decimal Used);
 
 public sealed class AiQuotaService : IAiQuotaService
 {

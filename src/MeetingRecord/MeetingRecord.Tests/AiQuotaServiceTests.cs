@@ -6,6 +6,7 @@ using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Tests;
 

@@ -10,6 +10,7 @@ using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Web.Health;
 using MeetingRecord.Dtos.Diagnostics;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Tests;
 

@@ -18,6 +18,7 @@ using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Dtos.Diagnostics;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Web.Health;
 

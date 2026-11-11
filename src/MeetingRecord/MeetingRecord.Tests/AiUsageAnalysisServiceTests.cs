@@ -7,6 +7,7 @@ using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Models.Systems;
 using Microsoft.Extensions.Options;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Tests;
 
@@ -602,7 +603,7 @@ public sealed class AiUsageAnalysisServiceTests : IAsyncDisposable
         var options = await service.GetFilterOptionsAsync();
 
         var user = Assert.Single(options.Users);
-        Assert.Equal((1, "新名"), user);
+        Assert.Equal(new AiUsageUserOption(1, "新名"), user);
         Assert.Equal(["m1", "m2"], options.Models);
     }
 

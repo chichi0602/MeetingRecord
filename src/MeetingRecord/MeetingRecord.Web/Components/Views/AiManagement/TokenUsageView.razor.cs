@@ -14,6 +14,7 @@ using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Export;
 using MeetingRecord.Web.Services;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Web.Components.Views.AiManagement;
 
@@ -46,30 +47,6 @@ public partial class TokenUsageView : ComponentBase
     private const string TabFeature = "feature";
     private const string TabModel = "model";
     private const string TabDetail = "detail";
-
-    /// <summary>CSV 欄位（1.0.31）。數字一律 InvariantCulture，金額不加千分位，試算表才算得動。</summary>
-    public static readonly IReadOnlyList<CsvColumn<AiUsageDetail>> CsvColumns =
-    [
-        new("時間", x => x.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
-        new("功能", x => x.FeatureText),
-        new("結果", x => x.OutcomeText),
-        new("使用者", x => x.UserName),
-        new("對象", x => x.TargetText),
-        new("供應商", x => x.Provider),
-        new("模型", x => x.Model),
-        new("輸入token", x => x.InputTokens?.ToString(CultureInfo.InvariantCulture)),
-        new("輸出token", x => x.OutputTokens?.ToString(CultureInfo.InvariantCulture)),
-        new("快取token", x => x.CachedInputTokens?.ToString(CultureInfo.InvariantCulture)),
-        new("音訊秒數", x => x.AudioSeconds?.ToString("0.###", CultureInfo.InvariantCulture)),
-        new("時長推估", x => x.AudioSeconds is null ? null : x.IsAudioDurationEstimated ? "是" : "否"),
-        new("估算金額", x => x.EstimatedCost?.ToString(CultureInfo.InvariantCulture)),
-        new("幣別", x => x.Currency),
-        new("匯率", x => x.ExchangeRate?.ToString(CultureInfo.InvariantCulture)),
-        new("換算金額", x => x.ConvertedCost?.ToString(CultureInfo.InvariantCulture)),
-        new("換算幣別", x => x.ConvertedCost is null ? null : x.ConvertedCurrency ?? x.Currency),
-        new("錯誤訊息", x => x.ErrorMessage),
-        new("呼叫識別碼", x => x.CallId?.ToString()),
-    ];
 
     [Inject]
     private AiUsageAnalysisService AiUsageAnalysisService { get; set; } = default!;
@@ -381,7 +358,7 @@ public partial class TokenUsageView : ComponentBase
 
         if (appliedFilter.UserId is { } userId)
         {
-            var name = filterOptions.Users.FirstOrDefault(x => x.UserId == userId).UserName;
+            var name = filterOptions.Users.FirstOrDefault(x => x.UserId == userId)?.UserName;
             list.Add(("使用者", string.IsNullOrWhiteSpace(name) ? $"#{userId}" : name));
         }
 
@@ -471,7 +448,7 @@ public partial class TokenUsageView : ComponentBase
         try
         {
             var items = await AiUsageAnalysisService.GetForExportAsync(appliedFilter);
-            var bytes = CsvExport.ToCsv(CsvColumns, items);
+            var bytes = CsvExport.ToCsv(AiUsageCsv.Columns, items);
             var fileName = $"MeetingRecord.Web-token-usage-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
             await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
 

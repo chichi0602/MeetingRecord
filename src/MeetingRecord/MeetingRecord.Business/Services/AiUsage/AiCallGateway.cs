@@ -8,6 +8,7 @@ using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Models.Systems;
 using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Business.Services.AiUsage;
 

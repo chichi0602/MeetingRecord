@@ -5,6 +5,7 @@ using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Tests;
 

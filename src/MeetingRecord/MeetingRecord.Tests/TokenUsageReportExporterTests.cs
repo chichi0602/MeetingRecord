@@ -1,8 +1,8 @@
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Share.Enums;
-using MeetingRecord.Web.Components.Views.AiManagement;
 using MeetingRecord.Web.Export;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Tests;
 
@@ -81,7 +81,7 @@ public sealed class TokenUsageReportExporterTests
     [Fact]
     public void View_CsvColumns_ShouldKeepOrderAndCarryTheCallId()
     {
-        var headers = TokenUsageView.CsvColumns.Select(x => x.Header).ToList();
+        var headers = AiUsageCsv.Columns.Select(x => x.Header).ToList();
 
         Assert.Equal("時間", headers[0]);
         Assert.Equal("呼叫識別碼", headers[^1]);
@@ -89,7 +89,7 @@ public sealed class TokenUsageReportExporterTests
         Assert.Contains("匯率", headers);
         Assert.Contains("換算金額", headers);
 
-        var text = CsvExport.ToCsvText(TokenUsageView.CsvColumns, [Detail(1)]);
+        var text = CsvExport.ToCsvText(AiUsageCsv.Columns, [Detail(1)]);
         Assert.Contains("0.375", text);
         Assert.Contains("12.00", text);
     }

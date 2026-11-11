@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Dtos.AiUsage;
 
 namespace MeetingRecord.Business.Services.Export;
 

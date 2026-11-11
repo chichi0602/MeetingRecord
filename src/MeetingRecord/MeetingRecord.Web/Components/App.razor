@@ -26,8 +26,12 @@
         <HeadOutlet />
     }
 
-    <link href="_content/AntDesign/css/ant-design-blazor.css" rel="stylesheet">
+    @* 1.1.49：AntDesign 的樣式與腳本改走 @Assets，取得指紋網址與永久快取（以前每次載入都要向伺服器確認有沒有更新）。 *@
+    <link href="@Assets["_content/AntDesign/css/ant-design-blazor.css"]" rel="stylesheet">
 
+    @* 1.1.49：先跟字型網域建立連線，圖示字型的 CSS 與字型檔才不會排在最後。 *@
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Sharp|Material+Icons+Round|Material+Icons+Two+Tone" rel="stylesheet">
 
 </head>
@@ -45,7 +49,7 @@
     }
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 
-    <script src="_content/AntDesign/js/ant-design-blazor.js"></script> 
+    <script src="@Assets["_content/AntDesign/js/ant-design-blazor.js"]"></script>
     <script antblazor-js></script>
 
     <script src="@Assets["js/download.js"]"></script>

@@ -65,6 +65,14 @@ public static class ApplicationBuilderExtensions
     {
         app.Use(async (context, next) =>
         {
+            // 1.1.49：WASM 的框架檔與套件靜態檔（_framework、_content）每次載入幾十個，逐一記 Information 只是拖慢、填滿日誌；
+            // 直接放行（這些檔案不會丟業務例外，出錯時 ASP.NET Core 自己會記）。
+            if (IsStaticAssetPath(context.Request.Path))
+            {
+                await next();
+                return;
+            }
+
             var requestLogger = context.RequestServices.GetRequiredService<ILogger<TProgram>>();
             var stopwatch = Stopwatch.StartNew();
 
@@ -126,6 +134,10 @@ public static class ApplicationBuilderExtensions
 
         return app;
     }
+
+    /// <summary>WASM 框架檔與套件靜態檔（1.1.49，請求日誌略過）。</summary>
+    internal static bool IsStaticAssetPath(PathString path)
+        => path.StartsWithSegments("/_framework") || path.StartsWithSegments("/_content");
 
     /// <summary>
     /// 驗證之後把使用者與路由樣板補進系統例外紀錄的情境（0.4.122）。必須放在 <c>UseAuthorization()</c> 之後。

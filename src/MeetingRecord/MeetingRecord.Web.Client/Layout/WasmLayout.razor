@@ -57,7 +57,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var result = await SessionService.GetAsync();
+        // 1.1.49：登入狀態與選單同時發出（以前依序兩次往返，有快取的再次載入因此超過 1.5 秒）。
+        // 選單 API 對須改密碼的人也開放（SessionController 整個 [AllowWhenMustChangePassword]）；登入狀態不通過時選單結果直接丟掉。
+        var sessionTask = SessionService.GetAsync();
+        var menuTask = SessionService.GetMenuAsync();
+        var result = await sessionTask;
         if (result.StatusCode == 401)
         {
             return; // ApiClient 已導到登入頁。
@@ -83,7 +87,7 @@ else
             return;
         }
 
-        var menuResult = await SessionService.GetMenuAsync();
+        var menuResult = await menuTask;
         menu = menuResult.Data ?? [];
         session = current;
     }

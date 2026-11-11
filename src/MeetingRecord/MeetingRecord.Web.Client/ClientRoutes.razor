@@ -5,9 +5,10 @@
 @inject MeetingUploadManager UploadManager
 @inject ModalService ModalService
 
-@* WASM 端的路由（1.1.1）。遷移期間逐頁切換：不在 WasmRoutes 的路徑還是 Blazor Server 頁，整頁載入交給伺服器。 *@
+@* WASM 端的路由（1.1.1）。1.1.45 起應用程式的頁面全部在這裡（含首頁與找不到頁）；只有 ServerPageRoutes 列的
+   登入、登出與錯誤頁由伺服器靜態算繪，往那裡要整頁載入。 *@
 <ConfigProvider>
-    <Router AppAssembly="typeof(ClientRoutes).Assembly" OnNavigateAsync="OnNavigateAsync">
+    <Router AppAssembly="typeof(ClientRoutes).Assembly" NotFoundPage="typeof(Pages.NotFoundPage)" OnNavigateAsync="OnNavigateAsync">
         <Found Context="routeData">
             <RouteView RouteData="routeData" DefaultLayout="typeof(WasmLayout)" />
         </Found>
@@ -26,7 +27,7 @@
 
     /// <summary>
     /// 1.1.23：上傳由整個前端共用（<see cref="MeetingUploadManager"/>），WASM 頁之間切換不會中斷；
-    /// 要去的是還沒遷移的 Blazor Server 頁就是整頁載入，上傳會中斷，先問（比照 Server 頁往 WASM 頁的確認，1.1.6）。
+    /// 要去的是伺服器頁（登入、登出、錯誤頁，1.1.45 起見 <see cref="ServerPageRoutes"/>）就是整頁載入，上傳會中斷，先問（1.1.6）。
     /// </summary>
     private async ValueTask OnLocationChangingAsync(LocationChangingContext context)
     {
@@ -36,7 +37,7 @@
         }
 
         var path = "/" + NavigationManager.ToBaseRelativePath(context.TargetLocation).Split('?', '#')[0];
-        if (WasmRoutes.IsWasm(path))
+        if (!ServerPageRoutes.IsServerPage(path))
         {
             return;
         }
@@ -61,8 +62,8 @@
 
     private Task OnNavigateAsync(NavigationContext context)
     {
-        // context.Path 會帶查詢字串（IsWasm 會忽略，1.1.39）；整頁載入時用 NavigationManager.Uri（已是目標網址）保留查詢字串。
-        if (!WasmRoutes.IsWasm("/" + context.Path))
+        // context.Path 會帶查詢字串（IsServerPage 會忽略，1.1.39）；整頁載入時用 NavigationManager.Uri（已是目標網址）保留查詢字串。
+        if (ServerPageRoutes.IsServerPage("/" + context.Path))
         {
             NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true, replace: true);
         }

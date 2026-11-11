@@ -1,10 +1,10 @@
 ﻿# 首頁與導覽 PRD
 
-- 文件版本：1.13
+- 文件版本：1.14
 - 文件狀態：已實作
-- 現行系統版本：0.4.122
+- 現行系統版本：1.1.45
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（「關於」對話窗為 0.4.24 新增）
-- 最後核對日期：2026/10/15
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -27,7 +27,8 @@
 
 ## 三、畫面與欄位
 
-- Landing（`/` → `Home.razor` → `SplashView`）：品牌圖示、「歡迎回來」眉標、標題（0.4.112 起顯示 `@SystemName`，讀 `SystemSettings.SystemInformation.SystemName`，不寫死）、系統說明文字、「系統載入中」狀態列與版本（`SystemVersion`）；採 `EmptyLayout`，不含側邊選單。
+- 首頁 `/`：1.1.45 起是 WASM 頁 `Web.Client/Pages/HomePage.razor`，登入狀態交給 `WasmLayout`（未登入、停用、須改密碼各自導向），通過後換到 `/meetings`（`replace`）。以前（0.4.x～1.1.44）是 Server 的 `Home.razor` → `SplashView` 品牌開場畫面（品牌圖示、「歡迎回來」、系統名稱、說明文字、「系統載入中」與版本），已移除。
+- 找不到頁 `/not-found`：1.1.45 起是 WASM 頁 `Web.Client/Pages/NotFoundPage.razor`（「找不到這個頁面」，附回會議紀錄的連結），也是 `ClientRoutes` 的 `NotFoundPage`；伺服器回 404 時轉到這裡。
 - 登入降落（0.4.45 起）：帳密登入、Google 登入、根路徑 `/` 的啟動畫面三條路都導向 `/meetings`（會議紀錄）。原本的 `/App` 頁面已刪除。
 - 側邊選單（`NavMenu.razor` + `SidebarMenuNode`）：
   - 依 `Menu.json` 階層渲染，支援展開與「收合」兩種型態（收合時以圖示 flyout 呈現）。0.4.120 起選單有三層：收合態的 flyout 遇到分組（沒有 `url`、有 `subMenu`）會畫成一列帶右箭頭的觸發鈕，懸停再往右彈出第二層 flyout，不把孫節點攤平；鍵盤以 `:has(:focus-visible)` 展開（移植自 NET10-Blazor-Starter）。
@@ -90,7 +91,7 @@
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Home.razor`（`/` landing）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Commons/SplashView.razor`、`SplashView.razor.cs`（`SystemName`／`SystemVersion`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/HomePage.razor`、`NotFoundPage.razor`（1.1.45；取代 Server 的 `SplashView`、`NotFound`）
 - `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap`、`PublicMenuIds`、`AdminOnlyMenuIds`、`GroupOnlyMenuIds`、`LoadAuthorizedMenuItemsAsync` 載入與過濾）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/NavMenu.razor`、`NavMenu.razor.css`（收合 flyout 第三層）

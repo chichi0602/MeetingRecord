@@ -1,0 +1,11 @@
+@page "/not-found"
+
+@* 找不到頁面（1.1.45 從 Blazor Server 搬到 WASM）：ClientRoutes 的 NotFoundPage，伺服器回 404 時也會轉到這裡
+   （UseStatusCodePagesWithReExecute("/not-found")）。 *@
+<PageTitle>找不到頁面</PageTitle>
+
+<div class="not-found-page">
+    <h1>找不到這個頁面</h1>
+    <p>網址可能打錯了，或這個頁面已經不存在。</p>
+    <a href="/meetings">回到會議紀錄</a>
+</div>

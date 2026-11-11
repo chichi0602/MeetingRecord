@@ -1,5 +1,9 @@
 ﻿@page "/Error"
+@layout NoFooterLayout
+@attribute [ExcludeFromInteractiveRouting]
 @using System.Diagnostics
+
+@* 例外處理頁（UseExceptionHandler("/Error")）。1.1.45 起靜態算繪，才拿得到 HttpContext（以前被當成互動頁，HttpContext 是 null）。 *@
 
 <PageTitle>Error</PageTitle>
 

@@ -1,0 +1,10 @@
+@page "/"
+@inject NavigationManager NavigationManager
+
+@* 首頁（1.1.45 從 Blazor Server 的 SplashView 搬到 WASM）：登入狀態（未登入、停用、須改密碼）由 WasmLayout 先處理，
+   走到這裡一定是有效的登入者，直接換到會議紀錄（同以前開場畫面檢查通過後的去處）。用 replace，上一頁不會回到這裡。 *@
+<PageTitle>會議紀錄</PageTitle>
+
+@code {
+    protected override void OnInitialized() => NavigationManager.NavigateTo("/meetings", replace: true);
+}

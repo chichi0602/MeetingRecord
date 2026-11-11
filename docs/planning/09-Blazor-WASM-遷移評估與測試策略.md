@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.49
+- 文件版本：1.50
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.44
+- 現行系統版本：1.1.45
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -520,6 +520,12 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 日誌檢視 `/logs`（API＋頁面） | 1.1.42 | ✅ 完成；`MonitoringController` 加 `logs/meta`、`query`、`export`、`ai-analysis`（串流）、`ai-analysis/pdf`，匯出與 AI 分析都由伺服器依同一組條件重查、不收前端給的日誌；頁面搬到 Client；`AiLogPromptBuilder` 搬到 Dtos；AI 串流 DTO 改成通用的 `DiagnosticAi…`，Client 讀串流抽成 `DiagnosticAiStream`；Server 的 `Views/Monitoring` 清空；新增 `LogViewerApiTests`、LOG-01 |
 | 稽核紀錄 `/audit-logs`（API＋頁面）＋ L4 調整 | 1.1.43 | ✅ 完成；新 `AuditLogController`（`api/v1/audit-logs`，`[AdminOnly]`）6 支，清除類稽核照舊在刪除之後；頁面搬到 Client——**最後一個應用程式的 Server 頁**；`AuditLogAdapterModel`／`AuditLogQuery` 搬到 `Dtos/AuditLogs`；L4-05 改成 WASM 頁斷網 10 秒後自動恢復、L4-08 的目標改成 `/not-found`；新增 `AuditLogApiTests` |
 | M5 里程碑報告 | 1.1.44 | ✅ 完成；[M5 報告](../testing/2026-11-11-M5-里程碑測試報告-1.1.43.md)（跑在 M5 最後一版 1.1.43）：L1 1945、L2 260、L3 110 過 1 略過、L4 10 全過；新開 50 支端點；WASM 下載量 `_framework` 全部 `.br` 合計 5.18 MB，只下載一個語系檔約 4.83 MB |
+
+## 十、之七 M6 進度（收尾，1.1.45 起，每版全綠自動 commit）
+
+| 步驟 | 版本 | 狀態 |
+|------|------|------|
+| 首頁與找不到頁搬到 WASM，路由收斂 | 1.1.45 | ✅ 完成；`/` 改成 WASM 頁（`WasmLayout` 處理登入狀態後換到 `/meetings`）、`/not-found` 改成 WASM 頁並當 `ClientRoutes` 的 `NotFoundPage`；`WasmRoutes` 反過來改成 `ServerPageRoutes`（只剩 `/Auths/*`、`/Error`，靜態算繪）；`/Error` 改靜態；刪 `Home`、`SplashView`、`NotFound`、`EmptyLayout`、`Counter`、`Weather`；L4-08 目標改登出頁；新增 NAV-01 |
 
 ## 十一、下一步
 

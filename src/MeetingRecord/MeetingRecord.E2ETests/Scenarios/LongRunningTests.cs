@@ -237,7 +237,8 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     {
         // 1.1.6（WASM 遷移）：兩種頁面之間切換是整頁載入，上傳會中斷，所以離開前要先問。
         // 1.1.23 會議頁搬到 WASM：上傳改由整個前端共用，WASM 頁之間切換不中斷（見 L4-09），要問的是往還沒遷移的舊版頁
-        // （1.1.26 起用使用說明頁，1.1.30 起稽核紀錄頁；1.1.43 稽核紀錄頁也搬了，應用程式的頁面都是 WASM，改用仍由伺服器處理的 /not-found。
+        // （1.1.26 起用使用說明頁，1.1.30 起稽核紀錄頁；1.1.43 稽核紀錄頁也搬了，改用 /not-found；1.1.45 /not-found 也是 WASM 頁，
+        // 改用仍由伺服器處理的登出頁 /Auths/Logout——上傳中按登出本來就該先問。
         // 確認框在導覽之前出現、選留下不會真的進頁）。
         var page = await LoginAsAsync(Seed.Owner);
         var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
@@ -252,7 +253,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         Assert.True(await BeforeUnloadBlockedAsync(page), "上傳中關分頁沒有提醒");
 
         // 切到舊版頁：系統的確認框，選留下就不離開。
-        await page.EvaluateAsync("() => Blazor.navigateTo('/not-found')");
+        await page.EvaluateAsync("() => Blazor.navigateTo('/Auths/Logout')");
         await Expect(page.Locator(".ant-modal-confirm").GetByText("上傳還在進行")).ToBeVisibleAsync();
         await ConfirmAsync(page, "留下");
         await Expect(page).ToHaveURLAsync(new Regex("/meetings$"));

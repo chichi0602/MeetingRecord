@@ -1,8 +1,8 @@
 ﻿# AI 對話紀錄 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：1.1.39
+- 現行系統版本：1.1.45
 - 首次實作版本：1.0.29（記錄）、1.0.30（頁面）；移植自 NET10-Blazor-Starter 的 /ai-call-logs
 - 最後核對日期：2026/11/11
 
@@ -111,7 +111,7 @@ REST API（1.1.38，只限管理者）：`api/v1/ai-call-logs` 的 `GET meta`、
   - 連帶刪除、保留期限。
   - 1.0.30 加入：篩選、排序、分頁、用呼叫識別碼找、明細（內容、用量、同一趟工作、檔案遺失）、刪除與清除、篩選選項、CSV 不含內容、三種檢視方式、轉錄的送出內容。
 - `AiCallLogApiTests`（1.1.38）：API 授權（未登入 401、非管理者 403）、清單與篩選選項、以呼叫識別碼找、明細查看寫稽核、JSON／PDF／CSV、刪除與清除。
-- `WasmRoutesTests`（1.1.39）：帶查詢字串的 `/ai-call-logs?callId=…` 判斷成 WASM 頁（以前會無限重載）。
+- `WasmRoutesTests`（1.1.39；1.1.45 起改成 `ServerPageRoutesTests`）：帶查詢字串的 `/ai-call-logs?callId=…` 判斷成 WASM 頁（以前會無限重載）。
 - 端對端 AIM-02（1.1.39）：`?callId=` 直接打開明細、刪除，查看與刪除的稽核由伺服器寫；MON-01／02 管理者打得開、一般使用者看不到。
 - `AiManagementMenuRegistrationTests`：選單、只限管理者、不在權限目錄。
 - `RbacBackfillServiceTests`：「AI 用量分析」退役。

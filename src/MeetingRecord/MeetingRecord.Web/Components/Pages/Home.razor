@@ -1,9 +1,0 @@
-﻿@page "/"
-@layout EmptyLayout
-@using Microsoft.Extensions.Options
-@using MeetingRecord.Models.Systems
-@inject IOptions<SystemSettings> SystemSettingsOptions
-
-<PageTitle>@SystemSettingsOptions.Value.SystemInformation.SystemName</PageTitle>
-
-<SplashView/>

@@ -23,7 +23,7 @@
     }
     else
     {
-        <HeadOutlet @rendermode="@RenderModeForPage()" />
+        <HeadOutlet />
     }
 
     <link href="_content/AntDesign/css/ant-design-blazor.css" rel="stylesheet">
@@ -33,14 +33,15 @@
 </head>
 
 <body>
-    @* 1.1.1（WASM 遷移 M1）：WasmRoutes 裡的頁面由瀏覽器端的 ClientRoutes 執行，其餘照舊是 Blazor Server。 *@
+    @* 1.1.1（WASM 遷移 M1）起逐頁搬到瀏覽器端的 ClientRoutes；1.1.45 起只剩 ServerPageRoutes 列的登入、登出、錯誤頁
+       由伺服器靜態算繪，其餘全部是 WASM 頁。 *@
     @if (IsWasmPage)
     {
         <MeetingRecord.Web.Client.ClientRoutes @rendermode="WasmRenderMode" />
     }
     else
     {
-        <Routes @rendermode="@RenderModeForPage()" />
+        <Routes />
     }
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>

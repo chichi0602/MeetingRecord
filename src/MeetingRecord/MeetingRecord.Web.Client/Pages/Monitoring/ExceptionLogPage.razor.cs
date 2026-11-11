@@ -1,34 +1,26 @@
 using AntDesign;
 using AntDesign.TableModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.DataAccess;
-using MeetingRecord.Business.Services.Diagnostics;
-using MeetingRecord.Business.Services.Export;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Models.AdapterModel;
-using MeetingRecord.Models.Systems;
-using MeetingRecord.Share.Enums;
-using MeetingRecord.Share.Helpers;
-using MeetingRecord.Web.Components.Commons;
-using MeetingRecord.Web.Diagnostics;
-using MeetingRecord.Web.Export;
-using MeetingRecord.Web.Services;
+using Microsoft.Extensions.Logging;
 using MeetingRecord.Dtos.Diagnostics;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
+using MeetingRecord.Web.Components.Commons;
+using MeetingRecord.Web.Services;
 
-namespace MeetingRecord.Web.Components.Views.Monitoring;
+namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 系統例外紀錄（0.4.122，移植自 NET10-Blazor-Starter，不含 Email 告警與 AI 追問）。**管理者限定**。
+/// 系統例外紀錄（0.4.122，移植自 NET10-Blazor-Starter，不含 Email 告警與 AI 追問；1.1.41 從 Blazor Server 的 ExceptionLogView
+/// 搬到 WASM，畫面不變）。**管理者限定**。
 ///
-/// <para>資料由 <see cref="ExceptionLogProvider"/> → 背景寫入器自動收集；本頁負責查詢、明細、複製、匯出 CSV、
-/// 清除與 AI 例外分析（會產生費用：先確認、邊生成邊顯示、關閉視窗即取消、寫入用量帳本）。</para>
+/// <para>資料由伺服器的 <c>ExceptionLogProvider</c> → 背景寫入器自動收集；本頁負責查詢、明細、複製、匯出 CSV、
+/// 清除與 AI 例外分析（會產生費用：先確認、邊生成邊顯示、關閉視窗即取消、寫入用量帳本），全部走 <c>api/v1/exception-logs</c>（1.1.40）。
+/// 送給 AI 的內容由伺服器依例外編號組（不含帳號）；稽核都由伺服器寫，這裡不寫。</para>
 /// </summary>
-public partial class ExceptionLogView : ComponentBase, IDisposable
+public partial class ExceptionLogPage : ComponentBase, IDisposable
 {
-    private const string PdfContentType = "application/pdf";
-
     /// <summary>複製全部（每筆含完整堆疊）超過這個筆數先確認。</summary>
     private const int CopyAllConfirmThreshold = 100;
 
@@ -40,50 +32,15 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         Succeeded,
     }
 
-    [Inject]
-    private ExceptionLogService ExceptionLogService { get; set; } = default!;
-
-    [Inject]
-    private DiagnosticAiService DiagnosticAiService { get; set; } = default!;
-
-    [Inject]
-    private IOptionsMonitor<LogRetentionSettings> RetentionOptions { get; set; } = default!;
-
-    [Inject]
-    private IPdfRenderer PdfRenderer { get; set; } = default!;
-
-    [Inject]
-    private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
-
-    [Inject]
-    private ClipboardInterop ClipboardInterop { get; set; } = default!;
-
-    [Inject]
-    private IAuditLogService AuditLogService { get; set; } = default!;
-
-    [Inject]
-    private CurrentUserService CurrentUserService { get; set; } = default!;
-
-    [Inject]
-    private ModalService ModalService { get; set; } = default!;
-
-    [Inject]
-    private MessageService MessageService { get; set; } = default!;
-
-    [Inject]
-    private NotificationService NotificationService { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
-
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = default!;
-
-    [Inject]
-    private ILogger<ExceptionLogView> Logger { get; set; } = default!;
+    [Inject] private ExceptionLogApi ExceptionLogApi { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
+    [Inject] private FileDownloadInterop FileDownloadInterop { get; set; } = default!;
+    [Inject] private ClipboardInterop ClipboardInterop { get; set; } = default!;
+    [Inject] private ModalService ModalService { get; set; } = default!;
+    [Inject] private MessageService MessageService { get; set; } = default!;
+    [Inject] private NotificationService NotificationService { get; set; } = default!;
+    [Inject] private ILogger<ExceptionLogPage> Logger { get; set; } = default!;
 
     private string RoleMessage { get; set; } = string.Empty;
 
@@ -104,36 +61,42 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
     private int _pageSize = MagicObjectHelper.PageSize;
     private int _total;
 
+    private ExceptionLogMetaDto? meta;
+
     private bool detailVisible;
     private ExceptionLogAdapterModel? detailItem;
     private string detailStackTrace = string.Empty;
     private string? detailRawStackTrace;
+    private int detailAiPromptChars;
     private bool isStackTraceLoading;
 
     // ───────── AI 分析 ─────────
-    private bool aiAvailable;
-    private string aiUnavailableReason = string.Empty;
     private bool aiModalVisible;
     private AiState aiState = AiState.None;
     private bool isAiRunning;
     private bool isAiExporting;
     private CancellationTokenSource? aiCts;
-    private string aiPrompt = string.Empty;
     private string aiStreaming = string.Empty;
     private string aiMarkdown = string.Empty;
     private string aiErrorMessage = string.Empty;
     private int aiElapsedSeconds;
-    private List<(string Label, string Value)> aiMeta = [];
+    private List<ExceptionAiMetaLineDto> aiMeta = [];
 
-    private int PurgeDays => RetentionOptions.CurrentValue.ManualExceptionLogDays;
+    private bool aiAvailable => meta?.AiAvailable == true;
 
-    private string RetentionText => RetentionOptions.CurrentValue.ExceptionLogDays > 0
-        ? $"「最後發生」超過 {RetentionOptions.CurrentValue.ExceptionLogDays} 天的紀錄每天自動清除。"
-        : "自動清除已停用（LogRetentionSettings:ExceptionLogDays = 0）。";
+    private int PurgeDays => meta?.PurgeDays ?? 90;
+
+    private int MaxRows => meta?.MaxRows ?? 5000;
+
+    private string RetentionText => meta is null
+        ? string.Empty
+        : meta.RetentionDays > 0
+            ? $"「最後發生」超過 {meta.RetentionDays} 天的紀錄每天自動清除。"
+            : "自動清除已停用（LogRetentionSettings:ExceptionLogDays = 0）。";
 
     private string AiButtonTitle => aiAvailable
         ? "把這筆例外（不含帳號）送給 AI 分析根因與修正建議（會產生費用）"
-        : aiUnavailableReason;
+        : meta?.AiUnavailableReason ?? string.Empty;
 
     private string AiModalTitle => aiState switch
     {
@@ -144,25 +107,28 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(AuthStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            return;
-        }
-
+        // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過，走到這裡一定是有效的登入者。
+        await PermissionView.LoadAsync();
         isAccessChecked = true;
 
-        // 管理者限定：權限鍵刻意不在角色權限目錄裡，所以直接看 CheckIsAdmin。判定前不讀任何資料。
-        if (!AuthenticationStateHelper.CheckIsAdmin())
+        // 管理者限定：權限鍵刻意不在角色權限目錄裡。判定前不讀任何資料。API 也是 [AdminOnly]。
+        if (!PermissionView.IsAdmin)
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/system-exceptions");
+            await PageAccessApi.RecordPageDeniedAsync("/system-exceptions");
             Logger.LogWarning("Exception log view denied because the current user is not an administrator.");
             return;
         }
 
-        aiAvailable = DiagnosticAiService.IsAvailable;
-        aiUnavailableReason = DiagnosticAiService.UnavailableReason;
+        var metaResult = await ExceptionLogApi.GetMetaAsync();
+        if (metaResult.Success)
+        {
+            meta = metaResult.Data;
+        }
+        else
+        {
+            Logger.LogWarning("Failed to load exception log settings: {Message}", ApiClient.ErrorText(metaResult));
+        }
 
         await ReloadAsync();
     }
@@ -175,9 +141,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         await ReloadAsync();
     }
 
-    /// <summary>
-    /// 重新載入目前頁。開頭的早退不可省：兩次載入重疊會讓同一個 circuit 的 DbContext 被並行使用。
-    /// </summary>
+    /// <summary>重新載入目前頁。重疊時忽略。</summary>
     private async Task ReloadAsync()
     {
         if (isLoading)
@@ -190,26 +154,27 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
         try
         {
-            var result = await ExceptionLogService.GetAsync(BuildQuery(_pageIndex, _pageSize));
-            rows = result.Result.ToList();
-            _total = result.Count;
+            var result = await ExceptionLogApi.SearchAsync(BuildQuery(_pageIndex, _pageSize));
+            if (!result.Success || result.Data is not { } page)
+            {
+                _ = MessageService.ErrorAsync($"載入例外紀錄失敗：{ApiClient.ErrorText(result)}");
+                rows = [];
+                _total = 0;
+                return;
+            }
+
+            rows = page.Items.ToList();
+            _total = page.TotalCount;
 
             // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照 TodoViewView）。
             // ⚠️ Math.Max(1, ...) 不可省：PageIndex < 1 時 AntDesign 不會再觸發 OnChange。
             if (rows.Count == 0 && _total > 0 && _pageIndex > 1)
             {
                 _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);
-                result = await ExceptionLogService.GetAsync(BuildQuery(_pageIndex, _pageSize));
-                rows = result.Result.ToList();
-                _total = result.Count;
+                result = await ExceptionLogApi.SearchAsync(BuildQuery(_pageIndex, _pageSize));
+                rows = result.Data?.Items.ToList() ?? [];
+                _total = result.Data?.TotalCount ?? 0;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load exception logs.");
-            _ = MessageService.ErrorAsync($"載入例外紀錄失敗：{ex.Message}");
-            rows = [];
-            _total = 0;
         }
         finally
         {
@@ -246,7 +211,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
     };
 
     /// <summary>複製全部與匯出用：同一組條件、不分頁（上限＝資料表的列數上限）。</summary>
-    private ExceptionLogQuery BuildFullQuery() => BuildQuery(1, ExceptionLogService.MaxRows);
+    private ExceptionLogQuery BuildFullQuery() => BuildQuery(1, MaxRows);
 
     private static string GetCountClass(long count) => count switch
     {
@@ -262,21 +227,27 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         detailItem = item;
         detailStackTrace = "讀取中…";
         detailRawStackTrace = null;
+        detailAiPromptChars = 0;
         isStackTraceLoading = true;
         detailVisible = true;
         StateHasChanged();
 
         try
         {
-            var stackTrace = await ExceptionLogService.GetStackTraceAsync(item.Id);
-            detailRawStackTrace = string.IsNullOrWhiteSpace(stackTrace) ? null : stackTrace;
-            detailStackTrace = detailRawStackTrace
-                ?? "堆疊檔案不存在（可能已被清除，或當初寫檔失敗）。完整日誌請到「日誌檢視」以最後追蹤碼查詢。";
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to read exception stack trace. ExceptionLogId={ExceptionLogId}", item.Id);
-            detailStackTrace = $"讀取堆疊失敗：{ex.Message}";
+            var result = await ExceptionLogApi.GetStackTraceAsync(item.Id);
+            if (result.Success && result.Data is { } data)
+            {
+                detailRawStackTrace = data.StackTrace;
+                detailAiPromptChars = data.AiPromptChars;
+                detailStackTrace = detailRawStackTrace
+                    ?? "堆疊檔案不存在（可能已被清除，或當初寫檔失敗）。完整日誌請到「日誌檢視」以最後追蹤碼查詢。";
+            }
+            else
+            {
+                detailStackTrace = result.StatusCode == 404
+                    ? "這筆例外紀錄已不存在，可能已被刪除。"
+                    : $"讀取堆疊失敗：{ApiClient.ErrorText(result)}";
+            }
         }
         finally
         {
@@ -302,16 +273,15 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             return;
         }
 
-        try
+        var result = await ExceptionLogApi.GetStackTraceAsync(row.Data.Id);
+        if (!result.Success)
         {
-            var stackTrace = await ExceptionLogService.GetStackTraceAsync(row.Data.Id);
-            await CopyAsync(ExceptionLogClipboardText.Build(row.Data, stackTrace), 1);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to copy exception log. ExceptionLogId={ExceptionLogId}", row.Data.Id);
+            Logger.LogWarning("Failed to copy exception log. ExceptionLogId={ExceptionLogId}, Message={Message}", row.Data.Id, ApiClient.ErrorText(result));
             _ = MessageService.ErrorAsync("複製失敗，請改按「查看」再複製。");
+            return;
         }
+
+        await CopyAsync(ExceptionLogClipboardText.Build(row.Data, result.Data?.StackTrace), 1);
     }
 
     private async Task OnCopyAllAsync()
@@ -324,7 +294,14 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         isLoading = true;
         try
         {
-            var items = (await ExceptionLogService.GetAsync(BuildFullQuery())).Result.ToList();
+            var search = await ExceptionLogApi.SearchAsync(BuildFullQuery());
+            if (!search.Success)
+            {
+                _ = MessageService.ErrorAsync($"複製失敗：{ApiClient.ErrorText(search)}");
+                return;
+            }
+
+            var items = search.Data?.Items.ToList() ?? [];
             if (items.Count == 0)
             {
                 return;
@@ -347,13 +324,14 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
                 }
             }
 
-            var stackTraces = await ExceptionLogService.GetStackTracesAsync(items.Select(x => x.Id).ToList());
-            await CopyAsync(ExceptionLogClipboardText.BuildMany(items.Select(x => (x, stackTraces[x.Id]))), items.Count);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to copy exception logs.");
-            _ = MessageService.ErrorAsync($"複製失敗：{ex.Message}");
+            var stackTraces = await ExceptionLogApi.GetStackTracesAsync(items.Select(x => x.Id).ToList());
+            if (!stackTraces.Success || stackTraces.Data is not { } stacks)
+            {
+                _ = MessageService.ErrorAsync($"複製失敗：{ApiClient.ErrorText(stackTraces)}");
+                return;
+            }
+
+            await CopyAsync(ExceptionLogClipboardText.BuildMany(items.Select(x => (x, stacks.GetValueOrDefault(x.Id)))), items.Count);
         }
         finally
         {
@@ -384,18 +362,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         isLoading = true;
         try
         {
-            var result = await ExceptionLogService.GetAsync(BuildFullQuery());
-            var bytes = CsvExport.ToCsv(ExceptionLogCsv.Columns, result.Result);
-            var fileName = $"MeetingRecord.Web-exceptions-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
-            await FileDownloadInterop.SaveBytesAsync(fileName, bytes, CsvExport.ContentType);
-
-            await WriteAuditAsync(AuditActions.ExceptionLogExport, "*", $"format=csv; rows={result.Count}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Exception log export failed.");
-            _ = MessageService.ErrorAsync($"匯出失敗：{ex.Message}");
+            await SaveDownloadAsync(await ExceptionLogApi.ExportCsvAsync(BuildFullQuery()), "匯出失敗");
         }
         finally
         {
@@ -406,7 +373,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
     private async Task OnDeleteAsync(ExceptionLogAdapterModel item)
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -426,17 +393,22 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             return;
         }
 
-        var result = await ExceptionLogService.DeleteAsync(item.Id);
+        var result = await ExceptionLogApi.DeleteAsync(item.Id);
         if (result.Success)
         {
-            await WriteAuditAsync(AuditActions.ExceptionLogDelete, item.Id.ToString(), $"type={item.ShortExceptionType}");
             _ = MessageService.SuccessAsync("刪除成功");
-            await ReloadAsync();
+        }
+        else if (result.StatusCode == 404)
+        {
+            _ = MessageService.WarningAsync("這筆紀錄已不存在。");
         }
         else
         {
-            _ = MessageService.ErrorAsync(result.Message);
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
+
+        await ReloadAsync();
     }
 
     #region 多選刪除（1.0.53）
@@ -463,7 +435,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
     private async Task OnBatchDeleteAsync()
     {
         var items = selectedRows.ToList();
-        if (items.Count == 0 || isBatchDeleting || isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (items.Count == 0 || isBatchDeleting || isLoading)
         {
             return;
         }
@@ -485,17 +457,11 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         isBatchDeleting = true;
         try
         {
-            // 比照單筆：每刪成一列就記一筆稽核。
+            // 逐筆呼叫刪除（伺服器每刪成一列就記一筆稽核，比照單筆）。
             var result = await BatchRunner.RunAsync(items, x => x.ShortExceptionType, async x =>
             {
-                var r = await ExceptionLogService.DeleteAsync(x.Id);
-                if (!r.Success)
-                {
-                    return r.Message;
-                }
-
-                await WriteAuditAsync(AuditActions.ExceptionLogDelete, x.Id.ToString(), $"type={x.ShortExceptionType}");
-                return null;
+                var deleted = await ExceptionLogApi.DeleteAsync(x.Id);
+                return deleted.Success ? null : deleted.StatusCode == 404 ? "找不到這筆紀錄" : ApiClient.ErrorText(deleted);
             });
             Logger.LogInformation("Batch exception log delete completed. Succeeded={Succeeded}, Failed={Failed}", result.Succeeded, result.Failures.Count);
             BatchResultNotifier.Notify(NotificationService, result, "刪除");
@@ -512,7 +478,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
     private async Task OnPurgeAsync()
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -533,22 +499,20 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             return;
         }
 
-        var result = await ExceptionLogService.PurgeAsync(days);
-        if (result.Success)
+        var result = await ExceptionLogApi.PurgeAsync();
+        if (!result.Success)
         {
-            await WriteAuditAsync(AuditActions.ExceptionLogPurge, "*", $"days={days}; {result.Message}");
-            _ = MessageService.SuccessAsync(string.IsNullOrWhiteSpace(result.Message) ? "清除完成" : result.Message);
-            await ReloadAsync();
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
-        else
-        {
-            _ = MessageService.ErrorAsync(result.Message);
-        }
+
+        _ = MessageService.SuccessAsync(string.IsNullOrWhiteSpace(result.Message) ? "清除完成" : result.Message);
+        await ReloadAsync();
     }
 
     private async Task OnClearAllAsync()
     {
-        if (isLoading || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isLoading)
         {
             return;
         }
@@ -568,18 +532,29 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
             return;
         }
 
-        var result = await ExceptionLogService.ClearAllAsync();
-        if (result.Success)
+        var result = await ExceptionLogApi.ClearAllAsync();
+        if (!result.Success)
         {
-            await WriteAuditAsync(AuditActions.ExceptionLogClearAll, "*", "清空全部例外紀錄");
-            _ = MessageService.SuccessAsync("已清空全部例外紀錄");
-            _pageIndex = 1;
-            await ReloadAsync();
+            _ = MessageService.ErrorAsync(ApiClient.ErrorText(result));
+            return;
         }
-        else
+
+        _ = MessageService.SuccessAsync("已清空全部例外紀錄");
+        _pageIndex = 1;
+        await ReloadAsync();
+    }
+
+    /// <summary>把伺服器產生的檔案存到瀏覽器；失敗就顯示「{失敗前綴}：原因」。</summary>
+    private async Task SaveDownloadAsync(ApiDownload download, string failurePrefix)
+    {
+        if (!download.Success || download.Content is null)
         {
-            _ = MessageService.ErrorAsync(result.Message);
+            _ = MessageService.ErrorAsync($"{failurePrefix}：{download.Error}");
+            return;
         }
+
+        await FileDownloadInterop.SaveBytesAsync(download.FileName!, download.Content, download.ContentType!);
+        NotifyDownloaded(download.FileName!);
     }
 
     private void NotifyDownloaded(string fileName)
@@ -595,7 +570,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
     private async Task OnAiAnalyzeAsync()
     {
-        if (isAiRunning || detailItem is null || !AuthenticationStateHelper.CheckIsAdmin())
+        if (isAiRunning || detailItem is null)
         {
             return;
         }
@@ -604,12 +579,10 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         var item = detailItem;
         try
         {
-            var prompt = AiExceptionPromptBuilder.Build(item, detailRawStackTrace);
-
             var confirmed = await ModalService.ConfirmAsync(new ConfirmOptions
             {
                 Title = "確認執行 AI 例外分析（會產生費用）",
-                Content = $"將把這筆例外的類型、訊息、頁面、操作與完整堆疊（約 {prompt.Length:N0} 字，不含帳號）送到 Azure OpenAI 分析，會產生費用。確定要繼續嗎？",
+                Content = $"將把這筆例外的類型、訊息、頁面、操作與完整堆疊（約 {detailAiPromptChars:N0} 字，不含帳號）送到 Azure OpenAI 分析，會產生費用。確定要繼續嗎？",
                 OkText = "開始分析",
                 CancelText = "取消",
                 MaskClosable = false,
@@ -620,12 +593,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
                 return;
             }
 
-            await RunAiAnalysisAsync(item, prompt);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Unhandled exception while running AI exception analysis.");
-            ShowAiFailure($"AI 分析發生未預期的錯誤：{ex.Message}");
+            await RunAiAnalysisAsync(item);
         }
         finally
         {
@@ -640,9 +608,9 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         }
     }
 
-    private async Task RunAiAnalysisAsync(ExceptionLogAdapterModel item, string prompt)
+    /// <summary>送出由伺服器依例外編號組（不含帳號）；成功、失敗、取消的稽核都由伺服器寫。</summary>
+    private async Task RunAiAnalysisAsync(ExceptionLogAdapterModel item)
     {
-        aiPrompt = prompt;
         aiStreaming = string.Empty;
         aiMarkdown = string.Empty;
         aiErrorMessage = string.Empty;
@@ -658,66 +626,34 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
         try
         {
-            var result = await DiagnosticAiService.AnalyzeAsync(
-                AiUsageFeature.ExceptionAnalysis,
-                AiDiagnosticPrompts.ExceptionAnalysis,
-                prompt,
-                OnAiDelta,
-                token,
-                relatedInfo: $"例外紀錄 #{item.Id}（{item.ExceptionType}）");
-
+            var done = await ExceptionLogApi.AnalyzeAsync(item.Id, OnAiDelta, token);
             if (isDisposed)
             {
                 return;
             }
 
-            aiMarkdown = result.Content;
-            aiMeta =
-            [
-                ("例外類型", item.ExceptionType),
-                ("累計次數", item.OccurrenceCount.ToString("N0")),
-                ("最後發生", item.LastOccurredAt.ToString("yyyy-MM-dd HH:mm:ss")),
-                ("使用模型", result.ModelName),
-            ];
-            if (result.Usage is { } usage)
-            {
-                aiMeta.Add(("用量", $"輸入 {usage.InputTokens:N0}　輸出 {usage.OutputTokens:N0} tokens"));
-            }
-
-            aiMeta.Add(("耗時", $"{result.Elapsed.TotalSeconds:F1} 秒"));
+            aiMarkdown = done.Content ?? string.Empty;
+            aiMeta = done.Meta ?? [];
             aiState = AiState.Succeeded;
-
-            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(),
-                $"chars={prompt.Length}; model={result.ModelName}; elapsedMs={(long)result.Elapsed.TotalMilliseconds}");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            // 使用者關掉視窗：服務已記成 Cancelled，畫面不再跳錯誤。
-            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(), $"chars={prompt.Length}; 使用者取消", success: false);
+            // 使用者關掉視窗：請求中斷，伺服器停止呼叫 AI（帳本記成 Cancelled、稽核記「使用者取消」），畫面不再跳錯誤。
         }
         catch (Exception ex)
         {
-            if (ex is MeetingRecord.Business.Services.AiUsage.AiQuotaExceededException)
-            {
-                Logger.LogWarning("AI exception analysis blocked by AI quota. ExceptionLogId={ExceptionLogId}", item.Id);
-            }
-            else
-            {
-                Logger.LogError(ex, "AI exception analysis failed. ExceptionLogId={ExceptionLogId}", item.Id);
-            }
-
-            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyze, item.Id.ToString(), $"chars={prompt.Length}; 失敗：{ex.GetType().Name}", success: false);
-            ShowAiFailure(ExceptionAiFailure.Describe(ex));
+            // 訊息是伺服器給的原文（額度用完、內容超過上限等，見 ExceptionAiFailure）。
+            Logger.LogWarning(ex, "AI exception analysis failed. ExceptionLogId={ExceptionLogId}", item.Id);
+            ShowAiFailure(ex is InvalidOperationException ? ex.Message : $"AI 分析未完成：{ex.Message}");
         }
     }
 
-    /// <summary>串流的增量文字；從背景執行緒呼叫，切回 circuit 再重繪。</summary>
+    /// <summary>串流的增量文字。</summary>
     private void OnAiDelta(string delta)
-        => _ = InvokeAsync(() =>
-        {
-            aiStreaming += delta;
-            StateHasChanged();
-        });
+    {
+        aiStreaming += delta;
+        StateHasChanged();
+    }
 
     private async Task RunElapsedTickerAsync(CancellationToken token)
     {
@@ -738,7 +674,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>關閉對話窗：分析中就取消（服務記 Cancelled）。</summary>
+    /// <summary>關閉對話窗：分析中就取消（中斷請求，伺服器記 Cancelled）。</summary>
     private void OnAiModalCancel()
     {
         if (isAiRunning && aiCts is not null)
@@ -752,7 +688,7 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
     private void ShowAiFailure(string message)
     {
-        // 取消後供應商可能先丟出別種例外，不要讓使用者關掉的視窗自己跳回來。
+        // 取消後可能先收到別種錯誤，不要讓使用者關掉的視窗自己跳回來。
         if (aiCts?.IsCancellationRequested == true || isDisposed)
         {
             return;
@@ -775,9 +711,10 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
         }
     }
 
+    /// <summary>匯出 PDF：伺服器產生（附錄＝伺服器重組的送出內容、操作者＝呼叫者），稽核也由伺服器寫。</summary>
     private async Task OnAiExportPdfAsync()
     {
-        if (isAiExporting || aiState != AiState.Succeeded)
+        if (isAiExporting || aiState != AiState.Succeeded || detailItem is null)
         {
             return;
         }
@@ -787,46 +724,14 @@ public partial class ExceptionLogView : ComponentBase, IDisposable
 
         try
         {
-            var exportedAt = DateTime.Now;
-            var html = DiagnosticReportExporter.BuildHtml(
-                "AI 例外分析報告",
-                [.. aiMeta, ("操作者", CurrentUserService.CurrentUser.Account)],
-                aiMarkdown,
-                "附錄：實際送出的例外內容",
-                aiPrompt,
-                exportedAt);
-
-            var pdf = await PdfRenderer.RenderAsync(html);
-            var fileName = DiagnosticReportExporter.BuildFileName("AI例外分析", exportedAt);
-            await FileDownloadInterop.SaveBytesAsync(fileName, pdf, PdfContentType);
-
-            await WriteAuditAsync(AuditActions.ExceptionLogAiAnalyzeExportPdf, detailItem?.Id.ToString() ?? "*", $"bytes={pdf.Length}");
-            NotifyDownloaded(fileName);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "AI exception analysis PDF export failed.");
-            _ = MessageService.ErrorAsync($"匯出 PDF 失敗：{ex.Message}");
+            var download = await ExceptionLogApi.ExportAiPdfAsync(detailItem.Id, new ExceptionAiPdfRequestDto { Markdown = aiMarkdown, Meta = aiMeta });
+            await SaveDownloadAsync(download, "匯出 PDF 失敗");
         }
         finally
         {
             isAiExporting = false;
             StateHasChanged();
         }
-    }
-
-    /// <summary>稽核不記例外內容（可能含敏感資訊），只記編號、字數、模型與耗時。</summary>
-    private Task WriteAuditAsync(string action, string targetId, string detail, bool success = true)
-    {
-        var currentUser = CurrentUserService.CurrentUser;
-        return AuditLogService.WriteAsync(
-            action,
-            success,
-            actorUserId: currentUser.Id,
-            actorAccount: currentUser.Account,
-            targetType: "ExceptionLog",
-            targetId: targetId,
-            detail: detail);
     }
 
     public void Dispose()

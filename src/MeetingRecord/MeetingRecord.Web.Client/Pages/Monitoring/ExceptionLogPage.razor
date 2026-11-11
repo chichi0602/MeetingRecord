@@ -1,7 +1,9 @@
-@using MeetingRecord.Business.Helpers
-@using MeetingRecord.Models.Systems
+@page "/system-exceptions"
 @using MeetingRecord.Dtos.Diagnostics
 @using MeetingRecord.Share.Helpers
+
+@* 系統例外紀錄（1.1.41 搬到 WASM）：由 Blazor Server 的 ExceptionLogView 改寫，畫面不變；資料改走 api/v1/exception-logs。 *@
+<PageTitle>系統例外紀錄</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@
 @if (!isAccessChecked)
@@ -205,9 +207,9 @@ else
                 </div>
 
                 <dl class="exception-ai-meta">
-                    @foreach (var (label, value) in aiMeta)
+                    @foreach (var line in aiMeta)
                     {
-                        <div class="exception-ai-meta-row"><dt>@label</dt><dd>@value</dd></div>
+                        <div class="exception-ai-meta-row"><dt>@line.Label</dt><dd>@line.Value</dd></div>
                     }
                 </dl>
 

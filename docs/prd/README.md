@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.34
+- 文件版本：1.35
 - 文件狀態：維護中
-- 現行系統版本：1.1.39
+- 現行系統版本：1.1.41
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -32,7 +32,7 @@
 | 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Web.Client/Pages/Monitoring/SystemHealthPage.razor`（1.1.35 起 WASM）、Health services | 已實作（0.4.120 起改名並只限管理者；0.4.123 改版為 17 項、頁尾改最近 24 小時警告以上日誌；1.0.29 新增 AI 用量上限成為 18 項；1.0.35 起 AI 供應商設定顯示實際部署並提示不認得的設定鍵，另有手動「測試 AI 連線」） | 1.0.35 |
 | 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Pages/Monitoring/LogViewerPage.razor`、`LogViewerView`、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121；0.4.122 起 TraceId 即錯誤追蹤碼） | 0.4.122 |
 | 日誌等級設定 | [日誌等級設定](日誌等級設定-prd.md) | `/log-level-setting` | `Web.Client/Pages/Monitoring/LogLevelSettingPage.razor`（1.1.33 起 WASM）、`LogLevelRuntimeState` | 已實作（0.4.120） | 0.4.120 |
-| 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `ExceptionLogView`／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |
+| 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `Web.Client/Pages/Monitoring/ExceptionLogPage`（1.1.41 起 WASM）／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |
 | 資料庫用量 | [資料庫用量](資料庫用量-prd.md) | `/database-usage` | `Web.Client/Pages/Monitoring/DatabaseUsagePage.razor`（1.1.32 起 WASM）、`DatabaseUsageService`、`StorageUsageService` | 已實作（0.4.120） | 0.4.120 |
 | 紀錄分類與團隊權控 | [紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md) | 跨功能（所有清單查詢／檔案）| `PermissionChecker`、`ProjectAccessService`、`EffectiveTeamResolver`、`RecordAccessScopeProvider`、`TagStringHelper` | 已實作（團隊標籤權控 0.4.99 起不作用、0.4.103 欄位與相關方法已刪除，現行為專案的主責＋協作團隊） | 0.4.118 |
 

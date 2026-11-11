@@ -1,4 +1,3 @@
-using MeetingRecord.Web.Components.Views.Monitoring;
 using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Tests;

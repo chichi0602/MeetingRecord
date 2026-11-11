@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.105
+- 文件版本：7.106
 - 文件狀態：維護中
-- 現行系統版本：1.1.40
+- 現行系統版本：1.1.41
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -10,6 +10,7 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| WASM 遷移 M5 系統例外頁（分支 `wasm-migration-m5-exception-page`）：`/system-exceptions` 搬到 WASM，畫面不變；AI 分析在瀏覽器讀串流、送出內容由伺服器組，稽核由伺服器寫；新增端對端 EXC-01（1.1.41）| [2026-11-11-WASM遷移M5-系統例外頁](2026-11-11-WASM遷移M5-系統例外頁.md) |
 | WASM 遷移 M5 系統例外 API（分支 `wasm-migration-m5-exception-api`）：新增只限管理者的 `api/v1/exception-logs` 10 支（清單、堆疊、CSV、刪除與清除、AI 例外分析串流與 PDF，提示詞由伺服器組、不含帳號）；`DiagnosticAiService` 經 API 呼叫也記得到人（1.1.40）| [2026-11-11-WASM遷移M5-系統例外API](2026-11-11-WASM遷移M5-系統例外API.md) |
 | WASM 遷移 M5 AI 對話紀錄頁（分支 `wasm-migration-m5-ai-call-log-page`）：`/ai-call-logs` 搬到 WASM，畫面不變、稽核由伺服器寫；途中修正帶查詢字串的 WASM 頁無限重載（`WasmRoutes.IsWasm` 忽略查詢字串）；新增端對端 AIM-02（1.1.39）| [2026-11-11-WASM遷移M5-AI對話紀錄頁](2026-11-11-WASM遷移M5-AI對話紀錄頁.md) |
 | WASM 遷移 M5 AI 對話紀錄 API（分支 `wasm-migration-m5-ai-call-log-api`）：新增只限管理者的 `api/v1/ai-call-logs` 11 支（清單、明細查看寫稽核、JSON／PDF／CSV 由伺服器產生、刪除與清除）；型別從 Models 搬到 Dtos（1.1.38）| [2026-11-11-WASM遷移M5-AI對話紀錄API](2026-11-11-WASM遷移M5-AI對話紀錄API.md) |

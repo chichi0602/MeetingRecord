@@ -151,4 +151,54 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
             await Task.Delay(300);
         }
     }
+
+    [E2EFact]
+    [Trait("Scenario", "EXC-01")]
+    [Trait("Title", "系統例外（WASM 頁）：明細按 AI 分析邊產生邊顯示，稽核由伺服器寫")]
+    [Trait("Page", "系統例外紀錄")]
+    [Trait("Persona", "管理者")]
+    public async Task ExceptionLog_AiAnalysis_ShouldStreamAndAudit()
+    {
+        // 1.1.41 系統例外頁搬到 WASM：AI 分析改走 api/v1/exception-logs 的串流，送出內容由伺服器組、稽核由伺服器寫。
+        var message = $"e2e-exception-{Guid.NewGuid():N}";
+        int id;
+        await using (var seed = App.CreateDbContext())
+        {
+            var row = new MeetingRecord.AccessDatas.Models.ExceptionLog
+            {
+                Signature = Guid.NewGuid().ToString("N"),
+                ExceptionType = "System.InvalidOperationException",
+                Message = message,
+                Source = "WebAPI",
+                Page = "/api/v1/e2e",
+                OccurrenceCount = 3,
+                FirstOccurredAt = DateTime.Now.AddMinutes(-5),
+                LastOccurredAt = DateTime.Now,
+            };
+            seed.ExceptionLog.Add(row);
+            await seed.SaveChangesAsync();
+            id = row.Id;
+        }
+
+        var page = await LoginAsAsync(Seed.Admin);
+        await page.GotoAsync("/system-exceptions");
+        await RowAction(Row(page, message), "查看").ClickAsync();
+        var detail = page.Locator(".ant-modal-wrap:visible").Filter(new() { HasText = message });
+        await Expect(detail.GetByText("堆疊檔案不存在").First).ToBeVisibleAsync();
+
+        await detail.GetByRole(AriaRole.Button, new() { NameRegex = new System.Text.RegularExpressions.Regex("AI 分析$") }).ClickAsync();
+        await ConfirmAsync(page, "開始分析");
+        var result = page.Locator(".ant-modal-wrap:visible").Filter(new() { HasText = "AI 例外分析結果" });
+        await Expect(result.GetByText("E2E 假 AI 回應").First).ToBeVisibleAsync();
+        await Expect(result.GetByText("System.InvalidOperationException").First).ToBeVisibleAsync();
+
+        await using var db = App.CreateDbContext();
+        var targetId = id.ToString();
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!await db.AuditLog.AnyAsync(x => x.Action == "ExceptionLog.AiAnalyze" && x.TargetId == targetId && x.Success && x.Detail!.EndsWith("via=Api")))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "AI 分析的稽核要由伺服器寫");
+            await Task.Delay(300);
+        }
+    }
 }

@@ -1,4 +1,7 @@
-namespace MeetingRecord.Web.Diagnostics;
+using System.Text.Json.Serialization;
+
+// 1.1.32（WASM 遷移 M5）：從 Web/Diagnostics 搬來，資料庫用量 API 與 WASM 頁共用同一份型別。
+namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>
 /// 每張資料表的估算方式。
@@ -43,6 +46,7 @@ public sealed class DatabaseUsageReport
     /// <summary>共享記憶體索引（-shm）。</summary>
     public long ShmBytes { get; set; }
 
+    [JsonIgnore]
     public long TotalOnDiskBytes => MainDbBytes + WalBytes + ShmBytes;
 
     public bool WalFileExists { get; set; }
@@ -54,11 +58,13 @@ public sealed class DatabaseUsageReport
     public long PageSize { get; set; }
 
     /// <summary>已配置：page_count × page_size，含尚未併回主檔的頁。</summary>
+    [JsonIgnore]
     public long AllocatedBytes => PageCount * PageSize;
 
     public long FreelistCount { get; set; }
 
     /// <summary>可回收：freelist_count × page_size，VACUUM 可釋放。</summary>
+    [JsonIgnore]
     public long ReclaimableBytes => FreelistCount * PageSize;
 
     public IReadOnlyList<TableUsage> Tables { get; set; } = [];

@@ -1,10 +1,10 @@
 ﻿# 資料庫用量 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.120
+- 現行系統版本：1.1.32
 - 首次實作版本：0.4.120（資料庫部分移植自 NET10-Blazor-Starter；「檔案儲存用量」為本專案新增）
-- 最後核對日期：2026/10/14
+- 最後核對日期：2026/11/11
 
 ## 一、目標與範圍
 
@@ -18,6 +18,8 @@
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
 | `/database-usage` | 系統管理 → 監控與診斷 → 資料庫用量（id 30） | **只限管理者**（不在角色權限目錄，`SidebarMenuService.AdminOnlyMenuIds`） | 系統管理員／維運 |
+
+1.1.32 起是 WASM 頁，資料走 API：`GET api/v1/monitoring/database-usage`、`GET api/v1/monitoring/storage-usage`（`MonitoringController`，`[AdminOnly]`）。
 
 ## 三、畫面與欄位
 
@@ -38,11 +40,11 @@
 1. `DatabaseUsageService.GetReportAsync`：以 EF 的 `OpenConnectionAsync` 開連線（不關掉別人開著的連線），檔案路徑取自連線的 `DataSource`（一定是 EF 實際在用的檔案），讀 `PRAGMA page_size／page_count／freelist_count`。
 2. 資料表清單取自 `sqlite_master`（含 `__EFMigrationsHistory`、`sqlite_sequence`）；索引數一次查回；每張表 `PRAGMA table_info` 後以一次掃描取得 `COUNT(*)` 與 `SUM(COALESCE(LENGTH(CAST(欄 AS BLOB)),0)+…)`——`CAST AS BLOB` 才是位元組數（中文欄位不轉會少算到三分之一）。每張表各自 try/catch，一張壞表不影響整頁。識別字一律加雙引號跳脫。
 3. `StorageUsageService.GetReport`：目錄清單宣告在 `GetTargets()`（`SystemSettings.ExternalFileSystem` 各路徑＋`INLogFilePathResolver.GetLogDirectory()`），逐一以 `DirectorySizeCalculator.MeasureDetailed` 量大小與檔案數；依 `Path.GetPathRoot` 去重後以 `DriveInfo` 讀可用與總容量。
-4. 畫面先量資料庫（快）並立刻顯示，再以 `Task.Run` 在背景執行緒量外部目錄，不卡住 Blazor circuit；`isLoading` 早退避免同一個 DbContext 被並行使用。
+4. 畫面（1.1.32 起 WASM）先打 `database-usage`（快）並立刻顯示，再打 `storage-usage`（伺服器以 `Task.Run` 量外部目錄）；`isLoading` 早退避免重複按「重新整理」。報表型別在 `MeetingRecord.Dtos/Diagnostics`（1.1.32 從 Web 搬來）。
 
 ## 五、權限與安全
 
-- 管理者限定：頁面以 `CheckIsAdmin()` 守門，權限判定完成前不渲染；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
+- 管理者限定：頁面以 `PermissionView.IsAdmin` 守門（1.1.32 前是 `CheckIsAdmin()`），權限判定完成前不渲染；API 是 `[AdminOnly]`，非管理者 403 並留稽核；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
 - 唯讀：不提供 VACUUM、刪檔等寫入動作。
 - 路徑只來自設定，使用者無法指定。
 
@@ -60,10 +62,12 @@
 - `MeetingRecord.Tests/StorageUsageServiceTests.cs`：各目錄大小與檔案數、不存在／未設定的目錄照樣列出、同一顆磁碟合併。
 - `MeetingRecord.Tests/DashboardMetricsTests.cs`：`DirectorySizeCalculator.MeasureDetailed` 含子目錄的檔案數。
 - `MeetingRecord.Tests/MonitoringMenuRegistrationTests.cs`：選單 id 30 位置、名稱、路由與管理者限定。
+- `MeetingRecord.Tests/MonitoringApiTests.cs`（1.1.32）：兩支 API 未登入 401、非管理者 403 並留稽核、管理者取得資料表與目錄清單。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/DatabaseUsageService.cs`、`DatabaseUsageModels.cs`、`StorageUsageService.cs`
+- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/DatabaseUsageService.cs`、`StorageUsageService.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/DatabaseUsageModels.cs`、`StorageUsageModels.cs`（1.1.32）
+- `src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs`、`src/MeetingRecord/MeetingRecord.Web.Client/Api/MonitoringApi.cs`（1.1.32）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/DirectorySizeCalculator.cs`（`MeasureDetailed`）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Monitoring/DatabaseUsagePage.razor`、`Components/Views/Monitoring/DatabaseUsageView.razor(.cs/.css)`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/DatabaseUsagePage.razor(.cs/.css)`（1.1.32 起 WASM；以前是 Server 的 `DatabaseUsagePage` → `DatabaseUsageView`）
 - 交叉連結：[儀表板 PRD](儀表板-prd.md)（儲存空間卡片）、[系統健康監控 PRD](系統健康監控-prd.md)、[資料模型與資料庫](../architecture/資料模型與資料庫.md)

@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.36
-- 文件狀態：已啟動遷移（M0～M4 完成並合回 main，IIS 測試機驗證待補，下一步 M5）
-- 現行系統版本：1.1.31
+- 文件版本：1.37
+- 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
+- 現行系統版本：1.1.32
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -500,6 +500,14 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 | 使用說明 API（說明內容、AI 助理串流） | 1.1.29 | ✅ 完成；`HelpController` 2 支（`GET manual`、`POST assistant/ask` 串流），管理員章節由伺服器判斷、中斷請求＝停止、稽核由伺服器寫；讀說明抽成 `HelpManualProvider`，串流抽成 `NdjsonStreamer`（AI 問答共用）；`HelpAssistantService` 改經 `IAiCallerProvider` |
 | `/help` 頁搬到 WASM | 1.1.30 | ✅ 完成；`HelpPage` 在 Web.Client、`HelpManual` 搬到 Share、`HelpViewInterop` 搬到 Client；頁面不再判斷管理者與寫稽核，「停止」＝中斷請求；瀏覽器端解析說明約 300～480 ms；AI-02 照過、新增 AI-05（停止），L4-05／08 改用稽核紀錄頁 |
 | M4 里程碑報告 | 1.1.31 | ✅ 完成；[M4 報告](../testing/2026-11-11-M4-里程碑測試報告-1.1.31.md)：全套照過、新增 AI-05；新開 2 支端點；WASM 下載量 `_framework` 全部 `.br` 合計 5.01 MB，只下載一個語系檔約 4.67 MB |
+
+## 十、之六 M5 進度（管理與監控，1.1.32 起，一頁一版）
+
+每版從 main 開短分支，做完停下來等使用者 commit。順序先排唯讀、獨立的頁，稽核紀錄（L4-05／08 借用的 Server 頁）排最後。
+
+| 步驟 | 版本 | 狀態 |
+|------|------|------|
+| 資料庫用量 `/database-usage` | 1.1.32 | ✅ 完成；新 `MonitoringController`（`api/v1/monitoring`，`[AdminOnly]`）兩支：`database-usage`、`storage-usage`；報表型別搬到 `Dtos/Diagnostics`；MON-01／02 照過 |
 
 ## 十一、下一步
 

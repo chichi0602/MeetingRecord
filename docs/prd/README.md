@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.29
+- 文件版本：1.30
 - 文件狀態：維護中
-- 現行系統版本：1.1.30
+- 現行系統版本：1.1.32
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/11
 
@@ -33,7 +33,7 @@
 | 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Pages/Monitoring/LogViewerPage.razor`、`LogViewerView`、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121；0.4.122 起 TraceId 即錯誤追蹤碼） | 0.4.122 |
 | 日誌等級設定 | [日誌等級設定](日誌等級設定-prd.md) | `/log-level-setting` | `Pages/Monitoring/LogLevelSettingPage.razor`、`LogLevelSettingView`、`LogLevelRuntimeState` | 已實作（0.4.120） | 0.4.120 |
 | 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `ExceptionLogView`／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |
-| 資料庫用量 | [資料庫用量](資料庫用量-prd.md) | `/database-usage` | `Pages/Monitoring/DatabaseUsagePage.razor`、`DatabaseUsageView`、`DatabaseUsageService`、`StorageUsageService` | 已實作（0.4.120） | 0.4.120 |
+| 資料庫用量 | [資料庫用量](資料庫用量-prd.md) | `/database-usage` | `Web.Client/Pages/Monitoring/DatabaseUsagePage.razor`（1.1.32 起 WASM）、`DatabaseUsageService`、`StorageUsageService` | 已實作（0.4.120） | 0.4.120 |
 | 紀錄分類與團隊權控 | [紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md) | 跨功能（所有清單查詢／檔案）| `PermissionChecker`、`ProjectAccessService`、`EffectiveTeamResolver`、`RecordAccessScopeProvider`、`TagStringHelper` | 已實作（團隊標籤權控 0.4.99 起不作用、0.4.103 欄位與相關方法已刪除，現行為專案的主責＋協作團隊） | 0.4.118 |
 
 ## 二、無選單入口的核心能力

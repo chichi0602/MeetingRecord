@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using MeetingRecord.AccessDatas;
+using MeetingRecord.Dtos.Diagnostics;
 using MeetingRecord.Web.Diagnostics;
 
 namespace MeetingRecord.Tests;

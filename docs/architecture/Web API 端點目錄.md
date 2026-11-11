@@ -1,8 +1,8 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.30
+- 文件版本：1.31
 - 文件狀態：已實作
-- 現行系統版本：1.1.29
+- 現行系統版本：1.1.32
 - 首次實作版本：0.1.61
 - 最後核對日期：2026/11/11
 
@@ -66,6 +66,8 @@
 **AI 問答**（1.1.21，`AiChatController`，路由 `api/v1/ai-chat/{project|meeting}/{targetId}`）：`GET conversations`、`POST conversations`（開新對話，回 Id）、`PUT conversations/{id}/title`（edit）、`DELETE conversations/{id}`（delete）、`GET conversations/{id}/messages`、`PUT conversations/{id}/messages/{index}`（edit；帶原本的角色與內容，對不上回 409）、`POST conversations/{id}/ask`（multipart：`question`＋0～5 個 `files`，**串流**）、`POST conversations/{id}/messages/{index}/regenerate`（edit，**串流**）、`GET conversations/{id}/attachments/{storedName}`（`download=true` 寫稽核）、`POST conversations/{id}/pdf`（export；`messageIndex` 有值＝單則，沒值＝整段，內容由伺服器讀）。權限依範圍（`AiChatPermissionAttribute`：專案看專案項目，會議看會議紀錄或專案項目），未註明者要 view。**串流格式**：`application/x-ndjson`，每行一筆 `AiChatStreamEventDto`——零到多筆 `delta`（新產生的文字），最後一筆 `done`（附完整結果）或 `error`（附原因）；在第一段文字產生之前就失敗（看不到 404、附件不合規定或額度用完 400）照一般 API 回應。服務層的錯誤原文放 `errorMessage`。
 
 **使用說明**（1.1.29，`HelpController`，`api/v1/help`，都要「使用說明」View，同畫面）：`GET manual`（去掉檔頭的說明 Markdown，保留 `<!-- 說明分類：… -->` 標記；另帶 `assistantAvailable`、`assistantUnavailableReason`）、`POST assistant/ask`（內容 `{ question, history: [{question, answer}], threadKey? }`；回 `application/x-ndjson` 串流，事件 `delta`／`done`（`answer`、`model`）／`error`）。問題空白、`threadKey` 不是 `help:`＋32 位小寫 16 進位、沒設定 AI 回 400；第一段文字前失敗（例如額度用完）回 400，開始後失敗送 `error`。要不要送「管理員」章節由伺服器依呼叫者判斷；中斷請求＝停止（帳本 Cancelled）；稽核 `Help.AiAsk` 由伺服器寫（`via=Api`）。
+
+**監控與診斷**（WASM 遷移 M5，`MonitoringController`，`api/v1/monitoring`，**整個 Controller `[AdminOnly]`**，非管理者 403 並留稽核）：1.1.32 `GET database-usage`（`DatabaseUsageReport`：SQLite 檔案、頁面配置、各資料表；讀取失敗時報表帶 `errorMessage`）、`GET storage-usage`（`StorageUsageReport`：各外部目錄大小與檔案數、各磁碟可用空間；影音目錄可能很大，所以和上一支分開）。
 
 > 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：API（待辦 1.1.18、會議 1.1.20、專案 1.1.24 起都直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >

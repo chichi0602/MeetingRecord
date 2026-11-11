@@ -109,10 +109,11 @@ public static class ServiceCollectionExtensions
         // 站內通知的自動保留期限（1.0.44，預設 90 天）。
         services.AddHostedService<NotificationRetentionBackgroundService>();
 
-        // 程序層級的未處理例外、管線自我監控（Program.cs 在 Build 後呼叫 Register）、瀏覽器錯誤回報（每個 circuit 一份）。
+        // 程序層級的未處理例外、管線自我監控（Program.cs 在 Build 後呼叫 Register）、
+        // 瀏覽器錯誤回報（1.1.47 起經 API，Singleton、依帳號限流）。
         services.AddSingleton<ProcessExceptionHooks>();
         services.AddSingleton<LoggingPipelineMonitor>();
-        services.AddScoped<BrowserErrorReporter>();
+        services.AddSingleton<BrowserErrorReporter>();
         services.TryAddSingleton(TimeProvider.System);
 
         // 以 DI 註冊 ILoggerProvider，讓它拿得到 Channel 與情境存取器。

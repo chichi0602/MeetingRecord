@@ -1,21 +1,18 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Models.Others;
 using MeetingRecord.Web.Configuration;
 using MeetingRecord.Web.Diagnostics;
 using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
 
-/// <summary>瀏覽器端錯誤回報。前端送來的內容一律不信任。</summary>
+/// <summary>瀏覽器端錯誤回報（1.1.47 起經 API、依帳號限流）。前端送來的內容一律不信任。</summary>
 public sealed class BrowserErrorReporterTests : IDisposable
 {
     private readonly ManualTimeProvider clock = new(new DateTimeOffset(2026, 10, 1, 1, 0, 0, TimeSpan.Zero));
     private readonly ExceptionContextAccessor accessor = new();
     private readonly LoggingPipelineMonitor monitor = new();
     private readonly CapturingLogger logger;
-    private readonly CurrentUserService currentUser = new() { CurrentUser = new CurrentUser { Id = 7, Account = "alice" } };
 
     public BrowserErrorReporterTests()
     {
@@ -27,7 +24,7 @@ public sealed class BrowserErrorReporterTests : IDisposable
     {
         var reporter = CreateReporter();
 
-        Assert.True(reporter.Report("error", "x is not defined", "at foo (app.js:1:2)", "https://site/app.js:1:2", "/projects?token=secret#top"));
+        Assert.True(reporter.Report(7, "alice", "error", "x is not defined", "at foo (app.js:1:2)", "https://site/app.js:1:2", "/projects?token=secret#top"));
 
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Error, entry.Level);
@@ -46,14 +43,27 @@ public sealed class BrowserErrorReporterTests : IDisposable
     {
         var reporter = CreateReporter(new ClientErrorReportingSettings { MaxPerCircuitPerMinute = 3 });
 
-        var results = Enumerable.Range(0, 5).Select(index => reporter.Report("error", $"e{index}", null, null, "/")).ToList();
+        var results = Enumerable.Range(0, 5).Select(index => reporter.Report(7, "alice", "error", $"e{index}", null, null, "/")).ToList();
 
         Assert.Equal([true, true, true, false, false], results);
         Assert.Equal(3, logger.Entries.Count);
         Assert.Equal(2, monitor.Snapshot().ClientErrorsDropped);
 
         clock.Advance(TimeSpan.FromMinutes(1));
-        Assert.True(reporter.Report("error", "after window", null, null, "/"));
+        Assert.True(reporter.Report(7, "alice", "error", "after window", null, null, "/"));
+    }
+
+    /// <summary>1.1.47：上限以帳號計——一個人洗版不會擋到別人的回報。</summary>
+    [Fact]
+    public void Report_RateLimit_ShouldBePerAccount()
+    {
+        var reporter = CreateReporter(new ClientErrorReportingSettings { MaxPerCircuitPerMinute = 2 });
+
+        Assert.True(reporter.Report(7, "alice", "error", "a1", null, null, "/"));
+        Assert.True(reporter.Report(7, "alice", "error", "a2", null, null, "/"));
+        Assert.False(reporter.Report(7, "alice", "error", "a3", null, null, "/"));
+        Assert.True(reporter.Report(8, "bob", "error", "b1", null, null, "/"));
+        Assert.Equal("bob", logger.Entries[^1].Context?.Account);
     }
 
     [Fact]
@@ -61,7 +71,7 @@ public sealed class BrowserErrorReporterTests : IDisposable
     {
         var reporter = CreateReporter(new ClientErrorReportingSettings { Enabled = false });
 
-        Assert.False(reporter.Report("error", "boom", null, null, "/"));
+        Assert.False(reporter.Report(7, "alice", "error", "boom", null, null, "/"));
         Assert.Empty(logger.Entries);
     }
 
@@ -70,7 +80,7 @@ public sealed class BrowserErrorReporterTests : IDisposable
     {
         var reporter = CreateReporter();
 
-        reporter.Report("weird-kind", new string('m', 5000), new string('s', 9000), null, "/" + new string('p', 500));
+        reporter.Report(7, "alice", "weird-kind", new string('m', 5000), new string('s', 9000), null, "/" + new string('p', 500));
 
         var entry = Assert.Single(logger.Entries);
         var exception = Assert.IsType<BrowserScriptException>(entry.Exception);
@@ -92,7 +102,7 @@ public sealed class BrowserErrorReporterTests : IDisposable
     }
 
     private BrowserErrorReporter CreateReporter(ClientErrorReportingSettings? settings = null)
-        => new(logger, accessor, currentUser, new StaticMonitor(settings ?? new ClientErrorReportingSettings()), monitor, clock);
+        => new(logger, accessor, new StaticMonitor(settings ?? new ClientErrorReportingSettings()), monitor, clock);
 
     public void Dispose() => accessor.Clear();
 

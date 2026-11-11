@@ -31,6 +31,7 @@ public sealed class ApiAuthorizationConventionTests
     private static readonly Dictionary<string, string> AuthenticatedOnlyAllowList = new(StringComparer.Ordinal)
     {
         ["AuthController.Me"] = "回傳呼叫者自己的帳號資料，任何登入者都可以看自己",
+        ["ClientErrorController.Report"] = "回報呼叫者自己頁面上的瀏覽器錯誤（1.1.47），只寫系統例外紀錄、依帳號限流；任何登入者都能用",
         ["SessionController.Get"] = "回傳呼叫者自己的登入狀態與權限鍵（1.1.0，WASM 前端決定導向用）；權限判斷仍在各 API 的 [HasPermission]",
         ["AccountController.ChangePassword"] = "只變更呼叫者自己的密碼，須驗目前密碼（1.1.6，規則同 Server 頁使用者選單的對話窗）",
         ["AccountController.ChangeOwnPassword"] = "變更密碼頁（1.1.13）：只改呼叫者自己的密碼、須驗目前密碼，規則照原頁；須改密碼的帳號也要能用",

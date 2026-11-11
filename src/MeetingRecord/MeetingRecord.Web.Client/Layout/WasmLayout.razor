@@ -3,6 +3,8 @@
 @inject AccountApi AccountApi
 @inject SystemApi SystemApi
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject MeetingRecord.Web.Client.Services.ClientErrorReporter ClientErrorReporter
 
 @* WASM 端的版面：開頁先問 Session API，依結果導向（登入、登出原因、改密碼），通過才畫外框。
    外框用共用的 AppShell（1.1.5），與 Blazor Server 頁的 MainLayout 同一份外觀；這裡供應 API 來的資料：
@@ -84,6 +86,29 @@ else
         var menuResult = await SessionService.GetMenuAsync();
         menu = menuResult.Data ?? [];
         session = current;
+    }
+
+    private DotNetObjectReference<MeetingRecord.Web.Client.Services.ClientErrorReporter>? clientErrorReporterRef;
+
+    /// <summary>
+    /// 登入狀態確認後，把瀏覽器錯誤回報接到 API（1.1.47，client-error-reporter.js）。版面在換頁時不會重建，只註冊一次；
+    /// 註冊前發生的錯誤由 JS 暫存、註冊時送出。註冊失敗（腳本沒載入）不影響頁面。
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (session is null || clientErrorReporterRef is not null)
+        {
+            return;
+        }
+
+        clientErrorReporterRef = DotNetObjectReference.Create(ClientErrorReporter);
+        try
+        {
+            await JS.InvokeVoidAsync("meetingRecordClientErrors.register", clientErrorReporterRef);
+        }
+        catch (JSException)
+        {
+        }
     }
 
     private bool IsOnChangePasswordPage()

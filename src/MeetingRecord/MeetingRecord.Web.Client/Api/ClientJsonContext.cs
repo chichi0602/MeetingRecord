@@ -31,6 +31,8 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ApiResult<SessionDto>), TypeInfoPropertyName = "SessionResult")]
 [JsonSerializable(typeof(ApiResult<List<MenuItemDto>>), TypeInfoPropertyName = "MenuResult")]
 [JsonSerializable(typeof(ApiResult<int>), TypeInfoPropertyName = "IntResult")]
+[JsonSerializable(typeof(ApiResult<bool>), TypeInfoPropertyName = "BoolResult")]
+[JsonSerializable(typeof(ClientErrorReportDto))]
 [JsonSerializable(typeof(ApiResult<object>), TypeInfoPropertyName = "EmptyResult")]
 [JsonSerializable(typeof(ApiResult<SystemAboutDto>), TypeInfoPropertyName = "AboutResult")]
 [JsonSerializable(typeof(ChangePasswordRequestDto))]

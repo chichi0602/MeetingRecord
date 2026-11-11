@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using MeetingRecord.E2ETests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace MeetingRecord.E2ETests.Scenarios;
 
@@ -39,5 +40,38 @@ public sealed class NavigationTests(E2EAppFixture app) : E2ETestBase(app)
         Assert.Equal(before + 1, Volatile.Read(ref documentLoads));
 
         Assert.DoesNotContain(sockets, url => url.Contains("/_blazor", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [E2EFact]
+    [Trait("Scenario", "ERR-01")]
+    [Trait("Title", "WASM 頁的瀏覽器錯誤會回報到伺服器，記進系統例外紀錄（來源「瀏覽器」）")]
+    [Trait("Page", "系統例外紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task BrowserError_OnWasmPage_ShouldReachTheExceptionLog()
+    {
+        // 1.1.47：以前經 Blazor Server 的連線回報，WASM 頁的錯誤送不出去；改走 POST api/v1/client-errors。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/meetings", "會議標題");
+        var message = $"e2e-browser-error-{Guid.NewGuid():N}";
+
+        await page.EvaluateAsync($"() => setTimeout(() => {{ throw new Error('{message}'); }}, 0)");
+
+        await using var db = App.CreateDbContext();
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (true)
+        {
+            // 瀏覽器的 error 事件訊息會帶「Uncaught Error: 」前綴，所以比對包含。
+            var row = await db.ExceptionLog.AsNoTracking().SingleOrDefaultAsync(x => x.Message.Contains(message));
+            if (row is not null)
+            {
+                Assert.Equal("瀏覽器", row.Source);
+                Assert.Equal("/meetings", row.Page);
+                Assert.Equal(Seed.Owner.Account, row.Account);
+                break;
+            }
+
+            Assert.True(DateTime.UtcNow < deadline, "瀏覽器錯誤沒有記進系統例外紀錄");
+            await Task.Delay(300);
+        }
     }
 }

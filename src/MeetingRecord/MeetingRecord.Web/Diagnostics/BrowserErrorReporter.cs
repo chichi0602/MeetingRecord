@@ -1,19 +1,27 @@
 using Microsoft.Extensions.Options;
-using Microsoft.JSInterop;
-using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Web.Configuration;
 using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Diagnostics;
 
 /// <summary>
-/// 接收瀏覽器端錯誤（0.4.122，移植自 NET10-Blazor-Starter）：<c>wwwroot/js/client-error-reporter.js</c> 經 circuit 呼叫 <see cref="Report"/>。
+/// 接收瀏覽器端錯誤（0.4.122，移植自 NET10-Blazor-Starter）。
 ///
-/// Scoped（＝每個 circuit 一份），頻率限制天生就是「每個 circuit」。由 MainLayout 在登入後註冊，
-/// 所以只有已登入、有 circuit 的頁面會回報；帳號取自 <see cref="CurrentUserService"/>（MainLayout 已驗證過）。
+/// <para>
+/// 1.1.47 起經 API 回報（<c>POST api/v1/client-errors</c>，<c>ClientErrorController</c>）：WASM 頁的
+/// <c>wwwroot/js/client-error-reporter.js</c> 捕捉後交給 WASM 端的回報器送出。以前經 Blazor Server 的 circuit 回報，
+/// WASM 頁的錯誤送不出去。只有登入者能回報（API 要登入），匿名者無從灌資料。
+/// </para>
 ///
+/// <para>
+/// Singleton，**依帳號限流**：每個帳號每分鐘最多 <see cref="ClientErrorReportingSettings.MaxPerCircuitPerMinute"/> 筆
+/// （設定名稱沿用 circuit 時代的，避免改到已部署的設定檔），超過的丟棄並計數。
+/// </para>
+///
+/// <para>
 /// 前端送來的東西一律不信任：長度在這裡再截一次、頁面只取路徑並截短。
 /// 以 Error 記錄並帶 <see cref="BrowserScriptException"/>，進系統例外紀錄（來源「瀏覽器」）。
+/// </para>
 /// </summary>
 public sealed class BrowserErrorReporter
 {
@@ -26,25 +34,22 @@ public sealed class BrowserErrorReporter
 
     private readonly ILogger<BrowserErrorReporter> logger;
     private readonly ExceptionContextAccessor contextAccessor;
-    private readonly CurrentUserService currentUserService;
     private readonly IOptionsMonitor<ClientErrorReportingSettings> options;
     private readonly LoggingPipelineMonitor monitor;
     private readonly TimeProvider timeProvider;
 
-    private readonly Queue<DateTimeOffset> recent = new();
+    private readonly Dictionary<int, Queue<DateTimeOffset>> recentByUser = [];
     private readonly object gate = new();
 
     public BrowserErrorReporter(
         ILogger<BrowserErrorReporter> logger,
         ExceptionContextAccessor contextAccessor,
-        CurrentUserService currentUserService,
         IOptionsMonitor<ClientErrorReportingSettings> options,
         LoggingPipelineMonitor monitor,
         TimeProvider timeProvider)
     {
         this.logger = logger;
         this.contextAccessor = contextAccessor;
-        this.currentUserService = currentUserService;
         this.options = options;
         this.monitor = monitor;
         this.timeProvider = timeProvider;
@@ -52,9 +57,11 @@ public sealed class BrowserErrorReporter
 
     public bool IsEnabled => options.CurrentValue.Enabled;
 
-    /// <returns>是否記錄了（供測試斷言）。</returns>
-    [JSInvokable]
-    public bool Report(string? kind, string? message, string? stack, string? source, string? path)
+    /// <summary>記錄一筆瀏覽器錯誤。</summary>
+    /// <param name="userId">回報者（API 呼叫者）；限流以它為單位。</param>
+    /// <param name="account">回報者帳號，寫進系統例外紀錄的「使用者」。</param>
+    /// <returns>是否記錄了（停用、超過上限時為 false）。</returns>
+    public bool Report(int userId, string? account, string? kind, string? message, string? stack, string? source, string? path)
     {
         var settings = options.CurrentValue;
         if (settings.Enabled == false)
@@ -62,7 +69,7 @@ public sealed class BrowserErrorReporter
             return false;
         }
 
-        if (TryAcquire(settings.MaxPerCircuitPerMinute) == false)
+        if (TryAcquire(userId, settings.MaxPerCircuitPerMinute) == false)
         {
             monitor.RecordClientErrorDropped();
             return false;
@@ -75,15 +82,14 @@ public sealed class BrowserErrorReporter
             Truncate(stack, MaxStackLength),
             Truncate(source, MaxSourceLength));
 
-        var user = currentUserService.CurrentUser;
         var previous = contextAccessor.Current;
         try
         {
             contextAccessor.Set(new ExceptionContext(
                 ExceptionSources.Browser,
                 NormalizePath(path),
-                user.Id > 0 ? user.Account : null,
-                user.Id > 0 ? user.Id : null));
+                string.IsNullOrWhiteSpace(account) ? null : account,
+                userId > 0 ? userId : null));
 
             // 樣板固定，簽章才不會因參數不同而失控；訊息差異已在例外本身。
             logger.LogError(exception, "Browser script error. Kind={Kind}", safeKind);
@@ -103,11 +109,17 @@ public sealed class BrowserErrorReporter
         return true;
     }
 
-    private bool TryAcquire(int maxPerMinute)
+    private bool TryAcquire(int userId, int maxPerMinute)
     {
         var now = timeProvider.GetUtcNow();
         lock (gate)
         {
+            if (!recentByUser.TryGetValue(userId, out var recent))
+            {
+                recent = new Queue<DateTimeOffset>();
+                recentByUser[userId] = recent;
+            }
+
             while (recent.Count > 0 && now - recent.Peek() >= Window)
             {
                 recent.Dequeue();

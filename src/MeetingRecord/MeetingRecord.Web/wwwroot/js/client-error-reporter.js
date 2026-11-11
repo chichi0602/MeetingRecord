@@ -1,8 +1,9 @@
 // 瀏覽器端錯誤回報（0.4.122，移植自 NET10-Blazor-Starter）。
-// 掛上 window 'error' 與 'unhandledrejection'，經 Blazor circuit 回報給伺服器的 BrowserErrorReporter，
-// 以 Error 記進日誌檔與系統例外紀錄（來源「瀏覽器」）。
+// 掛上 window 'error' 與 'unhandledrejection'，交給 WASM 端的 ClientErrorReporter 送到 POST api/v1/client-errors，
+// 伺服器的 BrowserErrorReporter 以 Error 記進日誌檔與系統例外紀錄（來源「瀏覽器」）。
+// （1.1.47 起；以前經 Blazor Server 的 circuit 回報，WASM 頁的錯誤送不出去。）
 //
-// 只有登入後的頁面（MainLayout）會呼叫 register；其他頁面的錯誤只會暫存在記憶體（上限 20 筆），不會送出。
+// 只有登入後的頁面（WasmLayout）會呼叫 register；其他頁面的錯誤只會暫存在記憶體（上限 20 筆），不會送出。
 // 長度上限與過濾在這裡先做一次，伺服器端還會再做一次（不信任前端）。
 (function () {
     const maxBuffered = 20;
@@ -24,7 +25,7 @@
     }
 
     function send(item) {
-        // 回報本身失敗（circuit 已斷線、元件已釋放）不可再丟出錯誤，否則會自己觸發自己。
+        // 回報本身失敗（網路斷了、參考已釋放）不可再丟出錯誤，否則會自己觸發自己。
         reporter.invokeMethodAsync('Report', item.kind, item.message, item.stack, item.source, item.path)
             .catch(() => { });
     }

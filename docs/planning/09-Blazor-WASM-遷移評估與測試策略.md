@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.51
+- 文件版本：1.52
 - 文件狀態：已啟動遷移（M0～M4 完成並合回 main，M5 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.46
+- 現行系統版本：1.1.47
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -527,6 +527,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 |------|------|------|
 | 首頁與找不到頁搬到 WASM，路由收斂 | 1.1.45 | ✅ 完成；`/` 改成 WASM 頁（`WasmLayout` 處理登入狀態後換到 `/meetings`）、`/not-found` 改成 WASM 頁並當 `ClientRoutes` 的 `NotFoundPage`；`WasmRoutes` 反過來改成 `ServerPageRoutes`（只剩 `/Auths/*`、`/Error`，靜態算繪）；`/Error` 改靜態；刪 `Home`、`SplashView`、`NotFound`、`EmptyLayout`、`Counter`、`Weather`；L4-08 目標改登出頁；新增 NAV-01 |
 | 拆除 Server 互動模式 | 1.1.46 | ✅ 完成；拿掉 `AddInteractiveServerComponents`／`AddInteractiveServerRenderMode`；Server 的 `Routes` 只留靜態頁（`NoFooterLayout`）；刪 `MainLayout`、`ReconnectModal`、`ApplicationCircuitHandler`、`LoggingErrorBoundary`、`RoleViewViewSample`、三個 `Server*Source` 與 Server 端 Interop 註冊；`ClientIpProvider` 只取 HTTP 請求的 IP；`AuthenticationStateHelper` 只剩純函式（`CanAccessPage`、`CanDoAction`），測試改成 `PermissionRulesTests`；守門測試同步 |
+| 前端錯誤回報改走 API | 1.1.47 | ✅ 完成；新 `POST api/v1/client-errors`（任何登入者，依帳號限流）；`BrowserErrorReporter` 改 Singleton；WASM 端 `ClientErrorReporter` 由 `WasmLayout` 登入後註冊；新增 `ClientErrorApiTests`、ERR-01（M1 延後的項目） |
 
 ## 十一、下一步
 

@@ -1,8 +1,8 @@
 ﻿# Blazor Server → Blazor WebAssembly 遷移評估與測試策略
 
-- 文件版本：1.34
+- 文件版本：1.35
 - 文件狀態：已啟動遷移（M0～M3 已合回 main；M4 在分支 `wasm-migration-m4` 進行中，IIS 測試機驗證待補）
-- 現行系統版本：1.1.29
+- 現行系統版本：1.1.30
 - 首次實作版本：不適用
 - 最後核對日期：2026/11/11
 
@@ -497,7 +497,7 @@ M0～M3 於 2026/11/11 合回 main，M4 另開分支；每版做完停下來等�
 |------|------|------|
 | AI 呼叫者歸屬修正（M3 缺陷） | 1.1.28 | ✅ 完成；經 API 呼叫 AI 時用量帳本記不到人、每人額度擋不住，改經 `IAiCallerProvider`（API 從 claims 取）；AI 問答、待辦抽取、會議重新轉錄與產生會議紀錄 |
 | 使用說明 API（說明內容、AI 助理串流） | 1.1.29 | ✅ 完成；`HelpController` 2 支（`GET manual`、`POST assistant/ask` 串流），管理員章節由伺服器判斷、中斷請求＝停止、稽核由伺服器寫；讀說明抽成 `HelpManualProvider`，串流抽成 `NdjsonStreamer`（AI 問答共用）；`HelpAssistantService` 改經 `IAiCallerProvider` |
-| `/help` 頁搬到 WASM | 1.1.30 | 待做 |
+| `/help` 頁搬到 WASM | 1.1.30 | ✅ 完成；`HelpPage` 在 Web.Client、`HelpManual` 搬到 Share、`HelpViewInterop` 搬到 Client；頁面不再判斷管理者與寫稽核，「停止」＝中斷請求；瀏覽器端解析說明約 300～480 ms；AI-02 照過、新增 AI-05（停止），L4-05／08 改用稽核紀錄頁 |
 | M4 里程碑報告 | 1.1.31 | 待做 |
 
 ## 十一、下一步

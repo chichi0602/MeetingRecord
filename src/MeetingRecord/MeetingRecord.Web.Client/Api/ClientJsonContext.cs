@@ -4,6 +4,7 @@ using MeetingRecord.Dtos.Accounts;
 using MeetingRecord.Dtos.AiChats;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Dashboards;
+using MeetingRecord.Dtos.Helps;
 using MeetingRecord.Dtos.Jobs;
 using MeetingRecord.Dtos.Meetings;
 using MeetingRecord.Dtos.Models;
@@ -72,6 +73,9 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(AiChatRegenerateRequestDto))]
 [JsonSerializable(typeof(AiChatExportRequestDto))]
 [JsonSerializable(typeof(AiChatStreamEventDto))]
+[JsonSerializable(typeof(ApiResult<HelpManualDto>), TypeInfoPropertyName = "HelpManualResult")]
+[JsonSerializable(typeof(HelpAssistantAskRequestDto))]
+[JsonSerializable(typeof(HelpAssistantStreamEventDto))]
 [JsonSerializable(typeof(TodoCreateUpdateDto))]
 [JsonSerializable(typeof(TodoCompletedRequestDto))]
 [JsonSerializable(typeof(ApiResult<PagedResult<TodoDto>>), TypeInfoPropertyName = "TodoPageResult")]

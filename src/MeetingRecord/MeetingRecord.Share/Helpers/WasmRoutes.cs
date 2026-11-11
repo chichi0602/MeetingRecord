@@ -24,6 +24,7 @@ public static class WasmRoutes
         "/todos", // 1.1.19 待辦事項
         "/meetings", // 1.1.23 會議紀錄
         "/projects", // 1.1.26 專案項目
+        "/help", // 1.1.30 使用說明
     };
 
     /// <param name="path">以 <c>/</c> 開頭、不含查詢字串的路徑。</param>

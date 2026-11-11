@@ -1,30 +1,34 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using MeetingRecord.Business.Services.AiUsage;
-using MeetingRecord.Business.Services.HelpAssistant;
+using MeetingRecord.Dtos.Helps;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Client.Auth;
 using MeetingRecord.Web.Components.Commons;
 using MeetingRecord.Web.Services;
-using MeetingRecord.Business.Services.Other;
-using MeetingRecord.Share.Helpers;
-using MeetingRecord.Web.Helps;
 
-namespace MeetingRecord.Web.Components.Views.Helps;
+namespace MeetingRecord.Web.Client.Pages.Helps;
 
 /// <summary>
-/// 使用說明頁。
+/// 使用說明頁（1.1.30 從 Blazor Server 的 <c>HelpView</c> 搬到 WASM）。畫面與操作不變。
 ///
 /// <para>
-/// 內容<b>不寫在這裡</b>，而是 <c>docs/guides/系統使用說明.md</c> 那一份——
-/// 它在建置時以內嵌資源的形式被放進組件，由 <see cref="HelpManualProvider"/> 讀取（1.1.29 起與 API 共用）。
-/// 這樣「文件庫的使用說明」與「系統裡的使用說明」永遠是同一份內容，
-/// 不會出現改了一邊忘了另一邊的情況。
+/// 內容<b>不寫在這裡</b>，而是 <c>docs/guides/系統使用說明.md</c> 那一份：伺服器把它嵌在 Web 組件裡，
+/// 經 <c>GET api/v1/help/manual</c> 給這頁，這裡用同一套 <see cref="HelpManual"/> 切分類與搜尋。
+/// 「文件庫的使用說明」與「系統裡的使用說明」永遠是同一份內容。
+/// </para>
+///
+/// <para>
+/// 問 AI 助理走 <c>POST api/v1/help/assistant/ask</c>（串流）。要不要送「管理員」章節、稽核都在伺服器；
+/// 「停止」＝中斷請求，伺服器跟著停止呼叫 AI。
 /// </para>
 /// </summary>
-public partial class HelpView : ComponentBase, IAsyncDisposable
+public partial class HelpPage : ComponentBase, IAsyncDisposable
 {
-    /// <summary>解析好的說明（<see cref="HelpManualProvider"/> 只解析一次），之後切分類、搜尋都不重新解析。</summary>
+    /// <summary>解析一次（開頁時），之後切分類、搜尋都不重新解析。</summary>
     private HelpManual? manual;
     private string? loadError;
     private string RoleMessage = string.Empty;
@@ -34,7 +38,7 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
     private IReadOnlyList<HelpTopic> searchResults = [];
 
     private ElementReference rootElement;
-    private DotNetObjectReference<HelpView>? selfReference;
+    private DotNetObjectReference<HelpPage>? selfReference;
     private bool isAttached;
 
     /// <summary>重繪後要做的前端動作：高亮、捲到錨點、捲回頂端。</summary>
@@ -48,14 +52,11 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
     /// <summary>下一次畫完要把問答串強制捲到底（發問時）。</summary>
     private bool pendingAssistantScroll;
 
-    [Inject]
-    public HelpViewInterop HelpViewInterop { get; set; } = default!;
-
-    [Inject]
-    public HelpAssistantService HelpAssistantService { get; set; } = default!;
-
-    [Inject]
-    public IAuditLogService AuditLogService { get; set; } = default!;
+    [Inject] private HelpViewInterop HelpViewInterop { get; set; } = default!;
+    [Inject] private HelpApi HelpApi { get; set; } = default!;
+    [Inject] private PermissionView PermissionView { get; set; } = default!;
+    [Inject] private PageAccessApi PageAccessApi { get; set; } = default!;
+    [Inject] private ILogger<HelpPage> Logger { get; set; } = default!;
 
     #region 問 AI 助理（1.0.43）
 
@@ -118,7 +119,7 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         // 只帶已經成功回答的輪次當上下文：失敗或停止的那一輪沒有完整答案，送出去只會誤導。
         var history = assistantTurns
             .Where(x => x.IsDone && x.Error is null)
-            .Select(x => new HelpAssistantTurn(x.Question, x.Answer))
+            .Select(x => new HelpAssistantTurnDto { Question = x.Question, Answer = x.Answer })
             .ToList();
 
         var turn = new AssistantTurn(question);
@@ -130,48 +131,32 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         var token = askCts.Token;
         StateHasChanged();
 
-        var isAdmin = AuthenticationStateHelper.CheckIsAdmin();
-        string? model = null;
-        string outcome;
-
         try
         {
-            var answer = await HelpAssistantService.AskAsync(
-                manual.BuildAssistantContext(includeAdmin: isAdmin),
-                history,
+            var (answer, _) = await HelpApi.AskAsync(
                 question,
-                delta => _ = InvokeAsync(() =>
+                history,
+                assistantThreadKey,
+                delta =>
                 {
                     turn.Answer += delta;
                     StateHasChanged();
-                }),
-                token,
-                assistantThreadKey);
+                },
+                token);
 
-            turn.Answer = answer.Content;
-            turn.AnswerHtml = MarkdownRenderer.ToHtml(answer.Content);
-            model = answer.ModelName;
-            outcome = "成功";
+            turn.Answer = answer;
+            turn.AnswerHtml = MarkdownRenderer.ToHtml(answer);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            // 使用者按「停止」：已經送出的照樣記帳（gateway 記成 Cancelled），畫面留下已收到的部分。
+            // 使用者按「停止」：請求中斷，伺服器停止呼叫 AI（已送出的照樣記帳，記成 Cancelled）；畫面留下已收到的部分。
             turn.AnswerHtml = MarkdownRenderer.ToHtml(turn.Answer + "\n\n（已停止）");
-            outcome = "停止";
         }
         catch (Exception ex)
         {
-            if (ex is AiQuotaExceededException)
-            {
-                Logger.LogWarning("Help assistant blocked by AI quota.");
-            }
-            else
-            {
-                Logger.LogError(ex, "Help assistant failed.");
-            }
-
-            turn.Error = HelpAssistantFailure.Describe(ex);
-            outcome = $"失敗：{ex.GetType().Name}";
+            // 訊息是伺服器給的原文（額度用完、說明太長等，見 HelpAssistantFailure）；稽核也由伺服器寫。
+            Logger.LogWarning(ex, "Help assistant failed.");
+            turn.Error = ex is InvalidOperationException ? ex.Message : $"AI 助理沒有回答成功：{ex.Message}";
         }
         finally
         {
@@ -183,13 +168,6 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
             askCts?.Dispose();
             askCts = null;
         }
-
-        // 問題全文已經在 AI 對話紀錄裡，稽核只記長度與結果。
-        await AuditLogService.WriteForCurrentUserAsync(
-            AuditActions.HelpAiAsk,
-            success: outcome == "成功",
-            targetType: "Help",
-            detail: $"questionChars={question.Length}; includeAdmin={isAdmin}; model={model ?? "-"}; outcome={outcome}");
 
         if (!disposed)
         {
@@ -297,7 +275,7 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        // 離開頁面就停掉還在跑的回答，不要讓沒人看的答案繼續花錢。
+        // 離開頁面就停掉還在跑的回答（中斷請求），不要讓沒人看的答案繼續花錢。
         disposed = true;
         askCts?.Cancel();
 
@@ -310,84 +288,30 @@ public partial class HelpView : ComponentBase, IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
-    [Inject]
-    public AuthenticationStateHelper AuthenticationStateHelper { get; set; } = default!;
-
-    [Inject]
-    public AuthenticationStateProvider authStateProvider { get; set; } = default!;
-
-    [Inject]
-    public NavigationManager NavigationManager { get; set; } = default!;
-
-    [Inject]
-    public ILogger<HelpView> Logger { get; set; } = default!;
-
     protected override async Task OnInitializedAsync()
     {
-        var checkResult = await AuthenticationStateHelper.Check(authStateProvider, NavigationManager);
-        if (checkResult != AuthenticationCheckResult.Succeeded)
-        {
-            return;
-        }
-
-        if (AuthenticationStateHelper.CheckAccessPage(MagicObjectHelper.角色_使用說明) == false)
+        // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過，走到這裡一定是有效的登入者。
+        await PermissionView.LoadAsync();
+        if (!PermissionView.CanAccessPage(MagicObjectHelper.角色_使用說明))
         {
             RoleMessage = MagicObjectHelper.你沒有權限存取此頁面;
-            await AuthenticationStateHelper.RecordPageAccessDeniedAsync("/help");
-            Logger.LogWarning("Help view denied because current user has not this role permission.");
+            await PageAccessApi.RecordPageDeniedAsync("/help");
+            Logger.LogWarning("Help page denied because current user has not this role permission.");
             return;
         }
 
-        manual = HelpManualProvider.Manual;
-        if (manual is null)
+        var result = await HelpApi.GetManualAsync();
+        if (!result.Success || result.Data is not { } dto)
         {
-            loadError = HelpManualProvider.LoadFailedMessage;
+            loadError = result.ErrorMessage ?? "使用說明載入失敗，請聯絡系統管理員。";
             return;
         }
 
-        assistantAvailable = HelpAssistantService.IsAvailable;
-        assistantUnavailableReason = assistantAvailable
-            ? string.Empty
-            : $"AI 助理目前無法使用：{HelpAssistantService.UnavailableReason}";
-    }
+        var watch = Stopwatch.StartNew();
+        manual = HelpManual.Parse(dto.Markdown);
+        Logger.LogInformation("Help manual parsed. ElapsedMs={ElapsedMs}, Topics={Topics}", watch.ElapsedMilliseconds, manual.Topics.Count);
 
-    [Inject]
-    public HelpManualProvider HelpManualProvider { get; set; } = default!;
-
-    /// <summary>
-    /// 切掉文件開頭的維護資訊，只留正文。
-    ///
-    /// <para>
-    /// `docs/` 的每份文件都有一段表頭（文件版本／文件狀態／現行系統版本／最後核對日期），
-    /// 這一份還多一段「這個檔案同時是系統內說明頁的來源」的提醒。那些是寫給維護者看的，
-    /// **對使用者只是雜訊**——所以保留在檔案裡（文件庫的慣例不破），但不顯示在畫面上。
-    /// </para>
-    ///
-    /// <para>
-    /// 切法是「第一條水平線之前全部丟掉」。找不到分隔線時原樣回傳，
-    /// 寧可多顯示一段表頭，也不要因為格式改了就整頁空白。
-    /// </para>
-    ///
-    /// <remarks>public 是為了讓測試看得到（寫這段時 Web 專案還沒有 InternalsVisibleTo；
-    /// 0.4.122 起有了，但這個方法保持 public 不動）。</remarks>
-    /// </summary>
-    public static string StripDocumentFrontMatter(string markdown)
-    {
-        if (string.IsNullOrWhiteSpace(markdown))
-        {
-            return markdown;
-        }
-
-        var lines = markdown.Split('\n');
-
-        for (var index = 0; index < lines.Length; index++)
-        {
-            if (lines[index].Trim() == "---")
-            {
-                return string.Join('\n', lines.Skip(index + 1)).TrimStart('\n', '\r');
-            }
-        }
-
-        return markdown;
+        assistantAvailable = dto.AssistantAvailable;
+        assistantUnavailableReason = dto.AssistantUnavailableReason;
     }
 }

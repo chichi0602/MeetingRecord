@@ -1,8 +1,8 @@
 ﻿# 使用說明 PRD
 
-- 文件版本：1.4
+- 文件版本：1.5
 - 文件狀態：已實作
-- 現行系統版本：1.1.29
+- 現行系統版本：1.1.30
 - 首次實作版本：0.4.78
 - 最後核對日期：2026/11/11
 
@@ -23,7 +23,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/help`（`Components/Pages/Helps/HelpPage.razor`，掛 `MainLayout`，內容在 `HelpView`） |
+| UI 路由 | `/help`（1.1.30 起 WASM 頁：`Web.Client/Pages/Helps/HelpPage.razor`；以前是 Server 的 `HelpPage` → `HelpView`） |
 | REST API | `GET api/v1/help/manual`、`POST api/v1/help/assistant/ask`（1.1.29，WASM 遷移用；提問是串流，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)） |
 | 選單路徑 | 核心功能區：使用說明（`Menu.json` id=12，icon `help_outline`，排在待辦事項之後） |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[12] = MagicObjectHelper.角色_使用說明` |
@@ -62,15 +62,15 @@
 
 ## 四、內部系統運作
 
-- 資料流：`HelpPage.razor` → `HelpView.OnInitializedAsync`：`AuthenticationStateHelper.Check`（登入）→ `CheckAccessPage(角色_使用說明)` → `HelpManualProvider.Manual`（1.1.29 起 Singleton，讀一次：內嵌資源 → `StripDocumentFrontMatter()` → `HelpManual.Parse()`）→ 選中分類的預先渲染 HTML 或搜尋結果輸出到 `.markdown-content`。
-- **`HelpManual`（1.0.42，`Components/Views/Helps/HelpManual.cs`，純邏輯、可單元測試）**：
+- 資料流（1.1.30 起 WASM）：`HelpPage.OnInitializedAsync`：`PermissionView.CanAccessPage(角色_使用說明)`（被拒時 `PageAccessApi.RecordPageDeniedAsync("/help")`）→ `HelpApi.GetManualAsync()`（伺服器 `HelpManualProvider`：內嵌資源 → `HelpManual.StripDocumentFrontMatter()`，讀一次）→ 瀏覽器端 `HelpManual.Parse()`（約 300～480 ms）→ 選中分類的預先渲染 HTML 或搜尋結果輸出到 `.markdown-content`。問 AI 助理走 `HelpApi.AskAsync`（串流）；「停止」與離開頁面＝中斷請求。
+- **`HelpManual`（1.0.42，1.1.30 起在 `MeetingRecord.Share/Helpers/HelpManual.cs`，伺服器與 WASM 共用；純邏輯、可單元測試）**：
   - `Parse`：依 `##` 切章（```` ``` ```` 圍欄內的行不算標題），讀每章前一行的 `<!-- 說明分類：XXX -->` 歸組，**標記行在渲染前移除**（`MarkdownRenderer` 有 `DisableHtml()`，留著會原樣印出）；章與章之間的 `---` 丟掉；每個分類預先渲染一次 HTML。
   - 標記漏了或名稱不在 6 類內：該章歸到「新手入門」，記在 `UnknownMarkers`，`HelpManualProvider` 寫 Warning log；測試會擋。
   - 搜尋單位 `HelpTopic`：每章的引言（第一個 `###` 之前）、每個 `###` 小節、每則 `**Q：…**` 問答各一筆；`Breadcrumb` 為「分類 › 章 › 小節」（小節與章同名時不重複）。
   - `Search(query)`：以空白切成多個關鍵字、不分大小寫、**全部都要出現**（標題＋內文，AND）；標題命中者排前，其餘照文件順序；空白查詢回空清單。
   - `FindCategoryOfAnchor(id)`：找含該標題 `id` 的分類，供站內錨點跳轉。
   - `BuildAssistantContext(includeAdmin)`（1.0.43）：依分類順序串接（已去標記，每類前加 `# 分類：XXX`），給 AI 助理當參考資料。`includeAdmin=false` 時**排除「管理員」分類**（使用者選擇：一般使用者用不到、送出量約少四分之一，也避免 AI 介紹他看不到的功能）；管理者全送。注意 FAQ 的「管理員才會遇到的」小節在「常見問題」分類內，仍會送出。
-- **瀏覽器端（1.0.42）**：`wwwroot/js/help-view.js`（`App.razor` 載入）＋ `Services/HelpViewInterop.cs`（Scoped 註冊）：`/` 聚焦、`Esc` 清空（呼叫 .NET `ClearSearchFromJs`）；高亮只用 TreeWalker 在文字節點包 `<mark>`，不改 HTML 字串或屬性；攔截說明內容裡的 `a[href^="#"]`，呼叫 .NET `JumpToAnchorFromJs` 切分類、清搜尋後 `scrollIntoView`。interop 失敗只記 log 不拋出（與 `TodoAutoFitInterop` 同理由）。`scrollTo(root, id)`：有錨點時捲到該標題；切分類（無錨點）時只在 `.help-view-body` 的 `getBoundingClientRect().top < 0` 才 `scrollIntoView({behavior:'auto'})`（1.0.43）。
+- **瀏覽器端（1.0.42）**：`wwwroot/js/help-view.js`（`App.razor` 載入）＋ `HelpViewInterop`（1.1.30 起在 `Web.Client/Services`，命名空間仍是 `MeetingRecord.Web.Services`，WASM 端 Scoped 註冊）：`/` 聚焦、`Esc` 清空（呼叫 .NET `ClearSearchFromJs`）；高亮只用 TreeWalker 在文字節點包 `<mark>`，不改 HTML 字串或屬性；攔截說明內容裡的 `a[href^="#"]`，呼叫 .NET `JumpToAnchorFromJs` 切分類、清搜尋後 `scrollIntoView`。interop 失敗只記 log 不拋出（與 `TodoAutoFitInterop` 同理由）。`scrollTo(root, id)`：有錨點時捲到該標題；切分類（無錨點）時只在 `.help-view-body` 的 `getBoundingClientRect().top < 0` 才 `scrollIntoView({behavior:'auto'})`（1.0.43）。
 - **AI 助理（1.0.43，`MeetingRecord.Business/Services/HelpAssistant/`）**：
   - `HelpAssistantPromptBuilder`（純邏輯）：`SystemPrompt` 規定只根據 `<使用說明>` 回答、沒寫到就答「使用說明沒有寫到這件事」並建議聯絡管理員（不要猜）、繁體中文（台灣用語）、步驟用條列、按鈕與頁面名稱用「」、最後另起一行「參考：章節 › 小節」、只回答系統操作問題。`BuildUserPrompt`：說明全文包在 `<使用說明>` 標籤內＋最近 `MaxHistoryTurns=3` 輪（每則截到 2,000 字）＋本次問題（截到 1,000 字，空白丟 `ArgumentException`）。`BuildRelatedInfo`：「使用說明提問：＜問題前 40 字＞」。
   - `HelpAssistantService`（Scoped，形狀比照 `DiagnosticAiService`）：供應商取 `LlmSettings.DefaultProvider`，`IsAvailable`／`UnavailableReason`；一律經 `AiCallGateway`，所以用量上限、Token 用量帳本與 AI 對話紀錄都自動處理；功能別 `AiUsageFeature.HelpAssistant = 9`（「使用說明 AI 助理」，token 計費）；`ThreadKey` 為 `help:{每次開頁一個 guid}`，同一頁的連續提問在 AI 對話紀錄串成一串。
@@ -83,7 +83,7 @@
 - **標題 id 為 GitHub 風格（1.0.42）**：`MarkdownRenderer` 改用 `UseAutoIdentifiers(AutoIdentifierOptions.GitHub)`。原本預設的 `AllowOnlyAscii` 會把中文標題 id 刪到只剩 ASCII（例：「出現「已達 AI 用量上限」時」→ `ai`），說明裡的 `#錨點` 連結從來沒對上過。只影響標題的 `id` 屬性，AI 問答、會議紀錄草稿畫面無可見差異。
 - **內嵌資源**：`MeetingRecord.Web.csproj` 以 `<EmbeddedResource Include="..\..\..\docs\guides\系統使用說明.md" LogicalName="MeetingRecord.Web.系統使用說明.md" />` 嵌入；`HelpManualProvider.ResourceName`（1.1.29 前在 `HelpView`）必須與 `LogicalName` 一字不差，不一致時**建置照樣成功**，只有測試抓得到。
 - **讀取時去 BOM**：`docs/*.md` 一律含 BOM，`StreamReader(..., detectEncodingFromByteOrderMarks: true)` 把它吃掉；否則 Markdig 會把第一行 `# 標題` 當成普通段落。
-- **切表頭**：`HelpView.StripDocumentFrontMatter` 把**第一條 `---` 之前**全部丟掉；找不到分隔線時原樣回傳（寧可多一段表頭，也不要整頁空白）。方法是 `public static`，因為 Web 專案沒有 `InternalsVisibleTo`。
+- **切表頭**：`HelpManual.StripDocumentFrontMatter`（1.1.30 前在 `HelpView`）把**第一條 `---` 之前**全部丟掉；找不到分隔線時原樣回傳（寧可多一段表頭，也不要整頁空白）。方法是 `public static`。
 - **渲染管線**：`MarkdownRenderer`（Business 層，全站共用：AI 問答、會議紀錄草稿、本頁）明列 Markdig 擴充（pipe／grid table、強調、清單、腳註、自動連結等），**不用 `UseAdvancedExtensions()`**，並呼叫 `DisableHtml()`；連結只放行 `http`／`https`／`mailto` 與站內相對位址。
 
 ### 設計決策
@@ -162,17 +162,17 @@
 - 1.0.42：使用者反映整份一頁太長、找不到答案 → 改為 6 分類瀏覽＋頁內搜尋（關鍵字高亮、`/` 與 `Esc` 快速鍵、跨分類錨點跳轉）；`MarkdownRenderer` 標題 id 改 GitHub 風格；新增 `HelpManualSearchTests`。
 - 1.0.43：修正切換分類時頁面往上跳（只在內容頂端已捲出畫面時才捲回）；頁首新增「問 AI 助理」（`HelpAssistantService`／`HelpAssistantPromptBuilder`、`HelpManual.BuildAssistantContext`、功能別 `HelpAssistant = 9`、稽核 `Help.AiAsk`）；新增 `HelpAssistantTests`。
 - 1.1.29：WASM 遷移 M4，新增 `api/v1/help`（說明內容、AI 助理串流）；讀說明抽成 `HelpManualProvider`、失敗訊息抽成 `HelpAssistantFailure`，Server 頁照舊；新增 `HelpApiTests`。
+- 1.1.30：WASM 遷移 M4，`/help` 搬到 WASM（`Web.Client/Pages/Helps/HelpPage`）；`HelpManual` 搬到 Share、`HelpViewInterop` 搬到 Client；頁面不再判斷管理者與寫稽核（都在伺服器），「停止」＝中斷請求；端對端新增 AI-05（停止）。
 
 ### 程式
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Pages/Helps/HelpPage.razor`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Helps/HelpView.razor`、`HelpView.razor.cs`（`OnInitializedAsync`、`StripDocumentFrontMatter`、`JumpToAnchorFromJs`、`ClearSearchFromJs`）、`HelpView.razor.css`
-- `src/MeetingRecord/MeetingRecord.Web/Components/Views/Helps/HelpManual.cs`（`Parse`、`Search`、`FindCategoryOfAnchor`，1.0.42；`BuildAssistantContext`，1.0.43）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Helps/HelpPage.razor`、`HelpPage.razor.cs`（`OnInitializedAsync`、`OnAskAssistantAsync`、`JumpToAnchorFromJs`、`ClearSearchFromJs`）、`HelpPage.razor.css`（1.1.30 起 WASM）；`src/MeetingRecord/MeetingRecord.Web.Client/Api/HelpApi.cs`（1.1.30）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/HelpManual.cs`（`StripDocumentFrontMatter`、`Parse`、`Search`、`FindCategoryOfAnchor`，1.0.42；`BuildAssistantContext`，1.0.43；1.1.30 從 Web 搬來）
 - `src/MeetingRecord/MeetingRecord.Business/Services/HelpAssistant/HelpAssistantPromptBuilder.cs`、`HelpAssistantService.cs`（1.0.43，Scoped 註冊於 `ServiceCollectionExtensions`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/HelpAssistant/HelpAssistantFailure.cs`（1.1.29）
 - `src/MeetingRecord/MeetingRecord.Web/Helps/HelpManualProvider.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/HelpController.cs`、`src/MeetingRecord/MeetingRecord.Web/Streaming/NdjsonStreamer.cs`、`src/MeetingRecord/MeetingRecord.Dtos/Helps/HelpDtos.cs`（1.1.29）
 - `src/MeetingRecord/MeetingRecord.Share/Enums/AiUsageFeature.cs`（`HelpAssistant = 9`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/AuditActions.cs`（`HelpAiAsk`）
-- `src/MeetingRecord/MeetingRecord.Web/wwwroot/js/help-view.js`、`src/MeetingRecord/MeetingRecord.Web/Services/HelpViewInterop.cs`（1.0.42）
+- `src/MeetingRecord/MeetingRecord.Web/wwwroot/js/help-view.js`、`src/MeetingRecord/MeetingRecord.Web.Client/Services/HelpViewInterop.cs`（1.0.42；1.1.30 搬到 Client）
 - `src/MeetingRecord/MeetingRecord.Web/MeetingRecord.Web.csproj`（`EmbeddedResource` 與 `LogicalName`）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MarkdownRenderer.cs`（`ToHtml`、`AllowedSchemes`；1.1.17 從 Business 搬來）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`角色_使用說明`）

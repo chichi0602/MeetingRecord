@@ -1,7 +1,8 @@
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
-using MeetingRecord.Web.Components.Views.Helps;
+using MeetingRecord.Share.Helpers;
+using MeetingRecord.Web.Helps;
 
 namespace MeetingRecord.Tests;
 
@@ -15,11 +16,11 @@ public sealed partial class HelpManualSearchTests
 
     private static string ReadManualBody()
     {
-        using var stream = typeof(HelpView).Assembly.GetManifestResourceStream(ResourceName);
+        using var stream = typeof(HelpManualProvider).Assembly.GetManifestResourceStream(ResourceName);
         Assert.NotNull(stream);
 
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return HelpView.StripDocumentFrontMatter(reader.ReadToEnd());
+        return HelpManual.StripDocumentFrontMatter(reader.ReadToEnd());
     }
 
     private static readonly Lazy<HelpManual> RealManual = new(() => HelpManual.Parse(ReadManualBody()));

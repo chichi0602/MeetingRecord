@@ -1,11 +1,10 @@
-using System.Reflection;
 using System.Text;
-using MeetingRecord.Web.Components.Views.Helps;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Web.Helps;
 
 /// <summary>
-/// 使用說明的內容（1.1.29，從 <see cref="HelpView"/> 抽出，Server 頁與 <c>api/v1/help</c> 共用）。Singleton，讀一次就快取。
+/// 使用說明的內容（1.1.29 從 Server 的 <c>HelpView</c> 抽出）。1.1.30 起頁面是 WASM，只有 <c>api/v1/help</c> 用它。Singleton，讀一次就快取。
 ///
 /// <para>
 /// 內容來源是 <c>docs/guides/系統使用說明.md</c>，建置時以內嵌資源放進 Web 組件（見 <c>MeetingRecord.Web.csproj</c>）。
@@ -46,7 +45,7 @@ public sealed class HelpManualProvider(ILogger<HelpManualProvider> logger)
 
         // ⚠️ 一定要去掉 BOM：docs/*.md 一律含 BOM，不處理的話 Markdig 會把第一行的「# 標題」當成普通段落。
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        var markdown = HelpView.StripDocumentFrontMatter(reader.ReadToEnd());
+        var markdown = HelpManual.StripDocumentFrontMatter(reader.ReadToEnd());
         var manual = HelpManual.Parse(markdown);
 
         // 標記漏了或打錯不會壞畫面（歸到第一類），但會讓章節跑錯分類——留線索給維護者，測試也會擋。

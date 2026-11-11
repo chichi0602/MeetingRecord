@@ -36,6 +36,7 @@ builder.Services.AddScoped<UploadApi>();
 builder.Services.AddScoped<ProjectApi>();
 builder.Services.AddScoped<TodoExtractionApi>();
 builder.Services.AddScoped<MeetingRecord.Web.Client.Uploads.ProjectAttachmentUploader>();
+builder.Services.AddScoped<HelpApi>();
 
 // 1.1.23：會議影音檔上傳由整個前端共用一份（WASM 的 Scoped 就是整個分頁），換 WASM 頁不中斷。
 builder.Services.AddScoped<MeetingRecord.Web.Client.Uploads.MeetingUploadManager>();
@@ -45,6 +46,9 @@ builder.Services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.TodoAutoFitInterop>();
+
+// 1.1.30：使用說明頁的前端互動（/ 快速搜尋、高亮、錨點、問答串捲動），頁面搬到 WASM 後只有這裡用。
+builder.Services.AddScoped<MeetingRecord.Web.Services.HelpViewInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, ApiJobProgressSource>();
 builder.Services.AddScoped<AuthenticationStateProvider, SessionAuthenticationStateProvider>();
 builder.Services.AddAuthorizationCore();

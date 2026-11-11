@@ -58,6 +58,44 @@ public sealed class AiTests(E2EAppFixture app) : E2ETestBase(app)
         await Expect(page.Locator(".help-view-assistant-answer")).ToContainTextAsync(Marker);
     }
 
+    /// <summary>假 AI 的慢速標記（同 <c>E2EFakeAi.SlowMarker</c>；E2ETests 不參考 Web）。</summary>
+    private const string SlowMarker = "E2E-慢速";
+
+    [E2EFact]
+    [Trait("Scenario", "AI-05")]
+    [Trait("Title", "使用說明 AI 助理按「停止」：伺服器停止呼叫 AI，帳本記成取消、稽核記停止")]
+    [Trait("Page", "使用說明")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task HelpAssistant_Stop_ShouldCancelOnTheServer()
+    {
+        // 1.1.30 使用說明頁搬到 WASM：「停止」＝中斷請求，伺服器要跟著停（不再繼續花費），稽核由伺服器寫。
+        var page = await LoginAsAsync(Seed.Owner);
+        await GotoAsync(page, "/help", "問 AI 助理");
+        await using var db = App.CreateDbContext();
+        var ownerId = await db.MyUser.Where(x => x.Account == Seed.Owner.Account).Select(x => x.Id).SingleAsync();
+        var cancelledBefore = await db.AiUsageLog.CountAsync(x => x.UserId == ownerId && x.Outcome == MeetingRecord.Share.Enums.AiUsageOutcome.Cancelled);
+        var stoppedBefore = await db.AuditLog.CountAsync(x => x.ActorUserId == ownerId && x.Action == "Help.AiAsk" && x.Detail!.Contains("outcome=停止"));
+
+        var question = page.GetByPlaceholder("輸入操作上的問題", new() { Exact = false });
+        await question.FillAsync($"{SlowMarker} 請慢慢回答");
+        await question.DispatchEventAsync("change");
+        await ToolbarButton(page, "發問").ClickAsync();
+
+        // 串流開始（看到第一段文字）就按停止。
+        await Expect(page.Locator(".help-view-assistant-streaming")).ToBeVisibleAsync();
+        await ToolbarButton(page, "停止").ClickAsync();
+        await Expect(page.Locator(".help-view-assistant-answer").Last).ToContainTextAsync("（已停止）");
+        await Expect(ToolbarButton(page, "發問")).ToBeVisibleAsync();
+
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (await db.AiUsageLog.CountAsync(x => x.UserId == ownerId && x.Outcome == MeetingRecord.Share.Enums.AiUsageOutcome.Cancelled) <= cancelledBefore
+               || await db.AuditLog.CountAsync(x => x.ActorUserId == ownerId && x.Action == "Help.AiAsk" && x.Detail!.Contains("outcome=停止")) <= stoppedBefore)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "按停止後，伺服器要把這次呼叫記成取消、稽核記「停止」");
+            await Task.Delay(300);
+        }
+    }
+
     [E2EFact]
     [Trait("Scenario", "AI-03")]
     [Trait("Title", "從會議紀錄抽出待辦（開窗前費用確認）並加入")]

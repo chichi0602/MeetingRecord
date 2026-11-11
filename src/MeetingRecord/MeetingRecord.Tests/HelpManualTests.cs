@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Text;
-using MeetingRecord.Web.Components.Views.Helps;
+using MeetingRecord.Web.Helps;
 using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Tests;
@@ -11,16 +11,16 @@ namespace MeetingRecord.Tests;
 /// <para>
 /// 守的是「一份原始檔、兩個出口」這個設計本身：<c>docs/guides/系統使用說明.md</c> 在建置時
 /// 被嵌進 Web 組件，系統內的說明頁再把它渲染出來。csproj 的 <c>LogicalName</c> 與
-/// <c>HelpView</c> 的資源名稱只要有一邊打錯，**畫面上只會永遠停在「載入中…」而不報錯**——
+/// <c>HelpManualProvider</c> 的資源名稱只要有一邊打錯，**畫面上只會永遠停在「載入中…」而不報錯**——
 /// 這種靜默失效正是需要測試的。
 /// </para>
 /// </summary>
 public sealed class HelpManualTests
 {
-    /// <summary>與 csproj 的 LogicalName、HelpView.ResourceName 三者必須一致。</summary>
+    /// <summary>與 csproj 的 LogicalName、HelpManualProvider.ResourceName 三者必須一致。</summary>
     private const string ResourceName = "MeetingRecord.Web.系統使用說明.md";
 
-    private static Assembly WebAssembly => typeof(HelpView).Assembly;
+    private static Assembly WebAssembly => typeof(HelpManualProvider).Assembly;
 
     private static string ReadManual()
     {
@@ -80,7 +80,7 @@ public sealed class HelpManualTests
     {
         // 表頭（文件版本／最後核對日期）與那段「這個檔案也是說明頁的來源」是寫給維護者的，
         // 使用者看了只會困惑，所以畫面上要切掉——但檔案裡要留著，文件庫的慣例不破。
-        var shown = HelpView.StripDocumentFrontMatter(ReadManual());
+        var shown = HelpManual.StripDocumentFrontMatter(ReadManual());
 
         Assert.DoesNotContain("文件版本", shown, StringComparison.Ordinal);
         Assert.DoesNotContain("最後核對日期", shown, StringComparison.Ordinal);
@@ -96,7 +96,7 @@ public sealed class HelpManualTests
         // 格式改了就整頁空白是最糟的失敗方式。找不到分隔線時寧可多顯示一段表頭。
         const string noSeparator = "# 標題\n\n內文";
 
-        Assert.Equal(noSeparator, HelpView.StripDocumentFrontMatter(noSeparator));
+        Assert.Equal(noSeparator, HelpManual.StripDocumentFrontMatter(noSeparator));
     }
 
     [Fact]

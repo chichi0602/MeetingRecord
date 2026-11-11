@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
 namespace MeetingRecord.Web.Services;
 
 /// <summary>
 /// 使用說明頁（1.0.42）的前端橋接：/ 快速搜尋、關鍵字高亮、跨分類錨點。
+/// 1.1.30 頁面搬到 WASM，這個類別跟著搬到 Web.Client（命名空間不變）。
 ///
 /// <para>
 /// ⚠️ 失敗一律吞掉並記 log，不往上拋（理由同 <see cref="TodoAutoFitInterop"/>）：

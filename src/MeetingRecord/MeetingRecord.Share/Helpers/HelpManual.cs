@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using MeetingRecord.Share.Helpers;
 
-namespace MeetingRecord.Web.Components.Views.Helps;
+namespace MeetingRecord.Share.Helpers;
 
 /// <summary>使用說明的一個分類（左欄的一項）。</summary>
 public sealed record HelpCategory(string Name, string Markdown, string Html);
@@ -27,10 +26,45 @@ public sealed record HelpTopic(string Category, string Section, string Title, st
 /// 標記行會在渲染前剝掉——<see cref="MarkdownRenderer"/> 關掉了 HTML，不剝會被原樣印成文字。
 /// </para>
 ///
-/// <para>純函式、不碰 IO，方便單元測試；畫面在 <see cref="HelpView"/>。</para>
+/// <para>純函式、不碰 IO，方便單元測試。1.1.30 從 Web 搬到 Share：伺服器（<c>HelpManualProvider</c>，送給 AI 的內容）
+/// 與 WASM 的使用說明頁（分類與搜尋）共用同一套切法。</para>
 /// </summary>
 public sealed partial class HelpManual
 {
+    /// <summary>
+    /// 切掉文件開頭的維護資訊，只留正文（1.1.30 從 <c>HelpView</c> 搬來）。
+    ///
+    /// <para>
+    /// `docs/` 的每份文件都有一段表頭（文件版本／文件狀態／現行系統版本／最後核對日期），
+    /// 這一份還多一段「這個檔案同時是系統內說明頁的來源」的提醒。那些是寫給維護者看的，
+    /// **對使用者只是雜訊**——所以保留在檔案裡（文件庫的慣例不破），但不顯示在畫面上。
+    /// </para>
+    ///
+    /// <para>
+    /// 切法是「第一條水平線之前全部丟掉」。找不到分隔線時原樣回傳，
+    /// 寧可多顯示一段表頭，也不要因為格式改了就整頁空白。
+    /// </para>
+    /// </summary>
+    public static string StripDocumentFrontMatter(string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return markdown;
+        }
+
+        var lines = markdown.Split('\n');
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (lines[index].Trim() == "---")
+            {
+                return string.Join('\n', lines.Skip(index + 1)).TrimStart('\n', '\r');
+            }
+        }
+
+        return markdown;
+    }
+
     /// <summary>分類固定這 6 個、依這個順序（使用者選定）。說明檔的標記必須是其中之一，測試會擋。</summary>
     public static readonly IReadOnlyList<string> CategoryNames =
         ["新手入門", "會議與逐字稿", "專案與待辦", "AI 與費用", "管理員", "常見問題"];
@@ -49,7 +83,7 @@ public sealed partial class HelpManual
     /// <summary>沒有標記或標記不認得的章節名稱（歸到第一個分類）。正常情況是空的。</summary>
     public IReadOnlyList<string> UnknownMarkers { get; }
 
-    /// <summary>解析已去掉檔頭的說明檔（見 <see cref="HelpView.StripDocumentFrontMatter"/>）。</summary>
+    /// <summary>解析已去掉檔頭的說明檔（見 <see cref="StripDocumentFrontMatter"/>）。</summary>
     public static HelpManual Parse(string markdown)
     {
         var sections = SplitSections(markdown ?? string.Empty);

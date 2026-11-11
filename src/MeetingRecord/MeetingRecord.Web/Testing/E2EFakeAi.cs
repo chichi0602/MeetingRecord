@@ -29,6 +29,12 @@ public static class E2EFakeAi
     /// <summary>假待辦抽取回傳的待辦標題。</summary>
     public const string ExtractedTodoTitle = "E2E 假待辦：完成介面設計";
 
+    /// <summary>
+    /// 提示詞含這段字時放慢串流（每段 300 ms，整段約 2 秒），讓端對端來得及按「停止」（1.1.30，AI-05）。
+    /// E2ETests 不參考 Web，那邊另有一份同樣的字串。
+    /// </summary>
+    public const string SlowMarker = "E2E-慢速";
+
     public static IServiceCollection AddE2EFakeAi(this IServiceCollection services)
     {
         services.AddScoped<ITextGenerationProvider, FakeTextGenerationProvider>();
@@ -58,11 +64,12 @@ public static class E2EFakeAi
                 : $"## {AnswerMarker}\n\n- 這是端對端測試的固定內容，沒有呼叫任何付費 AI。\n- 下週五前完成介面設計。\n";
 
             // 分幾段回呼，模擬串流逐字顯示。
+            var delay = userPrompt.Contains(SlowMarker, StringComparison.Ordinal) ? 300 : 10;
             foreach (var piece in content.Chunk(12))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 onDelta?.Invoke(new string(piece));
-                await Task.Delay(10, cancellationToken);
+                await Task.Delay(delay, cancellationToken);
             }
 
             return new TextGenerationResult(content, null);

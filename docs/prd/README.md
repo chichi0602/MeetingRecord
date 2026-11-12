@@ -1,10 +1,10 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.37
+- 文件版本：1.38
 - 文件狀態：維護中
-- 現行系統版本：1.1.43
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 本目錄是產品需求的單一入口。PRD 以**產品能力**為單位；「已實作／部分實作」描述程式現況，「規劃中」必須獨立分區，不代表系統已提供。本系統源自 NET10-Blazor-Starter 樣板，0.4.25 起更名為 MeetingRecord 並發展為「AI 會議紀錄系統」，0.4.26 納入「會議紀錄提示詞」能力，**0.4.27 起實際呼叫 Azure OpenAI 完成影音檔的語音轉文字**（見 [會議紀錄](會議紀錄-prd.md)）。**0.4.31 起完成後半段**：套用提示詞範本、呼叫 Azure OpenAI 產生會議紀錄，並把逐字稿歸屬到專案項目（見 [會議紀錄產生流程](會議紀錄產生流程-prd.md)）。系統仍不含 RAG 能力。PRD 內容一律以程式碼、`Menu.json` 與測試為準。
 
@@ -12,35 +12,35 @@
 
 | 產品能力 | PRD | 入口／路由 | 主要程式來源 | 狀態 | 核對版本 |
 |----------|-----|-----------|--------------|------|----------|
-| 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`） | `Pages/Home.razor`、`SidebarMenuService`、`Menu.json`、`MainLayout`（含「關於」對話窗） | 已實作（0.4.120 起選單三層、`AdminOnlyMenuIds`／`GroupOnlyMenuIds`；1.0.30 起系統管理下三個分組，新增「AI 管理」） | 1.0.30 |
-| 儀表板 | [儀表板](儀表板-prd.md) | `/dashboard` | `Pages/Dashboards/DashboardPage.razor`、`DashboardService`、`DashboardMetrics` | 已實作（0.4.54；0.4.97 起全員可看、全公司彙總、不放明細） | 0.4.118 |
-| 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Components/Auths/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作（0.4.113 起首次登入強制改密碼） | 0.4.118 |
-| 專案項目 | [專案項目](專案項目-prd.md) | `/projects` | `Pages/Projects/ProjectPage.razor`、`ProjectService`、`ProjectController`、`ProjectTeamWriter` | 已實作 | 0.4.118 |
-| 待辦事項 | [待辦事項](待辦事項-prd.md) | `/todos`（1.0.44 起 `/todos?todoId=N` 深連結） | `Pages/Todos/TodoPage.razor`、`TodoService`、`TodoController`、`TodoChangeRecorder`、`UserNotificationService`、`NotificationBell` | 已實作（1.0.44 起異動紀錄、「期限已變更」膠囊、右上角站內通知鈴） | 1.0.44 |
+| 首頁與導覽 | [首頁與導覽](首頁與導覽-prd.md) | `/`（登入後導向 `/meetings`）、`/not-found` | `Web.Client/Pages/HomePage.razor`、`WasmLayout`、`AppShell`（含「關於」對話窗）、`NavMenu`、`SidebarMenuService`、`Menu.json` | 已實作（0.4.120 起選單三層、`AdminOnlyMenuIds`／`GroupOnlyMenuIds`；1.0.30 起系統管理下三個分組，新增「AI 管理」） | 1.0.30 |
+| 儀表板 | [儀表板](儀表板-prd.md) | `/dashboard` | `Web.Client/Pages/Dashboards/DashboardPage.razor`、`DashboardService`、`DashboardMetrics` | 已實作（0.4.54；0.4.97 起全員可看、全公司彙總、不放明細） | 0.4.118 |
+| 登入與帳號流程 | [登入與帳號流程](登入與帳號流程-prd.md) | `/Auths/Login`、`/Auths/Logout`、`/Auths/Pending`、`/Profile`、`/ChangePassword` | `Web/Components/Auths/*`（伺服器靜態頁）、`Web.Client/Pages/Account/*`、`MyUserServiceLogin`、`ExternalLoginService`、`AuthController` | 已實作（0.4.113 起首次登入強制改密碼） | 0.4.118 |
+| 專案項目 | [專案項目](專案項目-prd.md) | `/projects` | `Web.Client/Pages/Projects/ProjectPage.razor`、`ProjectService`、`ProjectController`、`ProjectTeamWriter` | 已實作 | 0.4.118 |
+| 待辦事項 | [待辦事項](待辦事項-prd.md) | `/todos`（1.0.44 起 `/todos?todoId=N` 深連結） | `Web.Client/Pages/Todos/TodoPage.razor`、`TodoService`、`TodoController`、`TodoChangeRecorder`、`UserNotificationService`、`NotificationBell` | 已實作（1.0.44 起異動紀錄、「期限已變更」膠囊、右上角站內通知鈴） | 1.0.44 |
 | AI 問答（含 AI 抽出待辦） | [AI 問答](AI問答-prd.md) | 無獨立路由：`/projects` 工具列與歷史會議紀錄列、`/meetings` 列（`AiChatModal`） | `AiChatModal`、`AiChatService`、`AiChatStore`（`AiChatPath`）、`ChatContextBuilder`、`AttachmentTextExtractor`、`AiChatDocumentExporter`、`TodoExtractionService`／`TodoExtractionModal` | 已實作（0.4.51；0.4.60 起對話存檔案系統） | 0.4.118 |
-| 使用說明 | [使用說明](使用說明-prd.md) | `/help` | `Web.Client/Pages/Helps/HelpPage.razor`（1.1.30 起 WASM）、`HelpManual`（Share）（內嵌 `docs/guides/系統使用說明.md` 為資源）、`MarkdownRenderer` | 已實作（0.4.78；1.0.42 起 6 分類＋頁內搜尋） | 1.0.42 |
-| 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Web.Client/Pages/Admins/MyUserPage.razor`（WASM，1.1.10）、`MyUserService`、`UserController` | 已實作 | 0.4.118 |
-| 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Web.Client/Pages/Admins/RoleViewPage.razor`（WASM，1.1.11）、`RoleController`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
-| Token 用量（原 AI 用量分析） | [Token 用量](Token用量-prd.md) | `/token-usage`（別名 `/ai-usage`） | `Web.Client/Pages/AiManagement/TokenUsagePage.razor`（1.1.37 起 WASM）、`TokenUsageGroupTable`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiQuotaService`、`TokenUsageReportExporter`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別；1.0.30 起改名 Token 用量、移到「AI 管理」並只限管理者；1.0.31 起有上限列、篩選、圖表／每日／依使用者／依功能／依模型／明細頁籤、明細窗（可跳 AI 對話紀錄）、CSV／PDF 匯出、刪除與清除） | 1.0.31 |
-| AI 對話紀錄 | [AI 對話紀錄](AI對話紀錄-prd.md) | `/ai-call-logs` | `Web.Client/Pages/AiManagement/AiCallLogPage.razor`（1.1.39 起 WASM）、`AiCallGateway`、`AiCallLogService`、`AiCallLogFileStore`、`AiLogRetentionBackgroundService` | 已實作（1.0.29 記錄、1.0.30 頁面；只限管理者） | 1.0.30 |
-| 稽核紀錄 | [稽核紀錄](稽核紀錄-prd.md) | `/audit-logs` | `Web.Client/Pages/Admins/AuditLogPage.razor`（1.1.43 起 WASM）、`AuditLogService`、`AuditLogQueryService`、`ClientIpProvider`、`AuditLogRetentionBackgroundService`、`AuditActions` | 已實作（寫入自樣板時期；1.0.32 起有查詢頁、來源 IP、保留 365 天，只限管理者；1.0.33 起記登出、Google 登入、密碼、啟停用、團隊成員、權限拒絕；1.0.34 起記專案、會議、待辦、團隊、分類、提示詞、AI 問答的異動與資料範圍擋下的寫入） | 1.0.34 |
-| 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Web.Client/Pages/Categories/CategoryPage.razor`（WASM，1.1.7）、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
-| 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Web.Client/Pages/Teams/TeamPage.razor`（WASM，1.1.8）、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
-| 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（WASM，1.1.9）、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
-| 會議紀錄（含影音上傳與語音轉文字）| [會議紀錄](會議紀錄-prd.md) | `/meetings` | `Pages/Meetings/MeetingPage.razor`、`MeetingService`、`MeetingFileStore`、`TranscriptionJobRunner`、`MeetingController` | 已實作 | 0.4.118 |
+| 使用說明 | [使用說明](使用說明-prd.md) | `/help` | `Web.Client/Pages/Helps/HelpPage.razor`、`HelpManual`（Share）（內嵌 `docs/guides/系統使用說明.md` 為資源）、`MarkdownRenderer` | 已實作（0.4.78；1.0.42 起 6 分類＋頁內搜尋） | 1.0.42 |
+| 使用者管理 | [使用者管理](使用者管理-prd.md) | `/myusers` | `Web.Client/Pages/Admins/MyUserPage.razor`、`MyUserService`、`UserController` | 已實作 | 0.4.118 |
+| 角色管理 | [角色管理](角色管理-prd.md) | `/roleviews` | `Web.Client/Pages/Admins/RoleViewPage.razor`、`RoleController`、`RoleViewService`、`RbacWriteService`、`DefaultRoleSeeder` | 已實作（0.4.108 起一鍵建立預設角色） | 0.4.120 |
+| Token 用量（原 AI 用量分析） | [Token 用量](Token用量-prd.md) | `/token-usage`（別名 `/ai-usage`） | `Web.Client/Pages/AiManagement/TokenUsagePage.razor`、`TokenUsageGroupTable`、`AiUsageRecorder`、`AiUsageAnalysisService`、`AiQuotaService`、`TokenUsageReportExporter`、`AiUsagePricing`、`ExchangeRateBackgroundService`、`scripts/Backfill-AiUsageCost.mjs` | 已實作（0.4.80；0.4.88 起換算新台幣；0.4.120 起在「監控與診斷」底下；0.4.121 起含「AI 日誌分析」、0.4.122 起含「AI 例外分析」功能別；1.0.30 起改名 Token 用量、移到「AI 管理」並只限管理者；1.0.31 起有上限列、篩選、圖表／每日／依使用者／依功能／依模型／明細頁籤、明細窗（可跳 AI 對話紀錄）、CSV／PDF 匯出、刪除與清除） | 1.0.31 |
+| AI 對話紀錄 | [AI 對話紀錄](AI對話紀錄-prd.md) | `/ai-call-logs` | `Web.Client/Pages/AiManagement/AiCallLogPage.razor`、`AiCallGateway`、`AiCallLogService`、`AiCallLogFileStore`、`AiLogRetentionBackgroundService` | 已實作（1.0.29 記錄、1.0.30 頁面；只限管理者） | 1.0.30 |
+| 稽核紀錄 | [稽核紀錄](稽核紀錄-prd.md) | `/audit-logs` | `Web.Client/Pages/Admins/AuditLogPage.razor`、`AuditLogService`、`AuditLogQueryService`、`ClientIpProvider`、`AuditLogRetentionBackgroundService`、`AuditActions` | 已實作（寫入自樣板時期；1.0.32 起有查詢頁、來源 IP、保留 365 天，只限管理者；1.0.33 起記登出、Google 登入、密碼、啟停用、團隊成員、權限拒絕；1.0.34 起記專案、會議、待辦、團隊、分類、提示詞、AI 問答的異動與資料範圍擋下的寫入） | 1.0.34 |
+| 分類清單 | [分類清單](分類清單-prd.md) | `/categories` | `Web.Client/Pages/Categories/CategoryPage.razor`、`CategoryService`、`CategoryController` | 已實作 | 0.4.118 |
+| 團隊清單 | [團隊清單](團隊清單-prd.md) | `/teams` | `Web.Client/Pages/Teams/TeamPage.razor`、`TeamService`、`TeamController`、`ProjectAccessService` | 已實作 | 0.4.118 |
+| 會議紀錄提示詞 | [會議紀錄提示詞](會議紀錄提示詞-prd.md) | `/prompttemplates` | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`、`PromptTemplateService`、`PromptTemplateController` | 已實作 | 0.4.118 |
+| 會議紀錄（含影音上傳與語音轉文字）| [會議紀錄](會議紀錄-prd.md) | `/meetings` | `Web.Client/Pages/Meetings/MeetingPage.razor`、`MeetingService`、`MeetingFileStore`、`TranscriptionJobRunner`、`MeetingController` | 已實作 | 0.4.118 |
 | 會議紀錄產生流程 | [會議紀錄產生流程](會議紀錄產生流程-prd.md) | 跨 `/meetings`、`/projects`（上傳→轉錄→套用提示詞→草稿） | `TranscriptionJobRunner`、`MeetingDraftJobRunner`、`ITextGenerationProvider`、`MeetingDraftProgressNotifier` | 已實作（前半段 0.4.27、後半段 0.4.31） | 0.4.118 |
-| 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Web.Client/Pages/Monitoring/SystemHealthPage.razor`（1.1.35 起 WASM）、Health services | 已實作（0.4.120 起改名並只限管理者；0.4.123 改版為 17 項、頁尾改最近 24 小時警告以上日誌；1.0.29 新增 AI 用量上限成為 18 項；1.0.35 起 AI 供應商設定顯示實際部署並提示不認得的設定鍵，另有手動「測試 AI 連線」） | 1.0.35 |
-| 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Web.Client/Pages/Monitoring/LogViewerPage.razor`（1.1.42 起 WASM）、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121；0.4.122 起 TraceId 即錯誤追蹤碼） | 0.4.122 |
-| 日誌等級設定 | [日誌等級設定](日誌等級設定-prd.md) | `/log-level-setting` | `Web.Client/Pages/Monitoring/LogLevelSettingPage.razor`（1.1.33 起 WASM）、`LogLevelRuntimeState` | 已實作（0.4.120） | 0.4.120 |
-| 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `Web.Client/Pages/Monitoring/ExceptionLogPage`（1.1.41 起 WASM）／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |
-| 資料庫用量 | [資料庫用量](資料庫用量-prd.md) | `/database-usage` | `Web.Client/Pages/Monitoring/DatabaseUsagePage.razor`（1.1.32 起 WASM）、`DatabaseUsageService`、`StorageUsageService` | 已實作（0.4.120） | 0.4.120 |
-| 紀錄分類與團隊權控 | [紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md) | 跨功能（所有清單查詢／檔案）| `PermissionChecker`、`ProjectAccessService`、`EffectiveTeamResolver`、`RecordAccessScopeProvider`、`TagStringHelper` | 已實作（團隊標籤權控 0.4.99 起不作用、0.4.103 欄位與相關方法已刪除，現行為專案的主責＋協作團隊） | 0.4.118 |
+| 系統健康監控 | [系統健康監控](系統健康監控-prd.md) | `/system-health` | `Web.Client/Pages/Monitoring/SystemHealthPage.razor`、Health services | 已實作（0.4.120 起改名並只限管理者；0.4.123 改版為 17 項、頁尾改最近 24 小時警告以上日誌；1.0.29 新增 AI 用量上限成為 18 項；1.0.35 起 AI 供應商設定顯示實際部署並提示不認得的設定鍵，另有手動「測試 AI 連線」） | 1.0.35 |
+| 日誌檢視（含 AI 日誌分析） | [日誌檢視](日誌檢視-prd.md) | `/logs` | `Web.Client/Pages/Monitoring/LogViewerPage.razor`、`LogQueryService`、`DiagnosticAiService` | 已實作（0.4.121；0.4.122 起 TraceId 即錯誤追蹤碼） | 0.4.122 |
+| 日誌等級設定 | [日誌等級設定](日誌等級設定-prd.md) | `/log-level-setting` | `Web.Client/Pages/Monitoring/LogLevelSettingPage.razor`、`LogLevelRuntimeState` | 已實作（0.4.120） | 0.4.120 |
+| 系統例外紀錄（含 AI 例外分析、錯誤追蹤碼） | [系統例外紀錄](系統例外紀錄-prd.md) | `/system-exceptions` | `Web.Client/Pages/Monitoring/ExceptionLogPage.razor`／`ExceptionLogService`／`ExceptionLogProvider`／`ExceptionLogWriter` | 已實作（0.4.122） | 0.4.122 |
+| 資料庫用量 | [資料庫用量](資料庫用量-prd.md) | `/database-usage` | `Web.Client/Pages/Monitoring/DatabaseUsagePage.razor`、`DatabaseUsageService`、`StorageUsageService` | 已實作（0.4.120） | 0.4.120 |
+| 資料可見範圍（團隊）與分類標籤 | [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)、[分類清單](分類清單-prd.md) | 跨功能（所有清單查詢／檔案）| `PermissionChecker`、`ProjectAccessService`、`EffectiveTeamResolver`、`RecordAccessScopeProvider`、`TagStringHelper` | 已實作：專案的主責＋協作團隊決定可見範圍，分類只是標籤 | 0.4.118 |
 
 ## 二、無選單入口的核心能力
 
 | 能力 | PRD 歸屬 | 現況 |
 |------|----------|------|
-| 動作級授權（`[HasPermission("resource:action")]`）與管理員短路 | [紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)、[角色管理](角色管理-prd.md) | 已實作，UI 與 API 共用單一 RBAC 權威 |
+| 動作級授權（`[HasPermission("resource:action")]`）與管理員短路 | [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)、[角色管理](角色管理-prd.md) | 已實作，UI 與 API 共用單一 RBAC 權威 |
 | 稽核軌跡（`AuditLog`：登入、使用者/角色/權限異動）| [使用者管理](使用者管理-prd.md)、[角色管理](角色管理-prd.md) | 已實作 |
 | 帳號安全（PBKDF2、帳號鎖定、TOTP 骨架）| [登入與帳號流程](登入與帳號流程-prd.md) | 已實作；TOTP 預設關閉 |
 | 檔案上傳（專案附件）| [專案項目](專案項目-prd.md) | 已實作 |
@@ -48,7 +48,7 @@
 | 背景工作佇列（行程內 `Channel<T>` + 單一 worker `BackgroundService`）| [會議紀錄](會議紀錄-prd.md)、[會議紀錄產生流程](會議紀錄產生流程-prd.md) | 已實作；語音轉錄與會議紀錄草稿產生各一條佇列，佇列不持久化（重啟時殘留工作改判失敗） |
 | 匯率更新背景服務（`ExchangeRateBackgroundService`）| [Token 用量](Token用量-prd.md) | 已實作（0.4.88）；定期抓匯率供 AI 用量換算新台幣，抓不到時用 `FallbackRate` |
 | 付費動作二次確認 | [AI 問答](AI問答-prd.md)、[會議紀錄](會議紀錄-prd.md)、[日誌檢視](日誌檢視-prd.md)、[系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.65）；轉錄、產生草稿、抽出待辦、AI 問答送出前一律提示；0.4.121 起 AI 日誌分析、0.4.122 起 AI 例外分析亦同 |
-| 例外收集與錯誤追蹤碼（`ExceptionLogProvider` → Channel → `ExceptionLogWriter`；`TraceCode`）| [系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.122）；畫面、Web API、背景作業、系統啟動、瀏覽器的例外自動收進 `ExceptionLog`，錯誤畫面顯示追蹤碼 |
+| 例外收集與錯誤追蹤碼（`ExceptionLogProvider` → Channel → `ExceptionLogWriter`；`TraceCode`）| [系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.122）；伺服器頁、Web API、背景作業、系統啟動、瀏覽器的例外自動收進 `ExceptionLog`（每個請求一組追蹤碼記在紀錄裡）；WASM 頁出錯時只顯示純文字橫幅「這個頁面發生未預期的錯誤，請重新整理頁面；若持續發生請聯絡系統管理員。」，不顯示追蹤碼 |
 | 外部 AI 供應商抽象（`ITranscriptionProvider`、`ITextGenerationProvider`）| [會議紀錄](會議紀錄-prd.md)、[會議紀錄產生流程](會議紀錄產生流程-prd.md) | 已實作；目前各只有 Azure OpenAI 一個實作 |
 
 ## 三、規劃中產品藍圖
@@ -56,7 +56,7 @@
 | 藍圖 | 現況界線 |
 |------|----------|
 | 二階段驗證（TOTP）強制啟用流程 | 資料模型與服務骨架已實作（`MyUser.TwoFactorEnabled/Secret`、`TotpService`），預設關閉，尚未提供強制啟用 UI 流程 |
-| 逐字稿的下載端點與保留期限政策 | 未實作。**0.4.82 起連線上預覽與編修都移除了**（0.4.55 曾提供），逐字稿只作為生成與 AI 問答的輸入。**1.0.40 起恢復唯讀檢視**：「會議紀錄與逐字稿」視窗的逐字稿頁籤可看、複製全文、下載 .txt（頁面經服務層讀檔交給瀏覽器存檔），仍不能編修；仍沒有 API／HTTP 下載端點，也沒有自動清理機制 |
+| 逐字稿的編修與保留期限政策 | 未實作。逐字稿只能唯讀檢視（1.0.40 起）：「會議紀錄與逐字稿」視窗的逐字稿頁籤可看、複製全文、下載 .txt（`GET api/v1/Meeting/{id}/transcript/file`，寫稽核），不能編修；也沒有自動清理機制 |
 | 各能力後續構想 | 見各 PRD 的「規劃中需求」章節，以及 [Meeting Ink 對標項目決策清單](../planning/08-MeetingInk-對標項目決策清單.md) |
 
 ## 四、PRD 維護規則

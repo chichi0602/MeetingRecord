@@ -1,12 +1,12 @@
 ﻿# 待辦事項 PRD
 
-- 文件版本：1.19
+- 文件版本：1.20
 - 文件狀態：已實作
-- 現行系統版本：1.1.19
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.32
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
-> **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 的 `TodoRepository` 套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
+> **0.4.99：待辦跟著專案的可見範圍走**（0.4.102 起專案可見範圍由主責＋協作團隊決定，0.4.101 為資料群組，0.4.99～0.4.100 為專案成員資格）。清單、負責人面板、單筆讀取、新增、修改、完成、刪除都限制在自己看得到的專案（`TodoService` 注入 `ProjectAccessService`）；修改時原專案與目標專案都要看得到，不能把待辦搬進別人的專案。API 走同一個 `TodoService`，套同一條規則。下文「0.4.66 起完全沒有權控」描述的是 0.4.66～0.4.98 的狀態。
 
 ## 一、目標與範圍
 
@@ -20,7 +20,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/todos`（`TodoPage.razor`，掛 `MainLayout`） |
+| UI 路由 | `/todos`（`Web.Client/Pages/Todos/TodoPage.razor`，WASM） |
 | REST API | `api/Todo`、`api/v1/Todo`（JWT Bearer） |
 | 選單路徑 | 專案管理（`Menu.json` id=2）→ 待辦事項（id=22，icon `checklist`） |
 | 權限鍵 | 資源鍵「待辦事項」（`MagicObjectHelper.角色_待辦事項`），動作 `view`／`create`／`edit`／`delete`；管理員短路。1.0.52 起刪除看「是不是專案負責人」＋`edit`，不看 `delete`（見「刪除只限專案負責人」） |
@@ -77,7 +77,7 @@
 面板裡的四顆狀態膠囊（待辦／進行中／已完成／逾期）從純顯示改成可點的 `<button>`，
 點下去把**下面的小清單**篩成「這個人 ＋ 這個狀態」。左邊的主清單、膠囊自己的數字與完成度進度條都不動。
 
-實作是純記憶體的檢視層篩選（1.1.19 起 `Web.Client/Pages/Todos/TodoOwnerFilter.cs`），**服務層完全不動**：
+實作是純記憶體的檢視層篩選（`Web.Client/Pages/Todos/TodoOwnerFilter.cs`），**服務層完全不動**：
 `GetByOwnerAsync` 本來就刻意不分頁（單人量級小），所以在記憶體篩的成本可忽略。
 
 | 議題 | 結論 |
@@ -117,7 +117,7 @@
 | 哪些會通知 | **只有期限、負責人、狀態**。標題、優先度只記錄不通知——多半是錯字或措辭修正，通知只會變成雜訊 |
 | 通知誰 | `ProjectAccessService.GetProjectMemberIdsAsync`：專案主責＋協作團隊的成員、只算啟用中的帳號、**排除操作者本人**。不是團隊成員的管理者**不通知**（會被全公司的異動淹沒）。待辦搬到別的專案時，兩個專案的成員都通知 |
 | 新增、刪除 | 不記錄；刪除待辦會連同異動紀錄一起刪掉（Cascade）。**1.0.55 起甲方帳號新增、刪除會通知專案負責人**（見下節） |
-| 寫入路徑 | `TodoService.UpdateAsync`、`SetCompletedAsync`（勾選完成）、`ApplyExtractedUpdateAsync`（AI 抽出更新）全部經（1.1.18 起 Web API 也走 `TodoService`，`via=Api`） `TodoChangeRecorder`：`StageAsync` 與待辦同一次 `SaveChanges` 寫入（一起成功、一起失敗），存檔成功後 `Publish` 叫醒各人的通知鈴 |
+| 寫入路徑 | `TodoService.UpdateAsync`、`SetCompletedAsync`（勾選完成）、`ApplyExtractedUpdateAsync`（AI 抽出更新）全部經 `TodoChangeRecorder`（Web API 也走 `TodoService`，`via=Api`）：`StageAsync` 與待辦同一次 `SaveChanges` 寫入（一起成功、一起失敗），存檔成功後 `Publish` 叫醒各人的通知鈴 |
 | 通知文字 | 「王小明 把『完成報表』的期限改為 2026/10/31、負責人改為 林大華（來源：從〈10/16 週會〉抽出）」，來源後綴只有 AI 抽出更新才有 |
 | 通知保留 | `LogRetentionSettings:NotificationDays`（預設 90 天，0＝不清），每日清一次，不寫稽核；歷史留在 `TodoChange` |
 
@@ -125,7 +125,7 @@
 
 起因：要開帳號給專案的甲方，甲方在待辦頁可以編輯；要改時程時附上原因，專案的人透過小鈴鐺收到。
 
-- **改期限原因**：修改視窗裡期限的**日期**跟開啟時不同，就出現必填的「改期限原因」（最多 500 字）。服務層 `TodoService.UpdateAsync` 與 API `TodoRepository.UpdateAsync`（`TodoCreateUpdateDto.dueDateChangeNote`）共用 `TodoChangeRecorder.ValidateDueDateNote`，空白回「改期限請填寫原因。」（API 400）。只差時間、同一天不算改期限。AI 抽出更新既有待辦（`ApplyExtractedUpdateAsync`）不需要。
+- **改期限原因**：修改視窗裡期限的**日期**跟開啟時不同，就出現必填的「改期限原因」（最多 500 字）。服務層 `TodoService.UpdateAsync`（API 帶 `TodoCreateUpdateDto.dueDateChangeNote`）以 `TodoChangeRecorder.ValidateDueDateNote` 檢查，空白回「改期限請填寫原因。」（API 400）。只差時間、同一天不算改期限。AI 抽出更新既有待辦（`ApplyExtractedUpdateAsync`）不需要。
 - 原因存在期限那一列 `TodoChange.Note`，異動紀錄視窗在該列下方顯示「原因：…」，「期限已變更」膠囊的提示文字結尾加「，原因：…」，通知訊息結尾加「（備註：…）」。收件人規則不變（專案主責＋協作團隊成員，不含改的人）。
 - **甲方帳號**：使用者管理勾「甲方」（`MyUser.IsExternal`），角色用預設角色「甲方」（專案只能看、待辦全部動作）；看得到哪些專案照樣靠團隊——把甲方放進一個團隊，再把該團隊設為專案的協作團隊。
   - 甲方的**任何修改**都通知**專案負責人**（`Project.OwnerUserId`，帳號啟用中）：修改任何欄位（含描述、優先度、標題）、勾完成、新增（「戊 新增了待辦『…』」）、刪除（「戊 刪除了待辦『…』」）。負責人同時是團隊成員時只收一則（內容列出全部變動）。`TodoChangeRecorder.StageAsync`／`StageCreatedAsync`／`StageDeletedAsync`，畫面與 API 都經過。
@@ -159,15 +159,15 @@
 - **檢視切換「使用中｜已完成｜全部」**（`ProjectScopeSwitch`，與專案頁共用）：預設「使用中」，**不記憶**，每次開頁都回到使用中。清單與右側負責人面板（筆數、完成度、小清單）都只算目前檢視範圍內專案的待辦——`DataRequest.ProjectScope`、`GetOwnerSummariesAsync`／`GetByOwnerAsync` 的 `scope` 參數，經 `ProjectArchiveRules.ApplyScope` 依待辦所屬專案的狀態過濾（預設 `All`，API 與其他呼叫端不受影響）。
 - **專案過濾**跟著檢視列出對應的專案；切換檢視時，原本選的專案不在範圍內就清掉。
 - **新增／編輯表單的專案選單**不列已完成專案（正在編輯的那筆本來就在已完成專案時例外，避免顯示空白）。
-- **唯讀**：已完成專案的待辦，勾完成停用，修改、刪除、新增子項目按鈕隱藏；異動紀錄照常可看。管理者不受限。服務層（`TodoService` 的新增、修改、勾完成、刪除、AI 抽出更新既有待辦）與 API（`TodoRepository`）都經 `ProjectArchiveRules.CheckWritableAsync` 擋下，訊息「這個專案已完成（封存），請先重新開啟再修改。」；修改時原專案與目標專案都檢查，**搬進或搬出已完成專案都不行**。API 的新增、修改、刪除回 **400**。
+- **唯讀**：已完成專案的待辦，勾完成停用，修改、刪除、新增子項目按鈕隱藏；異動紀錄照常可看。管理者不受限。服務層（`TodoService` 的新增、修改、勾完成、刪除、AI 抽出更新既有待辦）都經 `ProjectArchiveRules.CheckWritableAsync` 擋下（API 也走 `TodoService`），訊息「這個專案已完成（封存），請先重新開啟再修改。」；修改時原專案與目標專案都檢查，**搬進或搬出已完成專案都不行**。API 的新增、修改、刪除回 **400**。
 - **深連結**：通知鈴或 `/todos?todoId=N` 點到已完成專案的待辦時，檢視自動切到「全部」，清單上才找得到它。
 
 ### 刪除只限專案負責人（1.0.52）
 
 專案的「負責人」1.0.52 起是帳號（規則見 [專案項目 PRD](專案項目-prd.md)），**刪除待辦只限該專案的負責人與管理者**；新增、修改、勾完成、新增子項目照舊，同專案的人依角色都能做。
 
-- 畫面：「刪除」按鈕只在**是專案負責人**＋有 `待辦事項:edit`＋專案不是唯讀時出現（1.1.19 起由 API 依呼叫者算好放在 `TodoDto.CanDelete`，頁面照著顯示）。負責人是「一般使用者」角色（沒有 `delete`）也能刪；不是負責人的「主管」有 `delete` 也看不到按鈕。
-- 服務層：`TodoService.DeleteAsync`（1.1.18 起 API 也走這裡）先擋封存，再用 `ProjectAccess.IsProjectOwner(todo.ProjectId)` 擋，訊息「只有專案負責人可以刪除待辦。」（`ProjectOwnerRules.DeleteTodoMessage`）。API `DELETE api/Todo/{id}` 因此改要求 `待辦事項:edit`（以前是 `delete`），被擋回 400 `ValidationError`。
+- 畫面：「刪除」按鈕只在**是專案負責人**＋有 `待辦事項:edit`＋專案不是唯讀時出現（由 API 依呼叫者算好放在 `TodoDto.CanDelete`，頁面照著顯示）。負責人是「一般使用者」角色（沒有 `delete`）也能刪；不是負責人的「主管」有 `delete` 也看不到按鈕。
+- 服務層：`TodoService.DeleteAsync`（API 也走這裡）先擋封存，再用 `ProjectAccess.IsProjectOwner(todo.ProjectId)` 擋，訊息「只有專案負責人可以刪除待辦。」（`ProjectOwnerRules.DeleteTodoMessage`）。API `DELETE api/Todo/{id}` 因此改要求 `待辦事項:edit`（以前是 `delete`），被擋回 400 `ValidationError`。
 - 刪主待辦照舊連同子項目一起刪；子項目本身也一樣只有負責人能刪。
 - 升級前對不到帳號、還沒有負責人的專案，待辦只有管理者能刪。
 - 待辦自己的「負責人」欄位仍是文字，與這裡的專案負責人無關。
@@ -201,8 +201,8 @@
 
 ## 五、內部系統運作
 
-- 資料流（1.1.19 起）：WASM 頁 `TodoPage` → `TodoApi` → `TodoController` → `TodoService` → `BackendDBContext.Todo`；以前是 Blazor Server 的 `TodoViewView` 直接注入服務。REST API 走 `TodoController` → 同一個 `TodoService`（1.1.18 起；以前是 `TodoRepository`，兩套規則並存），回 `ApiResult`；畫面用的清單樹、負責人面板、異動紀錄等另有端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
-- **1.1.19 起清單預設排序真的生效**：表格在沒有排序時也會回報某一欄、方向為「無」，以前照樣送出排序欄位，服務層因此跳過預設排序（有截止日的在前、越早到期越前面）又沒有方向可排，分頁順序不固定；現在沒有方向就不送排序欄位。
+- 資料流：WASM 頁 `TodoPage` → `TodoApi` → `TodoController` → `TodoService` → `BackendDBContext.Todo`。REST API 走 `TodoController` → 同一個 `TodoService`，回 `ApiResult`；畫面用的清單樹、負責人面板、異動紀錄等另有端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- **清單預設排序**：表格在沒有排序時也會回報某一欄、方向為「無」；沒有方向就不送排序欄位，否則服務層會跳過預設排序（有截止日的在前、越早到期越前面）又沒有方向可排，分頁順序不固定。
 - 讀取：清單與單筆都 `Include(Project)` 與 `Include(Meeting)` 以取得關聯名稱；`ProjectTitle`／`MeetingTitle` 由 AutoMapper 的 `ForMember` 自導覽屬性帶出。
 - 0.4.66 起 `TodoService` 不再注入 `IRecordAccessScopeProvider`——四處列級權控（清單、單筆、勾選完成、修改前置檢查）與 `DashboardService.BuildTodoQuery` 的團隊過濾全部移除。
 - 前置檢查：新增與修改都會驗證所屬專案存在（0.4.66 起不再檢查團隊可見範圍）。
@@ -220,13 +220,13 @@
 
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Todo.cs`（`Todo`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoService.cs`（`TodoService`：`AddAsync`、`UpdateAsync`、`SetCompletedAsync`、`DeleteAsync`、`BeforeAddCheckAsync`、`BeforeUpdateCheckAsync`）
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoPage.razor`、`TodoPage.razor.cs`（1.1.19 起是 WASM 頁，原 `TodoViewView`）；`src/MeetingRecord/MeetingRecord.Web.Client/Api/TodoApi.cs`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoPage.razor`、`TodoPage.razor.cs`；`src/MeetingRecord/MeetingRecord.Web.Client/Api/TodoApi.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoChangeRecorder.cs`（`StageAsync`、`Publish`，1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Notifications/UserNotificationService.cs`、`UserNotificationNotifier.cs`；`MeetingRecord.Web/BackgroundServices/NotificationRetentionBackgroundService.cs`（1.0.44）
-- `src/MeetingRecord/MeetingRecord.Web/Components/Commons/NotificationBell.razor`（1.0.44）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/NotificationBell.razor`（1.0.44）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/TodoHierarchyRules.cs`（`ValidateAsync`、`MoveChildrenAsync`，1.0.45）
-- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/ProjectScopeSwitch.razor`（1.0.46；1.1.17 起在 Web.Client）
+- `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/ProjectArchiveRules.cs`（`CheckWritableAsync`、`ApplyScope`，1.0.46）、`src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/ProjectScopeSwitch.razor`（1.0.46）
 - 測試：`TodoChangeAndNotificationTests`（35 條：1.0.44 的 15 條＋1.0.45 子項目 11 條＋1.0.46 封存 8 條＋1.0.52 `DeleteTodo_OnlyProjectOwnerOrAdmin_WebAndApi`）、`TodoServiceTests`
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）、`TodoBatchSelection.cs`；逾期與截止日顯示規則 `src/MeetingRecord/MeetingRecord.Share/Helpers/TodoRules.cs`（1.1.19 從 `TodoAdapterModel` 抽出，伺服器與 WASM 共用）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoOwnerFilter.cs`（`TodoOwnerFilter`）、`TodoBatchSelection.cs`；逾期與截止日顯示規則 `src/MeetingRecord/MeetingRecord.Share/Helpers/TodoRules.cs`（伺服器與 WASM 共用）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Todos/TodoAutoFit.cs`（`TodoAutoFit.Decide`）、`wwwroot/js/todo-auto-fit.js`（`window.meetingRecordTodoAutoFit`）
 - 交叉連結：[專案項目 PRD](專案項目-prd.md)、[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

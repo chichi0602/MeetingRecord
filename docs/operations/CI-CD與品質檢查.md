@@ -1,10 +1,10 @@
 ﻿# CI-CD 與品質檢查
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.1.53
 - 首次實作版本：0.2.8
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/11/12
 
 本專案以 **GitHub Actions** 在每次 push 與 PR 時自動建置、測試與品質檢查。工作流程定義於 [`.github/workflows/dotnet-ci.yml`](../../.github/workflows/dotnet-ci.yml)。
 
@@ -28,8 +28,8 @@
 | Checkout | `actions/checkout@v6` | 取出原始碼 |
 | Setup .NET | `actions/setup-dotnet@v5`（`10.0.x`） | 安裝 SDK |
 | Restore | `dotnet restore src/MeetingRecord/MeetingRecord.slnx` | 還原相依套件 |
-| Build | `dotnet build ... --configuration Release --no-restore` | Release 編譯 |
-| Test | `dotnet test ... --configuration Release --no-build --verbosity normal` | 執行 xUnit 測試（見 [測試指南](../guides/測試指南.md)） |
+| Build | `dotnet build src/MeetingRecord/MeetingRecord.slnx --configuration Release --no-restore` | Release 編譯整個方案（含 WASM 前端與兩個測試專案） |
+| Test | `dotnet test src/MeetingRecord/MeetingRecord.slnx --configuration Release --no-build --verbosity normal` | 執行方案內的 xUnit 測試（見 [測試指南](../guides/測試指南.md)）；端對端測試（`MeetingRecord.E2ETests`）因 CI 沒有設定 `MEETINGRECORD_E2E=1` 而全部略過，只編譯不執行 |
 | Documentation encoding check | `./scripts/Test-DocsEncoding.ps1`（pwsh） | 檢查 `docs/` 文件編碼 |
 | Vulnerability scan | `dotnet list ... package --vulnerable --include-transitive` | 掃描已知弱點套件 |
 

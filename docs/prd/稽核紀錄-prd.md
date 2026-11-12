@@ -1,10 +1,10 @@
 ﻿# 稽核紀錄 PRD
 
-- 文件版本：1.7
+- 文件版本：1.8
 - 文件狀態：已實作（第一批查詢頁與基礎建設 1.0.32、第二批帳號安全事件與權限拒絕 1.0.33、第三批業務資料事件 1.0.34）
-- 現行系統版本：1.1.46
+- 現行系統版本：1.1.53
 - 首次實作版本：樣板時期（0.4.25 以前，寫入 `AuditLog` 表，migration `AddAuditLog`）、1.0.32（查詢頁、來源 IP、保留期限）、1.0.33（帳號安全事件、權限拒絕）、1.0.34（業務資料事件）；移植自 NET10-Blazor-Starter 的 /audit-logs
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 ## 一、目標與範圍
 
@@ -43,9 +43,9 @@
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
-| `/audit-logs` | 系統管理 → 帳號與權限（id 35）→ 稽核紀錄（id 40，`fact_check`） | **只限管理者**（1.1.43 起 WASM 頁以 `PermissionView.IsAdmin` 判斷、API `[AdminOnly]`；`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄，不能勾給角色） | 系統管理員 |
+| `/audit-logs` | 系統管理 → 帳號與權限（id 35）→ 稽核紀錄（id 40，`fact_check`） | **只限管理者**（頁面以 `PermissionView.IsAdmin` 判斷、API `[AdminOnly]`；`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄，不能勾給角色） | 系統管理員 |
 
-REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`GET actions`、`POST search`、`POST export/csv`、`POST purge`、`POST clear-all`（沒有單筆刪除），匯出與清除的稽核由伺服器寫（清除類在刪除之後，`via=Api`），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。1.1.43 起頁面是 WASM 頁——最後一個應用程式的 Server 頁。
+REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`GET actions`、`POST search`、`POST export/csv`、`POST purge`、`POST clear-all`（沒有單筆刪除），匯出與清除的稽核由伺服器寫（清除類在刪除之後，`via=Api`），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 
 ## 三、畫面與欄位
 
@@ -104,11 +104,11 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
 - **資料表** `AuditLog`：`OccurredAt`（**UTC**）、`ActorUserId`、`ActorAccount`（快照）、`Action`、`TargetType`、`TargetId`、`Detail`、`Success`、`ClientIp`（1.0.32，最長 64）。
   - 索引（1.0.32，migration `AddAuditLogClientIpAndIndexes`）：`OccurredAt`、`Action`、`(ActorUserId, OccurredAt)`。
 - **寫入** `IAuditLogService` → `AuditLogService`（Business/Services/Other）：
-  - 1.0.32 起每次用同一組 `DbContextOptions<BackendDBContext>` 自己 new 一個短命 context 寫入。以前借用整條 Blazor 連線共用的 context：SaveChanges 會順便存掉呼叫端還沒存的變更，失敗時那筆稽核又留在追蹤器裡，下次存檔被重送。
+  - 1.0.32 起每次用同一組 `DbContextOptions<BackendDBContext>` 自己 new 一個短命 context 寫入，不借用呼叫端的 context：借用的話 SaveChanges 會順便存掉呼叫端還沒存的變更，失敗時那筆稽核又留在追蹤器裡，下次存檔被重送。
   - 寫入失敗只記 Warning，不中斷業務動作。
   - 不要在交易裡面呼叫（新 context 走另一條連線，SQLite 會等交易的寫入鎖）；目前一律在 Commit 之後寫。
 - **來源 IP** `IClientIpProvider` → `Web/Auth/ClientIpProvider`（scoped）：
-  - 先用 Blazor 連線建立／重連時由 `ApplicationCircuitHandler` 記下的 IP，其次用目前 `HttpContext` 的連線 IP。IPv4-mapped IPv6 轉回 IPv4。
+  - 取目前 `HttpContext` 的連線 IP（網頁的動作都經 API，一個請求一份）。IPv4-mapped IPv6 轉回 IPv4。
   - 反向代理後面靠既有的 `UseForwardedHeaders`（X-Forwarded-For）。
   - 取 IP 失敗不影響寫入（記 null）。
 - **查詢** `AuditLogQueryService`（Business/Services/DataAccess）：`GetAsync`、`GetForExportAsync`、`GetDistinctActionsAsync`、`PurgeBeforeAsync(utc)`、`PurgeAsync(days)`、`ClearAllAsync`。UTC↔本地的三個轉換點（篩選、顯示、清除門檻）集中在這裡；SQLite 讀回來是 `Kind=Unspecified`，先標成 UTC 再轉。刪除用 `ExecuteDelete`，不經變更追蹤。
@@ -137,16 +137,16 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
 ### 寫入規則（1.0.33）
 
 - **登入成功由呼叫端寫**：`MyUserServiceLogin.LoginAsync` 只寫失敗類（帶 `via`）。帳密對了不代表真的登入了——API 會因為必須先改密碼而拒絕（寫 `Login.Failed reason=MustChangePassword`），網頁簽入 Cookie 也可能失敗——所以 `Login.Success` 由網頁在 `SignInAsync` 之後、API 在發出權杖之後才寫。
-- **強制登出**：`AuthenticationStateHelper.Check` 把人踢出時導向 `/Auths/Logout?reason=…`（`LogoutReasons`）。登出頁在 `SignOutAsync` 之前取身分，原因在白名單裡寫 `Logout.Forced`，否則有身分就寫 `Logout.Manual`；沒身分也沒原因不寫。使用者手動帶 `?reason=` 只會改變自己那筆的分類，沒有危害。
-- **頁面權限拒絕**：各頁在拒絕分支呼叫 `AuthenticationStateHelper.RecordPageAccessDeniedAsync(route)`。刻意不放進 `CheckAccessPage`／`CheckIsAdmin`，因為側邊欄過濾每個選單項目都會呼叫它們。`PageAccessDeniedAuditTests` 掃原始碼守門。管理頁執行動作前的靜默 `CheckIsAdmin` 不記。
+- **強制登出**：Session API 判定帳號刪除、停用或沒有角色時，`WasmLayout` 導向 `/Auths/Logout?reason=…`（`LogoutReasons`）。登出頁在 `SignOutAsync` 之前取身分，原因在白名單裡寫 `Logout.Forced`，否則有身分就寫 `Logout.Manual`；沒身分也沒原因不寫。使用者手動帶 `?reason=` 只會改變自己那筆的分類，沒有危害。
+- **頁面權限拒絕**：各 WASM 頁在顯示「你沒有權限存取此頁面」的分支呼叫 `PageAccessApi.RecordPageDeniedAsync(route)`（`POST api/v1/audit/page-denied`，目標 `Page#{路由}`，摘要 `via=Wasm`）。刻意不放進權限判斷本身（`CanAccessPage`、`IsAdmin`），因為選單過濾與按鈕顯示也會呼叫它們。`PageAccessDeniedAuditTests` 掃原始碼守門。管理者限定 API（`[AdminOnly]`）擋下時也寫 `Permission.Denied`（`via=Api`）。
 - **API 權限拒絕**：`HasPermissionAttribute` 回 403 前寫入；寫入失敗照樣回 403。401（未登入）不記。
 - **自己改密碼**：操作者與目標都是本人。欄位空白、兩次不一致這類輸入錯誤不記；目前密碼錯誤記失敗。
 - **團隊成員**：實際異動 0 人時不寫；摘要最多列 50 個使用者編號。
 
 ### 寫入規則（1.0.34，業務資料）
 
-- **操作者由寫入服務自己找**：`IAuditLogService.WriteForCurrentUserAsync` 經 `IAuditActorProvider`（實作 `Web/Auth/AuditActorProvider`）決定操作者——Blazor 用 `CurrentUserService`，API 請求從 HttpContext 的 claims 取（`CurrentUserService` 在 API 是空的）。業務服務只要注入 `IAuditLogService`。
-- **網頁與 API 各寫各的**：Repository 是另一套寫入路徑、不呼叫 Service，所以兩邊都寫，摘要分別標 `via=Web`／`via=Api`。專案與會議的 API 刪除會轉呼叫 Service，由控制器傳 `via=Api`。
+- **操作者由寫入服務自己找**：`IAuditLogService.WriteForCurrentUserAsync` 經 `IAuditActorProvider`（實作 `Web/Auth/AuditActorProvider`）決定操作者——從這次 API 請求的 HttpContext claims 取（Cookie 與 JWT 都可）。業務服務只要注入 `IAuditLogService`。
+- **入口寫在 `via`**：業務寫入都在 Service 裡寫稽核，控制器呼叫時傳 `via=Api`（網頁的動作都經 API，所以也是 `via=Api`）。
 - **只在存檔成功之後寫**；409 衝突、404、驗證失敗不記。
 - **資料範圍擋下的寫入**：記 `Permission.Denied`（`reason=DataScope; op=…`），對使用者仍當成不存在；完全不存在的編號不記。讀取被擋不記。
 - **摘要不放內容**：會議紀錄草稿只記字數，AI 問答只記對話編號、位置與字數，提示詞只記名稱，附件只記檔名與大小。
@@ -154,7 +154,7 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
 ## 五、權限與安全
 
 - 只限管理者；頁面判定完成前不渲染任何內容，也不讀資料。
-- 清除與全部清除前再檢查一次管理者身分。
+- 清除與全部清除的 API 一樣是 `[AdminOnly]`，由伺服器再檢查一次管理者身分。
 - 清除類動作一律在刪除**之後**才寫稽核，這筆才會留在清空後的表裡——「誰清了稽核紀錄」永遠答得出來。
 - 摘要只放非敏感資訊：名稱、數量、編號、檔名；不放密碼、會議逐字稿與紀錄內容、AI 問答內容、提示詞本文。
 
@@ -170,7 +170,7 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
 
 - `AuditLogQueryServiceTests`：排序與分頁、本地／UTC 轉換（篩選、顯示、清除門檻）、每種篩選、匯出、動作選項、清除與全部清除、顯示文字。
 - `AuditLogServiceTests`：寫入、失敗不拋例外、**不會順便存掉呼叫端未存的變更**、IP 寫入、取 IP 失敗仍寫入。
-- `ClientIpProviderTests`：HTTP 請求的連線 IP、IPv4-mapped 轉換、沒有連線時為 null（1.1.46 拿掉 Blazor 連線 IP）。
+- `ClientIpProviderTests`：HTTP 請求的連線 IP、IPv4-mapped 轉換、沒有連線時為 null。
 - `AuditLogRetentionBackgroundServiceTests`：過期才刪、刪完才寫 `Audit.AutoPurge`、0 天不清、沒有可刪不寫。
 - `AuditActionsConventionTests`：每個代碼都有中文名稱且符合 `名詞.動作`；原始碼不得以字串常值寫稽核。
 - `AuditLogMenuRegistrationTests`：選單位置、名稱、網址、圖示、只限管理者、非管理者即使有同名權限也看不到。
@@ -178,7 +178,7 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
 - 1.0.34：
   - `BusinessAuditEventsTests`（11 則）：專案（含逐檔附件、下載、API 刪除 via、資料範圍擋下）、待辦（含完成／重開、AI 抽出、擋下）、團隊與分類（同步只在有增減時記）、提示詞（不含本文、預設範本一筆）、AI 問答（自動建立不記、擋下）。
   - `MeetingServiceTests` 新增 5 則：新增修改刪除的操作者與 via、影音上傳、歸屬與移出、草稿只記字數、擋下上傳。
-  - `AuditActorProviderTests`（4 則）：Blazor 優先、JWT 與 Cookie claims、沒人登入時為 null。
+  - `AuditActorProviderTests`（4 則）：`CurrentUserService` 有值時優先、JWT 與 Cookie claims、沒人登入時為 null。
   - `ApiIntegrationTests`／`GoLiveReviewApiTests`：API 建立專案、建立與刪除會議都有 `via=Api` 且操作者是 API 登入者。
 - 1.0.33：
   - `MyUserServiceLoginTests`：成功不寫稽核（由呼叫端寫）、失敗摘要帶 `via`。
@@ -187,18 +187,19 @@ REST API（1.1.43，只限管理者）：`api/v1/audit-logs` 的 `GET meta`、`G
   - `AuditEventsTests`：管理者重設密碼、首次登入改密碼（成功與目前密碼錯誤）、對話窗改密碼、設定 API 密碼、啟停用、加入／移出團隊。
   - `ExternalLoginServiceTests`：連結既有帳號、自動建立、既有連結不寫。
   - `LogoutAuditTests`：強制登出原因白名單、主動登出、未登入不寫。
-  - `AuthenticationStateHelperTests`：踢出時導向帶原因的登出頁、`RecordPageAccessDeniedAsync`（1.1.46 隨 Blazor Server 頁移除；登出原因改由 `PermissionRulesTests` 驗 `UserSessionService`，頁面拒絕稽核走 `PageAccessApi`）。
+  - `PermissionRulesTests`：`UserSessionService` 判斷刪除／停用／無角色並帶登出原因。
   - `PageAccessDeniedAuditTests`：每個拒絕分支都有寫稽核。
 
 ## 八、相關程式與文件
 
 - `Share/Helpers/AuditActions.cs`、`AccessDatas/Models/AuditLog.cs`、`Migrations/*_AddAuditLogClientIpAndIndexes.cs`
 - `Business/Services/Other/AuditLogService.cs`、`IClientIpProvider.cs`、`Business/Services/DataAccess/AuditLogQueryService.cs`
-- `Dtos/AuditLogs/AuditLogQuery.cs`、`AuditLogAdapterModel.cs`、`AuditLogApiDtos.cs`（1.1.43 從 Models 搬來）、`Models/Systems/LogRetentionSettings.cs`
-- API（1.1.43）：`Web/Controllers/AuditLogController.cs`、`Web/Export/AuditLogCsv.cs`
-- `Web/Auth/ClientIpProvider.cs`、`Web/Components/ApplicationCircuitHandler.cs`、`Web/BackgroundServices/AuditLogRetentionBackgroundService.cs`
-- 頁面（1.1.43 起 WASM）：`Web.Client/Pages/Admins/AuditLogPage.razor(.cs/.css)`、`Web.Client/Api/AuditLogApi.cs`（以前是 Server 的 `AuditLogPage` → `AuditLogView`）
-- 1.0.43：`Web/Components/Views/Helps/HelpView.razor.cs`（`OnAskAssistantAsync` 寫 `Help.AiAsk`）
-- 1.0.34：`Business/Services/Other/IAuditActorProvider.cs`、`Web/Auth/AuditActorProvider.cs`；`ProjectService`、`MeetingService`、`TodoService`、`TeamService`、`CategoryService`、`PromptTemplateService`、`AiChatService` 與對應的 Repository；`MeetingViewView`、`ProjectViewView`、`AiChatModal`、`TodoExtractionModal`
-- 1.0.33：`Share/Helpers/AuditVia.cs`（`AuditVia`、`LogoutReasons`）、`MyUserServiceLogin`、`Login.razor.cs`、`Logout.razor.cs`、`AuthController`、`ExternalAuthController`、`ExternalLoginService`、`MyUserService`、`AuthenticationStateHelper`、`HasPermissionAttribute`、17 個頁面的拒絕分支
+- `Dtos/AuditLogs/AuditLogQuery.cs`、`AuditLogAdapterModel.cs`、`AuditLogApiDtos.cs`、`Models/Systems/LogRetentionSettings.cs`
+- API：`Web/Controllers/AuditLogController.cs`、`Web/Export/AuditLogCsv.cs`
+- `Web/Auth/ClientIpProvider.cs`、`Web/BackgroundServices/AuditLogRetentionBackgroundService.cs`
+- 頁面拒絕稽核：`Web.Client/Api/PageAccessApi.cs`、`Web/Controllers/AuditController.cs`（`api/v1/audit/page-denied`）
+- 頁面：`Web.Client/Pages/Admins/AuditLogPage.razor(.cs/.css)`、`Web.Client/Api/AuditLogApi.cs`
+- 使用說明 AI 提問（`Help.AiAsk`）：`Web/Controllers/HelpController.cs`
+- 業務資料（1.0.34）：`Business/Services/Other/IAuditActorProvider.cs`、`Web/Auth/AuditActorProvider.cs`；`ProjectService`、`MeetingService`、`TodoService`、`TeamService`、`CategoryService`、`PromptTemplateService`、`AiChatService` 與對應的 API 控制器（傳 `via=Api`）
+- 帳號安全（1.0.33）：`Share/Helpers/AuditVia.cs`（`AuditVia`、`LogoutReasons`）、`MyUserServiceLogin`、`Login.razor.cs`、`Logout.razor.cs`、`AuthController`、`ExternalAuthController`、`ExternalLoginService`、`MyUserService`、`UserSessionService`、`HasPermissionAttribute`、`AdminOnlyAttribute`、各 WASM 頁的拒絕分支
 - [認證授權與權限機制](../security/認證授權與權限機制.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md) §8.3、變更紀錄：[第一批](../changelog/2026-10-15-稽核紀錄查詢頁與基礎建設.md)、[第二批](../changelog/2026-10-15-稽核紀錄帳號安全事件與權限拒絕.md)、[第三批](../changelog/2026-10-15-稽核紀錄業務資料事件.md)

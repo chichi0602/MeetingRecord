@@ -1,6 +1,6 @@
 ﻿# MeetingRecord — AI 會議記錄小助手
 
-以 **.NET 10** 與 **Blazor Server** 打造的 AI 會議紀錄系統：上傳會議影音檔，系統以 FFmpeg 轉檔切段後呼叫 **Azure OpenAI 語音轉文字**產生逐字稿，再套用提示詞範本由 LLM 整理成會議紀錄草稿；會議依「專案」歸檔，可從紀錄抽出待辦事項、對專案或單一會議做 AI 問答，並以儀表板與 Token 用量掌握全貌；管理者可在「AI 對話紀錄」查每次 AI 呼叫實際送出與回覆的內容。
+以 **.NET 10** 與 **Blazor WebAssembly** 打造的 AI 會議紀錄系統：上傳會議影音檔，系統以 FFmpeg 轉檔切段後呼叫 **Azure OpenAI 語音轉文字**產生逐字稿，再套用提示詞範本由 LLM 整理成會議紀錄草稿；會議依「專案」歸檔，可從紀錄抽出待辦事項、對專案或單一會議做 AI 問答，並以儀表板與 Token 用量掌握全貌；管理者可在「AI 對話紀錄」查每次 AI 呼叫實際送出與回覆的內容。
 
 本系統源自內部樣板 NET10-Blazor-Starter（0.4.25 更名為 MeetingRecord），沿用其分層架構、Cookie／JWT 認證、RBAC 與 Ant Design Blazor 介面基礎。
 
@@ -12,7 +12,7 @@
 
 - **定位**：公司內部的會議紀錄與追蹤系統 —— 影音轉逐字稿、AI 整理會議紀錄、抽出待辦、專案層級 AI 問答。
 - **適用情境**：專案例會、客戶會議、內部討論的紀錄與後續追蹤。
-- **資料權限**：角色＝能做什麼、團隊＝誰的資料（專案主責＋協作團隊）、分類＝什麼資料（只是標籤）；會議、待辦、附件、AI 問答跟著專案走，詳見[紀錄分類與團隊權控 PRD](docs/prd/紀錄分類與團隊權控-prd.md)。
+- **資料權限**：角色＝能做什麼、團隊＝誰的資料（專案主責＋協作團隊）、分類＝什麼資料（只是標籤）；會議、待辦、附件、AI 問答跟著專案走，詳見[權限與資料可見範圍總覽](docs/security/權限與資料可見範圍總覽.md)。
 - **功能全貌**：見[系統功能總覽](docs/architecture/系統功能總覽.md)；終端使用者操作見[系統使用說明](docs/guides/系統使用說明.md)（也是系統內 `/help` 頁的內容）。
 
 ---
@@ -22,16 +22,17 @@
 | 類別 | 採用方案 | 版本 |
 |------|----------|------|
 | 框架 | .NET / ASP.NET Core | 10.0 |
-| 前端 | Blazor Server（Interactive Server）+ 全域 SSR 渲染 | — |
+| 前端 | Blazor WebAssembly（應用程式頁面在瀏覽器執行，資料一律經 Web API）＋ 伺服器靜態算繪登入／登出頁 | — |
 | UI 元件庫 | AntDesign Blazor | 1.6.0 |
 | 圖示 | BlazorMaterialIcons（Google Material Icons） | 0.0.1 |
 | 資料存取 | Entity Framework Core | 10.0.5 |
 | 資料庫 | SQLite（唯一支援；檔案位置由 `appsettings.json` 控制） | — |
-| 認證 | ASP.NET Core Cookie Authentication（含 RememberMe） | — |
-| 授權 | RoleView + Menu.json 二維權限樹 | — |
+| 認證 | ASP.NET Core Cookie Authentication（網頁，含 RememberMe）＋ JWT Bearer（外部 API 用戶端） | — |
+| 授權 | 角色 RBAC：頁面與動作級權限鍵（`[HasPermission]` ＋ `IPermissionChecker`）＋ `Menu.json` 宣告式選單權限（`id` → 權限鍵） | — |
+| 即時推播 | ASP.NET Core SignalR（`/hubs/app`，WebSocket） | — |
 | 多語系 | `RequestLocalization` + `AntDesignLocaleFactory` | zh-TW / en-US |
 | 物件對映 | AutoMapper | — |
-| API 文件 | Swashbuckle Swagger UI | 10.1.5 |
+| API 文件 | Swashbuckle Swagger UI | 10.3.1 |
 | 日誌 | NLog.Web.AspNetCore | 6.1.2 |
 
 ---
@@ -42,16 +43,21 @@
 MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.AccessDatas
        │                  │                       │
        └──► MeetingRecord.Dtos / MeetingRecord.Models / MeetingRecord.Share
+
+MeetingRecord.Web.Client（WASM，由 Web 宿主）──► MeetingRecord.Dtos / MeetingRecord.Share
 ```
 
 | 專案 | 角色 |
 |------|------|
-| `MeetingRecord.Web` | Blazor Server 宿主、Razor 元件、Web API Controller、登入頁、本地化、靜態資源。 |
-| `MeetingRecord.Business` | 商業邏輯：Services、Repositories、AutoMapper Profile、Helpers。 |
+| `MeetingRecord.Web` | 伺服器：Web API Controller、靜態算繪的登入／登出／待審核頁、SignalR 推播 Hub（`/hubs/app`）、背景服務、本地化，並宿主 WASM 前端與靜態資源。 |
+| `MeetingRecord.Web.Client` | Blazor WebAssembly 前端：應用程式的全部頁面、版面 `WasmLayout`、共用元件、呼叫 Web API 的用戶端；只相依 Dtos／Share（`WebClientArchitectureTests` 把關），資料一律經 API。 |
+| `MeetingRecord.Business` | 商業邏輯：Services（含資料權控 `ProjectAccessService`）、AutoMapper Profile、Helpers。 |
 | `MeetingRecord.AccessDatas` | EF Core `BackendDBContext`、Entity 定義、Migrations。 |
 | `MeetingRecord.Models` | 系統設定、AdapterModel、共用領域模型。 |
 | `MeetingRecord.Dtos` | API 對外傳輸物件：`ApiResult<T>`、`PagedResult<T>`、各模組 DTO。 |
 | `MeetingRecord.Share` | 跨層共用：Helpers、Extensions（無外部相依）。 |
+| `MeetingRecord.Tests` | xUnit 單元與整合測試（L1／L2）。 |
+| `MeetingRecord.E2ETests` | Playwright 端對端測試（L3～L5）。 |
 
 啟動流程詳見 [docs/architecture/架構總覽.md](docs/architecture/架構總覽.md)。
 
@@ -87,7 +93,7 @@ MeetingRecord.Web ──► MeetingRecord.Business ──► MeetingRecord.Acces
 **平台能力（沿用樣板）**
 
 - 登入 / 登出（Cookie 驗證、記住我、4 位數驗證碼、燕麥奶茶色系登入頁）、Google OAuth2 第三方登入
-- RBAC：`RoleView` 權限樹（對應 `Menu.json` 的唯一 `id`），受保護 API 以 `[HasPermission]` 動作級授權
+- RBAC：角色勾選頁面與動作權限鍵（`Menu.json` 的唯一 `id` 經 `SidebarMenuService.MenuPermissionMap` 對應權限鍵），受保護 API 以 `[HasPermission]` 動作級授權，畫面按鈕以 `PermissionView` 依同一份權限顯示
 - 每筆紀錄可附加多檔案，自動依年月分目錄存放
 - Web API（含 Swagger UI、`ApiResult<T>` 信封、分頁搜尋）
 - 平行 API 路由：保留 `/api/...`，新增 `/api/v1/...` 作為新用戶端標準入口
@@ -170,10 +176,11 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ├── scripts/                        ← Run-E2E.ps1／New-TestReport.ps1（端對端測試與報告）、Test-DocsEncoding.ps1、Backfill-AiUsageCost.mjs、樣板遺留腳本
 └── src/MeetingRecord/
     ├── MeetingRecord.slnx              ← 方案檔（新版 .slnx 格式）
-    ├── MeetingRecord.Web/              ← Blazor Server 宿主
-    │   ├── Components/             ← Pages / Views / Layout / Auths / Commons
-    │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Todo / PromptTemplate / Auth …）
-    │   ├── BackgroundServices/     ← 轉錄、會議紀錄草稿產生、匯率更新、例外紀錄保存清理四個背景服務
+    ├── MeetingRecord.Web/              ← 伺服器（Web API、登入頁、推播、宿主 WASM 前端）
+    │   ├── Components/             ← Auths（登入／登出／待審核，靜態算繪）／ Layout（SidebarMenuService）／ Pages（Error）
+    │   ├── Controllers/            ← Web API（Project / Category / Team / Meeting / Todo / PromptTemplate / Session / Auth …）
+    │   ├── Hubs/                   ← SignalR 推播 Hub（AppHub，/hubs/app）
+    │   ├── BackgroundServices/     ← 轉錄、會議紀錄草稿產生、匯率更新，以及例外紀錄、AI 紀錄、稽核紀錄、通知的保存清理
     │   ├── Extensions/             ← 服務註冊與 middleware（ServiceCollectionExtensions 等）
     │   ├── Health/                 ← 系統健康監控檢查項
     │   ├── Diagnostics/            ← 監控與診斷：日誌查詢（LogQueryService）、日誌等級（LogLevelRuntimeState）、資料庫與檔案儲存用量、系統例外紀錄管線（ExceptionLogProvider／ExceptionLogWriter、TraceCode）
@@ -182,9 +189,15 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     │   ├── Filters/                ← ApiValidationFilter 等
     │   ├── Program.cs              ← 啟動主程式
     │   └── appsettings.json        ← 系統設定（含 SystemVersion）
+    ├── MeetingRecord.Web.Client/       ← Blazor WebAssembly 前端（在瀏覽器執行）
+    │   ├── Pages/                  ← 應用程式的全部頁面
+    │   ├── Layout/                 ← WasmLayout（開頁問 Session API、畫外框與選單）
+    │   ├── Components/             ← Layout / Commons 共用元件
+    │   ├── Api/                    ← 呼叫 Web API 的用戶端（ApiClient、各模組 XxxApi、PageAccessApi）
+    │   └── Auth/                   ← PermissionView、Session 狀態
     ├── MeetingRecord.Business/
     │   ├── Services/DataAccess/    ← Domain Service（CRUD）
-    │   ├── Services/Other/         ← AuthenticationStateHelper、MeetingFileStore 等
+    │   ├── Services/Other/         ← ProjectAccessService、PermissionChecker、UserSessionService、MeetingFileStore 等
     │   ├── Services/Transcription/ ← 語音轉錄管線（供應商抽象、FFmpeg、佇列、JobRunner）
     │   ├── Services/TextGeneration/← 會議紀錄草稿產生（LLM、串流進度）
     │   ├── Services/TodoExtraction/← AI 從會議紀錄抽出待辦
@@ -192,7 +205,6 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     │   ├── Services/AiUsage/       ← AI 用量帳本、計價與匯率
     │   ├── Services/Dashboard/     ← 儀表板彙總
     │   ├── Services/Export/        ← 會議紀錄／AI 問答 PDF 匯出
-    │   ├── Repositories/           ← API 層使用的 Repository
     │   └── Models/AutoMapping.cs   ← AutoMapper Profile
     ├── MeetingRecord.AccessDatas/
     │   ├── BackendDBContext.cs
@@ -200,7 +212,9 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
     │   └── Migrations/
     ├── MeetingRecord.Models/           ← AdapterModel、Systems、AutoMapper 來源
     ├── MeetingRecord.Dtos/             ← API DTO（含 ApiResult/PagedResult）
-    └── MeetingRecord.Share/            ← Helpers、Enums、Extensions
+    ├── MeetingRecord.Share/            ← Helpers、Enums、Extensions
+    ├── MeetingRecord.Tests/            ← xUnit 單元與整合測試
+    └── MeetingRecord.E2ETests/         ← Playwright 端對端測試
 ```
 
 ---
@@ -223,7 +237,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 | `LogRetentionSettings` | 系統例外紀錄保存天數（0.4.122）：`ExceptionLogDays`（預設 90，「最後發生」超過的每天自動刪除，`0`＝不自動清理）；AI 用量帳本保存天數（1.0.29）：`AiUsageLogDays`（預設 `0`＝永久保留，啟用時至少 62）；稽核紀錄保存天數（1.0.32）：`AuditLogDays`（預設 365，`0`＝不自動清理）。 |
 | `AiCallLogSettings` | AI 對話紀錄（1.0.29）：`Enabled`（預設 `true`，記錄每次付費 AI 呼叫的送出內容與回應）、`RetentionDays`（預設 90，1～3650，沒有永久保留）。 |
 | `AiQuotaSettings` | AI 用量上限（1.0.29，新台幣）：`GlobalMonthlyTwd`（全系統每月）、`PerUserMonthlyTwd`（每人每月），`0`＝不限制（預設）；改設定檔即生效、不必重啟。 |
-| `ClientErrorReporting` | 瀏覽器端錯誤回報（0.4.122）：`Enabled`（預設 `true`）、`MaxPerCircuitPerMinute`（每個連線每分鐘上限，預設 10）。 |
+| `ClientErrorReporting` | 瀏覽器端錯誤回報（0.4.122）：`Enabled`（預設 `true`）、`MaxPerCircuitPerMinute`（每個帳號每分鐘上限，預設 10；名稱為相容保留）。 |
 | `BootstrapSettings` | 預設 `support` 帳號種子設定：`SupportAccount` / `SupportName` / `SupportEmail` / `SupportPassword`（首次啟動建立，重啟時更新密碼）。 |
 | `GoogleOAuthSettings` | Google OAuth2 第三方登入：`Enabled`、`ClientId`、`ClientSecret`、`DefaultRoleName`（見 [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md)）。 |
 | `LlmSettings` | LLM 與語音轉錄供應商設定：`DefaultProvider`（文字生成：會議紀錄草稿、抽出待辦、AI 問答）與 `TranscriptionProvider`（語音轉錄，留空則沿用前者），`Providers.<供應商>` 下有 `Endpoint`／`ApiKey`／`Model`／`TranscriptionModel`（1.0.28 起文字生成走 Azure OpenAI v1 API，不需要 `ApiVersion`；轉錄的 api-version 內建，`TranscriptionApiVersion` 選填）；`Currency` 與 `Pricing.<模型>`（每百萬 token 或每分鐘音訊單價）供 AI 用量計價。`ApiKey` 請以 user-secrets／環境變數提供（見 [日誌與設定檔說明](docs/operations/日誌與設定檔說明.md)）。 |
@@ -281,7 +295,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ### 架構與設計（architecture）
 
 - [開發慣例與限制速查](docs/architecture/開發慣例與限制速查.md) — **AI/開發者必讀**：分層、SQLite migration、追蹤清理、權限同步、資料權控等不變量速查。
-- [架構總覽](docs/architecture/架構總覽.md) — 6 個專案分層、依賴方向、啟動流程、DI 註冊清單、背景服務。
+- [架構總覽](docs/architecture/架構總覽.md) — 9 個專案（含兩個測試專案）分層、依賴方向、啟動流程、DI 註冊清單、背景服務。
 - [系統功能總覽](docs/architecture/系統功能總覽.md) — 功能面全貌：端到端流程、每個選單頁在做什麼、權限與背景工作、已知問題與限制。
 - [資料模型與資料庫](docs/architecture/資料模型與資料庫.md) — `BackendDBContext`、主要 Entity、關聯與刪除政策。
 - [DTO 與模型邊界規範](docs/architecture/DTO%20與模型邊界規範.md) — API / UI / Business / Entity 資料邊界原則與新 CRUD 模組待辦。
@@ -294,8 +308,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 ### 認證與安全（security）
 
 - [權限與資料可見範圍總覽](docs/security/權限與資料可見範圍總覽.md) — 角色／團隊／分類、權限矩陣（誰看得到、誰能改）、上傳者與主責團隊專屬動作、刪除會帶走什麼。
-- [權限授權現況評估與改善路線](docs/security/權限授權現況評估與改善路線.md) — 角色／團隊／分類分工後的權控現況評估與後續改善項目。
-- [認證授權與權限機制](docs/security/認證授權與權限機制.md) — Cookie scheme、Claims、`RoleView` JSON、`Menu.json` 權限樹、`ProjectAccessService` 資料權控。
+- [認證授權與權限機制](docs/security/認證授權與權限機制.md) — Cookie／JWT 與 API policy scheme、Claims、RBAC 權限鍵、`Menu.json` 宣告式權限、`ProjectAccessService` 資料權控。
 - [密碼種類與儲存機制](docs/security/密碼種類與儲存機制.md) — 密碼種類盤點、`MyUser.Password` 雜湊、首次登入強制改密碼、種子密碼與機密金鑰。
 - [Google OAuth2 第三方登入](docs/security/Google%20OAuth2%20第三方登入.md) — Google SSO 設定、自動建帳與審核、串接權控與 API（JWT）。
 - [記住我登入原理說明](docs/security/記住我登入原理說明.md) — Cookie + RememberMe 完整原理。
@@ -330,7 +343,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 - [PRD 主控台（能力覆蓋矩陣）](docs/prd/README.md) — 以產品能力為單位的單一入口：能力→入口→程式來源→狀態。
 - 核心功能：[儀表板](docs/prd/儀表板-prd.md)、[會議紀錄](docs/prd/會議紀錄-prd.md)、[會議紀錄產生流程](docs/prd/會議紀錄產生流程-prd.md)、[會議紀錄提示詞](docs/prd/會議紀錄提示詞-prd.md)、[專案項目](docs/prd/專案項目-prd.md)、[待辦事項](docs/prd/待辦事項-prd.md)、[AI 問答](docs/prd/AI問答-prd.md)、[使用說明](docs/prd/使用說明-prd.md)。
-- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[稽核紀錄](docs/prd/稽核紀錄-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[Token 用量](docs/prd/Token用量-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[紀錄分類與團隊權控](docs/prd/紀錄分類與團隊權控-prd.md)。
+- 系統管理與平台：[首頁與導覽](docs/prd/首頁與導覽-prd.md)、[登入與帳號流程](docs/prd/登入與帳號流程-prd.md)、[使用者管理](docs/prd/使用者管理-prd.md)、[角色管理](docs/prd/角色管理-prd.md)、[稽核紀錄](docs/prd/稽核紀錄-prd.md)、[AI 對話紀錄](docs/prd/AI對話紀錄-prd.md)、[Token 用量](docs/prd/Token用量-prd.md)、[系統健康監控](docs/prd/系統健康監控-prd.md)、[日誌檢視](docs/prd/日誌檢視-prd.md)、[日誌等級設定](docs/prd/日誌等級設定-prd.md)、[系統例外紀錄](docs/prd/系統例外紀錄-prd.md)、[資料庫用量](docs/prd/資料庫用量-prd.md)、[分類清單](docs/prd/分類清單-prd.md)、[團隊清單](docs/prd/團隊清單-prd.md)、[權限與資料可見範圍總覽](docs/security/權限與資料可見範圍總覽.md)。
 
 ### 設計規格（superpowers）
 
@@ -347,7 +360,7 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 
 ### 專案規劃（planning）
 
-- [docs/planning/](docs/planning/README.md) — Meeting Ink 對標分析與決策清單（進行中）、Blazor WASM 遷移評估與測試策略（待決定）；樣板時期的 `01`～`06` TODO 為已封存快照。
+- [docs/planning/](docs/planning/README.md) — Meeting Ink 對標分析與決策清單（進行中）、Blazor WASM 遷移評估與測試策略（已於 1.1.51 完成）；樣板時期的 `01`～`06` TODO 為已封存快照。
 
 ---
 

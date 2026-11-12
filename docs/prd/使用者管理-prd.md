@@ -1,10 +1,10 @@
 ﻿# 使用者管理 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：1.1.10
+- 現行系統版本：1.1.53
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 > **0.4.102：「資料群組」改回「團隊」。** 團隊就是部門（例如業務部、管理部、研發部），一個人可以屬於多個；使用者看得到專案的條件是「他的任一團隊是該專案的主責或協作團隊」，**不再有公開專案**。欄位、清單欄與批次按鈕都改稱「團隊」，行為不變。
 >
@@ -21,10 +21,10 @@
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 |------|------|----------|-----------|
-| `/myusers` | 系統管理 → 使用者管理（`Menu.json` id=31）| 僅管理員（`AuthenticationStateHelper.CheckIsAdmin`）| 系統管理員 |
+| `/myusers` | 系統管理 → 使用者管理（`Menu.json` id=31）| 僅管理員（頁面 `PermissionView.IsAdmin`、API `[AdminOnly]`）| 系統管理員 |
 
-- 1.1.10 起是 WASM 頁 `Web.Client/Pages/Admins/MyUserPage`（畫面與以前的 `MyUserView` 相同）：登入狀態由 WASM 版面先處理；非管理員（`PermissionView.IsAdmin`）顯示「你沒有權限存取此頁面」、寫頁面拒絕稽核並停止載入。
-- 1.1.10 起資料經 `UserController`（`api/v1/User`）取得，整個 Controller 以 `[AdminOnly]` 閘控（不看權限鍵，只看是不是管理者）；見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- WASM 頁 `Web.Client/Pages/Admins/MyUserPage`：登入狀態由 `WasmLayout` 先處理；非管理員（`PermissionView.IsAdmin`）顯示「你沒有權限存取此頁面」、寫頁面拒絕稽核並停止載入。
+- 資料經 `UserController`（`api/v1/User`）取得，整個 Controller 以 `[AdminOnly]` 閘控（不看權限鍵，只看是不是管理者）；見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 
 ## 三、畫面與欄位
 
@@ -40,16 +40,16 @@
 
 ### 多選刪除（1.0.53）
 
-- 與批次調整團隊共用同一組勾選，批次列多一顆「刪除所選」。自己的帳號、support 由伺服器擋下（1.1.10 起規則在服務層），通知列為「不能刪除自己的帳號。」等原因。換頁、排序、搜尋與每次重載都清掉勾選。共通規則見[畫面與欄位字典 0.5](../guides/畫面與欄位字典.md)。
+- 與批次調整團隊共用同一組勾選，批次列多一顆「刪除所選」。自己的帳號、support 由伺服器擋下（規則在服務層），通知列為「不能刪除自己的帳號。」等原因。換頁、排序、搜尋與每次重載都清掉勾選。共通規則見[畫面與欄位字典 0.5](../guides/畫面與欄位字典.md)。
 - 單筆刪除改成看結果，失敗時顯示原因（以前一律「刪除成功」）。
 
 ## 四、內部系統運作
 
-WASM 頁（`MyUserPage`）→ `UserApi` → `UserController`（`[AdminOnly]`）→ `MyUserService` → `BackendDBContext`（1.1.10 起；以前是 Blazor Server 的 `MyUserView` 直接注入服務）：
+WASM 頁（`MyUserPage`）→ `UserApi` → `UserController`（`[AdminOnly]`）→ `MyUserService` → `BackendDBContext`：
 
 - **新增**（`AddAsync`）：`CleanTrackingHelper.Clean` 清追蹤；產生 `Salt`、以 `SecurePasswordHasher.HashPassword` 雜湊密碼，並設 `MustChangePassword = true`（0.4.113，帳號密碼是管理者提供的，第一次登入要改成自己的；`support` 不設）；存檔後 `SyncAssignmentsAsync` 雙寫角色與團隊；寫 `User.Create` 稽核。
 - **修改**（`UpdateAsync`）：清追蹤、以 `Entry(...).State = Modified` 更新；先帶回畫面模型沒有的欄位：`MustChangePassword`，以及 0.4.115 起的 `AccessFailedCount`、`LockoutEndUtc`、`TwoFactorEnabled`、`TwoFactorSecret`（以前整筆蓋回，管理者改個名字就把被鎖的帳號解鎖、兩步驟驗證清空）；密碼留白時沿用既有 `Password`／`Salt`，否則重新雜湊，且**替別人**重設時設 `MustChangePassword = true`（改自己的、`support` 不設）；重設密碼時清掉失敗次數與鎖定（0.4.115，這是管理者解鎖的方法）；再 `SyncAssignmentsAsync`；寫 `User.Update` 稽核。
-- **自己與 support 的保護**（1.1.10，以前只在畫面）：`DeleteAsync` 不能刪自己（「不能刪除自己的帳號。」）與 support；`SetStatusAsync` 不能停用自己與 support；`UpdateAsync` 不能把自己停用、不能拿掉自己的管理者身分（「不能拿掉自己的管理者身分。」）、不能停用 support。
+- **自己與 support 的保護**（1.1.10 起在服務層）：`DeleteAsync` 不能刪自己（「不能刪除自己的帳號。」）與 support；`SetStatusAsync` 不能停用自己與 support；`UpdateAsync` 不能把自己停用、不能拿掉自己的管理者身分（「不能拿掉自己的管理者身分。」）、不能停用 support。
 - **修改時帶回 `LastProjectId`**（1.1.10 修正：以前管理者每編輯一次，對方記住的「上次選的專案」就被清掉）。API 修改另外先讀出原資料再套上可改的欄位，Google 登入綁定（`OAuthProvider`、`GoogleId`）不會被清掉。
 - **刪除**（`DeleteAsync`）：`Entry(...).State = Deleted`；寫 `User.Delete` 稽核（含帳號）。
 - **稽核（1.0.33）**：管理者在編輯視窗填了新密碼時，`User.Update` 之外另寫 `Password.Reset`（摘要 `by=admin`，不含密碼）；清單上切換狀態寫 `User.Enable`／`User.Disable`；批次加入／移出團隊寫 `User.TeamAdd`／`User.TeamRemove`（目標 `Team#id`，摘要 `count` 與最多 50 個使用者編號，0 人不寫）。
@@ -59,11 +59,11 @@ WASM 頁（`MyUserPage`）→ `UserApi` → `UserController`（`[AdminOnly]`）�
 - **有效團隊**：登入後由 `EffectiveTeamResolver` 決定，0.4.101 起只取使用者直接所屬的團隊（`UserTeam`）。資料可見範圍的實際判斷在 `ProjectAccessService`。
 - **批次加入／移出**（`AddUsersToTeamAsync`／`RemoveUsersFromTeamAsync`）：只動勾選者的 `UserTeam`，已在（或本來就不在）該團隊的人略過，回傳實際異動筆數。
 - **前置檢查**：`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 檢查帳號唯一性。
-- **稽核 actor**：`ResolveActor` 取目前登入者（1.1.10 起經 `IAuditActorProvider`：Blazor 頁看 `CurrentUserService`、API 從 claims 取；以前只看 `CurrentUserService`，API 呼叫時是空的）；未登入時 actor 為 null。「替別人重設密碼」的判斷也用它。
+- **稽核 actor**：`ResolveActor` 取目前登入者（經 `IAuditActorProvider`，從這次 API 請求的登入身分 claims 取）；未登入時 actor 為 null。「替別人重設密碼」的判斷也用它。
 
 ## 五、權限與安全
 
-- 本頁僅管理員可進入（`CheckIsAdmin`）；權限判定以 RBAC 表為單一權威，管理員短路一律通過。
+- 本頁僅管理員可進入（頁面 `PermissionView.IsAdmin`，API `[AdminOnly]`）；權限判定以 RBAC 表為單一權威，管理員短路一律通過。
 - API 端業務資料以 `HasPermissionAttribute` 判權，無權限回 `ApiResult` 403（管理員短路），與本頁指派結果一致。
 - 清單／單筆輸出經 `OtherDependencyData` 將密碼欄位清空；API 回應一律是 `UserDto`（1.1.10），不含密碼雜湊、`Salt`、兩步驟驗證金鑰、Google 編號；密碼只在新增或重設時單向送入。
 - 密碼一律 PBKDF2 雜湊儲存；細節見 [登入與帳號流程](登入與帳號流程-prd.md) 與安全文件。
@@ -90,7 +90,7 @@ WASM 頁（`MyUserPage`）→ `UserApi` → `UserController`（`[AdminOnly]`）�
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/MyUserPage.razor`（`@page "/myusers"`，1.1.10 起在 WASM 執行；清單、編輯視窗、批次調整團隊）、`MyUserPage.razor.cs`（`OnEditAsync` 編輯回填、`OnModalOKHandleAsync` 存檔、`OnBatchTeamAsync` 批次調整團隊）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/MyUserPage.razor`（`@page "/myusers"`；清單、編輯視窗、批次調整團隊）、`MyUserPage.razor.cs`（`OnEditAsync` 編輯回填、`OnModalOKHandleAsync` 存檔、`OnBatchTeamAsync` 批次調整團隊）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Api/UserApi.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/UserController.cs`、`src/MeetingRecord/MeetingRecord.Web/Filters/AdminOnlyAttribute.cs`
 - `src/MeetingRecord/MeetingRecord.Dtos/Users/`（`UserDto`、`UserCreateUpdateDto`、`RoleOptionDto`、`UserTeamBatchRequestDto`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/MyUserService.cs`（`MyUserService.AddAsync`、`UpdateAsync`、`SyncAssignmentsAsync` 雙寫、`GetUserAssignmentsAsync` 回填）
@@ -98,5 +98,5 @@ WASM 頁（`MyUserPage`）→ `UserApi` → `UserController`（`[AdminOnly]`）�
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RbacBackfillService.cs`（啟動回填）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/EffectiveTeamResolver.cs`（有效團隊）
 - RBAC 資料表：`MyUser`、`RoleView`、`UserRole`、`UserTeam`、`RolePermissionMap`、`Permission`（`src/MeetingRecord/MeetingRecord.AccessDatas/Models/`）
-- 交叉連結：[登入與帳號流程](登入與帳號流程-prd.md)、[角色管理](角色管理-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
-- 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[密碼種類與儲存機制](../security/密碼種類與儲存機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)
+- 交叉連結：[登入與帳號流程](登入與帳號流程-prd.md)、[角色管理](角色管理-prd.md)、[權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)
+- 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[密碼種類與儲存機制](../security/密碼種類與儲存機制.md)

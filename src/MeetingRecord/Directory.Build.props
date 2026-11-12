@@ -3,7 +3,7 @@
   <!--
     CVE-2025-6965 / GHSA-2m69-gcr7-jv3q：SQLitePCLRaw.lib.e_sqlite3 <= 2.1.11（bundled SQLite < 3.50.2）。
     由 Microsoft.EntityFrameworkCore.Sqlite 10.0.5 遞移引入；NuGet 目前無更新版可升級。
-    風險低：SQLite 僅為開發/預設資料庫，Production 使用 SQL Server，EF Core 採參數化查詢。
+    風險低：EF Core 採參數化查詢，無未受信任的原始 SQL 進入 SQLite（SQLite 是唯一支援的資料庫，正式環境也是）。
     待 SQLitePCLRaw 釋出 > 2.1.11 修補版（或 EF Core 帶入）後，移除本抑制並升級。
     詳見 docs/operations/CI-CD與品質檢查.md。
   -->

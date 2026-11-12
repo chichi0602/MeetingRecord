@@ -1,8 +1,8 @@
 ﻿# 文件目錄索引
 
-- 文件版本：6.38
+- 文件版本：6.39
 - 文件狀態：維護中
-- 現行系統版本：1.1.52
+- 現行系統版本：1.1.53
 - 首次實作版本：0.2.8
 - 最後核對日期：2026/11/12
 
@@ -14,15 +14,15 @@
 
 | 目錄 | 收納特性 | 範例 |
 |------|----------|------|
-| [`planning/`](planning/) | 專案規劃、進度追蹤、TODO、路線圖 | Meeting Ink 對標分析與決策清單；Blazor WASM 遷移評估；樣板期 TODO（已封存） |
+| [`planning/`](planning/) | 專案規劃、進度追蹤、TODO、路線圖 | Blazor WASM 遷移評估與測試策略（已完成）；Meeting Ink 對標分析、樣板期 TODO（歷史文件） |
 | [`architecture/`](architecture/) | 系統架構、資料模型、API / DTO 設計規範、UI 設計規範、開發慣例 | 開發慣例速查、架構總覽、系統功能總覽、資料模型、Web API、介面視覺與對話窗設計規範 |
-| [`security/`](security/) | 認證、授權、登入、密碼與機密金鑰機制 | 認證授權、Google OAuth2、記住我、密碼儲存 |
+| [`security/`](security/) | 認證、授權、登入、密碼與機密金鑰機制 | 認證授權、權限與資料可見範圍、Google OAuth2、記住我、密碼儲存 |
 | [`features/`](features/) | 個別功能機制說明 | 分散式快取、多語系、檔案上傳、健康監控 |
 | [`guides/`](guides/) | 開發 / 操作教學、how-to、流程指南 | 系統使用說明、畫面與欄位字典、上架前測試清單、新 CRUD 頁面、EFCore、測試 |
 | [`operations/`](operations/) | 部署、維運、設定檔、上線檢查、CI/CD | 啟動與停止、維護規範、部署安全清單、日誌與設定檔、CI-CD |
 | [`prd/`](prd/) | 產品需求文件（功能 PRD）| PRD 主控台、各能力 PRD |
-| [`superpowers/`](superpowers/) | brainstorming 設計流程產出的規格 | 會議記錄流程 Wireframe |
-| [`testing/`](testing/) | 測試報告（由腳本產生的執行結果） | WASM 遷移 M0 基準與 M1～M5 里程碑測試報告 |
+| [`superpowers/`](superpowers/) | brainstorming 設計流程產出的規格（實作當時的設計紀錄，不隨程式改寫） | 會議記錄流程 Wireframe |
+| [`testing/`](testing/) | 測試報告（由腳本產生的執行結果） | 全套測試報告；WASM 遷移 M0 基準、M1～M5 里程碑與 M6 最終報告（歷史紀錄） |
 | [`changelog/`](changelog/) | 改版與變更紀錄 | 每次版本異動一篇 |
 
 > 每個子目錄都有自己的 `README.md` 作為該目錄索引；點上方分類連結即可進入並看到該目錄清單。
@@ -31,8 +31,8 @@
 
 ### planning — 專案規劃與進度追蹤
 - [07-MeetingInk-產品分析與自建藍圖](planning/07-MeetingInk-產品分析與自建藍圖.md)
-- [08-MeetingInk-對標項目決策清單](planning/08-MeetingInk-對標項目決策清單.md) ← **現行活文件**
-- [09-Blazor-WASM-遷移評估與測試策略](planning/09-Blazor-WASM-遷移評估與測試策略.md)
+- [08-MeetingInk-對標項目決策清單](planning/08-MeetingInk-對標項目決策清單.md)
+- [09-Blazor-WASM-遷移評估與測試策略](planning/09-Blazor-WASM-遷移評估與測試策略.md)（M0～M6 已於 1.1.51 完成）
 - 以下 `01`～`06` 為樣板規劃階段的已封存快照，不再維護：
 - [01-專案總覽與定位-TODO](planning/01-專案總覽與定位-TODO.md)
 - [02-現有架構盤點-TODO](planning/02-現有架構盤點-TODO.md)
@@ -55,7 +55,6 @@
 
 ### security — 認證、授權與安全
 - [權限與資料可見範圍總覽](security/權限與資料可見範圍總覽.md) ← 誰看得到、誰能改、刪除會帶走什麼
-- [權限授權現況評估與改善路線](security/權限授權現況評估與改善路線.md)
 - [認證授權與權限機制](security/認證授權與權限機制.md)
 - [Google OAuth2 第三方登入](security/Google%20OAuth2%20第三方登入.md)
 - [記住我登入原理說明](security/記住我登入原理說明.md)
@@ -109,7 +108,6 @@
 - [資料庫用量 PRD](prd/資料庫用量-prd.md)
 - [日誌檢視 PRD](prd/日誌檢視-prd.md)
 - [系統例外紀錄 PRD](prd/系統例外紀錄-prd.md)
-- [紀錄分類與團隊權控 PRD](prd/紀錄分類與團隊權控-prd.md)
 
 ### superpowers — 設計規格
 - [會議記錄流程 Wireframe 設計規格](superpowers/specs/2026-08-31-meeting-flow-wireframe-design.md)

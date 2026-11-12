@@ -1,10 +1,10 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.8
+- 文件版本：2.9
 - 文件狀態：已實作
-- 現行系統版本：1.1.37
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -49,11 +49,11 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/token-usage`，別名 `/ai-usage`（1.0.30 前的網址與書籤照樣能用）（1.1.37 起 WASM 頁 `Web.Client/Pages/AiManagement/TokenUsagePage.razor`；以前是 Server 的 `TokenUsagePage` → `TokenUsageView`） |
-| REST API | `api/v1/ai-usage`（1.1.36，只限管理者）：`GET overview`、`GET filter-options`、`POST report`、`POST rows`、`GET {id}`、`POST export/csv`、`POST export/pdf`、`DELETE {id}`、`POST purge`、`POST clear-all`，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。頁面 1.1.37 搬到 WASM |
+| UI 路由 | `/token-usage`，別名 `/ai-usage`（1.0.30 前的網址與書籤照樣能用）（WASM 頁 `Web.Client/Pages/AiManagement/TokenUsagePage.razor`） |
+| REST API | `api/v1/ai-usage`（1.1.36，只限管理者）：`GET overview`、`GET filter-options`、`POST report`、`POST rows`、`GET {id}`、`POST export/csv`、`POST export/pdf`、`DELETE {id}`、`POST purge`、`POST clear-all`，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md) |
 | 選單路徑 | 系統管理（`Menu.json` id=3）→ AI 管理（id=62，`psychology`，1.0.30 起）→ Token 用量（id=33，icon `toll`）。同組另有「AI 對話紀錄」（id=63）。0.4.120～1.0.29 位於「監控與診斷」（id=36）底下、名稱「AI 用量分析」、icon `monetization_on` |
 | 選單過濾 | 列在 `SidebarMenuService.AdminOnlyMenuIds`（非管理者看不到）；分組 62 列在 `GroupOnlyMenuIds`。`MenuPermissionMap` 沒有 id 33 |
-| 權限鍵 | **無，只限管理者**（1.0.30 起）。頁面以 `CheckIsAdmin()` 守門，不在權限目錄、不能勾給角色。0.4.80～1.0.29 的頁面鍵「AI 用量分析」改為 `MagicObjectHelper.已退役權限鍵_AI用量分析`，由 `RbacBackfillService` 在啟動時刪除權限列、角色對應與勾選。`角色_Token用量` 只是選單名稱常數，不是權限鍵 |
+| 權限鍵 | **無，只限管理者**（1.0.30 起）。頁面以 `PermissionView.IsAdmin` 守門、API 以 `[AdminOnly]` 擋，不在權限目錄、不能勾給角色。0.4.80～1.0.29 的頁面鍵「AI 用量分析」改為 `MagicObjectHelper.已退役權限鍵_AI用量分析`，由 `RbacBackfillService` 在啟動時刪除權限列、角色對應與勾選。`角色_Token用量` 只是選單名稱常數，不是權限鍵 |
 | 對外連結 | 明細窗的「查看 AI 對話紀錄」導向 `/ai-call-logs?callId=…`（1.0.31） |
 | 主要使用者 | 管理者 |
 
@@ -138,7 +138,7 @@
 - `RecordAsync` **永不拋例外**（寫不進去只記 log，不能讓使用者的工作失敗），一律以 `CancellationToken.None` 存檔（取消的呼叫照樣花了錢）。
 - 金額由 `AiUsagePricing.EstimateTokenCost`／`EstimateAudioCost` 依 `Model` 查 `LlmSettings.Pricing` 算出；連同單價（`InputPricePerMillion`、`OutputPricePerMillion`、`AudioPricePerMinute`）、`Currency`、`ExchangeRate`、`ConvertedCurrency` 一起寫入當下的**快照**——明細窗顯示的就是這些快照。
 - 匯率只讀 `ExchangeRateCache.Current`（同步欄位）；匯率的 `BaseCurrency` 與 `LlmSettings.Currency` 不同時整組留空。
-- 使用者歸屬：`AiUsageAttribution.Resolve(CurrentUser, IAiCallerProvider)`，`Id <= 0` 視為無人。1.1.28 起經 `IAiCallerProvider`（`Web/Auth/AiCallerProvider`）：Blazor 頁看 `CurrentUserService`，API 請求從 claims 取（Cookie 記姓名、JWT 記帳號）；以前只看 `CurrentUserService`，M3 起經 API（WASM 頁）的 AI 呼叫使用者是空的、每人額度不計入。背景工作（生成、轉錄）的觸發者在**入列那一刻**由 `MeetingJobRequest` 帶進佇列，recorder 刻意不注入 `CurrentUserService`（背景 scope 會解析成空白使用者且不報錯）。
+- 使用者歸屬：`AiUsageAttribution.Resolve(CurrentUser, IAiCallerProvider)`，`Id <= 0` 視為無人。1.1.28 起經 `IAiCallerProvider`（`Web/Auth/AiCallerProvider`）：API 請求從 claims 取（Cookie 記姓名、JWT 記帳號），所以經網頁觸發的 AI 呼叫也記得到人、計入每人額度。背景工作（生成、轉錄）的觸發者在**入列那一刻**由 `MeetingJobRequest` 帶進佇列，recorder 刻意不注入 `CurrentUserService`（背景 scope 會解析成空白使用者且不報錯）。
 - 串流用量：`AzureOpenAiTextGenerationProvider` 送 `stream_options.include_usage = true`，每個片段**先取 usage（`ExtractUsage`）再檢查 delta**——帶用量的那一片 `choices` 是空陣列。轉錄時長由 FFmpeg 以 `-loglevel info -nostats` 輸出、`MediaDurationParser` 解析 `Duration:`，取不到時以位元組回推並標 `IsAudioDurationEstimated`。
 
 ### 用量上限（1.0.29；1.0.31 起本頁顯示）
@@ -150,11 +150,11 @@
 
 ### 讀取：Token 用量頁
 
-- 1.1.37 起頁面是 WASM 的 `TokenUsagePage` →（`AiUsageApi`）`api/v1/ai-usage` →（伺服器）`AiUsageAnalysisService`、`IAiQuotaService`、`AiCallLogService`：
+- 頁面是 WASM 的 `TokenUsagePage` →（`AiUsageApi`）`api/v1/ai-usage` →（伺服器）`AiUsageAnalysisService`、`IAiQuotaService`、`AiCallLogService`：
   - `GetSummaryAsync()`：本月概況。撈上月同期起的投影（`UsageFact`），金額一律撈進記憶體加總。期間由 `AiUsageMetrics.BuildMonthToDateRanges` 算，曲線由 `AiUsageMetrics.BuildMonthToDateCumulative` 算。方法仍保留 `AiUsageFeature? feature` 參數（0.4.91 的功能連動），頁面 1.0.31 起不再傳。
   - `GetReportAsync(AiUsageFilter)`（1.0.31）：一次讀出範圍內的投影，在記憶體算合計、每日、三種分組（`AiUsageGroupRow`）與圖表切片。
   - `GetRecentCallsAsync(AiUsageQuery)`：明細分頁。`AiUsageQuery(Filter, CurrentPage, PageSize, SortAscending)`；排序 `OccurredAt` 後一律再以 `Id` 排（同一秒會寫進十幾列，不加會翻頁重複或漏列）；`Skip`／`Take` **無條件套用**。`AiUsageRow` 帶 `CallId`。
-  - `GetDetailAsync(id)`、`GetForExportAsync(filter, maxRows = 10,000)`（新到舊）、`GetFilterOptionsAsync()`（使用者以 `(UserId, UserName)` 分組取最近一次名稱、模型取不重複值；1.1.36 起使用者是 `AiUsageUserOption`，以前是 tuple、JSON 序列化不出來）。
+  - `GetDetailAsync(id)`、`GetForExportAsync(filter, maxRows = 10,000)`（新到舊）、`GetFilterOptionsAsync()`（使用者以 `(UserId, UserName)` 分組取最近一次名稱、模型取不重複值；使用者是 `AiUsageUserOption`——不能用 tuple，JSON 序列化不出來）。
   - `DeleteAsync(id)`、`PurgeBeforeAsync(before)`（1.0.29，自動保留期限共用）、`ClearAllAsync()`：都用 `ExecuteDelete`，不經變更追蹤。
   - 明細窗另以 `AiCallLogService.FindIdByCallIdAsync(callId)` 判斷有沒有對應的 AI 對話紀錄。
 - **篩選**：`AiUsageFilter(From, ToExclusive, Feature, UserId, Model, Outcome)`。頁面把結束日轉成「隔天零時」當上界，結束日當天才不會被切掉。私有的 `ApplyFilter` **只比對整數、字串與日期欄位**，金額欄位不進 SQL。頁面另存一份 `appliedFilter`，按查詢才更新。
@@ -166,7 +166,7 @@
 ### 匯出
 
 - **CSV**：`GetForExportAsync(appliedFilter)` 取目前條件下的每一筆，新到舊，最多 10,000 筆（到達上限時提示「只匯出最新 10,000 筆，請縮小查詢條件。」）。由 `CsvExport` 輸出（UTF-8 含 BOM、中和公式注入），檔名 `MeetingRecord.Web-token-usage-yyyyMMdd-HHmmss.csv`。
-  - 欄位依序（`Web/Export/AiUsageCsv.Columns`，1.1.36 從 `TokenUsageView.CsvColumns` 搬來；1.1.36 起由 `api/v1/ai-usage/export/csv` 在伺服器產生）：時間、功能、結果、使用者、對象、供應商、模型、輸入token、輸出token、快取token、音訊秒數、時長推估、估算金額、幣別、匯率、換算金額、換算幣別、錯誤訊息、呼叫識別碼。
+  - 欄位依序（`Web/Export/AiUsageCsv.Columns`，由 `api/v1/ai-usage/export/csv` 在伺服器產生）：時間、功能、結果、使用者、對象、供應商、模型、輸入token、輸出token、快取token、音訊秒數、時長推估、估算金額、幣別、匯率、換算金額、換算幣別、錯誤訊息、呼叫識別碼。
   - 數字一律 InvariantCulture，金額不加千分位，試算表才算得動。
 - **PDF**：靜態類別 `Business/Services/Export/TokenUsageReportExporter`（純函式，不碰 IO）組 HTML，交給 `IPdfRenderer`（「HTML → 無頭瀏覽器」管線）輸出 A4 橫式，中文字型交給瀏覽器處理。
   - 內容依序：表頭（系統版本、匯出者、查詢區間、篩選條件、匯出時間）、合計（含未定價與無匯率的註記）、每日（CSS 長條）、依使用者、依功能、依模型、明細。
@@ -176,7 +176,7 @@
 
 ### 刪除與清除
 
-- 單筆刪除、清除此日之前（不含當天）、全部清除；都先跳紅色確認框（見「三」第 11 項），方法內再檢查一次 `CheckIsAdmin()`。
+- 單筆刪除、清除此日之前（不含當天）、全部清除；都先跳紅色確認框（見「三」第 11 項），API 端 `[AdminOnly]` 再檢查一次管理者身分。
 - **AI 對話紀錄不連動**；會議時數不受影響（1.0.29 起儀表板讀 `Meeting.MediaDurationSeconds`）。
 - ⚠️ 本月的紀錄是用量上限的計算來源：刪掉本月的紀錄，本月已用額度會跟著變少；全部清除會歸零。
 - **自動保留期限**：`LogRetentionSettings:AiUsageLogDays`（預設 0＝永久保留；啟用時至少 62 天，設 1～61 啟動即失敗）。`AiLogRetentionBackgroundService` 啟動時跑一次、之後每天呼叫 `PurgeBeforeAsync`，有刪到才記稽核 `AiUsage.AutoPurge`。
@@ -233,9 +233,9 @@
 ## 五、權限與安全
 
 - **只限管理者**：
-  - 頁面進入：`AuthenticationStateHelper.Check` 通過後以 `CheckIsAdmin()` 守門（1.0.30 起；之前是 `CheckAccessPage(角色_AI用量分析)`），判定前不渲染、不讀任何資料，非管理者顯示「你沒有權限存取此頁面」。
-  - 刪除、清除在方法內再檢查一次 `CheckIsAdmin()`。
-  - 側邊欄以 `AdminOnlyMenuIds` 排除非管理者。舊資料庫殘留的「AI 用量分析」勾選不再有作用，並在啟動時由 `RbacBackfillService` 清掉。沒有動作級權限，也沒有 API。
+  - 頁面進入：登入狀態由 `WasmLayout` 處理，頁面以 `PermissionView.IsAdmin` 守門（1.0.30 起只限管理者），判定前不渲染、不讀任何資料，非管理者顯示「你沒有權限存取此頁面」並寫頁面拒絕稽核。
+  - `api/v1/ai-usage` 整個控制器 `[AdminOnly]`：非管理者 403 並寫 `Permission.Denied`；刪除、清除也在這裡再擋一次。
+  - 側邊欄以 `AdminOnlyMenuIds` 排除非管理者。舊資料庫殘留的「AI 用量分析」勾選不再有作用，並在啟動時由 `RbacBackfillService` 清掉。沒有動作級權限。
 - ⚠️ **本頁看得到全公司的用量與人名，不經 `ProjectAccessService`、不套團隊過濾**——與儀表板同屬「全公司彙總」的刻意例外。1.0.29 以前可以把「AI 用量分析」勾給非管理者角色，那個人就會看到全部團隊的用量（[上線前全面審查](../changelog/2026-10-02-上線前全面審查與修正.md)「四、未修，請判斷」列過這點）；1.0.30 改為只限管理者，這個疑慮已不存在。
 - 帳本只存 `ErrorMessage`（截斷 500 字），不存提示詞、逐字稿或回答內容；要看內容得到 AI 對話紀錄（那邊查看會留稽核）。
 - **稽核**（`targetType` 為 `AiUsageLog`，只記編號、筆數與條件）：
@@ -260,7 +260,7 @@
 - **刪除時該列已不存在**：提示「這筆紀錄已不存在。」並重新載入；**查看時該列已被刪**：提示「找不到這筆用量紀錄，可能已被刪除。」並關閉明細窗。
 - **CSV 超過 10,000 筆**：只匯出最新 10,000 筆並提示縮小條件；**PDF 明細超過 200 筆**：只列前 200 筆並註明改用 CSV。
 - **上限列讀取失敗**：只記錯誤，上限列顯示「不限」，頁面其他部分照常。
-- **載入失敗**：`ReloadAsync` 的例外記 log 並提示「載入 Token 用量失敗：…」，畫面保留上一份資料；載入中重複觸發會被早退擋下（避免同一個 circuit 的 DbContext 被並行使用）。
+- **載入失敗**：`ReloadAsync` 的例外記 log 並提示「載入 Token 用量失敗：…」，畫面保留上一份資料；載入中重複觸發會被早退擋下。
 - **刪掉本月紀錄**：本月上限已用額度跟著變少，確認框已提醒。
 
 ## 七、驗收與測試
@@ -298,8 +298,8 @@
 
 ### 程式
 
-- 頁面（1.1.37 起 WASM）：`src/MeetingRecord/MeetingRecord.Web.Client/Pages/AiManagement/TokenUsagePage.razor(.cs/.css)`（`OnInitializedAsync` 管理者檢查、`ReloadAsync`、`LoadRowsAsync`、`OnSearchAsync`、`OnViewAsync`、`OnExportCsvAsync`、`OnExportPdfAsync`、`OnDeleteAsync`、`OnPurgeAsync`、`OnClearAllAsync`）、`TokenUsageGroupTable.razor(.css)`（1.0.31，三個分組頁籤共用）、`src/MeetingRecord/MeetingRecord.Web.Client/Api/AiUsageApi.cs`；格式化 `src/MeetingRecord/MeetingRecord.Share/Helpers/AiUsageFormatter.cs`、上限值 `src/MeetingRecord/MeetingRecord.Dtos/AiUsage/AiUsageConstants.cs`（1.1.37）
-- 讀取服務：`src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiUsageAnalysisService.cs`（`GetSummaryAsync`、`GetReportAsync`、`GetRecentCallsAsync`、`GetDetailAsync`、`GetForExportAsync`、`GetFilterOptionsAsync`、`DeleteAsync`、`PurgeBeforeAsync`、`ClearAllAsync`、`ApplyFilter`、`BuildGroups`、`BuildDaily`、`CostView`）；型別 `src/MeetingRecord/MeetingRecord.Dtos/AiUsage/AiUsageModels.cs`（`AiUsageFilter`、`AiUsageQuery`、`AiUsageRow`、`AiUsageReport`、`AiUsageGroupRow`、`AiUsageDailyRow`、`AiUsageFilterOptions`、`AiUsageUserOption`、`AiUsageDetail`）、`AiQuotaModels.cs`（`AiQuotaStatus`、`AiQuotaScope`、`AiQuotaUserUsage`）、`AiUsageApiDtos.cs`（1.1.36 從 Business 搬來）
+- 頁面：`src/MeetingRecord/MeetingRecord.Web.Client/Pages/AiManagement/TokenUsagePage.razor(.cs/.css)`（`OnInitializedAsync` 管理者檢查、`ReloadAsync`、`LoadRowsAsync`、`OnSearchAsync`、`OnViewAsync`、`OnExportCsvAsync`、`OnExportPdfAsync`、`OnDeleteAsync`、`OnPurgeAsync`、`OnClearAllAsync`）、`TokenUsageGroupTable.razor(.css)`（1.0.31，三個分組頁籤共用）、`src/MeetingRecord/MeetingRecord.Web.Client/Api/AiUsageApi.cs`；格式化 `src/MeetingRecord/MeetingRecord.Share/Helpers/AiUsageFormatter.cs`、上限值 `src/MeetingRecord/MeetingRecord.Dtos/AiUsage/AiUsageConstants.cs`
+- 讀取服務：`src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiUsageAnalysisService.cs`（`GetSummaryAsync`、`GetReportAsync`、`GetRecentCallsAsync`、`GetDetailAsync`、`GetForExportAsync`、`GetFilterOptionsAsync`、`DeleteAsync`、`PurgeBeforeAsync`、`ClearAllAsync`、`ApplyFilter`、`BuildGroups`、`BuildDaily`、`CostView`）；型別 `src/MeetingRecord/MeetingRecord.Dtos/AiUsage/AiUsageModels.cs`（`AiUsageFilter`、`AiUsageQuery`、`AiUsageRow`、`AiUsageReport`、`AiUsageGroupRow`、`AiUsageDailyRow`、`AiUsageFilterOptions`、`AiUsageUserOption`、`AiUsageDetail`）、`AiQuotaModels.cs`（`AiQuotaStatus`、`AiQuotaScope`、`AiQuotaUserUsage`）、`AiUsageApiDtos.cs`
 - API：`src/MeetingRecord/MeetingRecord.Web/Controllers/AiUsageController.cs`（1.1.36）、CSV 欄位 `src/MeetingRecord/MeetingRecord.Web/Export/AiUsageCsv.cs`
 - PDF 報表：`src/MeetingRecord/MeetingRecord.Business/Services/Export/TokenUsageReportExporter.cs`（1.0.31，`BuildHtml`、`BuildFileName`、`MaxDetailRows`）；CSV：`src/MeetingRecord/MeetingRecord.Web/Export/CsvExport`
 - 用量上限：`src/MeetingRecord/MeetingRecord.Business/Services/AiUsage/AiQuotaService.cs`（`GetStatusAsync`、`GetTopUsersAsync`）
@@ -335,7 +335,7 @@
 - **0.4.122**：新增功能別 `AiUsageFeature.ExceptionAnalysis = 6`（「AI 例外分析」，token 計費，系統例外紀錄的明細窗觸發），同樣由 `DiagnosticAiService` 寫帳；功能下拉自動多一項。
 - **0.4.124**：補上 Azure 轉錄部署 `gpt-transcribe` 的單價（每分鐘 0.0045 美元，依 OpenAI 官方價目）；之前健康監控「AI 供應商設定」亮黃燈，轉錄金額記成「—」。本機帳本沒有這個模型的舊紀錄，未回填。`SystemHealthChecksTests.AiProvider_ShippedPricing_ShouldCoverTheDeploymentsInUse` 以出貨的單價表守住。
 - **1.0.29**：所有呼叫端改經 `AiCallGateway` 寫帳；帳本新增 `CallId`（migration `AddAiCallLogAndMeetingDuration`），對應新的 AI 對話紀錄（`AiCallLog`，頁面在 1.0.30）；帳本可設自動保留期限 `LogRetentionSettings:AiUsageLogDays`（預設 0＝永久，啟用時至少 62 天，`AiLogRetentionBackgroundService` 每天清，稽核 `AiUsage.AutoPurge`）；新增每月用量上限 `AiQuotaSettings`，依本帳本計算。儀表板會議時數改讀 `Meeting.MediaDurationSeconds`，不再依賴本帳本。見 [AI 管理（一）](../changelog/2026-10-15-AI管理基礎記錄管線與用量上限.md)。
-- **1.0.30**：頁面改名「Token 用量」，從「監控與診斷」搬到新分組「系統管理 → AI 管理」（id 62），網址改為 `/token-usage`（`/ai-usage` 保留為別名），icon 改 `toll`；改為只限管理者（`CheckIsAdmin()`＋`AdminOnlyMenuIds`），權限鍵「AI 用量分析」退役（`已退役權限鍵_AI用量分析`，`RbacBackfillService` 啟動時清除）。檔案搬到 `Pages/AiManagement/TokenUsagePage.razor`、`Views/AiManagement/TokenUsageView.*`。頁面功能不變。見 [AI 管理（二）](../changelog/2026-10-15-AI管理AI對話紀錄頁與選單.md)。
+- **1.0.30**：頁面改名「Token 用量」，從「監控與診斷」搬到新分組「系統管理 → AI 管理」（id 62），網址改為 `/token-usage`（`/ai-usage` 保留為別名），icon 改 `toll`；改為只限管理者（`AdminOnlyMenuIds`），權限鍵「AI 用量分析」退役（`已退役權限鍵_AI用量分析`，`RbacBackfillService` 啟動時清除）。頁面功能不變。見 [AI 管理（二）](../changelog/2026-10-15-AI管理AI對話紀錄頁與選單.md)。
 - **1.0.31**：頁面升級成完整的分析與管理頁：上限列（接上 1.0.29 的 `GetStatusAsync`／`GetTopUsersAsync`）、篩選（按查詢才套用）、篩選範圍合計卡、六個頁籤（新增元件 `TokenUsageGroupTable`）、明細窗（單價與匯率快照，可跳 AI 對話紀錄）、CSV／PDF 匯出（新增 `TokenUsageReportExporter`）、單筆刪除／清除此日之前／全部清除與 `AiUsage.*` 稽核。本月概況改為固定全部功能、本月，原本的功能下拉與「最近 N 天」下拉拿掉。服務新增 `AiUsageFilter`、`GetReportAsync` 等方法。PRD 由 `AI用量分析-prd.md` 改名為本檔並全文改寫。見 [AI 管理（三）](../changelog/2026-10-15-AI管理Token用量升級.md)。
 - **1.0.36**：出貨的單價表加入 `gpt-6.1-sol`（輸入 $2、輸出 $10／每百萬 token，OpenAI 官方模型頁標準層）。部署改用它之後的呼叫才有金額；之前已記錄、金額為「—」的紀錄不回填。
 - **1.0.43**：新增功能別 `HelpAssistant = 9`（「使用說明 AI 助理」，token 計費），由使用說明頁的「問 AI 助理」經 `AiCallGateway` 寫帳（成功／失敗／取消都記）；功能下拉自動多一項。

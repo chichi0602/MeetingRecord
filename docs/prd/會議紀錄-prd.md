@@ -1,16 +1,16 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.22
+- 文件版本：2.23
 - 文件狀態：已實作
-- 現行系統版本：1.1.23
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
 > **0.4.102：分類加回來（團隊沒有）。** 工具列恢復「分類」過濾、清單恢復「分類」欄、編輯表單恢復「分類」多選（啟用中的分類，以名稱存進 `Meeting.Categories`）。分類＝「什麼資料」，只用來篩選，**不影響誰看得到**；團隊欄位**刻意不放回會議頁**，可見性仍跟著專案走（已歸屬的看專案的主責＋協作團隊）。
 >
-> **0.4.99：會議改跟著專案走，團隊標籤不再作用。** 已歸屬專案的會議跟著專案的可見範圍（0.4.102 起看專案的主責＋協作團隊；0.4.101 看專案的資料群組；0.4.99～0.4.100 看專案成員）；**未歸屬的只有上傳者（新欄位 `Meeting.CreatedByUserId`）與管理者看得到**。`MeetingService` 原本 11 處團隊檢查全部換成 `ProjectAccess.CanViewMeeting`，另補上原本沒有檢查的 `UpdateAsync`／`DeleteAsync`；歸屬到專案、產生會議紀錄時，目標專案也要看得到。提示詞範本不再檢查團隊。API 的 `MeetingRepository` 套同一條規則，並修掉「API 更新一次就把 `ProjectId` 清成 null」的舊問題。第五節已改寫為現行規則，舊團隊權控只留歷史註記；「把團隊守門補進 `AiChatService`」這條規劃已由專案權控完成。
+> **0.4.99：會議改跟著專案走，團隊標籤不再作用。** 已歸屬專案的會議跟著專案的可見範圍（0.4.102 起看專案的主責＋協作團隊；0.4.101 看專案的資料群組；0.4.99～0.4.100 看專案成員）；**未歸屬的只有上傳者（新欄位 `Meeting.CreatedByUserId`）與管理者看得到**。`MeetingService` 原本 11 處團隊檢查全部換成 `ProjectAccess.CanViewMeeting`，另補上原本沒有檢查的 `UpdateAsync`／`DeleteAsync`；歸屬到專案、產生會議紀錄時，目標專案也要看得到。提示詞範本不再檢查團隊。API 走同一個 `MeetingService`，套同一條規則。第五節已改寫為現行規則，舊團隊權控只留歷史註記；「把團隊守門補進 `AiChatService`」這條規劃已由專案權控完成。
 
 ## 一、目標與範圍
 
@@ -29,19 +29,18 @@
 - 不做即時（會議進行中）轉錄與逐字稿串流。
 - 不做說話者聲紋辨識與身分綁定。
 - **不做逐字稿的編修**（0.4.55 曾提供，0.4.82 移除）。逐字稿檔案仍是生成會議紀錄與 AI 問答的輸入。0.4.82～1.0.39 連唯讀預覽都沒有；**1.0.40 起「會議紀錄與逐字稿」視窗有唯讀的「逐字稿」頁籤**，可複製全文、下載 .txt（使用者要拿去外部 AI 工具用），但仍不能改。
-- 不做影音檔／逐字稿的 HTTP 下載端點與線上播放（1.0.40 的下載 .txt 是 Blazor 頁面經服務層讀檔後交給瀏覽器存檔，不是對外網址）。
+- 不做影音檔的下載端點與線上播放（逐字稿 .txt 下載見下方「會議紀錄與逐字稿」）。
 - 不做一筆會議掛多個影音檔（一對一，替換即覆寫）。
-- Web API 只開放中繼資料 CRUD，不開放上傳、轉錄與逐字稿讀取。
 
 ## 二、使用者與入口
 
 | 項目 | 內容 |
 | --- | --- |
-| 路由 | `/meetings`（`MeetingPage.razor`，`MainLayout`） |
-| REST API | `api/Meeting`、`api/v1/Meeting`（`GET {id}`／`POST search`／`POST`／`PUT {id}`／`DELETE {id}`；1.1.20 起另有畫面用的清單、重新轉錄、會議紀錄、歸屬、逐字稿、下載與匯出端點，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)） |
+| 路由 | `/meetings`（`Web.Client/Pages/Meetings/MeetingPage.razor`，WASM） |
+| REST API | `api/Meeting`、`api/v1/Meeting`（`GET {id}`／`POST search`／`POST`／`PUT {id}`／`DELETE {id}`；另有畫面用的清單、重新轉錄、會議紀錄、歸屬、逐字稿、下載與匯出端點；影音檔上傳走 `api/v1/uploads`，見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)） |
 | 選單路徑 | 側邊欄「核心功能」區的頂層項目「會議紀錄」（id=61，`url=/meetings`，icon `mic`；0.4.33 起不再有「會議管理」群組） |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[61] = 角色_會議紀錄` |
-| UI 頁面權限 | 頁面鍵「會議紀錄」（`AuthenticationStateHelper.CheckAccessPage`；管理員短路） |
+| UI 頁面權限 | 頁面鍵「會議紀錄」（`PermissionView.CanAccessPage`；管理員短路） |
 | API 動作級權限 | `會議紀錄:view` / `會議紀錄:create` / `會議紀錄:edit` / `會議紀錄:delete` |
 | 主要使用者 | 具「會議紀錄」角色權限的後台使用者；系統管理員無條件可存取 |
 
@@ -49,19 +48,19 @@
 
 ## 三、畫面與欄位
 
-單頁清單 + Modal 表單（1.1.23 起是 WASM 頁 `Web.Client/Pages/Meetings/MeetingPage`，經 `api/v1/Meeting`；以前是 Server 的 `MeetingViewView`）：
+單頁清單 + Modal 表單（WASM 頁 `Web.Client/Pages/Meetings/MeetingPage`，經 `api/v1/Meeting`）：
 
 - 搜尋：關鍵字比對 `Title`、`Description` 或 `MediaOriginalFileName`（`Contains`）。清空搜尋鈕在有輸入時出現。
 - 工具列：新增、重新整理、**分類過濾（0.4.102 恢復，多選，含任一分類即符合）**、關鍵字、清空搜尋、搜尋。**0.4.35 移除分類過濾與團隊過濾**，團隊過濾沒有恢復。
 - 排序：可排序欄位 `Title`、`MeetingDate`、`TranscriptionStatus`、`CreatedAt`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。
 - 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。
 - 清單欄位：會議標題（**0.4.73 起第二行顯示所屬專案**，未歸屬顯示灰字「— 未歸屬」；刻意不另開一欄，因為操作欄最壞會有 11 顆圖示）、會議日期、影音檔（檔名＋大小，未上傳顯示「尚未上傳」）、轉錄狀態（彩色標籤；進行中附即時百分比，Tooltip 顯示目前段數；失敗時附 ⚠ 並以 Tooltip 顯示錯誤訊息）、**會議紀錄狀態（0.4.73 新增，含即時生成百分比與失敗 ⚠；不可排序，因為服務層的排序白名單沒有 DraftStatus）**、**分類（0.4.102 恢復）**、更新時間、操作。**0.4.35 移除分類與團隊兩欄**，團隊欄沒有恢復。
-- **轉錄進度通知器**（0.4.36）：右下角常駐面板（形式比照雲端硬碟的上傳進度），顯示每筆轉錄的階段與百分比，完成打勾、失敗顯示錯誤；掛在 `MainLayout`，切到其他頁面也看得到。轉錄結束時清單會自動重新載入，狀態欄自動翻成已完成／失敗，不必手動按 🔄。進度只存在記憶體（Singleton），**沒有資料庫欄位**。**0.4.55 起進行中的項目多一顆「取消」**（走 `IJobCancellationRegistry`，排隊中與執行中都能停），同時修正既有誤導——關閉鈕在工作進行中的文案改為「關閉通知（工作會繼續執行）」，先前它讀起來像取消，實際上只是關掉通知、轉錄照跑照計費。**0.4.117 起上傳也進面板**：
+- **轉錄進度通知器**（0.4.36）：右下角常駐面板（形式比照雲端硬碟的上傳進度），顯示每筆轉錄的階段與百分比，完成打勾、失敗顯示錯誤；由 `WasmLayout` 放進全站外框 `AppShell`（`BackgroundJobProgressPanel`），切到其他頁面也看得到。轉錄結束時清單會自動重新載入，狀態欄自動翻成已完成／失敗，不必手動按 🔄。進度只存在伺服器記憶體（Singleton），前端讀 `api/v1/jobs` 並聽 SignalR 推播（`/hubs/app`），**沒有資料庫欄位**。**0.4.55 起進行中的項目多一顆「取消」**（走 `IJobCancellationRegistry`，排隊中與執行中都能停），同時修正既有誤導——關閉鈕在工作進行中的文案改為「關閉通知（工作會繼續執行）」，先前它讀起來像取消，實際上只是關掉通知、轉錄照跑照計費。**0.4.117 起上傳也進面板**：
   - 通知器新增「上傳中」階段（`TranscriptionPhase.Uploading`）。`MeetingService.SaveMediaAsync` 開始寫檔前呼叫 `StartUpload`，每個百分比呼叫 `ReportUpload`，入列時被 `Enqueued` 覆蓋成排隊中；上傳失敗（含上傳頁籤斷線）標成失敗。
   - 同一個帳號的其他頁籤、瀏覽器、電腦，以及看得到這筆會議的其他人，面板與清單都看得到「上傳中 xx%」。
   - 上傳中**不顯示「取消」**：上傳不在背景佇列裡，`RequestCancel` 會留下待取消標記，入列後那趟轉錄會被默默跳過。要停止上傳只能關掉上傳的那個頁籤。**1.0.37 起上傳中也有「取消」**：`SaveMediaAsync` 寫檔期間以 `BackgroundJobKind.Upload` 登記進 `IJobCancellationRegistry`（寫完即撤銷），面板依階段用 Upload 或 Transcription 種類取消，不會再誤殺入列後的轉錄。
   - 同一筆會議已經在別的視窗上傳中時，再上傳會被拒絕。
-  - ⚠️ **0.4.84～1.0.24 面板其實沒有掛在 `MainLayout` 上**（改寫註解時誤刪，連同 `blazor-error-ui`），這段期間整站都看不到它；1.0.25 補回，並以 `LayoutMountTests` 釘住。
+  - ⚠️ 面板與 `blazor-error-ui` 曾因改寫註解被誤刪（0.4.84～1.0.24 整站看不到面板）；現以 `LayoutMountTests` 釘住 `WasmLayout` 有把面板傳進來、`AppShell` 有放插槽。
 - 新增／編輯表單欄位：
   - 會議標題 `Title`（必填，最長 200）
   - 會議日期 `MeetingDate`（選填，`DatePicker`）。**0.4.35 起：留空時於影音檔上傳成功當下自動帶入上傳當天**（`MeetingService.SaveMediaAsync` 以 `??=` 補值，已填的不覆蓋），要更正仍可從畫面編輯
@@ -70,7 +69,9 @@
   - ~~團隊 `Teams`~~ —— **0.4.35 已從表單移除**且不再恢復，可見性跟著專案走。資料庫欄位 **0.4.103 已刪除**；當時的影響（0.4.35～0.4.98 新建會議一律公開）見第五節的歷史註記
   - 影音檔（單檔，**0.4.77 起改用共用的 `FileDropZone`，可拖拉或點擊**；`accept` 由 `MeetingMediaPolicy.AcceptAttribute` 產生，⚠️ 但 `accept` 對「拖入」不可信，副檔名把關以服務層的 `IsAllowedFileName` 為準）
 - **Modal 版面**（0.4.28，0.4.69 改為全站共用機制）：`.meeting-view-modal` 近滿版——寬 `96vw`、`top: 2vh`、內容高 `96vh`，`ant-modal-body` 自行滾動，外層頁面與遮罩不出現滾動軸。表單以兩欄 grid 排列：會議標題／會議日期一列，描述與影音檔以 `.form-modal-full` 佔滿整列；視窗寬度 ≤768px 退回單欄（0.4.35 移除分類／團隊該列）。**0.4.69 起兩欄 grid 改用全站共用的 `.form-modal-grid` / `.form-modal-full`**（原本的 `.meeting-view-form-grid` / `.meeting-view-form-full` 已刪除），尺寸級別與分欄原則見 [開發慣例與限制速查 §6.5](../architecture/開發慣例與限制速查.md)。樣式一律寫在 `FormModalHelper.razor` 的全域 `<style>`——Blazor CSS 隔離的 `[b-xxxxx]` 屬性套不到由 `Modal` 元件自己渲染的外框元素。
-- **上傳進度列**：儲存後開始複製檔案，Modal 內以 AntDesign `Progress` 顯示 0-100%；上傳期間 Modal 的確定鈕轉為 loading、取消鈕與移除鈕失效，避免中途關閉。**0.4.116 起**主資料存好、開始上傳前，先把 Modal 留住並重新整理清單：先前 AntDesign 在確定鈕按下後就把 Modal 關掉，進度列跟著看不見，清單也要等上傳完才出現新會議，使用者只看到「新增成功」與一片沒變的畫面。**1.0.25 起**存檔到上傳結束前整張表單鎖住：欄位、移除檔案、取消鈕、右上角關閉、Esc 都不能用，唯一能按的是「取消上傳」（先確認）。主資料在上傳之前就存了，先前上傳期間還能改欄位，改的內容不會再存，標題改了也會默默消失。取消後服務層刪掉已傳的部分，會議資料保留，進度面板標成「已取消上傳。」；取消只作用在寫檔，寫完檔後的存檔與入列不受影響，避免留下已存檔卻沒入列的會議。不提供暫停：檔案經 Blazor 連線傳送，伺服器超過 1 分鐘沒收到資料就會切斷整條連線。**1.0.27 起不再在視窗裡顯示進度**（使用者要求）：主資料存好就關窗、重新整理清單，上傳進度直接顯示在該列的「轉錄狀態」（徽章「上傳中」＋百分比，來自 `TranscriptionPhase.Uploading`），上傳完接著是轉錄進度。上傳在背景跑（存檔流程不等它結束），**只鎖正在上傳的那一筆**：該列操作欄只剩「取消上傳」（只在發起上傳的頁面出現；其他頁籤的同一列只顯示「上傳中」，判斷依據是共用通知器），其他紀錄、工具列、排序、換頁照常可用。同一頁一次只上傳一個：上傳期間開其他視窗時選檔區停用並說明，開視窗也不會清掉上傳狀態或重建選檔區（背景還在讀那個檔案），上傳結束才重建並自行重載清單。離開頁面不取消上傳。上傳與頁面其他操作共用同一個 DbContext，因 Microsoft.Data.Sqlite 的非同步方法實為同步完成、Blazor 又逐段執行，兩者不會真正交錯；改用真正非同步的資料庫時要重新檢查。上傳失敗或取消時會議資料保留，提示改按「修改」再選檔重傳。**1.0.37 起**：取消上傳時，若這筆是這次存檔才新增的會議，連資料列一起刪（`SaveMediaAsync(deleteMeetingOnCancel: true)`，沿用 `DeleteAsync` 的檔案與 AI 對話清理），面板那一筆直接移除，清單該列消失；修改既有會議（含換檔）時取消仍保留會議與舊檔。上傳失敗（非取消）一律保留。取消結果改看服務層回傳的訊息（`UploadCancelledMessage`／`UploadCancelledAndMeetingDeletedMessage`），從面板取消時發起上傳的頁面也會跳通知；按取消時檔案已寫完（確認框開著時傳完、或已過寫檔階段）會跳「來不及取消」，不再無聲無息或誤報「已排入轉錄」。對話框只是隱藏（AntDesign Modal 預設不 DestroyOnClose），裡面的 InputFile 還在，檔案串流才讀得到。
+- **上傳進度**（1.0.27 起不在視窗裡顯示，使用者要求）：主資料存好就關窗、重新整理清單，上傳進度直接顯示在該列的「轉錄狀態」（徽章「上傳中」＋百分比，來自 `TranscriptionPhase.Uploading`），上傳完接著是轉錄進度。影音檔由整個前端共用的 `MeetingUploadManager` 以 HTTP 分塊上傳（`api/v1/uploads`＋`chunk-upload.js`），存檔流程不等它結束，**只鎖正在上傳的那一筆**：該列操作欄只剩「取消上傳」（先確認；只在發起上傳的分頁出現，其他分頁的同一列只顯示「上傳中」，依據是背景工作進度），其他紀錄、工具列、排序、換頁照常可用。選檔當下瀏覽器就拿到檔案，之後關窗、表單重設都不影響這趟上傳。存檔進行中整張表單鎖住（1.0.25 起）。
+  - 在系統內換頁不中斷上傳；換到伺服器頁（例如登出）、關分頁或重新整理前會先問「上傳還在進行」。上傳中登入失效時導到登入頁，會議資料保留。不提供暫停：伺服器超過 2 分鐘沒收到檔案資料就結束這趟上傳。
+  - 取消後服務層刪掉已傳的部分，進度面板標成「已取消上傳。」；取消只作用在寫檔，寫完檔後的存檔與入列不受影響，避免留下已存檔卻沒入列的會議。**1.0.37 起**：取消上傳時，若這筆是這次存檔才新增的會議，連資料列一起刪（`SaveMediaAsync(deleteMeetingOnCancel: true)`，沿用 `DeleteAsync` 的檔案與 AI 對話清理），面板那一筆直接移除，清單該列消失；修改既有會議（含換檔）時取消仍保留會議與舊檔。上傳失敗（非取消）一律保留會議資料，提示改按「修改」再選檔重傳。取消結果看服務層回傳的訊息（`UploadCancelledMessage`／`UploadCancelledAndMeetingDeletedMessage`），從面板取消時發起上傳的分頁也會跳通知；按取消時檔案已寫完會跳「來不及取消」，不會無聲無息或誤報「已排入轉錄」。
 - 操作按鈕：
   - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制，**1.0.47 起只對上傳者與管理者顯示**；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
   - **產生會議紀錄（0.4.73，`edit`；1.0.48 前是列上的「AI 轉會議紀錄」）**：開對話框（標題「產生會議紀錄」）選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員。按確定會再跳一次費用確認。**1.0.48 起列上不再有這顆鈕**（使用者要求），入口改到下面「會議紀錄與逐字稿」視窗裡的「產生會議紀錄」／「重新產生」
@@ -92,7 +93,7 @@
 - 進度面板的「取消」要有 `會議紀錄:edit`（0.4.115）。只看得到那筆會議的人仍看得到進度，但沒有取消鈕。
 - **會議紀錄編修器（0.4.82）**：檢視與編修共用 `Components/Commons/MarkdownEditorModal`，差別只在 `CanEdit`。1.0.40 起同一個視窗先唯讀、按「編修」才切到編修模式；視窗一律 `markdown-editor-modal meeting-view-modal`（寬 96vw、內容固定高 96vh），檢視與編修切換時大小不跳動。
   版面是左邊 `<textarea>`、右邊 Markdown 即時預覽，上方一列常駐的搜尋／取代（搜尋、上一個／下一個、取代、全部取代，顯示「第 n / 共 m 筆」）。
-  - 搜尋取代的邏輯全在 `Share/Helpers/TextSearchHelper`（1.1.17 從 Business 搬來，WASM 頁也用）（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
+  - 搜尋取代的邏輯全在 `Share/Helpers/TextSearchHelper`（純函式，可單元測試）；JS 只負責 `setSelectionRange` 與捲動。**不做**大小寫選項與整詞比對（中文沒有詞邊界，`\b` 對它無效）。
   - ⚠️ **只反白當前那一筆**。`<textarea>` 裡唯一能做的反白就是 selection；要同時標記全部 m 筆得做逐像素對齊的 overlay，中文字型 fallback 一有差異就整段錯位。用「第 n / 共 m 筆」補足資訊。
   - ⚠️ **刻意不綁 Ctrl+F**。Blazor 的 `@onkeydown:preventDefault` 是編譯期決定的，攔 Ctrl+F 就得對整個容器無條件攔，連右邊預覽區的瀏覽器原生搜尋都會被吃掉。
   - ⚠️ **編修時 `Keyboard="false"`**（Esc 不關窗），改過後按「取消」會先跳確認——一整篇打到一半的會議紀錄，按錯一次鍵就沒了。
@@ -118,14 +119,14 @@
 
 ## 四、內部系統運作
 
-- UI 路徑：1.1.23 起是 WASM 頁 `MeetingPage` → `MeetingApi`（`api/v1/Meeting`）→ `MeetingController` → `MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`。影音檔由整個前端共用的 `MeetingUploadManager` 上傳（`api/v1/uploads`＋`chunk-upload.js`，換 WASM 頁不中斷），進度讀 `api/v1/jobs` 並聽推播。以前是 Blazor Server 的 `MeetingViewView` 直接呼叫服務。
-- API 路徑：`MeetingController` → `MeetingService`（1.1.20 起全部，以前只有刪除，其他走 `MeetingRepository`）→ `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。刪除自 0.4.115 起就走 `MeetingService.DeleteAsync`：和畫面同一套，一併清影音、逐字稿與 AI 問答對話（1.0.29 起也刪這場會議的 AI 對話紀錄，用量帳本不動），背景工作進行中回 400。以前 API 只刪資料列與兩個實體檔、對話檔留在磁碟上；新增又照抄用戶端的 `Id`，別人用同一個編號就能讀到已刪會議的問答。現在新增一律由資料庫配號。
+- UI 路徑：WASM 頁 `MeetingPage` → `MeetingApi`（`api/v1/Meeting`）→ `MeetingController` → `MeetingService` → `BackendDBContext` / `MeetingFileStore` / `ITranscriptionQueue`。影音檔由整個前端共用的 `MeetingUploadManager` 上傳（`api/v1/uploads`＋`chunk-upload.js`，在系統內換頁不中斷），進度讀 `api/v1/jobs` 並聽 SignalR 推播（`/hubs/app`）。
+- API 路徑：`MeetingController` → `MeetingService` → `BackendDBContext`，回傳 `ApiResult<T>` / `PagedResult<T>`。刪除走 `MeetingService.DeleteAsync`，一併清影音、逐字稿與 AI 問答對話（1.0.29 起也刪這場會議的 AI 對話紀錄，用量帳本不動），背景工作進行中回 400。新增一律由資料庫配號、不照抄用戶端的 `Id`（照抄的話別人用同一個編號就能讀到已刪會議的問答）。
 - Entity `Meeting`（DbSet 為 `context.Meeting`）。**刻意不叫 `MeetingRecord`**——會與根命名空間 `MeetingRecord` 衝突；`Meeting` 也與 0.4.24 移除前的舊表同名。
   因為「一筆會議只有一個影音檔」，媒體欄位直接內嵌，**不另開附件子表**，省掉 Cascade 與附件集合的整套機制。
 - 標籤欄位 `Categories` 以 `TagStringHelper` 的「換行包夾」格式儲存；AutoMapper 以 `ForMember` 搭配 `ToList`／`ToStored` 轉換（`Teams` 0.4.103 已刪除）。
 - 查詢一律 `AsNoTracking()`；寫入前後以 `CleanTrackingHelper.Clean<Meeting>` 清追蹤。
 - 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製；`Clone()` 為淺複製後另建 `Categories` 新清單。
-- **`UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位**（1.0.29 起含 `MediaDurationSeconds`），只寫回標題／日期／描述／標籤。使用者開著 Modal 時背景轉錄若剛好完成，畫面上的舊複本不會把新狀態蓋掉；`MeetingRepository.UpdateAsync` 對 API 路徑做同樣保護。
+- **`UpdateAsync` 一律沿用資料庫既有的媒體與轉錄欄位**（1.0.29 起含 `MediaDurationSeconds`），只寫回標題／日期／描述／標籤。使用者開著 Modal 時背景轉錄若剛好完成，畫面上的舊複本不會把新狀態蓋掉。
 
 ### 檔案存放
 
@@ -177,7 +178,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 
 ## 五、權限與安全
 
-- API 一律 `[Authorize(JwtBearer)]`；每個動作以 `[HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.*)]` 做動作級授權。
+- API 一律 `[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]`（帶 Bearer 走 JWT，否則走登入 Cookie）；每個動作以 `[HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.*)]` 做動作級授權。
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`會議紀錄:view`、`會議紀錄:create`、`會議紀錄:edit`、`會議紀錄:delete`。裸鍵「會議紀錄」代表該頁全部動作（向後相容）。
 - **上傳影音檔與重新轉錄歸在 `edit`**，不新增動作類型。
 - **上傳者專屬動作（1.0.47）**：同專案看得到的人都能看、改欄位（標題、說明、分類）、編修會議紀錄、重新產生、AI 問答、下載；**刪除、從專案移除、換影音檔、重新轉錄只限上傳者（`Meeting.CreatedByUserId`）與管理者**。判斷一律用 `ProjectAccess.IsMeetingOwner`，在 `MeetingService` 的 `DeleteAsync`／`DetachFromProjectAsync`／`SaveMediaAsync`／`RequeueTranscriptionAsync` 擋下，訊息由 `MeetingService.OwnerOnlyMessage` 組成，例如「只有上傳者或管理者可以把這筆會議紀錄從專案移除。」；上傳者為 null 的舊會議只有管理者。
@@ -193,9 +194,9 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
   - **未歸屬專案**：只有上傳者（`Meeting.CreatedByUserId`）看得到；上傳者為 null（0.4.80 以前、啟動回填也推不回來的舊會議）時只有管理者看得到。
   - **管理者**（`MyUser.IsAdmin`）看全部。
   - 看不到的當成不存在：UI 找不到、API 回 404。
-  - 套用範圍：`MeetingService` 的清單、單筆、修改、刪除、上傳影音檔、重新轉錄、歸屬到專案、產生會議紀錄（目標專案也要看得到）、讀逐字稿（`ReadTranscriptAsync`，1.0.40），API 的 `MeetingRepository`，以及讀逐字稿原文的 **AI 問答**（`AiChatService.EnsureAccessAsync`，見 [AI 問答 PRD](AI問答-prd.md)）。分類只是標籤，不影響可見性。
+  - 套用範圍：`MeetingService` 的清單、單筆、修改、刪除、上傳影音檔、重新轉錄、歸屬到專案、產生會議紀錄（目標專案也要看得到）、讀逐字稿（`ReadTranscriptAsync`，1.0.40），以及讀逐字稿原文的 **AI 問答**（`AiChatService.EnsureAccessAsync`，見 [AI 問答 PRD](AI問答-prd.md)）。分類只是標籤，不影響可見性。
 - **已完成（封存）專案的會議唯讀（1.0.46）**：會議歸屬的專案狀態是「已完成」時，一般使用者的修改、刪除、上傳影音檔、重新轉錄、從專案移除、編修會議紀錄都會被擋，歸屬到已完成專案、產生會議紀錄時指定已完成專案也一樣；訊息「這個專案已完成（封存），請先重新開啟再修改。」。管理者放行。檢視、下載 PDF、AI 問答不受影響。服務層一律經 `ProjectArchiveRules.CheckWritableAsync`。
-- 逐字稿內容為高敏感資料：0.4.82～1.0.39 沒有逐字稿預覽，讀逐字稿原文的唯一路徑是 AI 問答。1.0.40 起多了唯讀的逐字稿頁籤，經 `MeetingService.ReadTranscriptAsync(meetingId)` 讀取——與清單同樣經 `ProjectAccessService` 過濾，看不到的會議回 null（當成不存在），內容是 `MeetingFileStore.ReadTranscriptAsync` 濾過雜訊的版本；複製與下載另要匯出權限，成功後寫稽核。兩條路徑都在 Blazor 服務層、Cookie 驗證、經上述專案權控守門；**沒有任何可直接下載檔案的 HTTP 端點**。
+- 逐字稿內容為高敏感資料：讀原文的路徑只有 AI 問答與唯讀的逐字稿頁籤（1.0.40 起）。逐字稿經 `MeetingService.ReadTranscriptAsync(meetingId)` 讀取——與清單同樣經 `ProjectAccessService` 過濾，看不到的會議回 null（當成不存在），內容是 `MeetingFileStore.ReadTranscriptAsync` 濾過雜訊的版本。檢視走 `GET api/v1/Meeting/{id}/transcript`（`view`）；下載 .txt 走 `GET api/v1/Meeting/{id}/transcript/file`、複製後呼叫 `POST {id}/transcript/copied`，兩者要 `export` 權限並由伺服器寫稽核。影音檔沒有下載端點。
 - 歷史（已失效，僅供對照）：
   - ~~0.4.98 以前以 `Meeting.Teams` 做團隊列級權控（`TagStringHelper.BuildTeamAccessPredicate`／`IsTeamAccessible`，無團隊＝公開）~~；0.4.35 從表單移除團隊欄位後，~~0.4.35～0.4.98 新建的會議一律公開~~，0.4.82 移除逐字稿預覽後 AI 問答一度沒有列級守門。0.4.99 改為專案權控解決，**0.4.103 `Meeting.Teams` 與上述兩個方法已刪除**。
 - 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
@@ -203,14 +204,14 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 
 ### 稽核（1.0.34）
 
-- `MeetingService`（網頁與 API）：`Meeting.Create`／`Update`／`Delete`（摘要帶 `via`，API 傳 `Api`）。逐字稿下載與複製、PDF 匯出（`Meeting.TranscriptDownload`／`TranscriptCopy`／`ExportPdf`）1.1.20 起也可由 API 寫（摘要多 `via=Api`）。
-- 流程動作：`Meeting.MediaUpload`（檔名與大小；使用者取消不記）、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`（`projectId`）、`Meeting.DraftRequest`（專案、提示詞名稱、與會者人數）、`Meeting.DraftUpdate`（**只記字數**，不記會議紀錄內容）、`Meeting.ExportPdf`（會議頁與專案頁的匯出）、`Meeting.TranscriptDownload`「下載逐字稿」與 `Meeting.TranscriptCopy`「複製逐字稿」（1.0.40，頁面在成功後寫入，detail 帶 `page=Meeting`／`Project`）。
+- `MeetingService`（網頁與 API）：`Meeting.Create`／`Update`／`Delete`（摘要帶 `via`，API 傳 `Api`）。逐字稿下載與複製、PDF 匯出（`Meeting.TranscriptDownload`／`TranscriptCopy`／`ExportPdf`）由 API 寫（摘要帶 `via=Api`）。
+- 流程動作：`Meeting.MediaUpload`（檔名與大小；使用者取消不記）、`Meeting.Retranscribe`、`Meeting.AttachProject`／`DetachProject`（`projectId`）、`Meeting.DraftRequest`（專案、提示詞名稱、與會者人數）、`Meeting.DraftUpdate`（**只記字數**，不記會議紀錄內容）、`Meeting.ExportPdf`（會議頁與專案頁的匯出）、`Meeting.TranscriptDownload`「下載逐字稿」與 `Meeting.TranscriptCopy`「複製逐字稿」（1.0.40，伺服器在成功後寫入，detail 帶 `page=Meeting`／`Project`）。
 - 看不到的會議被嘗試修改、刪除、上傳、重新轉錄、歸屬、移出、產生或編修草稿時寫 `Permission.Denied`（`reason=DataScope; op=…`）；歸屬或產生草稿時指定了看不到的專案，目標是那個專案。用量上限擋下由 `AiCallGateway` 另記 `Ai.QuotaBlocked`。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 
 - 不支援的副檔名／超過 1GB：前端選檔時即擋下並通知，`MeetingService.SaveMediaAsync` 再擋一次（前端可被繞過）。
-- 主資料已存檔但上傳失敗：Modal **不關閉**，清單先重新整理，使用者可直接重試；不會產生「有紀錄沒檔案」以外的中間狀態。
+- 主資料已存檔但上傳失敗：會議資料保留，通知提示按這一列的「修改」再選檔重傳；不會產生「有紀錄沒檔案」以外的中間狀態。
 - 替換影音檔：新檔登錄成功後才刪除舊影音檔與舊逐字稿；狀態重設為「待處理」，`TranscriptRelativePath` 清空。
 - 找不到資料：修改／刪除時查無記錄回「找不到要修改／刪除的會議紀錄」；API 回 404 NotFound。
 - 刪除時實體檔案已遺失：只寫 `Warning` 日誌，不阻斷資料列刪除。
@@ -221,15 +222,13 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - 來源檔沒有音軌：FFmpeg 不會產生任何分段，回「FFmpeg 未產生任何音訊分段，請確認來源檔是否含有可用的音軌。」
 - 對「處理中」或「待處理」的紀錄按重新轉錄：拒絕並提示已排入轉錄（**0.4.65 起也擋「待處理」**——只擋「處理中」會讓連按兩下入列兩次、跑兩趟並重複計費）。
 - 對沒有影音檔的紀錄按重新轉錄：拒絕並提示尚未上傳。
-- 非管理員且不屬於任何團隊：看不到任何已歸屬專案的會議，只看得到自己上傳的未歸屬會議（0.4.99 起；0.4.98 以前是「只看得到公開（無團隊標籤）的會議」）。
+- 非管理員且不屬於任何團隊：看不到任何已歸屬專案的會議，只看得到自己上傳的未歸屬會議（0.4.99 起）。
 - 路由 ID 與 Payload ID 不一致：API `Update` 回 400 ValidationError。
 - 例外：Service 以 try/catch 記錄並回 `VerifyRecordResult(false, ...)`；API 以 `ApiServerError` 回 500。
 
 ### 已知限制
 
-- ~~1GB 檔案經 Blazor Server 的 SignalR 傳輸相當慢~~——1.0.60 起檔案內容改走 HTTP 分塊上傳（見 [檔案上傳機制](../features/檔案上傳機制.md) §3.0.1），不再經 SignalR。
-- **大檔上傳可能整條連線中斷**（0.4.116 記錄）：IIS Production 上 127MB 的 mp4 傳到第 11 秒，Blazor 讀檔串流判定逾時並終止連線，整頁空白，會議已建立但沒有影音檔（可重新整理後編輯該筆再上傳）。根本原因尚未確認，先檢查 IIS 是否啟用 WebSocket；若啟用後仍中斷，改走 HTTP 上傳 API。見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)。 **1.0.60 已改走 HTTP 分塊上傳解決**（就是這裡記的備案），不再經 Blazor 讀檔串流。
-- 清單上的轉錄狀態**不會自動更新**，需要按「重新整理」才會看到背景轉錄的最新進度。
+- 檔案內容走 HTTP 分塊上傳（1.0.60 起，見 [檔案上傳機制](../features/檔案上傳機制.md) §3.0.1）。大檔不經即時連線傳送，是因為大檔經長連線傳送既慢又容易整條連線逾時中斷（0.4.116 曾在 IIS 上 127MB 的 mp4 傳到第 11 秒就整頁空白，見 [2026-10-08 changelog](../changelog/2026-10-08-會議上傳進度與連線中斷.md)）。
 - 1.0.37 起文字生成走 v1 API、不需要版本；轉錄的 api-version 內建 `2025-03-01-preview`，`TranscriptionApiVersion` 只在需要換版本時填。
 
 ## 七、設定
@@ -316,8 +315,8 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 ### 手動驗收（需先安裝 FFmpeg 並填好 Azure 金鑰）
 
 1. 啟動 → 確認 `MeetingMediaPath` / `MeetingTranscriptPath` 自動建立。
-2. 登入 → 側邊欄出現「會議管理 > 會議紀錄」→ 進 `/meetings`。
-3. 新增會議並上傳 mp3：進度列 0%→100%，狀態依序為「待處理」→「處理中」→「已完成」。
+2. 登入 → 側邊欄「核心功能」出現「會議紀錄」→ 進 `/meetings`。
+3. 新增會議並上傳 mp3：該列「上傳中」0%→100%，接著狀態依序為「待處理」→「處理中」→「已完成」（不必手動重新整理）。
 4. 開「AI 問答」提問，確認回答引用的逐字稿片段中文正常無亂碼。
    1.0.40 起另開「會議紀錄與逐字稿」的逐字稿頁籤，確認中文正常，再下載 .txt 用記事本開啟確認不亂碼。
    1.0.41 起逐字稿頁籤與下載的 .txt 都應是繁體；開一筆 1.0.40 以前轉錄的會議，確認不重新轉錄也顯示繁體。
@@ -332,17 +331,14 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 
 以下**尚未實作**，不屬於 0.4.27 驗收範圍：
 
-- 套用提示詞範本 → 呼叫 LLM 產生會議紀錄草稿（見 [會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)）。
-- ~~**把團隊守門補進 `AiChatService`**（0.4.82 起它是逐字稿原文的唯一出口，且無列級權控）~~——0.4.99 已由專案權控完成。
 - 逐字稿的編修（0.4.55 曾有，0.4.82 移除；1.0.40 只恢復唯讀檢視、複製與下載 .txt）。若要復原編修，連同版本歷程一起想清楚——先前是就地覆寫，不留舊內容。
-- 影音檔／逐字稿的 HTTP 下載端點與線上播放。
-- 清單轉錄狀態的自動輪詢或即時推播。
+- 影音檔的下載端點與線上播放。
 - 逐字稿保留期限與自動清理政策。
 - 轉錄成本上限、每日配額與失敗重試計費控管。
 
 ## 十、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Meetings/MeetingPage.razor`（`@page "/meetings"`，1.1.23 起 WASM 頁）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Meetings/MeetingPage.razor`（`@page "/meetings"`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Meetings/MeetingPage.razor.cs`（`MeetingPage`：頁面權限、背景工作進度、會議紀錄編修入口）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Api/MeetingApi.cs`、`Uploads/MeetingUploadManager.cs`（上傳由整個前端共用）
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs`（`MeetingController` 各端點的 `[HasPermission]` 動作鍵）
@@ -356,8 +352,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionJobRunner.cs`（`TranscriptionJobRunner`）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/TranscriptionQueue.cs`（`ITranscriptionQueue`／`TranscriptionQueue`）
 - `src/MeetingRecord/MeetingRecord.Web/BackgroundServices/TranscriptionBackgroundService.cs`（`TranscriptionBackgroundService`）
-- `src/MeetingRecord/MeetingRecord.Business/Helpers/MeetingMediaPolicy.cs`（`MeetingMediaPolicy`：允收政策）
-- `src/MeetingRecord/MeetingRecord.Web/Controllers/MeetingController.cs`（1.1.20 起走 `MeetingService`；`MeetingRepository` 已刪）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/MeetingMediaPolicy.cs`（`MeetingMediaPolicy`：允收政策，前端與服務層共用）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/Meeting.cs`（`Meeting`）、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs`（`BackendDBContext.Meeting` DbSet）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Migrations/20260821090356_AddMeeting.cs`（`AddMeeting`）
 - `src/MeetingRecord/MeetingRecord.Share/Enums/TranscriptionStatus.cs`（`TranscriptionStatus`、`TranscriptionStatusText`）

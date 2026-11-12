@@ -1,10 +1,10 @@
 ﻿# 日誌等級設定 PRD
 
-- 文件版本：1.1
+- 文件版本：1.2
 - 文件狀態：已實作
-- 現行系統版本：1.1.33
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.120（移植自 NET10-Blazor-Starter）
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 ## 一、目標與範圍
 
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- |
 | `/log-level-setting` | 系統管理 → 監控與診斷 → 日誌等級設定（id 38） | **只限管理者**（不在角色權限目錄，`SidebarMenuService.AdminOnlyMenuIds`） | 系統管理員／維運 |
 
-1.1.33 起是 WASM 頁，資料走 API：`GET api/v1/monitoring/log-level`、`PUT api/v1/monitoring/log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400）、`POST api/v1/monitoring/log-level/restore`（`MonitoringController`，`[AdminOnly]`）。
+頁面資料走 API：`GET api/v1/monitoring/log-level`、`PUT api/v1/monitoring/log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400）、`POST api/v1/monitoring/log-level/restore`（`MonitoringController`，`[AdminOnly]`）。
 
 ## 三、畫面與欄位
 
@@ -41,7 +41,7 @@
 
 ## 五、權限與安全
 
-- 管理者限定：頁面以 `PermissionView.IsAdmin` 守門（1.1.33 前是 `CheckIsAdmin()`），API 是 `[AdminOnly]`（非管理者 403 並留稽核）；側邊欄由 `AdminOnlyMenuIds` 排除非管理者，不看權限鍵。
+- 管理者限定：頁面以 `PermissionView.IsAdmin` 守門，API 是 `[AdminOnly]`（非管理者 403 並留稽核）；側邊欄由 `AdminOnlyMenuIds` 排除非管理者，不看權限鍵。
 - 權限判定完成前不渲染任何內容。
 - 不寫任何檔案，重新啟動即回到 `nlog.config` 的值。
 
@@ -61,8 +61,8 @@
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogLevelRuntimeState.cs`（`Initialize`、`Apply`、`RestoreDefault`、`OnConfigurationChanged`）
-- `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（`LogLevelRank`、`LogLevelRankHelper`；1.1.33 從 Web 搬來）、`LogLevelDtos.cs`
+- `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（`LogLevelRank`、`LogLevelRankHelper`）、`LogLevelDtos.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs`、`src/MeetingRecord/MeetingRecord.Web.Client/Api/MonitoringApi.cs`（1.1.33）
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/LogLevelSettingPage.razor(.cs/.css)`（1.1.33 起 WASM；以前是 Server 的 `LogLevelSettingPage` → `LogLevelSettingView`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/LogLevelSettingPage.razor(.cs/.css)`
 - `src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 執行期日誌等級`）、`nlog.config`
 - 交叉連結：[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[系統健康監控 PRD](系統健康監控-prd.md)、[首頁與導覽 PRD](首頁與導覽-prd.md)

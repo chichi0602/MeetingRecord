@@ -1,10 +1,10 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.11
+- 文件版本：3.12
 - 文件狀態：已實作
-- 現行系統版本：1.1.9
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 > 本文件描述**跨越多個版本的完整流程**。0.4.27 完成前半段（音檔上傳 → 轉錄 → 逐字稿），詳見 [會議紀錄 PRD](會議紀錄-prd.md)；0.4.31 完成後半段（套用提示詞 → LLM → 會議紀錄），入口在 [專案項目 PRD](專案項目-prd.md) 描述的 `/projects` 頁面。
 
@@ -47,7 +47,7 @@
 | 轉錄與生成的供應商選型 | 轉錄採 Azure OpenAI（`gpt-4o-transcribe`）。`LlmSettings.TranscriptionProvider` 與 `DefaultProvider` 分開，兩端可指向不同廠商；留空則沿用 `DefaultProvider` |
 | 長音檔處理 | **一律**以 FFmpeg 切成 15 分鐘 mp3 分段，逐段轉錄後串接。不做「檔案夠小就不切」的分支——固定路徑同時解掉 25MB 單檔上限與長會議問題 |
 | 逐字稿是否落庫 | **不落庫**，寫成 `.txt` 存於 `MeetingTranscriptPath`；資料表只存相對路徑。保留期限與自動清理政策仍未定 |
-| 同步等待或背景作業 | 背景作業。行程內 `Channel<int>` + 單一 worker，不阻塞 Blazor circuit |
+| 同步等待或背景作業 | 背景作業。行程內 `Channel<int>` + 單一 worker，不阻塞 API 請求（送出後立即回應，進度經 `api/v1/jobs` 與 SignalR 推播） |
 | 失敗語意 | 轉錄失敗時狀態轉「失敗」並寫入 `TranscriptionError`；影音檔保留，可按「重新轉錄」重跑。應用程式重啟會把殘留的「處理中」改判為「失敗」 |
 | 產出物歸屬 | ~~獨立實體，不掛在專案項目之下~~ —— **此決議已於 0.4.31 推翻**，見下節 |
 
@@ -149,7 +149,7 @@
 - `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/MeetingDraftJobRunner.cs`（`MeetingDraftJobRunner.RunAsync`：生成工作流程與 map-reduce）
 - `src/MeetingRecord/MeetingRecord.Business/Services/TextGeneration/TranscriptChunker.cs`（`TranscriptChunker.Split`：分段純函式）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Transcription/ITranscriptionProvider.cs`（`ITranscriptionProvider`：轉錄端的對照組）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/PromptVariableHelper.cs`（1.1.9 從 Business 搬到 Share；`PromptVariableHelper.FindUnknownVariables`／`Render`：變數偵測與代入）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/PromptVariableHelper.cs`（`PromptVariableHelper.FindUnknownVariables`／`Render`：變數偵測與代入）
 - `src/MeetingRecord/MeetingRecord.Business/Helpers/NameGuidancePromptHelper.cs`（`NameGuidancePromptHelper.Build`：名詞與人名對照區塊，純函式）
 - `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs`（`LlmSettings`／`LlmProviderSettings`：provider-aware 設定）
 - 交叉連結：[會議紀錄 PRD](會議紀錄-prd.md)、[會議紀錄提示詞 PRD](會議紀錄提示詞-prd.md)、[專案項目 PRD](專案項目-prd.md)、[../features/檔案上傳機制.md](../features/檔案上傳機制.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)、[../architecture/開發慣例與限制速查.md](../architecture/開發慣例與限制速查.md)

@@ -1,10 +1,10 @@
 ﻿# 團隊清單 PRD
 
-- 文件版本：2.7
+- 文件版本：2.8
 - 文件狀態：已實作
-- 現行系統版本：1.1.8
+- 現行系統版本：1.1.53
 - 首次實作版本：0.3.0
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 > **0.4.102：名稱改回「團隊清單」，團隊＝部門＝「誰的資料」。** 三者分工：**團隊＝誰的資料**（例如業務部、管理部、研發部，決定看得到哪些專案）、**分類＝什麼資料**（描述用標籤，見 [分類清單](分類清單-prd.md)）、**角色＝能做什麼**（見 [角色管理](角色管理-prd.md)）。每個專案恰好一個**主責團隊**加 0～多個**協作團隊**，**沒有公開專案**。團隊還是某專案的主責團隊時不能刪。
 >
@@ -31,10 +31,10 @@
 
 | 項目 | 內容 |
 | --- | --- |
-| 路由 | `/teams`（`TeamPage.razor`，`MainLayout`） |
+| 路由 | `/teams`（`Web.Client/Pages/Teams/TeamPage.razor`，WASM） |
 | 選單路徑 | 資料定義（id=5）> 團隊清單（id=52，icon `groups`，`url=/teams`） |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[52] = 角色_團隊清單` |
-| UI 頁面權限 | 頁面鍵「團隊清單」（`MagicObjectHelper.角色_團隊清單`，`AuthenticationStateHelper.CheckAccessPage`；管理員短路） |
+| UI 頁面權限 | 頁面鍵「團隊清單」（`MagicObjectHelper.角色_團隊清單`，`PermissionView.CanAccessPage`；管理員短路） |
 | API 動作級權限 | `團隊清單:view` / `團隊清單:create` / `團隊清單:edit` / `團隊清單:delete` |
 | 主要使用者 | 具「團隊清單」角色權限者（**不在一般使用者的初始權限裡**）；系統管理員無條件可存取 |
 
@@ -42,7 +42,7 @@
 
 ## 三、畫面與欄位
 
-單頁清單 + Modal 表單（1.1.8 起是 WASM 頁 `Web.Client/Pages/Teams/TeamPage`，畫面與以前的 `TeamViewView` 相同）：
+單頁清單 + Modal 表單（WASM 頁 `Web.Client/Pages/Teams/TeamPage`）：
 
 - 搜尋：關鍵字比對 `Name`、`Code` 或 `Description`（`Contains`）。
 - 排序：可排序欄位 `Name`、`Code`、`IsEnabled`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。
@@ -62,10 +62,10 @@
 
 ## 四、內部系統運作
 
-- UI 路徑（1.1.8 起）：WASM 頁 `TeamPage` → `TeamApi`（瀏覽器，登入 Cookie＋防偽標頭）→ `TeamController` → `TeamService` → `BackendDBContext`。1.1.7 以前是 Blazor Server 的 `TeamViewView` 直接注入 `TeamService`。
-- API 路徑：`TeamController` → `TeamService`（1.1.8 起與畫面同一套規則；以前走 `TeamRepository`，已移除），回傳 `ApiResult<T>` / `PagedResult<T>`。另有 `PUT {id}/enabled`（切換啟用）、`GET {id}/delete-check`（刪除前檢查，畫面在跳確認框前先問）、`GET members/selectable`（可選成員，要新增或修改權限）。
+- UI 路徑：WASM 頁 `TeamPage` → `TeamApi`（瀏覽器，登入 Cookie＋防偽標頭）→ `TeamController` → `TeamService` → `BackendDBContext`。
+- API 路徑：`TeamController` → `TeamService`（與畫面同一套規則），回傳 `ApiResult<T>` / `PagedResult<T>`。另有 `PUT {id}/enabled`（切換啟用）、`GET {id}/delete-check`（刪除前檢查，畫面在跳確認框前先問）、`GET members/selectable`（可選成員，要新增或修改權限）。
 - Entity `Team`（`Id/Name/Code/Description/IsEnabled/CreatedAt/UpdatedAt`），DbSet 為 `context.Team`。關聯：`UserTeam`（使用者↔團隊）、`ProjectTeam`（專案↔團隊，含 `IsPrimary`）、`CategoryTeam`（分類↔團隊，參考用，0.4.102），皆 `(外鍵, TeamId)` 唯一、兩側 Cascade。
-- **刪除保護**（0.4.102）：`TeamService.BeforeDeleteCheckAsync` 與 `DeleteAsync`（API 1.1.8 起也走這裡，含 `delete-check`）對**非管理者**以 `ProjectTeamWriter.PrimaryProjectTitlesAsync` 查這個團隊是哪些專案的主責，有就擋（API 回 409）；管理者不受此限（0.4.104）：照刪，受影響的專案就沒有主責團隊，之後編輯專案時再補；下次啟動時 `TeamConversionService` 會替沒有主責的專案補上（取協作團隊中 Id 最小的，沒有就掛「待分配」）。訊息由 `ProjectTeamWriter.PrimaryInUseMessage` 組出。只當協作團隊的可以刪，Cascade 刪掉那筆 `ProjectTeam`，只會縮小可見範圍。
+- **刪除保護**（0.4.102）：`TeamService.BeforeDeleteCheckAsync` 與 `DeleteAsync`（API 也走這裡，含 `delete-check`）對**非管理者**以 `ProjectTeamWriter.PrimaryProjectTitlesAsync` 查這個團隊是哪些專案的主責，有就擋（API 回 409）；管理者不受此限（0.4.104）：照刪，受影響的專案就沒有主責團隊，之後編輯專案時再補；下次啟動時 `TeamConversionService` 會替沒有主責的專案補上（取協作團隊中 Id 最小的，沒有就掛「待分配」）。訊息由 `ProjectTeamWriter.PrimaryInUseMessage` 組出。只當協作團隊的可以刪，Cascade 刪掉那筆 `ProjectTeam`，只會縮小可見範圍。
 - 其他頁面取選項：`GetAllEnabledNamesAsync()`（使用者管理的團隊下拉）；專案表單的「主責團隊」下拉由 `ProjectService` 提供（管理者全部啟用中團隊，一般使用者只有自己所屬的），「協作團隊」下拉是全部啟用中團隊；分類清單的「負責團隊（參考）」由 `CategoryService` 提供啟用中團隊。
 - 查詢一律 `AsNoTracking()`；新增前 `CleanTrackingHelper.Clean<Team>` 清追蹤，寫入後再清一次。
 - 編輯前於 UI 以 `Clone()` 複製記錄；`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
@@ -73,20 +73,20 @@
 
 ## 五、權限與安全
 
-- API 一律 `[Authorize(JwtBearer)]`；每個動作以 `[HasPermission(MagicObjectHelper.角色_團隊清單, PermissionActions.*)]` 做動作級授權。
+- API 一律 `[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]`（帶 Bearer 走 JWT，否則走登入 Cookie）；每個動作以 `[HasPermission(MagicObjectHelper.角色_團隊清單, PermissionActions.*)]` 做動作級授權。
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`團隊清單:view`、`團隊清單:create`、`團隊清單:edit`、`團隊清單:delete`。裸鍵「團隊清單」代表該頁全部動作（向後相容）。
-- ⚠️ 能進本頁的人可以把任何帳號加進任何團隊，等於能決定誰看得到哪些專案——這個權限只該給管理者或少數負責權控的人。UI 頁面層只做 `CheckAccessPage`，進得去就能增刪改。
+- ⚠️ 能進本頁的人可以把任何帳號加進任何團隊，等於能決定誰看得到哪些專案——這個權限只該給管理者或少數負責權控的人。UI 頁面層只看能不能進頁（`PermissionView.CanAccessPage`），各按鈕與 API 再依動作鍵判斷。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路（不需個別權限）。
-- UI 與 API 共用單一 RBAC 權威來源：1.1.8 起團隊頁在 WASM 執行，進頁與按鈕由 `PermissionView`（規則同 `CheckAccessPage`／`CheckAccessAction`）決定，資料一律經 API 的動作鍵檢查。可選成員清單（全公司帳號）要 `團隊清單:create` 或 `團隊清單:edit` 其中之一，只有 `view` 拿不到。
+- UI 與 API 共用單一 RBAC 權威來源：進頁與按鈕由 `PermissionView`（規則同伺服器的 `AuthenticationStateHelper.CanAccessPage`／`CanDoAction`）決定，資料一律經 API 的動作鍵檢查；沒有權限時頁面顯示「你沒有權限存取此頁面」並經 `PageAccessApi.RecordPageDeniedAsync` 寫稽核。可選成員清單（全公司帳號）要 `團隊清單:create` 或 `團隊清單:edit` 其中之一，只有 `view` 拿不到。
 
 ### 稽核（1.0.34）
 
-- `TeamService`：`Team.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要 `name`、`via`（經 API 的是 `via=Api`；1.1.8 起 WASM 團隊頁也經 API）。
+- `TeamService`：`Team.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要 `name`、`via`（團隊頁經 API，所以是 `via=Api`）。
 - 成員同步（`SyncMembersAsync`）有實際增減時寫 `Team.MembersChange`（`added=…; removed=…`，各最多 50 個使用者編號），沒變動不寫。使用者管理頁的批次加入／移出另記 `User.TeamAdd`／`TeamRemove`。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 
-- 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「團隊名稱已存在，無法新增／修改。」。API 用同一個檢查，重複回 409 Conflict（1.1.8 以前 API 另用大小寫敏感的 `ExistsByNameAsync`）。
+- 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「團隊名稱已存在，無法新增／修改。」。API 用同一個檢查，重複回 409 Conflict。
 - 代號重複：僅在 `Code` 非空白時檢查唯一（同樣去頭尾空白、不分大小寫），重複回「團隊代號已存在，無法新增／修改。」/409；空白代號可重複（見測試 `WithEmptyCode...`）。
 - 非管理者刪除仍是主責的團隊：UI 顯示上述「請先到專案改主責團隊再刪除」訊息；API 回 409 Conflict。管理者照刪（測試 `DeleteTeam_Admin_IsNeverBlocked`）。
 - 找不到資料：修改／刪除時查無記錄回「找不到要修改／刪除的團隊資料」；API 回 404 NotFound。
@@ -114,7 +114,7 @@ API 的規則（名稱與代號重複、沒帶 `memberIds` 不動成員、非管
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Teams/TeamPage.razor`（`@page "/teams"`，1.1.8 起在 WASM 執行）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Teams/TeamPage.razor`（`@page "/teams"`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Teams/TeamPage.razor.cs`（`OnInitializedAsync` 以 `PermissionView` 檢查頁面權限）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Api/TeamApi.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/TeamController.cs`（`TeamController` 各端點的 `[HasPermission]` 動作鍵）
@@ -125,4 +125,4 @@ API 的規則（名稱與代號重複、沒帶 `memberIds` 不動成員、非管
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/MagicObjectHelper.cs`（`#region 角色`：`角色_團隊清單`）、`src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`MenuPermissionMap[52]`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 52）
 - `src/MeetingRecord/MeetingRecord.Tests/TeamServiceTests.cs`
-- 交叉連結：[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../superpowers/specs/2026-06-22-category-team-pages-design.md](../superpowers/specs/2026-06-22-category-team-pages-design.md)、[../prd/紀錄分類與團隊權控-prd.md](../prd/紀錄分類與團隊權控-prd.md)
+- 交叉連結：[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[../superpowers/specs/2026-06-22-category-team-pages-design.md](../superpowers/specs/2026-06-22-category-team-pages-design.md)、[權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)

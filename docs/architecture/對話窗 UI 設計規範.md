@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.23
+- 文件版本：1.24
 - 文件狀態：已實作
-- 現行系統版本：1.1.43
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 ## 摘要
 
@@ -18,7 +18,7 @@
 
 常駐介面另見 [介面視覺設計規範](介面視覺設計規範.md)，包括側邊欄、頁首、表格、按鈕、狀態徽章與燕麥奶茶色票。兩份文件的分工是：色票、外框 z-index 與按鈕規則以那一份為準，對話窗的尺寸、行為與確認流程以本文件為準。
 
-本文件的內容都已對照 `src/MeetingRecord/MeetingRecord.Web/**` 的現行原始碼核對。速查表 [開發慣例與限制速查](開發慣例與限制速查.md) 的 §6.3（付費動作）、§6.5（對話框版面）、§6.8（輸入法與 Enter）與 §6.10（表單取消）仍是硬性紅線，本文件是它們的展開版。以下路徑都相對於 `src/MeetingRecord/MeetingRecord.Web/`。
+本文件的內容都已對照現行原始碼核對（頁面與共用元件在 `src/MeetingRecord/MeetingRecord.Web.Client/`，`wwwroot` 靜態資源在 `src/MeetingRecord/MeetingRecord.Web/`）。速查表 [開發慣例與限制速查](開發慣例與限制速查.md) 的 §6.3（付費動作）、§6.5（對話框版面）、§6.8（輸入法與 Enter）與 §6.10（表單取消）仍是硬性紅線，本文件是它們的展開版。以下 `Web.Client/…`、`Components/…` 路徑在 `MeetingRecord.Web.Client` 專案下，`wwwroot/…` 在 `MeetingRecord.Web` 專案下。
 
 ---
 
@@ -41,7 +41,7 @@
 
 - AntDesign 的 Modal 會被 portal 到 DOM 的其他位置，拿不到檢視的 scope 屬性。寫在檢視 `.razor.css` 裡的 `.ant-modal-*` 會被編成 `.ant-modal-*[b-xxxxx]`，**永遠選不到，而且不會報錯**。
 - 檢視自己在 Modal 裡寫的 markup（例如 `.ai-chat-shell`、`.markdown-editor-split`）仍然帶得到 scope 屬性，可以留在該元件的 `.razor.css`。
-- ⚠️ **`FormModalHelper` 只在 `Components/Layout/MainLayout.razor` 掛一次**，全站都吃得到，不要在頁面裡再掛一個。0.4.69 之前 layout 沒掛，各頁就自己補了 8 個，結果同一段 `<style>` 在 DOM 裡出現 9 次，而「變更密碼」的樣式從來沒生效過。0.4.82 把那 8 個移除了。
+- ⚠️ **`FormModalHelper` 只在全站外框 `Web.Client/Components/Layout/AppShell.razor` 掛一次**（每一頁都經 `WasmLayout` 包在它裡面），全站都吃得到，不要在頁面裡再掛一個。0.4.69 之前外框沒掛，各頁就自己補了 8 個，結果同一段 `<style>` 在 DOM 裡出現 9 次，而「變更密碼」的樣式從來沒生效過。0.4.82 把那 8 個移除了。
 - 這段 `<style>` 是寫在 `.razor` 裡的，所以 at 規則要寫 `@@media`；它沒有任何 scope，新增選擇器時要取得夠獨特。
 
 ---
@@ -85,28 +85,27 @@
 
 | 對話窗 | 元件 | class |
 |---|---|---|
-| 變更密碼 | `Layout/MainLayout.razor` | `form-modal-compact` |
-| 關於 | `Layout/MainLayout.razor` | `form-modal-compact` |
-| 分類維護 | `Web.Client/Pages/Categories/CategoryPage.razor`（1.1.7 起 WASM） | `form-modal-compact` |
-| 團隊維護 | `Web.Client/Pages/Teams/TeamPage.razor`（1.1.8 起 WASM） | `form-modal-compact` |
-| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `form-modal-compact` |
-| 歸屬到專案 | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `form-modal-compact` |
-| 使用者維護 | `Web.Client/Pages/Admins/MyUserPage.razor`（1.1.10 起 WASM） | `form-modal-standard` |
-| 提示詞範本維護 | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（1.1.9 起 WASM） | `form-modal-standard` |
-| 待辦維護、待辦詳情 | `Web.Client/Pages/Todos/TodoPage.razor`（1.1.19 起 WASM） | `form-modal-standard` |
+| 變更密碼 | `Web.Client/Components/Layout/AppShell.razor` | `form-modal-compact` |
+| 關於 | `Web.Client/Components/Layout/AppShell.razor` | `form-modal-compact` |
+| 分類維護 | `Web.Client/Pages/Categories/CategoryPage.razor` | `form-modal-compact` |
+| 團隊維護 | `Web.Client/Pages/Teams/TeamPage.razor` | `form-modal-compact` |
+| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Web.Client/Pages/Meetings/MeetingPage.razor` | `form-modal-compact` |
+| 歸屬到專案 | `Web.Client/Pages/Meetings/MeetingPage.razor` | `form-modal-compact` |
+| 使用者維護 | `Web.Client/Pages/Admins/MyUserPage.razor` | `form-modal-standard` |
+| 提示詞範本維護 | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor` | `form-modal-standard` |
+| 待辦維護、待辦詳情 | `Web.Client/Pages/Todos/TodoPage.razor` | `form-modal-standard` |
+| 專案附件 | `Web.Client/Pages/Projects/ProjectPage.razor` | `form-modal-standard` |
+| 抽出待辦 | `Web.Client/Pages/Projects/TodoExtractionModal.razor` | `form-modal-standard` |
+| 用量明細（唯讀，1.0.31） | `Web.Client/Pages/AiManagement/TokenUsagePage.razor` | `form-modal-standard` |
+| 角色維護 | `Web.Client/Pages/Admins/RoleViewPage.razor` | `form-modal-large` |
+| 專案維護 | `Web.Client/Pages/Projects/ProjectPage.razor` | `form-modal-large` |
+| AI 對話紀錄明細（唯讀，1.0.30） | `Web.Client/Pages/AiManagement/AiCallLogPage.razor` | `form-modal-large` |
+| 稽核明細（唯讀，1.0.32） | `Web.Client/Pages/Admins/AuditLogPage.razor` | `form-modal-large` |
+| 會議紀錄維護（含影音上傳） | `Web.Client/Pages/Meetings/MeetingPage.razor` | `meeting-view-modal` |
+| 會議紀錄與逐字稿（檢視＋編修） | `Web.Client/Components/Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
+| AI 問答 | `Web.Client/Components/Commons/AiChatModal.razor` | `meeting-view-modal ai-chat-modal` |
 
-> ⚠️ **WASM 頁有「確定」鈕的視窗一律單向繫結 `Visible="@..."`，不要用 `@bind-Visible`**（1.1.19）：AntDesign 1.6 按「確定」時會先送出 `VisibleChanged(false)` 才呼叫 `OnOk`，雙向繫結下伺服器擋下（400／409）時視窗已經關了，處理器裡設回 true 也打不開，使用者填的內容跟著不見。開關由頁面自己決定：存檔成功、取消（含 Esc 與點遮罩，都會走 `OnCancel`）才關。`ModalVisibleBindingTests` 會擋。存檔成功時**先關窗**再通知與重新載入，免得重新載入的幾趟 API 期間視窗還蓋在畫面上。
-
-| 專案附件 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-standard` |
-| 抽出待辦 | `Web.Client/Pages/Projects/TodoExtractionModal.razor`（1.1.26 起） | `form-modal-standard` |
-| 用量明細（唯讀，1.0.31） | `Web.Client/Pages/AiManagement/TokenUsagePage.razor`（1.1.37 前是 `Views/AiManagement/TokenUsageView.razor`） | `form-modal-standard` |
-| 角色維護 | `Web.Client/Pages/Admins/RoleViewPage.razor`（1.1.11 起 WASM） | `form-modal-large` |
-| 專案維護 | `Web.Client/Pages/Projects/ProjectPage.razor`（1.1.26 起） | `form-modal-large` |
-| AI 對話紀錄明細（唯讀，1.0.30） | `Web.Client/Pages/AiManagement/AiCallLogPage.razor`（1.1.39 前是 `Views/AiManagement/AiCallLogView.razor`） | `form-modal-large` |
-| 稽核明細（唯讀，1.0.32） | `Web.Client/Pages/Admins/AuditLogPage.razor`（1.1.43 前是 `Views/Admins/AuditLogView.razor`） | `form-modal-large` |
-| 會議紀錄維護（含影音上傳） | `Web.Client/Pages/Meetings/MeetingPage.razor`（1.1.23 起） | `meeting-view-modal` |
-| 會議紀錄與逐字稿（檢視＋編修） | `Commons/MarkdownEditorModal.razor` | `markdown-editor-modal meeting-view-modal` |
-| AI 問答 | `Web.Client/Components/Commons/AiChatModal.razor`（1.1.22 起） | `meeting-view-modal ai-chat-modal` |
+> ⚠️ **有「確定」鈕的視窗一律單向繫結 `Visible="@..."`，不要用 `@bind-Visible`**（1.1.19）：AntDesign 1.6 按「確定」時會先送出 `VisibleChanged(false)` 才呼叫 `OnOk`，雙向繫結下伺服器擋下（400／409）時視窗已經關了，處理器裡設回 true 也打不開，使用者填的內容跟著不見。開關由頁面自己決定：存檔成功、取消（含 Esc 與點遮罩，都會走 `OnCancel`）才關。`ModalVisibleBindingTests` 會擋。存檔成功時**先關窗**再通知與重新載入，免得重新載入的幾趟 API 期間視窗還蓋在畫面上。
 
 `MarkdownEditorModal` 的 `ModalClass` 在 1.0.40 起是**常數**，檢視與編修都是 96vw ＋ 固定高 96vh（比照 AI 問答）。0.4.82～1.0.39 依 `CanEdit` 切換，唯讀時用 880px 的 `form-modal-standard`；1.0.40 改成同一個視窗內檢視↔編修切換，尺寸一跟著變就整個跳動，使用者也要求檢視「像 AI 問答一樣滿版」。razor 仍寫 `Class="@ModalClass"`，所以 `ModalSizeClassTests` 照樣跳過它。
 
@@ -161,7 +160,7 @@
 - **`KeyboardEventArgs.IsComposing` 是唯一的輸入法判斷途徑。**`KeyboardEventArgs` 沒有 `KeyCode`，在 Blazor 端無法用「檢查 229」的老方法。
 - **Shift+Enter 在多行欄位會換行**：`IsSubmit` 回 false，瀏覽器的原生行為就會換行，不必另寫程式碼。
 - 表單對話窗把 `@onkeydown="OnModalKeyDownAsync"` 掛在 `EditForm` 上。⚠️ 送出前要等一下（`FormSubmitGate.EnterSettleDelay`，200ms）：AntDesign `Input` 預設在 change 或 blur 時才回寫繫結值，Enter 送出時焦點還在欄位裡，不等的話會拿到舊值。⚠️ 等候必須在送出防護裡（1.0.62 起一律 `submitGate.RunAsync(SaveModalAsync, FormSubmitGate.EnterSettleDelay)`，「確定」走同一個閘門）——以前先等再進防護，等候期間按「確定」會新增兩筆。
-- AntDesign Modal 沒有開放 keydown 掛載點（`Keyboard` 參數只管 Esc），沒有 `EditForm` 的對話窗要自己包一層原生 `<div @onkeydown>` 來接。範例：`MainLayout.razor` 的變更密碼、`MeetingViewView.razor` 的 `.meeting-draft-request-form`、`TodoExtractionModal.razor` 的 `.todo-extract`。
+- AntDesign Modal 沒有開放 keydown 掛載點（`Keyboard` 參數只管 Esc），沒有 `EditForm` 的對話窗要自己包一層原生 `<div @onkeydown>` 來接。範例：`AppShell.razor` 的變更密碼、`MeetingPage.razor` 的 `.meeting-draft-request-form`、`TodoExtractionModal.razor` 的 `.todo-extract`。
 - 表單內「新增標籤」這類**按鈕級**的輸入區要加 `@onkeydown:stopPropagation="true"`，否則外層 `EditForm` 會把那一下 Enter 當成送出。範例：`ProjectPage.razor` 的 `.project-view-tag-editor`。
 - 表單裡的**下拉（Select）與日期（DatePicker）**外層也一律包 `<div @onkeydown:stopPropagation="true">`（1.0.62 補齊八個 CRUD 表單）：日期欄按 Enter 是「套用打的日期」、下拉搜尋框按 Enter 是「選這一項」，不包會被當成送出、值還沒套用就存檔。`FormEnterGuardTests` 把關。
 
@@ -213,8 +212,8 @@
 
 ### 7.2 三個一定會踩到的坑
 
-1. **`@bind-Visible` 是雙向的。**AntDesign 在呼叫 `OnCancel` **之前**就已經把視窗關掉了。使用者選「繼續編修」時，必須寫 `modalVisible = true` 把視窗開回來。用單向 `Visible=` 的元件（`TodoExtractionModal`、`MarkdownEditorModal`、`AiChatModal`）則**不可以**這樣寫，直接 `return` 就能留住視窗。
-2. **Esc 會走兩條路。**Modal 的 `Keyboard="true"` 與表單的 `@onkeydown` 都會呼叫同一個 cancel handler，加了確認框之後會疊出兩個。每個表單都要一個 `isDiscardConfirming` 旗標擋重入，範例見 `CategoryPage.OnModalCancelHandleAsync`（1.1.7 起在 `Web.Client/Pages/Categories`）。
+1. **`@bind-Visible` 是雙向的。**AntDesign 在呼叫 `OnCancel` **之前**就送出關窗，所以表單視窗一律單向 `Visible=`（1.1.19），開關由頁面決定；使用者選「繼續編修」時頁面明確設 `modalVisible = true`。元件內部用單向 `Visible=` 的（`TodoExtractionModal`、`MarkdownEditorModal`、`AiChatModal`）**不可以**寫 `Visible = true`（那是元件參數），直接 `return` 就能留住視窗。
+2. **Esc 會走兩條路。**Modal 的 `Keyboard="true"` 與表單的 `@onkeydown` 都會呼叫同一個 cancel handler，加了確認框之後會疊出兩個。每個表單都要一個 `isDiscardConfirming` 旗標擋重入，範例見 `Web.Client/Pages/Categories/CategoryPage` 的 `OnModalCancelHandleAsync`。
 3. **`TodoExtractionModal` 的快照要拍在 `ExtractAsync` 結尾**，不能拍在開窗時。開窗時候選清單還是空的，什麼都沒改也會被判成 dirty。
 
 ### 7.3 `Keyboard` 與 `MaskClosable`
@@ -246,7 +245,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 - `OkText` 寫**動作本身**（「刪除」「取代並開始轉錄」「覆蓋並重新產生」），不寫「確定」。
 - 一律 `MaskClosable = false`。
 - **`Danger` 跟著「覆蓋或刪除」走，不跟著「花錢」走。**會刪掉或覆蓋既有資料時才套紅色確認鈕。非破壞性的方向不套，例如啟用膠囊；停用則要套。
-- 例：「AI 對話紀錄」（1.0.30，1.1.39 起 `AiCallLogPage`）的三個刪除動作都套 `Danger`，內容都註明「無法復原。Token 用量不受影響。」：
+- 例：「AI 對話紀錄」（1.0.30，`AiCallLogPage`）的三個刪除動作都套 `Danger`，內容都註明「無法復原。Token 用量不受影響。」：
 
   | 動作 | 標題 | `OkText` |
   |---|---|---|
@@ -254,7 +253,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
   | 清除此日之前 | 清除 yyyy-MM-dd 之前的 AI 對話紀錄（不含當天，連同內容檔） | 清除 |
   | 全部清除 | 清空全部 AI 對話紀錄（刪除所有紀錄與整個內容檔目錄） | 全部清除 |
 
-- 例：「Token 用量」（1.0.31，1.1.37 起 `TokenUsagePage`）的三個刪除動作同樣套 `Danger`。內容都註明「AI 對話紀錄不會一起刪除；會議時數不受影響」；刪除範圍含本月時加註「本月 AI 用量上限的已用額度會跟著變少」（全部清除寫「會歸零」），因為本月的帳本就是用量上限的計算來源：
+- 例：「Token 用量」（1.0.31，`TokenUsagePage`）的三個刪除動作同樣套 `Danger`。內容都註明「AI 對話紀錄不會一起刪除；會議時數不受影響」；刪除範圍含本月時加註「本月 AI 用量上限的已用額度會跟著變少」（全部清除寫「會歸零」），因為本月的帳本就是用量上限的計算來源：
 
   | 動作 | 標題 | `OkText` |
   |---|---|---|
@@ -262,7 +261,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
   | 清除此日之前 | 清除 yyyy-MM-dd 之前的用量紀錄（不含當天） | 清除 |
   | 全部清除 | 清空全部用量紀錄（統計起始日會重新計算） | 全部清除 |
 
-- 例：「稽核紀錄」（1.0.32，1.1.43 起 `AuditLogPage`）的兩個清除動作套 `Danger`，內容都註明「無法復原。這次清除本身會留下一筆紀錄。」；沒有單筆刪除：
+- 例：「稽核紀錄」（1.0.32，`AuditLogPage`）的兩個清除動作套 `Danger`，內容都註明「無法復原。這次清除本身會留下一筆紀錄。」；沒有單筆刪除：
 
   | 動作 | 標題 | `OkText` |
   |---|---|---|
@@ -275,19 +274,19 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 | 入口 | 位置 | 標題 | Danger |
 |---|---|---|---|
-| 上傳影音檔（存檔後自動轉錄） | `MeetingPage.OnModalOKHandleAsync`（1.1.23 起 WASM） | 確認上傳並開始轉錄（會產生費用） | 已有音檔時套（舊音檔與逐字稿會被刪除） |
+| 上傳影音檔（存檔後自動轉錄） | `MeetingPage.OnModalOKHandleAsync` | 確認上傳並開始轉錄（會產生費用） | 已有音檔時套（舊音檔與逐字稿會被刪除） |
 | 執行／重新轉錄 | `MeetingPage` | 確認執行轉錄／確認重新轉錄（會產生費用） | 已有逐字稿時套 |
 | 產生會議紀錄（會議頁對話窗、專案頁「AI 轉會議紀錄」） | `MeetingPage`、`ProjectPage` | 確認產生會議紀錄／確認重新產生（會產生費用） | 已有草稿時套 |
 | 抽出待辦 | `ProjectPage`（開窗**之前**的按鈕上） | 確認抽出待辦（會產生費用） | **永不**套（只產生候選） |
 | AI 問答：修改提問後重新產生答案 | `AiChatModal` | 確認重新產生答案（會產生費用） | 套（會覆蓋原本的回答） |
 | AI 問答：送出新問題 | `AiChatModal.OnAskAsync` | — | 刻意不確認，這是唯一沒有確認框的付費入口 |
-| AI 日誌分析（0.4.121） | `LogViewerPage.OnAiAnalyzeAsync`（1.1.42 前是 `LogViewerView`；開窗**之前**） | 確認執行 AI 日誌分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
-| AI 例外分析（0.4.122） | `ExceptionLogPage.OnAiAnalyzeAsync`（1.1.41 前是 `ExceptionLogView`；明細窗按鈕，開窗**之前**） | 確認執行 AI 例外分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
+| AI 日誌分析（0.4.121） | `LogViewerPage.OnAiAnalyzeAsync`（開窗**之前**） | 確認執行 AI 日誌分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
+| AI 例外分析（0.4.122） | `ExceptionLogPage.OnAiAnalyzeAsync`（明細窗按鈕，開窗**之前**） | 確認執行 AI 例外分析（會產生費用） | 不套（唯讀分析，不覆蓋任何資料） |
 
 三個位置陷阱：
 
 1. **確認必須放在真正觸發 API 的那一步之前。**`TodoExtractionModal` 一開窗就會呼叫 `ExtractAsync`，所以確認要掛在開窗按鈕上；開窗方法必須是 `async Task`，不能是 `void`，否則會變成 fire-and-forget。
-2. **掛在 `OnOk` 上的確認被取消時，要寫 `modalVisible = true`**（AntDesign 會自己關掉視窗）。上傳影音檔的確認放在驗證通過之後、主資料存檔之前。
+2. **掛在 `OnOk` 上的確認被取消時，要明確保持 `modalVisible = true`**，否則使用者填的整張表單會消失（視窗一律單向 `Visible`，開關由頁面決定）。上傳影音檔的確認放在驗證通過之後、主資料存檔之前。
 3. **防連點要靠方法開頭的早退與服務層擋 `Pending`**，不能只靠 `Loading`。確認框擋不住「使用者確認兩次」。
 
 文案只寫免費而且精確的事實（檔名、檔案大小），其餘用質性描述（「音檔越長費用越高」），**不要講「幾次 API 呼叫」**。講錯數字比不講更糟。
@@ -324,10 +323,10 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 ### 10.2 全頁防誤拖
 
-`MainLayout.razor` 的 `.page` 掛了 `@ondragover:preventDefault="true"` 與 `@ondrop:preventDefault="true"`，**只設 preventDefault，不接 handler**。
+全站外框 `Web.Client/Components/Layout/AppShell.razor` 的 `.page` 掛了 `@ondragover:preventDefault="true"` 與 `@ondrop:preventDefault="true"`，**只設 preventDefault，不接 handler**。
 
-- 不擋的話，把檔案拖到頁面空白處時，瀏覽器會直接導航去開那個檔案，Blazor 的 circuit 跟著斷線，填到一半的表單整份消失。
-- 不接 handler，是因為 dragover 每幾十毫秒觸發一次，接了就會一直往返伺服器。
+- 不擋的話，把檔案拖到頁面空白處時，瀏覽器會直接導航去開那個檔案，整個應用程式跟著被換掉，填到一半的表單整份消失。
+- 不接 handler，是因為 dragover 每幾十毫秒觸發一次，接了就會一直跑事件處理。
 - 拖放區本身不受影響，因為它的 input 才是 drop 的實際目標。
 
 ### 10.3 AI 問答的貼上與拖放：`wwwroot/js/chat-attach.js`
@@ -357,7 +356,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 - 搜尋框：Enter 跳下一筆（`IsSubmit`）、Shift+Enter 跳上一筆（`IsReverseSubmit`），兩者都擋組字中的 Enter。**刻意不綁 Ctrl+F**，因為 `@onkeydown:preventDefault` 在編譯期就決定了，攔了會連右邊預覽的瀏覽器原生搜尋都吃掉。
 - **左右同步捲動**（0.4.100）：預覽用 `MarkdownRenderer.ToHtml(editingText, includeSourceLines: true)` 產生，每個區塊都帶 `data-source-line`。`TextEditorInterop.BindScrollSyncAsync` 呼叫 `wwwroot/js/text-editor.js` 的 `meetingRecordTextEditor.bindScrollSync`，兩邊各量出「這一行或這個區塊在第幾個像素」組成對應點，捲動時在兩個對應點之間內插，**對齊到段落，而不是按比例**。程式設定捲動位置也會觸發 scroll 事件，所以用「預期的值」擋掉回彈，不用旗標。視窗剛打開時內容可能還沒進 DOM，`bindScrollSync` 會回傳 false，讓 C# 端下一輪再試。`includeSourceLines` 預設關閉，PDF、AI 問答與使用說明都不要打開。
 
-### 11.2 AI 問答：`Web.Client/Components/Commons/AiChatModal.razor`（1.1.22 起，Server 與 WASM 頁共用）
+### 11.2 AI 問答：`Web.Client/Components/Commons/AiChatModal.razor`（會議紀錄頁與專案項目頁共用）
 
 - class 是 `meeting-view-modal ai-chat-modal`，**固定高度**（`height: 96vh`，0.4.94；0.4.94～1.0.39 是全站唯一，1.0.40 起會議紀錄與逐字稿視窗比照）。聊天視窗吃滿螢幕才正常；0.4.93 之前高度隨內容縮，剛開新對話時只有四百多 px 高。
 - 版面 `.ai-chat-shell` 是 `grid-template-columns: 240px minmax(0, 1fr)`，左欄對話紀錄、右欄訊息；900px 以下退回單欄。
@@ -387,7 +386,8 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 | 測試 | 守的是什麼 |
 |---|---|
-| `MeetingRecord.Tests/ModalSizeClassTests.cs` | 掃描 `Components/**/*.razor` 的每個 `<Modal `，有三條規則。`EveryModal_ShouldDeclareExactlyOneSizeClass`：每個 Modal 剛好掛一個尺寸 class（`form-modal-compact`／`-standard`／`-large`／`meeting-view-modal`）；`Class="@…"` 屬於執行期決定，跳過檢查（目前只有 `MarkdownEditorModal`），完全沒有 `Class` 則判失敗。`ModalWithSizeClass_ShouldNotAlsoSetWidth`：不得同時設 `Width`。`Scanner_ShouldActuallyFindTheModals`：至少掃到 15 個，而且包含 `MarkdownEditorModal.razor`，防止掃描器壞掉時全綠。排除未被引用的範例檔 `RoleViewViewSample.razor` |
+| `MeetingRecord.Tests/ModalSizeClassTests.cs` | 掃描 `MeetingRecord.Web/Components` 與 `MeetingRecord.Web.Client` 底下每個 `.razor` 的 `<Modal `，有三條規則。`EveryModal_ShouldDeclareExactlyOneSizeClass`：每個 Modal 剛好掛一個尺寸 class（`form-modal-compact`／`-standard`／`-large`／`meeting-view-modal`）；`Class="@…"` 屬於執行期決定，跳過檢查（目前只有 `MarkdownEditorModal`），完全沒有 `Class` 則判失敗。`ModalWithSizeClass_ShouldNotAlsoSetWidth`：不得同時設 `Width`。`Scanner_ShouldActuallyFindTheModals`：至少掃到 15 個，而且包含 `MarkdownEditorModal.razor`，防止掃描器壞掉時全綠。目前沒有排除的檔案 |
+| `MeetingRecord.Tests/ModalVisibleBindingTests.cs` | 有「確定」鈕的 Modal 不得用 `@bind-Visible`（1.1.19） |
 | `MeetingRecord.Tests/FormKeyboardHelperTests.cs` | Enter／組字中／Shift／Ctrl／Alt／Meta／Esc 兩種拼法；`IsReverseSubmit` 的對稱規則 |
 | `MeetingRecord.Tests/FormDirtyHelperTests.cs` | 快照穩定性（`Capture(m)` 等於 `Capture(m.Clone())`，涵蓋 8 個型別）；欄位、清單、字典與 extras 的變更偵測；null 快照回 true；extras 個數固定；`BuildDiscardOptions` 的文案與 `MarkdownEditorModal` 已出貨版本一字不差 |
 | `MeetingRecord.Tests/RazorMarkupTests.cs` | Razor 註解不得包含自己的結束符號，避免開發者註解外洩到畫面 |
@@ -395,7 +395,7 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 ⚠️ **以下無法用單元測試驗證**（本專案沒有 bUnit，也測不了 overlay 與 JS interop），只能開畫面實測：
 
 - 留白與捲動
-- `@bind-Visible` 重開
+- 對話窗開關與重開
 - Esc 疊出兩個確認框
 - 輸入法組字
 - 拖放
@@ -407,11 +407,9 @@ var ok = await modalService.ConfirmAsync(new ConfirmOptions()
 
 | 位置 | 現況 | 備註 |
 |---|---|---|
-| 各 View 的 `NotifySuccess`／inline 通知 | 成功結果大多用 `NotificationType.Warning`（橘色圖示），只有使用者／團隊／分類的啟用停用切換與角色「建立預設角色」用 `Success` | 0.4.84 changelog 記錄為「刻意不做」，建議日後抽 `ToastNotifier` 統一處理，並加一支釘住 `BottomRight` 的測試 |
+| 各頁面的 `NotifySuccess`／inline 通知 | 成功結果大多用 `NotificationType.Warning`（橘色圖示），只有使用者／團隊／分類的啟用停用切換與角色「建立預設角色」用 `Success` | 0.4.84 changelog 記錄為「刻意不做」，建議日後抽 `ToastNotifier` 統一處理，並加一支釘住 `BottomRight` 的測試 |
 | 8 個清單頁的新增分支 | 頂部 `messageService` 與右下角 notification 同時出現 | 同上，留給下一版 |
-| 速查表 §6.3 | 寫的是「五條路徑，四條加了確認」 | AI 問答後來加了「重新產生答案」，而且有確認（見 8.2），計數已經不準 |
-| 速查表 §6.8「刻意不綁 Enter」表 | 寫的是「19 個 `ConfirmAsync` 二次確認框」 | 現在 `.razor`／`.razor.cs` 的呼叫點約 24 個，加上 `FormDirtyHelper` 共用點共約 25 個 |
-| `Components/Commons/BackgroundJobProgressPanel.razor.css` | 藍灰系字面色碼 | 見介面視覺設計規範第十節 |
+| `Web.Client/Components/Commons/BackgroundJobProgressPanel.razor.css` | 藍灰系字面色碼 | 見介面視覺設計規範第十節 |
 
 ---
 

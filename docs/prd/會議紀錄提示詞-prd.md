@@ -1,10 +1,10 @@
 ﻿# 會議紀錄提示詞 PRD
 
-- 文件版本：1.7
+- 文件版本：1.8
 - 文件狀態：已實作
-- 現行系統版本：1.1.26
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.26
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 > **0.4.99：提示詞範本對所有人開放。** `PromptTemplateService` 拿掉團隊過濾（清單、單筆、啟用切換、`GetEnabledSelectableAsync`），編輯表單拿掉團隊欄位；範本的維護看角色的「提示詞清單」權限（一般使用者角色的初始權限沒有），啟用中的所有人產生會議紀錄時都選得到。~~`Teams` 欄位保留、存檔時原值帶回~~。下文的團隊權控描述的是 0.4.98 以前的狀態。
 >
@@ -29,11 +29,11 @@
 
 | 項目 | 內容 |
 | --- | --- |
-| 路由 | `/prompttemplates`（`PromptTemplatePage.razor`，`MainLayout`） |
+| 路由 | `/prompttemplates`（`Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`，WASM） |
 | REST API | `api/PromptTemplate`、`api/v1/PromptTemplate`（`GET {id}`／`POST search`／`POST`／`PUT {id}`／`DELETE {id}`） |
 | 選單路徑 | 資料定義（id=5）> 提示詞清單（id=53，`url=/prompttemplates`，icon `article`） |
 | 選單→權限對應 | `SidebarMenuService.MenuPermissionMap[53] = 角色_提示詞清單` |
-| UI 頁面權限 | 頁面鍵「提示詞清單」（`AuthenticationStateHelper.CheckAccessPage`；管理員短路） |
+| UI 頁面權限 | 頁面鍵「提示詞清單」（`PermissionView.CanAccessPage`；管理員短路） |
 | API 動作級權限 | `提示詞清單:view` / `提示詞清單:create` / `提示詞清單:edit` / `提示詞清單:delete` |
 | 主要使用者 | 具「提示詞清單」角色權限的後台管理者；系統管理員無條件可存取 |
 
@@ -41,7 +41,7 @@
 
 ## 三、畫面與欄位
 
-單頁清單 + Modal 表單（1.1.9 起是 WASM 頁 `Web.Client/Pages/PromptTemplates/PromptTemplatePage`，畫面與以前的 `PromptTemplateViewView` 相同）：
+單頁清單 + Modal 表單（WASM 頁 `Web.Client/Pages/PromptTemplates/PromptTemplatePage`）：
 
 - 搜尋：關鍵字比對 `Name`、`Content` 或 `Description`（`Contains`）。清空搜尋鈕在有輸入時出現。
 - 工具列：新增、建立內建範本、選擇內建範本＋新增此範本、重新整理、關鍵字、清空搜尋、搜尋。（分類過濾與團隊過濾已於 0.4.64 移除）
@@ -56,7 +56,7 @@
   - 分類 `Categories`（多值標籤，供檢索分群，**不影響可見性**）
   - ~~團隊 `Teams`（多值標籤，Placeholder「選擇團隊（不設定表示公開）」，決定可見範圍）~~——0.4.99 從表單拿掉，**0.4.103 欄位已刪除**；範本對所有人開放
   - 啟用狀態 `IsEnabled`（Switch，預設啟用）
-- 按鈕級權限：新增／修改／刪除按鈕分別以 `CheckAccessAction(角色_提示詞清單, PermissionActions.Create/Edit/Delete)` 控制顯示（WASM 頁用 `PermissionView.Can`，規則相同）。
+- 按鈕級權限：新增／修改／刪除按鈕分別以 `PermissionView.Can(角色_提示詞清單, PermissionActions.Create/Edit/Delete)` 控制顯示。
 - 鍵盤行為：Esc 關閉 Modal。**0.4.77 起 Enter 送出表單**（先前刻意排除，理由是 `Content` 為多行輸入）——判斷走 `FormKeyboardHelper.IsSubmit`，組字中的 Enter 不算送出，**Shift+Enter 在多行欄位換行**。
 - 刪除：`ConfirmAsync` 二次確認，提示不可復原。
 
@@ -110,34 +110,34 @@
 
 ## 四、內部系統運作
 
-- UI 路徑（1.1.9 起）：WASM 頁 `PromptTemplatePage` → `PromptTemplateApi`（瀏覽器，登入 Cookie＋防偽標頭）→ `PromptTemplateController` → `PromptTemplateService` → `BackendDBContext`。1.1.8 以前是 Blazor Server 的 `PromptTemplateViewView` 直接注入服務。
-- API 路徑：`PromptTemplateController` → `PromptTemplateService`（1.1.9 起與畫面同一套規則；以前走 `PromptTemplateRepository`，已移除），回傳 `ApiResult<T>` / `PagedResult<T>`。另有 `PUT {id}/enabled`、內建範本（`GET presets`、`POST presets`、`POST presets/single`，規則從畫面搬進 Controller）、`GET categories/enabled`。API 的分類用 `categoryNames`（名稱清單）或舊欄位 `categories`（儲存格式），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+- UI 路徑：WASM 頁 `PromptTemplatePage` → `PromptTemplateApi`（瀏覽器，登入 Cookie＋防偽標頭）→ `PromptTemplateController` → `PromptTemplateService` → `BackendDBContext`。
+- API 路徑：`PromptTemplateController` → `PromptTemplateService`（與畫面同一套規則），回傳 `ApiResult<T>` / `PagedResult<T>`。另有 `PUT {id}/enabled`、內建範本（`GET presets`、`POST presets`、`POST presets/single`，規則在 Controller）、`GET categories/enabled`。API 的分類用 `categoryNames`（名稱清單）或舊欄位 `categories`（儲存格式），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 - Entity `PromptTemplate`（`Id/Name/Content/Description/IsEnabled/Categories/CreatedAt/UpdatedAt`；`Teams` 0.4.103 已刪除），DbSet 為 `context.PromptTemplate`。`Content` 在 SQLite 為 `TEXT`，Entity 端刻意不加長度上限，長度限制只在 AdapterModel／DTO 以 `[StringLength(20000)]` 表達。
 - 標籤欄位 `Categories` 以 `TagStringHelper` 的「換行包夾」格式儲存（例 `\n週報\n`）；AutoMapper 以 `ForMember` 搭配 `TagStringHelper.ToList` / `ToStored` 在 `List<string>` 與儲存字串之間轉換。
-- 變數檢查在 UI 層的 `NotifyUnknownVariables()`；1.1.9 起（WASM 頁）在存檔成功之後才提醒（以前在前置檢查通過、存檔之前）。**刻意不放進 Service 的前置檢查流程**，因為它不阻擋儲存。判斷邏輯抽在 `PromptVariableHelper`（1.1.9 起在 `MeetingRecord.Share/Helpers`，伺服器與 WASM 頁共用）以便單元測試。
+- 變數檢查在 UI 層的 `NotifyUnknownVariables()`，在存檔成功之後才提醒。**刻意不放進 Service 的前置檢查流程**，因為它不阻擋儲存。判斷邏輯抽在 `PromptVariableHelper`（`MeetingRecord.Share/Helpers`，伺服器與 WASM 頁共用）以便單元測試。
 - 查詢一律 `AsNoTracking()`；寫入前 `CleanTrackingHelper.Clean<PromptTemplate>` 清追蹤，寫入後再清一次。
-- 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`Clone()` 為淺複製後另建分類新清單（1.1.9 起是 `PromptTemplateDto.Clone()`、清單是 `CategoryNames`）。`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
+- 編輯前於 UI 以 `CurrentRecord = model.Clone()` 複製，避免污染清單資料；`Clone()`（`PromptTemplateDto.Clone()`）為淺複製後另建分類新清單（`CategoryNames`）。`UpdateAsync` 保留原 `CreatedAt`、更新 `UpdatedAt`，以 `Entry(item).State = Modified/Deleted` 提交。
 - 模型變更需在 `MeetingRecord.AccessDatas/Migrations/` 產生 SQLite migration（本專案只支援 SQLite）；本能力對應 migration `AddPromptTemplate`（只新增 `PromptTemplate` 一張表，不影響既有表）。
-- LLM 設定：`LlmSettings` 於 `Program.cs` 以 `AddOptions<LlmSettings>().Bind(...).ValidateDataAnnotations().ValidateOnStart()` 綁定為 `IOptions<LlmSettings>`；`Providers` 為以供應商名稱為鍵的字典，`DefaultProvider` 指定預設供應商。**本版無任何呼叫端**，僅供規劃中流程預留。
+- LLM 設定：`LlmSettings` 於 `Program.cs` 以 `AddOptions<LlmSettings>().Bind(...).ValidateDataAnnotations().ValidateOnStart()` 綁定為 `IOptions<LlmSettings>`；`Providers` 為以供應商名稱為鍵的字典，`DefaultProvider` 指定預設供應商。語音轉文字、會議紀錄草稿、AI 問答、抽出待辦、使用說明 AI 助理與 AI 日誌／例外分析都讀這份設定。
 
 ## 五、權限與安全
 
-- API 一律 `[Authorize(JwtBearer)]`；每個動作以 `[HasPermission(MagicObjectHelper.角色_提示詞清單, PermissionActions.*)]` 做動作級授權。
+- API 一律 `[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]`（帶 Bearer 走 JWT，否則走登入 Cookie）；每個動作以 `[HasPermission(MagicObjectHelper.角色_提示詞清單, PermissionActions.*)]` 做動作級授權。
 - 權限鍵組合規則 `頁面:動作`（`PermissionKey.For`）：`提示詞清單:view`、`提示詞清單:create`、`提示詞清單:edit`、`提示詞清單:delete`。裸鍵「提示詞清單」代表該頁全部動作（向後相容）。
 - 無權限回 403，且維持 `ApiResult` 格式；系統管理員短路（不需個別權限）。
-- UI 與 API 共用單一 RBAC 權威來源：1.1.9 起提示詞頁在 WASM 執行，進頁與按鈕由 `PermissionView`（規則同 `CheckAccessPage`／`CheckAccessAction`）決定，資料一律經 API 的動作鍵檢查；內建範本的三支 API 要 `提示詞清單:create`。
-- **提示詞範本不做列級過濾（0.4.99 起）**：UI 與 API 都對所有人開放，只看角色的「提示詞清單」動作權限。~~**團隊列級權控只在 Blazor Service 層生效**：非管理員於 `PromptTemplateService` 以 `TagStringHelper.BuildTeamAccessPredicate` 只能看到公開（無團隊）或與自身有效團隊有交集的提示詞；單筆讀取以 `TagStringHelper.IsTeamAccessible` 守門。~~（0.4.98 以前；**0.4.103 這兩個方法與 `PromptTemplate.Teams` 已刪除**。）
+- UI 與 API 共用單一 RBAC 權威來源：進頁與按鈕由 `PermissionView`（規則同伺服器的 `AuthenticationStateHelper.CanAccessPage`／`CanDoAction`）決定，資料一律經 API 的動作鍵檢查；內建範本的三支 API 要 `提示詞清單:create`。
+- **提示詞範本不做列級過濾（0.4.99 起）**：UI 與 API 都對所有人開放，只看角色的「提示詞清單」動作權限；提示詞範本沒有團隊欄位。
 - 新增權限鍵要開給非管理者時，由管理者到角色管理（`/roleviews`）在對應角色勾選（0.4.98～0.4.100 只有「一般使用者」一個角色，0.4.101 起恢復多角色）。
 - `LlmSettings` 的 `ApiKey` 為機敏值：版控內只放開發預設值，`appsettings.Production.json` 一併清空 `DefaultProvider` 與 `ApiKey`，正式環境須以環境變數（`LlmSettings__Providers__AzureOpenAI__ApiKey`）或 user-secrets 提供。`StartupSafetyValidator` 在 Production 啟動時檢查：指定了 `DefaultProvider` 就不允許 `ApiKey` 留空或沿用開發預設值、也不允許 `Endpoint` 留空或沿用範例值。
 
 ### 稽核（1.0.34）
 
-- `PromptTemplateService`：`PromptTemplate.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要**只記名稱**，不記提示詞本文；經 API 的是 `via=Api`（1.1.9 起 WASM 提示詞頁也經 API）。
+- `PromptTemplateService`：`PromptTemplate.Create`／`Update`／`Delete`／`Enable`／`Disable`，摘要**只記名稱**，不記提示詞本文；提示詞頁經 API，所以是 `via=Api`。
 - 建立內建範本（`AddPresetsAsync`）有新增時寫一筆 `PromptTemplate.AddPresets`（`added=N; skipped=N`）。見 [稽核紀錄 PRD](稽核紀錄-prd.md)。
 
 ## 六、錯誤與邊界
 
-- 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「提示詞名稱已存在」。API 用同一個檢查，重複回 409 Conflict（1.1.8 以前 API 另用大小寫敏感的 `ExistsByNameAsync`）。
+- 名稱重複：新增／修改前以 `BeforeAddCheckAsync` / `BeforeUpdateCheckAsync` 比對（`ToLower()` 不分大小寫，修改時排除自身），重複回「提示詞名稱已存在」。API 用同一個檢查，重複回 409 Conflict。
 - **名稱唯一性是全域**（不分大小寫）。~~可見性是團隊範圍：B 團隊建立的提示詞，A 團隊使用者在清單上看不到，但用同名新增時仍會收到「提示詞名稱已存在」~~——0.4.98 以前的情形，0.4.99 起範本對所有人可見。
 - 找不到資料：修改／刪除時查無記錄回「找不到要修改／刪除的提示詞資料」；API 回 404 NotFound。
 - 驗證失敗：`DataAnnotations`（名稱與內容必填、長度上限）由 `EditContext.Validate()` 於 Modal 攔截並逐條通知。
@@ -185,12 +185,12 @@ API 的規則（名稱重複、`categoryNames` 與舊欄位 `categories`、分�
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（`@page "/prompttemplates"`，1.1.9 起在 WASM 執行）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor`（`@page "/prompttemplates"`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor.cs`（`OnInitializedAsync` 以 `PermissionView` 檢查頁面權限）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Api/PromptTemplateApi.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/PromptTemplateController.cs`（`PromptTemplateController` 各端點的 `[HasPermission]` 動作鍵）
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/PromptTemplateService.cs`（`PromptTemplateService.AddAsync`、`BeforeAddCheckAsync`／`BeforeUpdateCheckAsync` 前置檢查、`AddPresetsAsync`）
-- `src/MeetingRecord/MeetingRecord.Share/Helpers/PromptVariableHelper.cs`（`PromptVariableHelper.KnownVariables` 固定變數集；1.1.9 從 Business 搬來）
+- `src/MeetingRecord/MeetingRecord.Share/Helpers/PromptVariableHelper.cs`（`PromptVariableHelper.KnownVariables` 固定變數集）
 - `src/MeetingRecord/MeetingRecord.AccessDatas/Models/PromptTemplate.cs`（`PromptTemplate` Entity 欄位）、`src/MeetingRecord/MeetingRecord.AccessDatas/BackendDBContext.cs`（`BackendDBContext.PromptTemplate` DbSet）
 - `src/MeetingRecord/MeetingRecord.Business/Models/AutoMapping.cs`（`AutoMapping` 的 `#region PromptTemplate`：標籤欄位轉換）
 - `src/MeetingRecord/MeetingRecord.Dtos/Models/PromptTemplateCreateUpdateDto.cs`（`PromptTemplateCreateUpdateDto`）、`src/MeetingRecord/MeetingRecord.Dtos/Commons/PromptTemplateSearchRequestDto.cs`（`PromptTemplateSearchRequestDto`）
@@ -200,4 +200,4 @@ API 的規則（名稱重複、`categoryNames` 與舊欄位 `categories`、分�
 - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`（`AddApplicationServices` 的 DI 註冊）
 - `src/MeetingRecord/MeetingRecord.Models/Systems/LlmSettings.cs`（`LlmSettings`）、`src/MeetingRecord/MeetingRecord.Web/Program.cs`（`#region 加入設定強型別注入宣告`：`AddOptions<LlmSettings>` Options 綁定）、`src/MeetingRecord/MeetingRecord.Web/Configuration/StartupSafetyValidator.cs`（`StartupSafetyValidator.Validate`：Production 檢查）
 - `src/MeetingRecord/MeetingRecord.Tests/PromptTemplateServiceTests.cs`、`src/MeetingRecord/MeetingRecord.Tests/PromptVariableHelperTests.cs`、`src/MeetingRecord/MeetingRecord.Tests/PromptTemplateRegistrationTests.cs`
-- 交叉連結：[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[紀錄分類與團隊權控-prd.md](紀錄分類與團隊權控-prd.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)
+- 交叉連結：[會議紀錄產生流程 PRD](會議紀錄產生流程-prd.md)、[../architecture/Web API 設計慣例.md](../architecture/Web%20API%20設計慣例.md)、[../architecture/資料模型與資料庫.md](../architecture/資料模型與資料庫.md)、[權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)、[../operations/日誌與設定檔說明.md](../operations/日誌與設定檔說明.md)

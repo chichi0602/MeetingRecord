@@ -1,10 +1,10 @@
 ﻿# 系統健康監控 PRD
 
-- 文件版本：3.4
+- 文件版本：3.5
 - 文件狀態：已實作
-- 現行系統版本：1.1.35
+- 現行系統版本：1.1.53
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（0.4.93 擴充為「系統健康度」，0.4.120 改名「系統健康監控」並改為只限管理者，0.4.123 改版為 17 項並重做畫面，1.0.29 新增「AI 用量上限」成為 18 項）
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 ## 一、目標與範圍
 
@@ -28,15 +28,15 @@
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
-| `/system-health` | 系統管理 → 監控與診斷（id 36）→ 系統健康監控（id 34） | 只限管理者（`CheckIsAdmin()`＋`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄、不能勾給角色） | 系統管理員／維運 |
+| `/system-health` | 系統管理 → 監控與診斷（id 36）→ 系統健康監控（id 34） | 只限管理者（頁面 `PermissionView.IsAdmin`、API `[AdminOnly]`、`SidebarMenuService.AdminOnlyMenuIds`；不在權限目錄、不能勾給角色） | 系統管理員／維運 |
 
-1.1.35 起是 WASM 頁，資料走 API（`MonitoringController`，`[AdminOnly]`）：`GET api/v1/monitoring/health`、`GET api/v1/monitoring/logs/recent-warnings`、`POST api/v1/monitoring/ai-connection-test`（稽核由伺服器寫，`via=Api`）。
+頁面資料走 API（`MonitoringController`，`[AdminOnly]`）：`GET api/v1/monitoring/health`、`GET api/v1/monitoring/logs/recent-warnings`、`POST api/v1/monitoring/ai-connection-test`（稽核由伺服器寫，`via=Api`）。
 | `/health/live` | 非選單（探針） | 無（匿名） | 部署平台存活探針 |
 | `/health/ready` | 非選單（探針） | 無（匿名） | 部署平台就緒探針 |
 
 ## 三、畫面與欄位
 
-畫面照本專案 UI 規範：薄頁＋View、不放 h1（標題由 Menu.json 顯示）、燈號只用 `--oat-ok／--oat-warn／--oat-err` 色票。
+畫面照本專案 UI 規範：不放 h1（標題由 Menu.json 顯示）、燈號只用 `--oat-ok／--oat-warn／--oat-err` 色票。
 
 - **工具列**：
   - 「重新檢查」（`refresh` 圖示＋文字）。執行中顯示載入狀態，重複點擊會被忽略。
@@ -60,7 +60,7 @@
 
 ## 四、內部系統運作
 
-1. **開頁**（1.1.35 起 WASM 頁 `SystemHealthPage`）：
+1. **開頁**（WASM 頁 `SystemHealthPage`）：
    1. 登入狀態由 `WasmLayout` 處理。
    2. `PermissionView.IsAdmin`：非管理者顯示「你沒有權限存取此頁面」並中止（經 API 寫頁面拒絕稽核）。0.4.120 起不再看權限鍵。API 也是 `[AdminOnly]`。
    3. 呼叫 `RefreshAsync` → `GET api/v1/monitoring/health`。開頭以 `isLoading` 早退，避免重複按。
@@ -88,7 +88,7 @@
 ## 五、權限與安全
 
 - **只限管理者**（0.4.120 起）：
-  - 頁面以 `PermissionView.IsAdmin` 守門（1.1.35 前是 `CheckIsAdmin()`），權限判定完成前不渲染任何內容；API 是 `[AdminOnly]`，非管理者 403 並留稽核。
+  - 頁面以 `PermissionView.IsAdmin` 守門，權限判定完成前不渲染任何內容；API 是 `[AdminOnly]`，非管理者 403 並留稽核。
   - 選單 id 34 列在 `SidebarMenuService.AdminOnlyMenuIds`。
   - 不在 `MenuPermissionMap` 與 `RolePermissionService` 權限目錄，無法勾給角色。
   - 未遮罩的日誌原文因此只有管理者看得到。
@@ -149,7 +149,7 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/SystemHealthPage.razor(.cs/.css)`（1.1.35 起 WASM；以前是 Server 的 `SystemHealthPage` → `SystemHealthView`）：
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/SystemHealthPage.razor(.cs/.css)`：
   - `RefreshAsync`：重新檢查。
   - `ToggleWarnLogsAsync`／`LoadWarnLogsAsync`：警告日誌。
   - `WarnLogTake = 200`。
@@ -160,7 +160,7 @@
 - `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthChecks.cs`：
   - `SystemHealthWeights`。
   - 判斷純函式：`EvaluateLogging`、`EvaluateDataProtection`、`EvaluateExceptionPipeline`、`ProbeCacheAsync`、`EvaluateAiProvider`、`EvaluateTranscription`、`EvaluatePdfExport`、`EvaluateExchangeRate`、`EvaluateBackgroundJobs`、`EvaluateRecentErrors`、`EvaluateAiQuota`（1.0.29）。
-- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs`、`DatabaseHealthCheck.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/SystemHealthModels.cs`、`AiConnectionProbeResult.cs`（1.1.35 搬來）
+- `src/MeetingRecord/MeetingRecord.Web/Health/SystemHealthScoreCalculator.cs`、`DatabaseHealthCheck.cs`；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/SystemHealthModels.cs`、`AiConnectionProbeResult.cs`
 - `src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs`（`Health`、`RecentWarnings`、`TestAiConnection`，1.1.35）
 - `src/MeetingRecord/MeetingRecord.Web/Diagnostics/`：`LoggingPipelineMonitor`、`ExceptionLogProvider`、`NLogFilePathResolver`、`LogLevelRuntimeState`、`LogQueryService`
 - `src/MeetingRecord/MeetingRecord.Web/Extensions/ServiceCollectionExtensions.cs`：`AddConfiguredHealthChecks`（探針 tag `live`/`ready`）、`AddConfiguredDataProtection`、`AddConfiguredCache`。

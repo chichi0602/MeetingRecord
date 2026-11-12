@@ -2,9 +2,9 @@
 
 - 文件版本：1.1
 - 文件狀態：已實作
-- 現行系統版本：0.4.118
+- 現行系統版本：1.1.53
 - 首次實作版本：—（未追溯，約 0.1.x 初始腳手架）
-- 最後核對日期：2026/10/08
+- 最後核對日期：2026/11/12
 
 本系統**只支援 SQLite**（0.4.24 起已移除 SQL Server 軌道），所有 migration 都放在 `MeetingRecord.AccessDatas/Migrations/`，DbContext 只有一個：`BackendDBContext`。
 

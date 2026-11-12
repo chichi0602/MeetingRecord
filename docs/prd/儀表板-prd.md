@@ -1,10 +1,10 @@
 ﻿# 儀表板 PRD
 
-- 文件版本：1.5
+- 文件版本：1.6
 - 文件狀態：已實作
-- 現行系統版本：1.1.12
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.54
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 ## 一、目標與範圍
 
@@ -23,7 +23,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| UI 路由 | `/dashboard`（1.1.12 起是 WASM 頁 `Web.Client/Pages/Dashboards/DashboardPage`，掛 `WasmLayout`） |
+| UI 路由 | `/dashboard`（WASM 頁 `Web.Client/Pages/Dashboards/DashboardPage`，掛 `WasmLayout`） |
 | API | `GET /api/v1/dashboard`（1.1.12，只需登入，回 `ApiResult<DashboardSummary>`） |
 | REST API | 無 |
 | 選單路徑 | 核心功能區第一項：儀表板（`Menu.json` id=11，icon `space_dashboard`，`section: "核心功能"`） |
@@ -76,7 +76,7 @@
 
 ## 四、內部系統運作
 
-- 資料流（1.1.12 起）：WASM 頁 `DashboardPage` → `DashboardApi` → `DashboardController` → `DashboardService.GetSummaryAsync()`（Scoped）→ `BackendDBContext` 與檔案系統。沒有快取。看不到的專案名稱以 API 呼叫者自己的資料範圍判斷。以前是 Blazor Server 的 `DashboardView` 直接注入服務。
+- 資料流：WASM 頁 `DashboardPage` → `DashboardApi` → `DashboardController` → `DashboardService.GetSummaryAsync()`（Scoped）→ `BackendDBContext` 與檔案系統。沒有快取。看不到的專案名稱以 API 呼叫者自己的資料範圍判斷。
 - **一次投影、記憶體分組**：`Meeting`、`Project`、`Todo`、`PromptTemplate` 各撈一次需要的純量欄位（`MeetingFact`／`ProjectFact`／`TodoFact`／`PromptTemplateFact`，全部 `AsNoTracking()`），再於記憶體分組計算，而不是十幾條各自的 `GroupBy` 查詢。專案附件容量用 `ProjectFile.FileSize` 的 `SumAsync`。
 - **平均耗時在記憶體算**：SQLite／EF Core 無法對 `TimeSpan` 做 `AVG`，取回 `TranscriptionStartedAt`／`CompletedAt` 與 `DraftStartedAt`／`CompletedAt` 有頭有尾的區間後由 `DashboardMetrics.AverageDuration` 平均。資料量成長後要改在 SQL 端用 `julianday` 相減。
 - **轉錄失敗率**：`DashboardMetrics.CalculateFailureRate`，分母為「完成＋失敗」，兩者皆 0 回 null。
@@ -94,7 +94,7 @@
 |------|------|
 | 資料範圍 | **0.4.97 起全公司同一份數字**。1.0.47 起 `DashboardService` 注入 `ProjectAccessService`，**只用來決定長條圖上的專案名稱要不要露出**（看不到的併成「其他專案」），不過濾任何數字。0.4.97～1.0.46 不注入任何存取範圍。0.4.54～0.4.96 曾沿用各頁規則（會議、範本套團隊過濾），為了「儀表板與點進去看到的筆數對得上」；0.4.97 使用者要求儀表板給所有人看、不設權限後改為全公司彙總。0.4.99 的專案權控與 0.4.102 的主責＋協作團隊也刻意不套到這裡 |
 | 為何不放明細 | 不套權限的直接後果：任何清單都會把別的團隊看不到的內容露出來。新增區塊只能是數字或圖表 |
-| 登入即可看怎麼做 | 宣告在 `SidebarMenuService.PublicMenuIds`。⚠️ **單純不放進 `MenuPermissionMap` 沒有用**：沒有對應的項目會退回用 `Name`（「儀表板」）當權限鍵，角色沒有同名權限就照樣被藏起來。頁面本身只做登入檢查（`AuthenticationStateHelper.Check`），不呼叫 `CheckAccessPage`。資料庫裡舊的「儀表板」Permission 列成為孤兒，無害、未清理 |
+| 登入即可看怎麼做 | 宣告在 `SidebarMenuService.PublicMenuIds`。⚠️ **單純不放進 `MenuPermissionMap` 沒有用**：沒有對應的項目會退回用 `Name`（「儀表板」）當權限鍵，角色沒有同名權限就照樣被藏起來。頁面本身只靠 `WasmLayout` 的登入檢查，不呼叫 `PermissionView.CanAccessPage`；API 也只需登入。資料庫裡舊的「儀表板」Permission 列成為孤兒，無害、未清理 |
 | 不做快取 | 儀表板本來就該顯示當下數字；Business 層也注入不到 Web 層的 `ICacheService`。代價是每次重新整理都會掃一次逐字稿目錄與全部對話檔，資料成長後這裡會是痛點 |
 | 移除趨勢圖（0.4.96） | 上傳→轉錄→生成通常幾分鐘內完成，「新增會議」與「完成紀錄」兩條線幾乎重疊；量小（每天 0～3 場）畫出來是貼地鋸齒；資訊已由「本月新增」與狀態圓餅涵蓋；切天數會重載整份統計。`TrendPoint`、`DashboardMetrics.BuildDayBuckets`／`BuildDayLabels`、`LineChart.razor` **刻意保留**，Token 用量頁（原 AI 用量分析）的累計曲線還在用 |
 | 「啟用但未使用」用名稱比對 | `DraftPromptTemplateName` 是生成當下的**名稱快照**（讓範本刪除後仍看得出當初用了什麼）。必然結果：改過名的範本會被算成未使用、已刪除的範本仍出現在使用次數長條圖。畫面提示已寫明，`DashboardMetricsTests.CountUnusedEnabledTemplates_RenamedTemplate_ShouldCountAsUnused` 把它釘成契約 |
@@ -103,7 +103,7 @@
 
 ## 五、權限與安全
 
-- 頁面與選單：登入即可看（`PublicMenuIds`），未登入或身分無效由 `AuthenticationStateHelper.Check` 導向 `/Auths/Logout`（再回登入頁）。沒有動作權限，因為本頁沒有任何寫入動作。
+- 頁面與選單：登入即可看（`PublicMenuIds`），未登入由 `WasmLayout` 整頁導到 `/Auths/Login`，帳號停用、刪除或沒有角色導到 `/Auths/Logout?reason=…`。沒有動作權限，因為本頁沒有任何寫入動作。
 - **資料權限例外**：數字不經 `ProjectAccessService` 過濾，所有人看到全公司數字，因此會與一般使用者在會議、專案、待辦頁看到的筆數不同——刻意如此（使用說明 FAQ 也有說明）。
 - 露出的名稱只有兩類：專案名稱（各專案會議份數長條圖）與提示詞範本名稱（使用次數長條圖）。0.4.97 使用者確認保留；0.4.115 上線前審查重新列為「未修，請判斷」：看不到某專案的人也會看到該專案的名稱與會議數（見 [上線前全面審查與修正](../changelog/2026-10-02-上線前全面審查與修正.md) §四）。**1.0.47 已處理**：看不到的專案名稱併成「其他專案」，會議數仍計入（全公司數字不變）；管理者看全部名稱。提示詞範本名稱照常顯示——範本本來就對所有人開放。見 [權限補強](../changelog/2026-10-19-權限補強與權限總覽文件.md)。
 - 日後新增任何區塊都不得帶出會議標題、待辦內容、逐字稿或對話內容。
@@ -146,11 +146,11 @@
 
 ### 程式
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Dashboards/DashboardPage.razor`、`.razor.cs`（`ReloadAsync`、`FormatPercent`）、`.razor.css`（1.1.12 起在 WASM 執行）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Dashboards/DashboardPage.razor`、`.razor.cs`（`ReloadAsync`、`FormatPercent`）、`.razor.css`
 - `src/MeetingRecord/MeetingRecord.Web.Client/Api/DashboardApi.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/DashboardController.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Dashboard/DashboardService.cs`（`GetSummaryAsync`、`BuildCards`、`BuildTodoOverview`、`BuildProjectOverview`、`BuildMeetingHours`、`BuildPerformance`、`BuildPromptTemplates`）
-- `src/MeetingRecord/MeetingRecord.Business/Services/Dashboard/DashboardMetrics.cs`；資料型別 `src/MeetingRecord/MeetingRecord.Dtos/Dashboards/DashboardModels.cs`（1.1.12 從 Business 搬來：`DashboardSummary`、`StatCardItem`、`ChartSlice`、`StorageSummary` 等）；圓餅幾何 `src/MeetingRecord/MeetingRecord.Share/Helpers/ChartGeometry.cs`
-- `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/Charts/`（`StatCard`、`PieChart`、`BarChart`、`LineChart`、`ChartPalette`；1.1.12 起在 Client，命名空間不變，仍是 Server 頁的 Token 用量、資料庫用量、日誌等級也用）
+- `src/MeetingRecord/MeetingRecord.Business/Services/Dashboard/DashboardMetrics.cs`；資料型別 `src/MeetingRecord/MeetingRecord.Dtos/Dashboards/DashboardModels.cs`（`DashboardSummary`、`StatCardItem`、`ChartSlice`、`StorageSummary` 等）；圓餅幾何 `src/MeetingRecord/MeetingRecord.Share/Helpers/ChartGeometry.cs`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Components/Commons/Charts/`（`StatCard`、`PieChart`、`BarChart`、`LineChart`、`ChartPalette`；Token 用量、資料庫用量、日誌等級設定等頁也用）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/FileSizeFormatter.cs`、`DirectorySizeCalculator.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/AiChat/AiChatStore.cs`（`CountQuestions`）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Layout/SidebarMenuService.cs`（`PublicMenuIds`、`FilterAuthorizedMenuItems`）、`src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`（id 11）
@@ -160,6 +160,6 @@
 ### 文件
 
 - Changelog：[儀表板](../changelog/2026-09-08-儀表板.md)、[操作欄只留圖示與趨勢範圍](../changelog/2026-09-10-操作欄只留圖示與趨勢範圍.md)、[儀表板範本與儲存空間](../changelog/2026-09-16-儀表板範本與儲存空間.md)、[儀表板移除趨勢圖](../changelog/2026-09-23-儀表板移除趨勢圖.md)、[儀表板全員可看與概況指標](../changelog/2026-09-23-儀表板全員可看與概況指標.md)
-- 交叉連結：[首頁與導覽 PRD](首頁與導覽-prd.md)、[Token 用量 PRD](Token用量-prd.md)、[紀錄分類與團隊權控 PRD](紀錄分類與團隊權控-prd.md)、[系統功能總覽](../architecture/系統功能總覽.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md)
+- 交叉連結：[首頁與導覽 PRD](首頁與導覽-prd.md)、[Token 用量 PRD](Token用量-prd.md)、[權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)、[系統功能總覽](../architecture/系統功能總覽.md)、[開發慣例與限制速查](../architecture/開發慣例與限制速查.md)
 
 > 返回 [PRD 主控台](README.md)

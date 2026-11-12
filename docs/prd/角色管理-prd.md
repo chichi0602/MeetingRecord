@@ -1,10 +1,10 @@
 ﻿# 角色管理 PRD
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：1.1.11
+- 現行系統版本：1.1.53
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/11/10
+- 最後核對日期：2026/11/12
 
 > **0.4.102：權限矩陣的「資料群組」改回「團隊清單」。** 0.4.101 的「資料群組」權限鍵（含 `資料群組:edit` 這類動作鍵）由 `RbacBackfillService.RenameLegacyPermissionKeysAsync` 啟動時就地改回「團隊清單」，原本有的角色照樣有。角色本身的行為與 0.4.101 相同。三者分工：**角色＝能做什麼，團隊＝誰的資料，分類＝什麼資料**。
 >
@@ -19,16 +19,16 @@
 提供管理員維護角色（`RoleView`）與其**動作粒度權限矩陣**的能力（0.4.101 起角色不再設定預設團隊）。角色權限以權限鍵集合表示，透過 RBAC 雙寫落地為 `RolePermissionMap`，成為 UI 與 API 動作級授權（`[HasPermission]`／`IPermissionChecker`）的單一權威來源。
 
 - **範圍**：`/roleviews` 角色維護頁、`RoleViewService` CRUD、`RolePermissionService` 權限矩陣序列化、`RbacWriteService.SyncRolePermissionsAsync` 雙寫、稽核寫入。
-- **非範圍**：使用者與角色的指派見 [使用者管理](使用者管理-prd.md)；登入與帳號安全見 [登入與帳號流程](登入與帳號流程-prd.md)；資料可見範圍見 [團隊清單](團隊清單-prd.md)、[專案項目](專案項目-prd.md)與 [紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)。
+- **非範圍**：使用者與角色的指派見 [使用者管理](使用者管理-prd.md)；登入與帳號安全見 [登入與帳號流程](登入與帳號流程-prd.md)；資料可見範圍見 [團隊清單](團隊清單-prd.md)、[專案項目](專案項目-prd.md)與 [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)。
 
 ## 二、使用者與入口
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 |------|------|----------|-----------|
-| `/roleviews` | 系統管理 → 帳號與權限 → 角色管理（`Menu.json` id=32）| 僅管理員（`AuthenticationStateHelper.CheckIsAdmin`）| 系統管理員 |
+| `/roleviews` | 系統管理 → 帳號與權限 → 角色管理（`Menu.json` id=32）| 僅管理員（頁面 `PermissionView.IsAdmin`、API `[AdminOnly]`）| 系統管理員 |
 
-- 1.1.11 起是 WASM 頁 `Web.Client/Pages/Admins/RoleViewPage`（畫面與以前的 `RoleViewView` 相同）：登入狀態由 WASM 版面先處理；非管理員（`PermissionView.IsAdmin`）顯示「你沒有權限存取此頁面」、寫頁面拒絕稽核並停止載入。
-- 1.1.11 起資料經 `RoleController`（`api/v1/Role`，`[AdminOnly]`）取得；此處編輯出來的權限鍵，才是各業務 API 控制器 `[HasPermission("頁面", "動作")]` 的授權依據。
+- WASM 頁 `Web.Client/Pages/Admins/RoleViewPage`：登入狀態由 `WasmLayout` 先處理；非管理員（`PermissionView.IsAdmin`）顯示「你沒有權限存取此頁面」、寫頁面拒絕稽核並停止載入。
+- 資料經 `RoleController`（`api/v1/Role`，`[AdminOnly]`）取得；此處編輯出來的權限鍵，才是各業務 API 控制器 `[HasPermission("頁面", "動作")]` 的授權依據。
 
 ## 三、畫面與欄位
 
@@ -48,7 +48,7 @@
   - 名稱（必填，唯一）。
   - ~~預設團隊~~（0.4.99 起拿掉表單欄位，0.4.101 刪除資料庫欄位）。
   - **動作粒度權限矩陣**（角色項目）：依 `RolePermissionService` 的群組結構呈現。每個群組（母項，如「系統管理功能」）有一個群組核取方塊；群組下每個頁面節點提供「（全部）」核取方塊，以及五個動作核取方塊：檢視、新增、編輯、刪除、匯出（`view/create/edit/delete/export`）。
-  - 0.4.120 起權限目錄（`GetRoleListPermissionAllName()`）**不含**「系統健康度」：「監控與診斷」底下的系統健康監控、日誌等級設定、資料庫用量**只限管理者、不能勾給角色**（選單 `AdminOnlyMenuIds`、頁面 `CheckIsAdmin()`）；0.4.120～1.0.29 同組的「AI 用量分析」仍在目錄裡、可勾給角色；**1.0.30 起也移出目錄**：改名「Token 用量」並與新的「AI 對話紀錄」一起放在「系統管理 → AI 管理」，兩頁都只限管理者。選單上的「帳號與權限」「監控與診斷」「AI 管理」分組也沒有自己的權限鍵。
+  - 0.4.120 起權限目錄（`GetRoleListPermissionAllName()`）**不含**「系統健康度」：「監控與診斷」底下的系統健康監控、日誌等級設定、資料庫用量**只限管理者、不能勾給角色**（選單 `AdminOnlyMenuIds`、頁面 `PermissionView.IsAdmin`、API `[AdminOnly]`）；0.4.120～1.0.29 同組的「AI 用量分析」仍在目錄裡、可勾給角色；**1.0.30 起也移出目錄**：改名「Token 用量」並與新的「AI 對話紀錄」一起放在「系統管理 → AI 管理」，兩頁都只限管理者。選單上的「帳號與權限」「監控與診斷」「AI 管理」分組也沒有自己的權限鍵。
 - **矩陣互動語意**：勾「（全部）」等同該頁裸鍵、代表全部動作，並停用個別動作核取方塊（舊制相容）；勾任一動作或頁面會自動點亮所屬群組；取消群組會連帶清掉其下所有頁面權限。
 
 ### 多選刪除（1.0.53）
@@ -57,7 +57,7 @@
 
 ## 四、內部系統運作
 
-WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`，檢查權限樹都在目錄裡）→ `RoleViewService` → `BackendDBContext`（1.1.11 起；以前是 Blazor Server 的 `RoleViewView` 直接注入服務）。清單不帶權限樹，修改時再取單筆；新增時取 `permission-template`：
+WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`，檢查權限樹都在目錄裡）→ `RoleViewService` → `BackendDBContext`。清單不帶權限樹，修改時再取單筆；新增時取 `permission-template`：
 
 - **矩陣 ↔ 權限鍵**（`RolePermissionService`）：`GetPermissionInput` 將勾選狀態轉為權限鍵清單——群組名、裸頁面鍵（＝全動作），或 `PermissionKey.For(頁面, 動作)`（如「專案項目:edit」）；`SetPermissionInput` 反向回填矩陣。清單序列化為 `RoleView.TabViewJson`。
 - **新增／修改**（`AddAsync`／`UpdateAsync`）：`CleanTrackingHelper.Clean` 清追蹤；以 `GetPermissionInputToJson` 產生 `TabViewJson` 存檔；再 `ParsePermissionKeys` 解析並呼叫 `RbacWriteService.SyncRolePermissionsAsync` 雙寫至 `RolePermissionMap`；寫 `Role.Create`／`Role.Update` 稽核（含權限鍵數）。
@@ -76,8 +76,8 @@ WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`�
 
 ## 五、權限與安全
 
-- RBAC 表（`Permission`／`RolePermissionMap`／`UserRole`）為 UI 與 API 共用的**單一權威**；登入後 `AuthenticationStateHelper` 以 `IPermissionChecker.GetEffectivePermissionKeysAsync` 載入有效權限鍵（多角色聯集）。
-- 動作級授權：API 控制器以 `[HasPermission(頁面, 動作)]` 判權，無權限回 `ApiResult` 403（`ForbiddenResult`）；未登入回 401；管理員短路一律通過。UI 以 `CheckAccessAction` 依動作顯示／停用按鈕。
+- RBAC 表（`Permission`／`RolePermissionMap`／`UserRole`）為 UI 與 API 共用的**單一權威**；有效權限鍵（多角色聯集）由 `IPermissionChecker.GetEffectivePermissionKeysAsync` 提供：API 的 `[HasPermission]` 用它判權，Session API（`GET api/v1/session`）也把它交給前端 `PermissionView`。
+- 動作級授權：API 控制器以 `[HasPermission(頁面, 動作)]` 判權，無權限回 `ApiResult` 403（`ForbiddenResult`）；未登入回 401；管理員短路一律通過。UI 以 `PermissionView.Can(頁面, 動作)` 依動作顯示／停用按鈕。
 - 角色本頁僅管理員可進入；不輸出任何機密欄位。
 
 ## 六、錯誤與邊界
@@ -86,7 +86,7 @@ WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`�
 - 修改對象不存在：回「找不到要修改的角色資料。」
 - `TabViewJson` 解析失敗：`OtherDependencyData` 以空權限初始化矩陣（不致命）。
 - 未設任何權限：該角色無有效權限鍵，成員（非管理員）將無對應頁面／動作。
-- 權限樹裡有目錄外的群組、頁面或動作：API 回 400「權限項目「X」不在權限目錄裡。」（1.1.11；以前只有畫面在把關，任意名稱都會由雙寫自動補建 `Permission` 列）。
+- 權限樹裡有目錄外的群組、頁面或動作：API 回 400「權限項目「X」不在權限目錄裡。」（1.1.11 起；不擋的話任意名稱都會由雙寫自動補建 `Permission` 列）。
 
 ## 七、驗收與測試
 
@@ -100,7 +100,7 @@ WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`�
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/RoleViewPage.razor`（`@page "/roleviews"`，1.1.11 起在 WASM 執行；「角色項目」權限矩陣）、`RoleViewPage.razor.cs`（矩陣互動 `OnPermissionGroupChanged`／`OnPermissionItemChanged`／`OnPermissionActionChanged`、`GetActionChecked`；動作欄定義 `PermissionActionItems`）
+- `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Admins/RoleViewPage.razor`（`@page "/roleviews"`；「角色項目」權限矩陣）、`RoleViewPage.razor.cs`（矩陣互動 `OnPermissionGroupChanged`／`OnPermissionItemChanged`／`OnPermissionActionChanged`、`GetActionChecked`；動作欄定義 `PermissionActionItems`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Api/RoleApi.cs`、`src/MeetingRecord/MeetingRecord.Web/Controllers/RoleController.cs`（權限樹與目錄檢查）、`src/MeetingRecord/MeetingRecord.Dtos/Roles/RoleDtos.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/DataAccess/RoleViewService.cs`（`RoleViewService.AddAsync`、`UpdateAsync`、`AddPresetsAsync`；`OtherDependencyData` 回填矩陣）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/RolePermissionService.cs`（`RolePermissionService.SetPermissionInput`、`GetPermissionInput`、`GetRoleListPermissionAllName`）
@@ -109,5 +109,5 @@ WASM 頁（`RoleViewPage`）→ `RoleApi` → `RoleController`（`[AdminOnly]`�
 - `src/MeetingRecord/MeetingRecord.Web/Filters/HasPermissionAttribute.cs`（`HasPermissionAttribute.OnAuthorizationAsync`：API 403）
 - `src/MeetingRecord/MeetingRecord.Share/Helpers/PermissionKeys.cs`（`PermissionActions`／`PermissionKey`）
 - RBAC 資料表：`RoleView`、`Permission`、`RolePermissionMap`、`UserRole`（`src/MeetingRecord/MeetingRecord.AccessDatas/Models/`）
-- 交叉連結：[使用者管理](使用者管理-prd.md)、[登入與帳號流程](登入與帳號流程-prd.md)、[紀錄分類與團隊權控](紀錄分類與團隊權控-prd.md)
-- 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)、[權限授權現況評估與改善路線](../security/權限授權現況評估與改善路線.md)
+- 交叉連結：[使用者管理](使用者管理-prd.md)、[登入與帳號流程](登入與帳號流程-prd.md)、[權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)
+- 安全機制：[認證授權與權限機制](../security/認證授權與權限機制.md)

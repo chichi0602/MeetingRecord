@@ -13,7 +13,7 @@
 > - 選單權限的「位置索引三處同步」已改為宣告式 `Menu.json` 唯一 `id` → `SidebarMenuService.MenuPermissionMap` 權限鍵（`ApplyPermissionStructure` 仍在，但改以 id 對應，重排選單不錯位）
 > - `MyTask`／樣板 `Meeting` 模組已於 0.4.24 移除；現行的會議紀錄（0.4.27 起）是本系統另行開發的功能
 > - 「雙資料庫 migration」已收斂為 SQLite 單軌（0.4.24）
-> - 團隊權控已整個改寫：角色＝能做什麼、團隊＝誰的資料（專案主責＋協作團隊、`UserTeam`）、分類＝什麼資料（0.4.101～0.4.103）；紀錄上的「團隊」換行分隔標籤欄位、`RoleView.DefaultTeamsJson`、「無團隊即公開」皆已移除（分類仍以 `TagStringHelper` 換行分隔儲存，但只是標籤、不影響可見性） —— 見 [紀錄分類與團隊權控 PRD](../../prd/紀錄分類與團隊權控-prd.md)
+> - 團隊權控已整個改寫：角色＝能做什麼、團隊＝誰的資料（專案主責＋協作團隊、`UserTeam`）、分類＝什麼資料（0.4.101～0.4.103）；紀錄上的「團隊」換行分隔標籤欄位、`RoleView.DefaultTeamsJson`、「無團隊即公開」皆已移除（分類仍以 `TagStringHelper` 換行分隔儲存，但只是標籤、不影響可見性） —— 見 [紀錄分類與團隊權控 PRD](../../security/權限與資料可見範圍總覽.md)
 
 > 以 superpowers brainstorming 流程產出。對應實作見 changelog [`2026-06-22-紀錄分類團隊與權控.md`](../../changelog/2026-06-22-紀錄分類團隊與權控.md)。
 

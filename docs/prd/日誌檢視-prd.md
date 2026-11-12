@@ -1,10 +1,10 @@
 ﻿# 日誌檢視 PRD
 
-- 文件版本：1.6
+- 文件版本：1.7
 - 文件狀態：已實作
-- 現行系統版本：1.1.42
+- 現行系統版本：1.1.53
 - 首次實作版本：0.4.121（移植自 NET10-Blazor-Starter；AI 分析改走本專案的供應商與用量帳本）
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 ## 一、目標與範圍
 
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- |
 | `/logs` | 系統管理 → 監控與診斷 → 日誌檢視（id 37） | **只限管理者**（不在角色權限目錄，`SidebarMenuService.AdminOnlyMenuIds`） | 系統管理員／維運 |
 
-1.1.42 起是 WASM 頁，資料走 API（`MonitoringController`，`[AdminOnly]`）：`GET api/v1/monitoring/logs/meta`、`POST logs/query`、`POST logs/export`（伺服器依同一組條件重查產生 .log）、`POST logs/ai-analysis`（串流；伺服器重查、取最新 100 筆，不收前端給的日誌）、`POST logs/ai-analysis/pdf`，稽核由伺服器寫（`via=Api`），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
+頁面資料走 API（`MonitoringController`，`[AdminOnly]`）：`GET api/v1/monitoring/logs/meta`、`POST logs/query`、`POST logs/export`（伺服器依同一組條件重查產生 .log）、`POST logs/ai-analysis`（串流；伺服器重查、取最新 100 筆，不收前端給的日誌）、`POST logs/ai-analysis/pdf`，稽核由伺服器寫（`via=Api`），見 [Web API 端點目錄](../architecture/Web%20API%20端點目錄.md)。
 
 ## 三、畫面與欄位
 
@@ -40,14 +40,14 @@
 ## 四、內部系統運作
 
 1. `LogQueryService.QueryAsync`：檔案路徑來自 `INLogFilePathResolver`（`{NLog:BasePath}/MeetingRecord.Web/MeetingRecord.Web-logfile-{日期}*.log`，含封存檔、依最後寫入時間排序），依時間升冪逐檔串流（`FileShare.ReadWrite`，因為 NLog `keepFileOpen`）。
-2. 一行若第 25 個字元是 `|` 且前 24 字元可解析成 `yyyy-MM-dd HH:mm:ss.ffff` 即為新紀錄，否則是上一筆的續行（堆疊）。欄位依 nlog.config 的 7 欄 layout 切分；訊息本身含 `|` 時以最後一個 `|` 為界。0.4.122 起第 2 欄由 `${aspnet-TraceIdentifier}` 改為 `${scopeproperty:item=TraceCode:whenEmpty=${aspnet-TraceIdentifier}}`（錯誤追蹤碼，`Diagnostics/TraceCode`；HTTP 請求的追蹤碼同時取代 `TraceIdentifier`），欄數不變、解析不受影響；Blazor 互動也各有一組碼，所以畫面操作的日誌行同樣查得到。格式不符的行照樣保留、不因等級篩選隱藏。
+2. 一行若第 25 個字元是 `|` 且前 24 字元可解析成 `yyyy-MM-dd HH:mm:ss.ffff` 即為新紀錄，否則是上一筆的續行（堆疊）。欄位依 nlog.config 的 7 欄 layout 切分；訊息本身含 `|` 時以最後一個 `|` 為界。0.4.122 起第 2 欄由 `${aspnet-TraceIdentifier}` 改為 `${scopeproperty:item=TraceCode:whenEmpty=${aspnet-TraceIdentifier}}`（錯誤追蹤碼，`Diagnostics/TraceCode`；HTTP 請求的追蹤碼同時取代 `TraceIdentifier`），欄數不變、解析不受影響；網頁的操作都經 API 請求，所以畫面操作的日誌行同樣查得到。格式不符的行照樣保留、不因等級篩選隱藏。
 3. 每筆湊齊後才套用時間、等級、關鍵字、TraceId 篩選；通過者進容量 N 的佇列（只留最新 N 筆，記憶體 O(N)）；內容時間超過結束時間即停止讀取。區間超過 3 天夾住起始時間、筆數超過 10,000 夾住並提示。
 4. AI：`AiLogPromptBuilder.Build` 取最新 100 筆原文（不截斷、換行統一 LF）組成使用者訊息；系統提示詞 `AiDiagnosticPrompts.LogAnalysis`（四個章節＋防注入規則：日誌內容只是資料）；`DiagnosticAiService.AnalyzeAsync` 依 `LlmSettings.DefaultProvider` 串流呼叫，**成功／失敗／取消都寫進 AI 用量帳本**（`AiUsageFeature.LogAnalysis = 5`「AI 日誌分析」）。1.0.29 起經 `AiCallGateway`，同時以同一個 CallId 記進 AI 對話紀錄（完整送出內容與回應；關聯說明「日誌 起～迄，送出 n／N 筆」）；送出前檢查 AI 用量上限。
 5. PDF：`DiagnosticReportExporter.BuildHtml` → `IPdfRenderer.RenderAsync`（無頭瀏覽器）→ `FileDownloadInterop.SaveBytesAsync`。
 
 ## 五、權限與安全
 
-- 管理者限定：頁面以管理者判斷守門（1.1.42 起 WASM 頁用 `PermissionView.IsAdmin`；查詢、匯出、AI 由 API 的 `[AdminOnly]` 擋），判定完成前不渲染、不讀任何日誌；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
+- 管理者限定：頁面以 `PermissionView.IsAdmin` 守門（查詢、匯出、AI 由 API 的 `[AdminOnly]` 擋），判定完成前不渲染、不讀任何日誌；側邊欄由 `AdminOnlyMenuIds` 排除非管理者。
 - 日誌路徑只來自設定，使用者無法指定檔名。
 - AI 分析會把日誌原文送到外部 AI 服務：先跳費用確認並寫明可能含敏感內容；系統提示詞要求把日誌視為資料、不執行其中的指令，且不輸出 HTML、圖片、連結。
 - 稽核：`LogViewer.Export`、`LogViewer.AiAnalyze`（成功／失敗／取消）、`LogViewer.AiAnalyzeExportPdf`；只記筆數、字數、模型與耗時，**不記日誌內容**。
@@ -72,9 +72,9 @@
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogQueryService.cs`、`NLogFilePathResolver.cs`、`LogAiFailure.cs`（1.1.42）；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`（1.1.33 從 Web 搬來）、`AiLogPromptBuilder.cs`（1.1.42 從 Web 搬來）、`DiagnosticAiDtos.cs`（1.1.42）
+- `src/MeetingRecord/MeetingRecord.Web/Diagnostics/LogQueryService.cs`、`NLogFilePathResolver.cs`、`LogAiFailure.cs`（1.1.42）；型別 `src/MeetingRecord/MeetingRecord.Dtos/Diagnostics/LogModels.cs`、`AiLogPromptBuilder.cs`、`DiagnosticAiDtos.cs`（1.1.42）
 - API：`src/MeetingRecord/MeetingRecord.Web/Controllers/MonitoringController.cs` 的 `logs/…`（1.1.42）
 - `src/MeetingRecord/MeetingRecord.Business/Services/Diagnostics/DiagnosticAiService.cs`、`AiDiagnosticPrompts.cs`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Export/DiagnosticReportExporter.cs`
-- 頁面（1.1.42 起 WASM）：`src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/LogViewerPage.razor(.cs/.css)`、`src/MeetingRecord/MeetingRecord.Web.Client/Api/MonitoringApi.cs`、`Api/DiagnosticAiStream.cs`（以前是 Server 的 `LogViewerPage` → `LogViewerView`）
+- 頁面：`src/MeetingRecord/MeetingRecord.Web.Client/Pages/Monitoring/LogViewerPage.razor(.cs/.css)`、`src/MeetingRecord/MeetingRecord.Web.Client/Api/MonitoringApi.cs`、`Api/DiagnosticAiStream.cs`
 - 交叉連結：[日誌與設定檔說明](../operations/日誌與設定檔說明.md)、[日誌等級設定 PRD](日誌等級設定-prd.md)、[系統例外紀錄 PRD](系統例外紀錄-prd.md)、[Token 用量 PRD](Token用量-prd.md)、[AI 對話紀錄 PRD](AI對話紀錄-prd.md)（每次 AI 日誌分析的送出內容與回應）

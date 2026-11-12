@@ -1,17 +1,17 @@
 ﻿# Web API 端點目錄
 
-- 文件版本：1.39
+- 文件版本：1.40
 - 文件狀態：已實作
-- 現行系統版本：1.1.47
+- 現行系統版本：1.1.53
 - 首次實作版本：0.1.61
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 本文件彙整 `MeetingRecord.Web/Controllers/` 下所有 Web API 端點的實際路由、HTTP 動詞、授權與回傳型別，作為《[Web API 設計慣例](Web%20API%20設計慣例.md)》（樣板與慣例）之外的**端點清單參照**。慣例細節（`ApiResult<T>`、`PagedResult<T>`、Search DTO、動作級授權）見設計慣例文件。
 
 ## 一、通則
 
-- 每個資源控制器同時掛 `api/[controller]` 與 `api/v1/[controller]` 兩條平行路由（見《[API Versioning 策略](API%20Versioning%20策略.md)》）。
-- 資源控制器類別層級套 `[ApiController]`、`[ApiValidationFilter]`、`[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]`（API 用 JWT Bearer）。
+- 第二節的資源控制器（加上 `TodoController`、`AuthController`）同時掛 `api/[controller]` 與 `api/v1/[controller]` 兩條平行路由；其餘控制器只有 `api/v1/…`（見《[API Versioning 策略](API%20Versioning%20策略.md)》）。
+- 控制器類別層級套 `[ApiController]`、`[Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]`（CRUD 類另加 `[ApiValidationFilter]`）：帶 `Authorization: Bearer` 走 JWT（外部用戶端），否則走網頁登入 Cookie（WASM 前端；會改資料的請求要帶 `X-MeetingRecord-Client` 標頭）。
 - 每個動作以 `[HasPermission(資源鍵, 動作)]` 做動作級授權；無權限回 **403** 並維持 `ApiResult` 外殼；管理員短路。權限鍵定義於 `MeetingRecord.Share` 的 `MagicObjectHelper`，動作為 `PermissionActions.View/Create/Edit/Delete`。
 - 回傳一律包在 `ApiResult<T>`；分頁再包 `PagedResult<T>`。
 
@@ -51,35 +51,35 @@
 
 **變更密碼頁與設定 API 密碼頁**（1.1.13，`AccountController`，只需登入、只動呼叫者自己）：`POST api/v1/account/change-own-password`（內容 `{ currentPassword, newPassword, confirmPassword }`；要確認新密碼、沒有字數下限、稽核 `via=FirstLogin`；標 `[AllowWhenMustChangePassword]`，改完清掉須改密碼標記）；`GET api/v1/account/password-status`（回 `{ hasLocalPassword }`）；`POST api/v1/account/api-password`（內容同上，還沒有本地密碼的帳號免填 `currentPassword`）。失敗回 400、訊息照原頁；support 帳號一律被拒。與 1.1.6 的 `change-password`（使用者選單對話窗，至少 6 字）是不同的規則。
 
-**背景工作進度**（1.1.15，`JobController`，WASM 頁右下角進度面板用）：`GET api/v1/jobs`（只需登入；回 `List<BackgroundJobDto>`，只含呼叫者資料範圍內的會議的上傳、轉錄、會議紀錄生成工作，進行中排前面）；`POST api/v1/jobs/{meetingId}/cancel?kind=Transcription|Draft`（會議紀錄 Edit；上傳中的轉錄工作會以「上傳」種類取消）；`POST api/v1/jobs/{meetingId}/dismiss?kind=…`、`POST api/v1/jobs/dismiss-all`（只需登入，關閉通知、工作照跑；關閉是全域的，比照 Server 頁面板）。看不到或已結束的工作回 404，`kind` 不對回 400。推播 `AppHub.JobsChanged`（不帶資料、節流 0.5 秒）提醒前端重查。
+**背景工作進度**（1.1.15，`JobController`，WASM 頁右下角進度面板用）：`GET api/v1/jobs`（只需登入；回 `List<BackgroundJobDto>`，只含呼叫者資料範圍內的會議的上傳、轉錄、會議紀錄生成工作，進行中排前面）；`POST api/v1/jobs/{meetingId}/cancel?kind=Transcription|Draft`（會議紀錄 Edit；上傳中的轉錄工作會以「上傳」種類取消）；`POST api/v1/jobs/{meetingId}/dismiss?kind=…`、`POST api/v1/jobs/dismiss-all`（只需登入，關閉通知、工作照跑；關閉是全域的）。看不到或已結束的工作回 404，`kind` 不對回 400。推播 `AppHub.JobsChanged`（不帶資料、節流 0.5 秒）提醒前端重查。
 
 **待辦事項**（1.1.18，`TodoController` 改走 `TodoService`）：既有五支（`GET {id}`、`POST search`、`POST`、`PUT {id}`、`DELETE {id}`）路由、權限、回應形狀不變，`TodoDto` 只多帶欄位：`projectStatus`、`createdByUserId`、`parentTitle`、`children`、`childrenTotal`／`childrenCompleted`、`dueDateChangedAt`／`dueDateChangeText`（後四項只有清單樹會帶）、`canDelete`（呼叫者能不能刪，畫面用）。`POST search` 照舊是**平面**清單（子項目也是一筆）。畫面用的新端點：`POST api/v1/Todo/tree`（只分頁主層、子項目跟著主待辦，內容 `TodoTreeRequestDto`，含 `projectScope` Active／Archived／All）、`PUT {id}/completed`（edit；失敗訊息放 `errorMessage`）、`GET owners?projectId&scope`、`GET by-owner?owner&projectId&scope`、`GET {id}/changes`、`GET parent-candidates?projectId&excludeId`（create 或 edit 任一）、`GET projects/selectable`；除註明者外都要 view。看不到的待辦一律 404。
 
 **會議紀錄**（1.1.20，`MeetingController` 改走 `MeetingService`）：既有五支路由、權限、回應形狀不變，`MeetingDto` 只多帶欄位（`projectId`、`projectTitle`、`createdByUserId`、`hasMedia`、`hasTranscript`、`canRetryTranscription`、`draftStatus`、`draftError`、`draftPromptTemplateName`、`draftCompletedAt`、`hasDraft`、`canGenerateDraft`、`isUploader`、`canDelete`；`draftContent` 只有 `GET {id}` 帶），`MeetingCreateUpdateDto` 多了 `categoryNames`（有帶就以它為準，比照提示詞）。`POST search` 照舊。**外部行為變更**：`PUT` 對已完成（封存）專案的會議改為 400（與畫面一致，管理者除外）。畫面用的新端點：`POST list`（分類篩選、畫面欄位排序，view）、`GET {id}/linked-todos`（edit）、`POST {id}/retranscribe`（edit）、`POST {id}/draft`（產生會議紀錄，edit，會花 AI 費用）、`PUT {id}/draft`（修改全文，edit）、`PUT {id}/project`（歸屬專案，edit）、`GET {id}/transcript`（view）、`GET {id}/transcript/file`（.txt 含 BOM，export，寫稽核）、`POST {id}/transcript/copied`（瀏覽器複製後寫稽核，export）、`POST {id}/draft/pdf`（可帶還沒存的內容，export，寫稽核）、`GET projects/selectable`（附與會人員名冊）、`GET prompt-templates/selectable`、`GET categories/enabled`（後三支 view，不借用其他頁的權限）。看不到的會議一律 404；服務層擋下回 400，新端點訊息放 `errorMessage`。
 
-**專案項目**（1.1.24，`ProjectController` 改走 `ProjectService`，`ProjectRepository` 已刪除）：既有五支路由、權限、回應形狀不變，相容規則照舊（新增沒帶主責用自己 Id 最小的團隊、只帶負責人姓名時找同名帳號、對不到仍建立並留下姓名；修改時沒帶的團隊與負責人保留，名詞、名冊、分類沒帶或空的也保留）；**同名改成允許**（以前 409）。`ProjectDto` 只多帶欄位：`primaryTeamName`、`collaboratorTeamNames`、`isArchived`、`files`（只有單筆帶）、呼叫者的 `isProjectOwner`／`canManageTeams`／`canChangeOwner`。畫面用的新端點：`GET selectable?includeArchived=`（View）、`GET categories/enabled`、`GET teams/filter`（View，1.1.26，篩選與表單的分類、團隊篩選選項）、`GET`／`PUT last-selected`（View）、`GET teams/primary`、`GET teams/collaborator?include=`、`GET owner-candidates?primaryTeamId=&collaboratorTeamIds=`（Create 或 Edit 任一）、`POST form`（Create）與 `PUT {id}/form`（Edit）——整筆覆寫、日期可留空、帶 `uploadIds`（附件，見四之一）與 `removedFileIds`（只限專案負責人），新增時專案已建立但附件存不進去回 400 也帶 `projectId`——以及 `GET files/{fileId}`（View，附件下載，稽核 `via=Api`）。
+**專案項目**（1.1.24，`ProjectController` 改走 `ProjectService`）：既有五支路由、權限、回應形狀不變，相容規則照舊（新增沒帶主責用自己 Id 最小的團隊、只帶負責人姓名時找同名帳號、對不到仍建立並留下姓名；修改時沒帶的團隊與負責人保留，名詞、名冊、分類沒帶或空的也保留）；**同名改成允許**（以前 409）。`ProjectDto` 只多帶欄位：`primaryTeamName`、`collaboratorTeamNames`、`isArchived`、`files`（只有單筆帶）、呼叫者的 `isProjectOwner`／`canManageTeams`／`canChangeOwner`。畫面用的新端點：`GET selectable?includeArchived=`（View）、`GET categories/enabled`、`GET teams/filter`（View，1.1.26，篩選與表單的分類、團隊篩選選項）、`GET`／`PUT last-selected`（View）、`GET teams/primary`、`GET teams/collaborator?include=`、`GET owner-candidates?primaryTeamId=&collaboratorTeamIds=`（Create 或 Edit 任一）、`POST form`（Create）與 `PUT {id}/form`（Edit）——整筆覆寫、日期可留空、帶 `uploadIds`（附件，見四之一）與 `removedFileIds`（只限專案負責人），新增時專案已建立但附件存不進去回 400 也帶 `projectId`——以及 `GET files/{fileId}`（View，附件下載，稽核 `via=Api`）。
 
 **專案頁裡的會議**（1.1.25，`ProjectMeetingController`，路由 `api/v1/Project/{projectId}/…`，**只看專案項目權限**，不借用會議紀錄頁）：`GET meetings`（View，不帶會議紀錄全文）、`GET meetings/{meetingId}`（View，含全文）、`GET transcripts/selectable`（View；1.1.26 起多帶 `hasDraft`、`draftStatus`、`canGenerateDraft`）、`GET prompt-templates/selectable`（View）、`POST meetings/{meetingId}/draft`（Edit，產生會議紀錄並歸屬到這個專案，會花 AI 費用）、`PUT meetings/{meetingId}/draft`（Edit）、`DELETE meetings/{meetingId}`（Edit 或 Delete 任一，從專案移除，只限上傳者）、`GET meetings/{meetingId}/transcript`（View）、`GET …/transcript/file`、`POST …/transcript/copied`、`POST …/draft/pdf`（表頭帶專案名稱）、`GET todos/pdf`（Export）。會議不屬於這個專案一律 404（產生會議紀錄例外：可挑還沒歸屬的逐字稿）；稽核摘要 `page=Project; via=Api`。
 
-**待辦抽取**（1.1.25，`TodoExtractionController`，`api/v1/todo-extraction`，都要「待辦事項」Create，同 Server 專案頁）：`POST meetings/{meetingId}`（抽出候選，會花 AI 費用；回 `items`、`existingTitles`、`openTodos`；已完成的專案、沒有會議紀錄回 400 與原因）、`POST todos`（加為新待辦，可帶 `parentTodoId`，稽核 `via=AiExtract`）、`PUT todos/{todoId}`（用候選更新既有待辦的期限與負責人）。
+**待辦抽取**（1.1.25，`TodoExtractionController`，`api/v1/todo-extraction`，都要「待辦事項」Create）：`POST meetings/{meetingId}`（抽出候選，會花 AI 費用；回 `items`、`existingTitles`、`openTodos`；已完成的專案、沒有會議紀錄回 400 與原因）、`POST todos`（加為新待辦，可帶 `parentTodoId`，稽核 `via=AiExtract`）、`PUT todos/{todoId}`（用候選更新既有待辦的期限與負責人）。
 
 **AI 問答**（1.1.21，`AiChatController`，路由 `api/v1/ai-chat/{project|meeting}/{targetId}`）：`GET conversations`、`POST conversations`（開新對話，回 Id）、`PUT conversations/{id}/title`（edit）、`DELETE conversations/{id}`（delete）、`GET conversations/{id}/messages`、`PUT conversations/{id}/messages/{index}`（edit；帶原本的角色與內容，對不上回 409）、`POST conversations/{id}/ask`（multipart：`question`＋0～5 個 `files`，**串流**）、`POST conversations/{id}/messages/{index}/regenerate`（edit，**串流**）、`GET conversations/{id}/attachments/{storedName}`（`download=true` 寫稽核）、`POST conversations/{id}/pdf`（export；`messageIndex` 有值＝單則，沒值＝整段，內容由伺服器讀）。權限依範圍（`AiChatPermissionAttribute`：專案看專案項目，會議看會議紀錄或專案項目），未註明者要 view。**串流格式**：`application/x-ndjson`，每行一筆 `AiChatStreamEventDto`——零到多筆 `delta`（新產生的文字），最後一筆 `done`（附完整結果）或 `error`（附原因）；在第一段文字產生之前就失敗（看不到 404、附件不合規定或額度用完 400）照一般 API 回應。服務層的錯誤原文放 `errorMessage`。
 
 **使用說明**（1.1.29，`HelpController`，`api/v1/help`，都要「使用說明」View，同畫面）：`GET manual`（去掉檔頭的說明 Markdown，保留 `<!-- 說明分類：… -->` 標記；另帶 `assistantAvailable`、`assistantUnavailableReason`）、`POST assistant/ask`（內容 `{ question, history: [{question, answer}], threadKey? }`；回 `application/x-ndjson` 串流，事件 `delta`／`done`（`answer`、`model`）／`error`）。問題空白、`threadKey` 不是 `help:`＋32 位小寫 16 進位、沒設定 AI 回 400；第一段文字前失敗（例如額度用完）回 400，開始後失敗送 `error`。要不要送「管理員」章節由伺服器依呼叫者判斷；中斷請求＝停止（帳本 Cancelled）；稽核 `Help.AiAsk` 由伺服器寫（`via=Api`）。
 
-**監控與診斷**（WASM 遷移 M5，`MonitoringController`，`api/v1/monitoring`，**整個 Controller `[AdminOnly]`**，非管理者 403 並留稽核）：1.1.32 `GET database-usage`（`DatabaseUsageReport`：SQLite 檔案、頁面配置、各資料表；讀取失敗時報表帶 `errorMessage`）、`GET storage-usage`（`StorageUsageReport`：各外部目錄大小與檔案數、各磁碟可用空間；影音目錄可能很大，所以和上一支分開）；1.1.33 `GET log-level`（`LogLevelStateDto`：是否可調整、生效等級、系統預設、是否覆寫）、`PUT log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400；NLog 設定讀不到 500）、`POST log-level/restore`，套用與還原的稽核 `LogLevel.Apply/Restore` 由伺服器寫（`via=Api`）；1.1.35 `GET health`（`SystemHealthReport`，失敗 500）、`GET logs/recent-warnings`（最近 24 小時 WARN 以上最新 200 筆、時間正序）、`POST ai-connection-test`（實際呼叫文字生成與語音轉錄，**會產生費用**；回兩個 `AiConnectionProbeResult`，稽核 `AiConnection.Test` 由伺服器寫）；1.1.42 日誌檢視 `GET logs/meta`（AI 能不能用）、`POST logs/query`（`LogQueryRequest` → `LogQueryResult`，時間正序、條件被夾住時回實際區間）、`POST logs/export`（伺服器依同一組條件**重查**產生 .log，UTF-8 含 BOM；沒有日誌 400）、`POST logs/ai-analysis`（**串流** `application/x-ndjson`，事件同系統例外 `DiagnosticAiStreamEventDto`；伺服器重查、取最新 100 筆，不收前端給的日誌；中斷＝取消；AI 未設定、沒有日誌、第一段前失敗回 400）、`POST logs/ai-analysis/pdf`（`{ query, markdown, meta }`，附錄由伺服器重查重組），稽核 `LogViewer.Export／AiAnalyze／AiAnalyzeExportPdf` 由伺服器寫（目標 `LogQuery`＋查詢區間，`via=Api`）。
+**監控與診斷**（1.1.32 起，`MonitoringController`，`api/v1/monitoring`，**整個 Controller `[AdminOnly]`**，非管理者 403 並留稽核）：1.1.32 `GET database-usage`（`DatabaseUsageReport`：SQLite 檔案、頁面配置、各資料表；讀取失敗時報表帶 `errorMessage`）、`GET storage-usage`（`StorageUsageReport`：各外部目錄大小與檔案數、各磁碟可用空間；影音目錄可能很大，所以和上一支分開）；1.1.33 `GET log-level`（`LogLevelStateDto`：是否可調整、生效等級、系統預設、是否覆寫）、`PUT log-level`（`{ level }`，只接受 TRACE～FATAL，其他 400；NLog 設定讀不到 500）、`POST log-level/restore`，套用與還原的稽核 `LogLevel.Apply/Restore` 由伺服器寫（`via=Api`）；1.1.35 `GET health`（`SystemHealthReport`，失敗 500）、`GET logs/recent-warnings`（最近 24 小時 WARN 以上最新 200 筆、時間正序）、`POST ai-connection-test`（實際呼叫文字生成與語音轉錄，**會產生費用**；回兩個 `AiConnectionProbeResult`，稽核 `AiConnection.Test` 由伺服器寫）；1.1.42 日誌檢視 `GET logs/meta`（AI 能不能用）、`POST logs/query`（`LogQueryRequest` → `LogQueryResult`，時間正序、條件被夾住時回實際區間）、`POST logs/export`（伺服器依同一組條件**重查**產生 .log，UTF-8 含 BOM；沒有日誌 400）、`POST logs/ai-analysis`（**串流** `application/x-ndjson`，事件同系統例外 `DiagnosticAiStreamEventDto`；伺服器重查、取最新 100 筆，不收前端給的日誌；中斷＝取消；AI 未設定、沒有日誌、第一段前失敗回 400）、`POST logs/ai-analysis/pdf`（`{ query, markdown, meta }`，附錄由伺服器重查重組），稽核 `LogViewer.Export／AiAnalyze／AiAnalyzeExportPdf` 由伺服器寫（目標 `LogQuery`＋查詢區間，`via=Api`）。
 
-**Token 用量**（WASM 遷移 M5，1.1.36，`AiUsageController`，`api/v1/ai-usage`，**整個 Controller `[AdminOnly]`**）：`GET overview`（本月概況、全系統上限、每人上限前五名、`perUserLimit`、`retentionDays`、`maxExportRows`）、`GET filter-options`、`POST report`（內容 `AiUsageFilter`：`from`、`toExclusive`、`feature`、`userId`、`model`、`outcome`）、`POST rows`（`AiUsageQuery`：`filter`、`currentPage`、`pageSize`、`sortAscending`）、`GET {id}`（明細＋同次呼叫的 AI 對話紀錄編號，不存在 404）、`POST export/csv`（伺服器產生，最多 10,000 筆）、`POST export/pdf`（伺服器產生，匯出者是 API 呼叫者）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，刪除該日之前、不含當天，回筆數）、`POST clear-all`（回筆數）。匯出、刪除、清除的稽核 `AiUsage.*` 由伺服器寫（`via=Api`）。
+**Token 用量**（1.1.36，`AiUsageController`，`api/v1/ai-usage`，**整個 Controller `[AdminOnly]`**）：`GET overview`（本月概況、全系統上限、每人上限前五名、`perUserLimit`、`retentionDays`、`maxExportRows`）、`GET filter-options`、`POST report`（內容 `AiUsageFilter`：`from`、`toExclusive`、`feature`、`userId`、`model`、`outcome`）、`POST rows`（`AiUsageQuery`：`filter`、`currentPage`、`pageSize`、`sortAscending`）、`GET {id}`（明細＋同次呼叫的 AI 對話紀錄編號，不存在 404）、`POST export/csv`（伺服器產生，最多 10,000 筆）、`POST export/pdf`（伺服器產生，匯出者是 API 呼叫者）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，刪除該日之前、不含當天，回筆數）、`POST clear-all`（回筆數）。匯出、刪除、清除的稽核 `AiUsage.*` 由伺服器寫（`via=Api`）。
 
-**AI 對話紀錄**（WASM 遷移 M5，1.1.38，`AiCallLogController`，`api/v1/ai-call-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（是否記錄、保留天數、CSV 上限）、`GET filter-options`、`POST search`（`AiCallLogQuery`：起訖時間、功能、結果、使用者、模型、關鍵字、分頁與排序，回 `PagedResult<AiCallLogAdapterModel>`）、`GET by-call-id/{callId}`（找不到 404）、`GET {id}`（`AiCallLogDetail`：列、內容、用量、同一趟工作；**查看就寫稽核 `AiCallLog.View`**）、`GET {id}/json`（內容檔原文）、`POST {id}/pdf`、`POST export/csv`（只有中繼資料、不含內容，最多 10,000 筆）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，回筆數）、`POST clear-all`。稽核只記編號與識別碼、不記內容（`via=Api`）。
+**AI 對話紀錄**（1.1.38，`AiCallLogController`，`api/v1/ai-call-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（是否記錄、保留天數、CSV 上限）、`GET filter-options`、`POST search`（`AiCallLogQuery`：起訖時間、功能、結果、使用者、模型、關鍵字、分頁與排序，回 `PagedResult<AiCallLogAdapterModel>`）、`GET by-call-id/{callId}`（找不到 404）、`GET {id}`（`AiCallLogDetail`：列、內容、用量、同一趟工作；**查看就寫稽核 `AiCallLog.View`**）、`GET {id}/json`（內容檔原文）、`POST {id}/pdf`、`POST export/csv`（只有中繼資料、不含內容，最多 10,000 筆）、`DELETE {id}`（不存在 404）、`POST purge`（`{ before }`，回筆數）、`POST clear-all`。稽核只記編號與識別碼、不記內容（`via=Api`）。
 
-**系統例外**（WASM 遷移 M5，1.1.40，`ExceptionLogController`，`api/v1/exception-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（保留天數、手動清除天數、上限 5,000、AI 能不能用）、`POST search`（`ExceptionLogQuery`，回 `PagedResult<ExceptionLogAdapterModel>`；「複製全部」頁大小帶上限）、`GET {id}/stack-trace`（堆疊與 AI 送出字數，列不存在 404）、`POST stack-traces`（`{ ids }`，最多 5,000）、`POST export/csv`、`DELETE {id}`（不存在 404）、`POST purge`（天數由伺服器設定決定）、`POST clear-all`、`POST {id}/ai-analysis`（**串流** `application/x-ndjson`，事件 `delta`／`done`（含結果、模型、說明行）／`error`；送出內容由伺服器依編號組、不含帳號；中斷請求＝取消，帳本記 Cancelled；AI 未設定或第一段前失敗回 400）、`POST {id}/ai-analysis/pdf`（`{ markdown, meta }`，附錄由伺服器重組）。稽核同畫面、不記例外內容（`via=Api`）。
+**系統例外**（1.1.40，`ExceptionLogController`，`api/v1/exception-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（保留天數、手動清除天數、上限 5,000、AI 能不能用）、`POST search`（`ExceptionLogQuery`，回 `PagedResult<ExceptionLogAdapterModel>`；「複製全部」頁大小帶上限）、`GET {id}/stack-trace`（堆疊與 AI 送出字數，列不存在 404）、`POST stack-traces`（`{ ids }`，最多 5,000）、`POST export/csv`、`DELETE {id}`（不存在 404）、`POST purge`（天數由伺服器設定決定）、`POST clear-all`、`POST {id}/ai-analysis`（**串流** `application/x-ndjson`，事件 `delta`／`done`（含結果、模型、說明行）／`error`；送出內容由伺服器依編號組、不含帳號；中斷請求＝取消，帳本記 Cancelled；AI 未設定或第一段前失敗回 400）、`POST {id}/ai-analysis/pdf`（`{ markdown, meta }`，附錄由伺服器重組）。稽核同畫面、不記例外內容（`via=Api`）。
 
-**稽核紀錄**（WASM 遷移 M5，1.1.43，`AuditLogController`，`api/v1/audit-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（自動清除天數、手動清除天數、CSV 上限）、`GET actions`（出現過的動作代碼）、`POST search`（`AuditLogQuery`：本地時間起訖、動作、結果、操作者帳號、IP 前綴、關鍵字、分頁與時間排序，回 `PagedResult<AuditLogAdapterModel>`）、`POST export/csv`（最多 10,000 筆）、`POST purge`（天數由伺服器設定決定）、`POST clear-all`。**沒有單筆刪除**。匯出與清除的稽核由伺服器寫，清除類在刪除**之後**寫（`via=Api`）。
+**稽核紀錄**（1.1.43，`AuditLogController`，`api/v1/audit-logs`，**整個 Controller `[AdminOnly]`**）：`GET meta`（自動清除天數、手動清除天數、CSV 上限）、`GET actions`（出現過的動作代碼）、`POST search`（`AuditLogQuery`：本地時間起訖、動作、結果、操作者帳號、IP 前綴、關鍵字、分頁與時間排序，回 `PagedResult<AuditLogAdapterModel>`）、`POST export/csv`（最多 10,000 筆）、`POST purge`（天數由伺服器設定決定）、`POST clear-all`。**沒有單筆刪除**。匯出與清除的稽核由伺服器寫，清除類在刪除**之後**寫（`via=Api`）。
 
-**瀏覽器錯誤回報**（WASM 遷移 M6，1.1.47，`ClientErrorController`，`api/v1/client-errors`，任何登入者）：`POST`（`ClientErrorReportDto`：`kind`、`message`、`stack`、`source`、`path`），記進日誌檔與系統例外紀錄（來源「瀏覽器」、帳號是呼叫者、頁面只留路徑），長度伺服器再截一次；每個帳號每分鐘上限 `ClientErrorReporting:MaxPerCircuitPerMinute`（預設 10），超過回 `data: false` 並計數。匿名者 401。
+**瀏覽器錯誤回報**（1.1.47，`ClientErrorController`，`api/v1/client-errors`，任何登入者）：`POST`（`ClientErrorReportDto`：`kind`、`message`、`stack`、`source`、`path`），記進日誌檔與系統例外紀錄（來源「瀏覽器」、帳號是呼叫者、頁面只留路徑），長度伺服器再截一次；每個帳號每分鐘上限 `ClientErrorReporting:MaxPerCircuitPerMinute`（預設 10），超過回 `data: false` 並計數。匿名者 401。
 
-> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：API（待辦 1.1.18、會議 1.1.20、專案 1.1.24 起都直接走服務層）與 Blazor 服務層同樣經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
+> 注意：**資料可見範圍（0.4.99 起，0.4.102 改以專案的主責＋協作團隊判斷）**：API 呼叫的就是頁面背後同一個服務（待辦 1.1.18、會議 1.1.20、專案 1.1.24 起），一律經 `ProjectAccessService` 過濾——呼叫者所屬團隊與專案的主責或協作團隊有交集才看得到，**沒有公開專案**；會議跟著專案、未歸屬只有上傳者；管理者不受限。**看不到的一律回 404**（當成不存在）。`PromptTemplate` 對所有人開放、`Team`／`Category` 只看權限鍵，都不做列級過濾。
 >
 > **專案的團隊與分類（0.4.102）**：`ProjectCreateUpdateDto`／`ProjectDto` 多了選填的 `primaryTeamId`、`collaboratorTeamIds`、`categories`，專案的 GET／搜尋結果會帶回團隊 Id。
 > - `POST api/Project` 沒給 `primaryTeamId` 時，用建立者所屬、Id 最小的團隊當主責；建立者不屬於任何團隊時回 **400**「請先加入團隊，或指定主責團隊。」
@@ -101,9 +101,9 @@
 `MeetingController` 與其他四個的差異：
 
 - **沒有同名衝突檢查**（會議標題可重複），因此新增／更新不會回 `Conflict`。
-- **只開放中繼資料**。影音檔上傳、語音轉錄與逐字稿讀取刻意不開 API——那些操作牽涉實體檔案、背景佇列與長時間外部呼叫，只在 Blazor 服務層提供（見 [會議紀錄 PRD](../prd/會議紀錄-prd.md)）。
+- 五支 CRUD 只處理中繼資料。影音檔上傳走分塊上傳（第四之一節）、重新轉錄與產生會議紀錄排入背景佇列、逐字稿讀取與下載都是上面列的畫面用端點（見 [會議紀錄 PRD](../prd/會議紀錄-prd.md)）。
 - `PUT` 經 `MeetingService.UpdateAsync`（1.1.20 起，與畫面同一份）一律沿用資料庫既有的媒體、轉錄、會議紀錄與歸屬欄位，API 用戶端無法覆寫背景轉錄寫入的狀態。
-- `DELETE` 走 `MeetingService.DeleteAsync`（0.4.115）：和畫面同一套，一併清影音檔、逐字稿與 AI 問答對話；轉錄或會議紀錄生成進行中回 **400**。以前由控制器自己清兩個實體檔，對話檔留在磁碟上。
+- `DELETE` 走 `MeetingService.DeleteAsync`（0.4.115）：和畫面同一套，一併清影音檔、逐字稿與 AI 問答對話；轉錄或會議紀錄生成進行中回 **400**。
 - **`DELETE api/Meeting/{id}` 1.0.47 起要求 `會議紀錄:edit`（以前是 `delete`）**：刪除只限上傳者與管理者，由 `MeetingService.DeleteAsync` 把關，上傳者的角色只要能編輯就能刪自己上傳的（與畫面一致）。不是上傳者回 **400** `ValidationError`「只有上傳者或管理者可以刪除這筆會議紀錄。」；看不到回 404；沒有 `edit` 回 403。只有 `delete` 沒有 `edit` 的自訂角色從此呼叫不了這支 API。刪除會保留從這場會議抽出的待辦（`MeetingId` 改成 null）。**1.0.52 起專案負責人也能刪**該專案底下任何人的會議，擋下的訊息改為「只有上傳者或專案負責人可以刪除這筆會議紀錄。」。
 - **`DELETE api/Todo/{id}` 1.0.52 起要求 `待辦事項:edit`（以前是 `delete`）**：刪除只限專案負責人與管理者（`TodoService.DeleteAsync`，1.1.18 起 API 與畫面同一份），不是負責人回 **400** `ValidationError`「只有專案負責人可以刪除待辦。」；看不到 404；沒有 `edit` 回 403。主待辦連同子項目一起刪。
 - **`PUT api/Todo/{id}` 改期限要附原因（1.0.55）**：`dueDate` 的日期與原本不同時，`dueDateChangeNote` 必填（≤500），否則 **400**「改期限請填寫原因。」；原因寫進異動紀錄並附在通知後面。甲方帳號（`MyUser.IsExternal`）`DELETE` 只能刪自己 `POST` 建立的待辦，否則 **400**「甲方帳號只能刪除自己建立的待辦。」。
@@ -140,22 +140,18 @@
 | 送一塊 | `PUT api/v1/uploads/{uploadId}/chunks/{index}` | body 為原始位元組（每塊 8 MB，最後一塊為餘數）；須帶 `X-MeetingRecord-Upload: 1`；200 收下、400 編號或長度不對、401 未登入、404 找不到或不是自己的、409 已停止；免除限流 |
 | 建立工作階段（1.1.16） | `POST api/v1/uploads` | WASM 頁用（`UploadSessionController`）。內容 `{ purpose: "MeetingMedia", meetingId, fileName, contentType, size, deleteMeetingOnCancel }`；會議紀錄「新增」或「修改」權限；先跑 `MeetingService.CheckMediaUploadAsync`（格式、大小、資料範圍、只限上傳者、封存、進行中工作），不合回 400 與原因；回 `{ uploadId, chunkSize, chunkCount }`。讀檔、存檔、排入轉錄在伺服器背景以上傳者身分執行 |
 | 查狀態（1.1.16） | `GET api/v1/uploads/{uploadId}` | 回 `{ state: Uploading/Succeeded/Cancelled/Failed, message, meetingDeleted, cancelTooLate }`；只認擁有者，別人的 404；結束後保留 10 分鐘 |
-| 取消（1.1.16） | `DELETE api/v1/uploads/{uploadId}` | 等同 Server 頁的「取消上傳」：新增時附的檔連會議一起刪（建好就取消、服務層還沒開始收檔時也一樣）；檔案已寫完則來不及取消、照樣排入轉錄 |
-| 回報失敗（1.1.23） | `POST api/v1/uploads/{uploadId}/fail` | 內容 `{ message }`。瀏覽器送不下去（重試用完、登入失效）時呼叫，伺服器立刻結束那趟上傳、會議保留（同 Server 頁），不必等 2 分鐘逾時；只認擁有者，別人的回 404 |
+| 取消（1.1.16） | `DELETE api/v1/uploads/{uploadId}` | 等同畫面的「取消上傳」：新增時附的檔連會議一起刪（建好就取消、服務層還沒開始收檔時也一樣）；檔案已寫完則來不及取消、照樣排入轉錄 |
+| 回報失敗（1.1.23） | `POST api/v1/uploads/{uploadId}/fail` | 內容 `{ message }`。瀏覽器送不下去（重試用完、登入失效）時呼叫，伺服器立刻結束那趟上傳、會議保留，不必等 2 分鐘逾時；只認擁有者，別人的回 404 |
 | 專案附件（1.1.24） | `POST api/v1/uploads/project-attachments` | 專案項目「新增」或「修改」任一。內容同建立工作階段（`purpose: "ProjectAttachment"`、`fileName`、`contentType`、`size`），超過 1 GB 回 400。伺服器把分塊寫進暫存檔；查狀態、取消、回報失敗沿用上面三支。傳完（`Succeeded`）後把 `uploadId` 帶進 `POST／PUT api/v1/Project/…/form`，存檔成功才刪暫存檔 |
 
-專案附件的上傳用途等專案頁搬到 WASM 時再加（1.1.21）。
+新增端點一律要有授權屬性，`ApiAuthorizationConventionTests` 會擋（見《[Web API 設計慣例](Web%20API%20設計慣例.md)》）。
 
-## 五、模板遺留
-
-~~`WeatherForecastController`~~（路由 `/WeatherForecast`）是專案模板遺留範例，沒有任何驗證、任何人都能呼叫，**1.0.58 已刪除**（連同 `MeetingRecord.Models/Others/WeatherForecast.cs`）。目前沒有模板遺留的 API；新增端點一律要有授權屬性，`ApiAuthorizationConventionTests` 會擋（見《[Web API 設計慣例](Web%20API%20設計慣例.md)》）。
-
-## 六、相關文件
+## 五、相關文件
 
 - [Web API 設計慣例](Web%20API%20設計慣例.md)
 - [API Versioning 策略](API%20Versioning%20策略.md)
 - [認證授權與權限機制](../security/認證授權與權限機制.md)
-- [紀錄分類與團隊權控 PRD](../prd/紀錄分類與團隊權控-prd.md)
+- [權限與資料可見範圍總覽](../security/權限與資料可見範圍總覽.md)
 - [會議紀錄提示詞 PRD](../prd/會議紀錄提示詞-prd.md)
 
 > 返回 [architecture 索引](README.md)

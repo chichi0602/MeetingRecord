@@ -9,8 +9,8 @@ namespace MeetingRecord.Web.Diagnostics;
 ///
 /// <para>
 /// 1.1.47 起經 API 回報（<c>POST api/v1/client-errors</c>，<c>ClientErrorController</c>）：WASM 頁的
-/// <c>wwwroot/js/client-error-reporter.js</c> 捕捉後交給 WASM 端的回報器送出。以前經 Blazor Server 的 circuit 回報，
-/// WASM 頁的錯誤送不出去。只有登入者能回報（API 要登入），匿名者無從灌資料。
+/// <c>wwwroot/js/client-error-reporter.js</c> 捕捉 JS 錯誤後交給 WASM 端的回報器送出；1.1.54 起頁面上的 .NET 例外
+/// 由 <c>DotNetErrorForwarder</c> 走同一支 API（種類 <c>dotnet</c>）。只有登入者能回報（API 要登入），匿名者無從灌資料。
 /// </para>
 ///
 /// <para>
@@ -75,7 +75,7 @@ public sealed class BrowserErrorReporter
             return false;
         }
 
-        var safeKind = kind is "unhandledrejection" ? "unhandledrejection" : "error";
+        var safeKind = kind is "unhandledrejection" or "dotnet" ? kind : "error";
         var exception = new BrowserScriptException(
             safeKind,
             Truncate(string.IsNullOrWhiteSpace(message) ? "(no message)" : message, MaxMessageLength),

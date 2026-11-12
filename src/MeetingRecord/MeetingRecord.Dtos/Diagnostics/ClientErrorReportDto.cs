@@ -1,12 +1,13 @@
 namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>
-/// 瀏覽器端錯誤（1.1.47，<c>POST api/v1/client-errors</c>）：<c>client-error-reporter.js</c> 捕捉的 <c>error</c>／<c>unhandledrejection</c>。
+/// 瀏覽器端錯誤（1.1.47，<c>POST api/v1/client-errors</c>）：<c>client-error-reporter.js</c> 捕捉的 <c>error</c>／<c>unhandledrejection</c>，
+/// 以及 1.1.54 起 <c>DotNetErrorForwarder</c> 送的頁面 .NET 例外（<c>dotnet</c>）。
 /// 前端先截過長度，伺服器還會再截一次、頁面只留路徑（不信任前端）。
 /// </summary>
 public class ClientErrorReportDto
 {
-    /// <summary><c>error</c> 或 <c>unhandledrejection</c>；其他值一律當 <c>error</c>。</summary>
+    /// <summary><c>error</c>、<c>unhandledrejection</c> 或 <c>dotnet</c>；其他值一律當 <c>error</c>。</summary>
     public string? Kind { get; set; }
 
     public string? Message { get; set; }

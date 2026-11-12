@@ -74,4 +74,43 @@ public sealed class NavigationTests(E2EAppFixture app) : E2ETestBase(app)
             await Task.Delay(300);
         }
     }
+
+    [E2EFact]
+    [Trait("Scenario", "ERR-02")]
+    [Trait("Title", "頁面上的 .NET 例外：畫面顯示錯誤提示，並記進系統例外紀錄（來源「瀏覽器」、種類 dotnet）")]
+    [Trait("Page", "系統例外紀錄")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task DotNetException_OnWasmPage_ShouldShowTheBannerAndReachTheExceptionLog()
+    {
+        // 1.1.54：.NET 例外不會觸發瀏覽器的 error 事件，由 DotNetErrorForwarder 送出。
+        // 讓儀表板 API 回傳格式正確、但卡片清單是 null 的資料，頁面算繪時丟 NullReferenceException，由 WasmLayout 的 ErrorBoundary 接住。
+        var page = await LoginAsAsync(Seed.Owner);
+        await page.RouteAsync("**/api/v1/dashboard", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """{"success":true,"statusCode":200,"message":"ok","data":{"cards":null}}""",
+        }));
+
+        await page.GotoAsync("/dashboard");
+        await Expect(page.GetByText("這個頁面發生未預期的錯誤")).ToBeVisibleAsync();
+
+        await using var db = App.CreateDbContext();
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (true)
+        {
+            var row = await db.ExceptionLog.AsNoTracking()
+                .Where(x => x.Page == "/dashboard" && x.Message.Contains("System.NullReferenceException"))
+                .SingleOrDefaultAsync();
+            if (row is not null)
+            {
+                Assert.Equal("瀏覽器", row.Source);
+                Assert.Equal(Seed.Owner.Account, row.Account);
+                break;
+            }
+
+            Assert.True(DateTime.UtcNow < deadline, ".NET 例外沒有記進系統例外紀錄");
+            await Task.Delay(300);
+        }
+    }
 }

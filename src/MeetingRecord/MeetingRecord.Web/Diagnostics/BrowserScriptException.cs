@@ -1,7 +1,7 @@
 namespace MeetingRecord.Web.Diagnostics;
 
 /// <summary>
-/// 代表一個瀏覽器端的 JavaScript 錯誤（0.4.122）。
+/// 代表一個瀏覽器端的錯誤（0.4.122）：JavaScript 錯誤，或 1.1.54 起 WASM 頁上的 .NET 例外（種類 <c>dotnet</c>，訊息開頭是例外型別）。
 ///
 /// 系統例外紀錄只收「Error 以上且帶例外物件」的日誌，所以前端錯誤要包成例外才進得去。
 /// 型別名稱固定，簽章由「訊息＋頁面＋操作」區分：同一個 JS 錯誤在同一頁重複發生會合併計次。
@@ -17,7 +17,7 @@ public sealed class BrowserScriptException : Exception
         Source = source;
     }
 
-    /// <summary><c>error</c> 或 <c>unhandledrejection</c>。</summary>
+    /// <summary><c>error</c>、<c>unhandledrejection</c> 或 <c>dotnet</c>（1.1.54）。</summary>
     public string Kind { get; }
 
     public string ScriptStack { get; }

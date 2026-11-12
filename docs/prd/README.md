@@ -1,8 +1,8 @@
 ﻿# prd — 產品需求文件主控台
 
-- 文件版本：1.38
+- 文件版本：1.39
 - 文件狀態：維護中
-- 現行系統版本：1.1.53
+- 現行系統版本：1.1.54
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/12
 
@@ -48,7 +48,7 @@
 | 背景工作佇列（行程內 `Channel<T>` + 單一 worker `BackgroundService`）| [會議紀錄](會議紀錄-prd.md)、[會議紀錄產生流程](會議紀錄產生流程-prd.md) | 已實作；語音轉錄與會議紀錄草稿產生各一條佇列，佇列不持久化（重啟時殘留工作改判失敗） |
 | 匯率更新背景服務（`ExchangeRateBackgroundService`）| [Token 用量](Token用量-prd.md) | 已實作（0.4.88）；定期抓匯率供 AI 用量換算新台幣，抓不到時用 `FallbackRate` |
 | 付費動作二次確認 | [AI 問答](AI問答-prd.md)、[會議紀錄](會議紀錄-prd.md)、[日誌檢視](日誌檢視-prd.md)、[系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.65）；轉錄、產生草稿、抽出待辦、AI 問答送出前一律提示；0.4.121 起 AI 日誌分析、0.4.122 起 AI 例外分析亦同 |
-| 例外收集與錯誤追蹤碼（`ExceptionLogProvider` → Channel → `ExceptionLogWriter`；`TraceCode`）| [系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.122）；伺服器頁、Web API、背景作業、系統啟動、瀏覽器的例外自動收進 `ExceptionLog`（每個請求一組追蹤碼記在紀錄裡）；WASM 頁出錯時只顯示純文字橫幅「這個頁面發生未預期的錯誤，請重新整理頁面；若持續發生請聯絡系統管理員。」，不顯示追蹤碼 |
+| 例外收集與錯誤追蹤碼（`ExceptionLogProvider` → Channel → `ExceptionLogWriter`；`TraceCode`）| [系統例外紀錄](系統例外紀錄-prd.md) | 已實作（0.4.122）；伺服器頁、Web API、背景作業、系統啟動、瀏覽器的例外自動收進 `ExceptionLog`（每個請求一組追蹤碼記在紀錄裡）；WASM 頁出錯時顯示純文字橫幅「這個頁面發生未預期的錯誤，請重新整理頁面；若持續發生請聯絡系統管理員。」、不顯示追蹤碼，例外本身自動送到系統例外紀錄（1.1.54） |
 | 外部 AI 供應商抽象（`ITranscriptionProvider`、`ITextGenerationProvider`）| [會議紀錄](會議紀錄-prd.md)、[會議紀錄產生流程](會議紀錄產生流程-prd.md) | 已實作；目前各只有 Azure OpenAI 一個實作 |
 
 ## 三、規劃中產品藍圖

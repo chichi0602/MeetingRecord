@@ -53,6 +53,27 @@ public sealed class WasmApiClientTests
         Assert.Equal(ApiClient.LoginPath, navigation.NavigatedTo);
     }
 
+    [Fact]
+    public async Task ManyUnauthorized_ShouldRedirectToLoginOnlyOnce()
+    {
+        // 1.1.54：登入一失效，同時進行中的請求（上傳分塊、查進度、錯誤回報）會各自拿到 401；
+        // 每個都整頁導向的話，後一次會打斷前一次（瀏覽器回 net::ERR_ABORTED）。只導一次。
+        var navigation = new TestNavigationManager();
+        var client = new ApiClient(new HttpClient(new StatusHandler(HttpStatusCode.Unauthorized)) { BaseAddress = new Uri("http://localhost/") }, navigation);
+        var notified = 0;
+        client.BeforeLoginRedirect += () =>
+        {
+            notified++;
+            return Task.CompletedTask;
+        };
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => client.GetAsync("api/v1/jobs", ClientJsonContext.Default.BackgroundJobsResult)));
+
+        Assert.All(results, x => Assert.Equal(401, x.StatusCode));
+        Assert.Equal(1, navigation.NavigateCount);
+        Assert.Equal(1, notified);
+    }
+
     private sealed class ThrowingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -71,6 +92,12 @@ public sealed class WasmApiClientTests
 
         public string? NavigatedTo { get; private set; }
 
-        protected override void NavigateToCore(string uri, NavigationOptions options) => NavigatedTo = uri;
+        public int NavigateCount { get; private set; }
+
+        protected override void NavigateToCore(string uri, NavigationOptions options)
+        {
+            NavigatedTo = uri;
+            NavigateCount++;
+        }
     }
 }

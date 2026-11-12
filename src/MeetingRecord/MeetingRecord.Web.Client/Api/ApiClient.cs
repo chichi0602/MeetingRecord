@@ -15,7 +15,7 @@ public sealed record ApiDownload(bool Success, byte[]? Content, string? FileName
 /// <list type="bullet">
 /// <item>一律解成 <see cref="ApiResult{T}"/>；回應不是 ApiResult（例如代理伺服器的錯誤頁）也回失敗結果，不丟例外。</item>
 /// <item>連不上伺服器（斷網）也回失敗結果（1.1.23，狀態碼 <see cref="NetworkErrorStatusCode"/>）：以前會丟例外，整頁被錯誤邊界換成錯誤畫面。</item>
-/// <item>401（未登入、登入失效）整頁導到登入頁。</item>
+/// <item>401（未登入、登入失效）整頁導到登入頁，同時好幾個 401 也只導一次（1.1.54）。</item>
 /// <item>403 且原因是須改密碼（1.1.4，伺服器的 MustChangePasswordFilter）整頁導到變更密碼頁。</item>
 /// </list>
 /// </summary>
@@ -34,6 +34,9 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
     /// 401 整頁導到登入頁之前先呼叫（1.1.23）：上傳中開著「確定要離開嗎？」（<c>beforeunload</c>），不先拿掉的話瀏覽器會擋下這次導向。
     /// </summary>
     public event Func<Task>? BeforeLoginRedirect;
+
+    /// <summary>已經開始導向登入頁（WASM 只有一條執行緒，不必鎖）。</summary>
+    private bool redirectingToLogin;
 
     public Task<ApiResult<T>> GetAsync<T>(string url, JsonTypeInfo<ApiResult<T>> typeInfo, CancellationToken cancellationToken = default)
         => SendAsync(() => http.GetAsync(url, cancellationToken), typeInfo, cancellationToken);
@@ -129,12 +132,19 @@ public sealed class ApiClient(HttpClient http, NavigationManager navigation)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            foreach (var handler in BeforeLoginRedirect?.GetInvocationList().Cast<Func<Task>>() ?? [])
+            // 只導一次（1.1.54）：登入一失效，同時進行中的請求會各自拿到 401，每個都整頁導向的話後一次會打斷前一次。
+            // 整頁載入後 ApiClient 重新建立，旗標自然歸零。
+            if (!redirectingToLogin)
             {
-                await handler();
+                redirectingToLogin = true;
+                foreach (var handler in BeforeLoginRedirect?.GetInvocationList().Cast<Func<Task>>() ?? [])
+                {
+                    await handler();
+                }
+
+                navigation.NavigateTo(LoginPath, forceLoad: true, replace: true);
             }
 
-            navigation.NavigateTo(LoginPath, forceLoad: true, replace: true);
             return ApiResult<T>.UnauthorizedResult("尚未登入或登入已失效。");
         }
 

@@ -91,6 +91,19 @@ public sealed class BrowserErrorReporterTests : IDisposable
     }
 
     [Theory]
+    [InlineData("unhandledrejection")]
+    [InlineData("dotnet")]
+    public void Report_KnownKinds_ShouldBeKept(string kind)
+    {
+        var reporter = CreateReporter();
+
+        Assert.True(reporter.Report(7, "alice", kind, "boom", null, null, "/dashboard"));
+
+        var exception = Assert.IsType<BrowserScriptException>(Assert.Single(logger.Entries).Exception);
+        Assert.Equal(kind, exception.Kind);
+    }
+
+    [Theory]
     [InlineData(null, "/")]
     [InlineData("", "/")]
     [InlineData("projects", "/projects")]

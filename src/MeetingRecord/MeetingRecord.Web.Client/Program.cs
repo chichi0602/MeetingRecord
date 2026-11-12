@@ -42,6 +42,11 @@ builder.Services.AddScoped<AiUsageApi>();
 builder.Services.AddScoped<AiCallLogApi>();
 builder.Services.AddScoped<ExceptionLogApi>();
 builder.Services.AddScoped<MeetingRecord.Web.Client.Services.ClientErrorReporter>();
+
+// 1.1.54：頁面上的 .NET 例外（ErrorBoundary 接住的、算繪時沒接住的）也送到系統例外紀錄；WasmLayout 登入狀態確認後接上。
+var dotNetErrorForwarder = new MeetingRecord.Web.Client.Services.DotNetErrorForwarder();
+builder.Services.AddSingleton(dotNetErrorForwarder);
+builder.Logging.AddProvider(new MeetingRecord.Web.Client.Services.ClientErrorLoggerProvider(dotNetErrorForwarder));
 builder.Services.AddScoped<AuditLogApi>();
 
 // 1.1.23：會議影音檔上傳由整個前端共用一份（WASM 的 Scoped 就是整個分頁），換 WASM 頁不中斷。

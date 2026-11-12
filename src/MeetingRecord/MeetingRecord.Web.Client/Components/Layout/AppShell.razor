@@ -1,10 +1,9 @@
-@* 全站共用的外框（1.1.5，WASM 遷移）：側邊欄、頂端列、使用者選單、變更密碼與關於。
-   Blazor Server 的 MainLayout 與 WASM 的 WasmLayout 都用它，外觀只有一份。資料與動作由外面傳入——
-   Server 端來自伺服器服務、WASM 端來自 API；通知鈴與進度面板用插槽放進來。 *@
+@* 全站共用的外框（1.1.5 起）：側邊欄、頂端列、使用者選單、變更密碼與關於。
+   由 WasmLayout 掛上，資料與動作由外面傳入（來自 API）；通知鈴與進度面板用插槽放進來。 *@
 
 @* ⚠️ 擋掉「拖到頁面空白處」的預設行為：瀏覽器會直接導航去開那個檔案，
-   Blazor 的 circuit 跟著死，填到一半的表單整份不見。有了拖放區之後這會變成常見誤操作。
-   只設 preventDefault、不接 handler：接了的話 dragover 每幾十毫秒就往返伺服器一次。
+   整個應用程式跟著被換掉，填到一半的表單整份不見。有了拖放區之後這會變成常見誤操作。
+   只設 preventDefault、不接 handler：接了的話 dragover 每幾十毫秒就觸發一次事件處理。
    拖放區本身不受影響——它的 input 是 drop 的實際目標，這裡攔的是沒命中任何 input 的那些。 *@
 <div class="page @(isSidebarCollapsed ? "sidebar-collapsed" : string.Empty)"
      @ondragover:preventDefault="true"
@@ -130,16 +129,15 @@
     </dl>
 </Modal>
 
-@* 全站**唯一**的 FormModalHelper 掛載點。所有頁面的外框都是這個元件（Server 頁經 MainLayout、
-   WASM 頁經 WasmLayout），所以每一個對話框的外框樣式都從這裡來。
+@* 全站**唯一**的 FormModalHelper 掛載點。所有頁面的外框都是這個元件（經 WasmLayout），
+   所以每一個對話框的外框樣式都從這裡來。
 
    ⚠️ 不要在頁面裡再掛一個。0.4.69 之前這裡沒有 render 它，各頁面就自己補了 8 個，
    結果同一段 <style> 在 DOM 裡出現 9 次；0.4.82 把那 8 個移除、只留這一個。 *@
 <FormModalHelper />
 
-@* 常駐於所有頁面的浮層：Server 頁放上傳、轉錄與會議紀錄生成的進度面板（離開來源頁面也要看得到）。
-   ⚠️ 0.4.84 曾把進度面板與 blazor-error-ui 誤刪，到 1.0.25 才補回；LayoutMountTests 釘住 MainLayout 有傳進來、這裡有放插槽。
-   WASM 頁的進度面板等 M3 再接。 *@
+@* 常駐於所有頁面的浮層：WasmLayout 放進來的上傳、轉錄與會議紀錄生成的進度面板（離開來源頁面也要看得到）。
+   ⚠️ 0.4.84 曾把進度面板與 blazor-error-ui 誤刪，到 1.0.25 才補回；LayoutMountTests 釘住 WasmLayout 有傳進來、這裡有放插槽。 *@
 @OverlayContent
 
 <div id="blazor-error-ui" data-nosnippet>

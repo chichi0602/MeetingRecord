@@ -590,7 +590,7 @@ public sealed class SystemHealthChecksTests
         var monitoringGroup = systemGroup.GetProperty("subMenu").EnumerateArray().Single(x => x.GetProperty("id").GetInt32() == 36);
         var node = monitoringGroup.GetProperty("subMenu").EnumerateArray().Single(x => x.GetProperty("id").GetInt32() == 34);
 
-        // name 是頁面標題（MainLayout 依 Menu.json 顯示），與常數一字不差。
+        // name 是頁面標題（AppShell 依 Menu.json 顯示），與常數一字不差。
         Assert.Equal(MagicObjectHelper.角色_系統健康監控, node.GetProperty("name").GetString());
         Assert.Equal("/system-health", node.GetProperty("url").GetString());
     }

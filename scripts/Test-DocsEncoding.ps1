@@ -1,5 +1,11 @@
+# 檢查 docs/ 下所有 .md（遞迴）都是 UTF-8 含 BOM、而且沒有亂碼（U+FFFD 替代字元）；有任何一份不合格就失敗。
+# CI（.github/workflows/dotnet-ci.yml）每次都會跑。
+#
+# 用法（在哪個目錄執行都可以）：
+#   pwsh scripts/Test-DocsEncoding.ps1
+#   pwsh scripts/Test-DocsEncoding.ps1 -DocsPath 其他資料夾
 param(
-    [string]$DocsPath = "docs"
+    [string]$DocsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "docs")
 )
 
 $ErrorActionPreference = "Stop"

@@ -31,7 +31,7 @@ public sealed class AiManagementMenuRegistrationTests
         var children = group.Value.GetProperty("subMenu").EnumerateArray().ToList();
         Assert.Equal([AiCallLogId, TokenUsageId], children.Select(x => x.GetProperty("id").GetInt32()));
 
-        // name 是頁面標題（MainLayout 依 Menu.json 顯示），與常數一字不差。
+        // name 是頁面標題（AppShell 依 Menu.json 顯示），與常數一字不差。
         Assert.Equal(MagicObjectHelper.角色_AI對話紀錄, children[0].GetProperty("name").GetString());
         Assert.Equal("/ai-call-logs", children[0].GetProperty("url").GetString());
         Assert.Equal(MagicObjectHelper.角色_Token用量, children[1].GetProperty("name").GetString());

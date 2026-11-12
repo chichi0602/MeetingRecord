@@ -230,7 +230,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
 
     [E2EFact]
     [Trait("Scenario", "L4-08")]
-    [Trait("Title", "上傳中要切到舊版（Blazor Server）頁或關分頁會先確認；選留下上傳照常完成")]
+    [Trait("Title", "上傳中要離開到伺服器頁（登出）或關分頁會先確認；選留下上傳照常完成")]
     [Trait("Page", "會議紀錄")]
     [Trait("Persona", "主責團隊成員")]
     public async Task LeavingDuringUpload_ShouldAskFirst()

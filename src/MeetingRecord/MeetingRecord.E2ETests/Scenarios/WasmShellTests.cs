@@ -5,8 +5,8 @@ using MeetingRecord.E2ETests.Infrastructure;
 namespace MeetingRecord.E2ETests.Scenarios;
 
 /// <summary>
-/// WASM 遷移 M1（1.1.1）：WASM 空殼頁 <c>/wasm</c>。遷移期間逐頁切換，已遷移的頁在瀏覽器執行、其餘仍是 Blazor Server，
-/// 兩種頁之間整頁載入。這裡驗證兩邊能互相切換、登入狀態與選單與 Server 頁一致。
+/// WASM 外框與共用設施（1.1.1 起）：WASM 空殼頁 <c>/wasm</c> 與一般頁面共用同一個外框（AppShell），
+/// 這裡驗證頁面之間能互相切換、登入狀態、選單、關於視窗、進度面板等在瀏覽器端正確運作。
 /// </summary>
 public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
 {
@@ -15,7 +15,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
     [E2ETheory]
     [MemberData(nameof(Personas))]
     [Trait("Scenario", "WASM-01")]
-    [Trait("Title", "WASM 空殼頁的選單與 Server 頁側邊欄完全相同")]
+    [Trait("Title", "WASM 空殼頁的選單與一般頁面（儀表板）的側邊欄完全相同")]
     [Trait("Page", "WASM 預覽")]
     [Trait("Persona", "依人物")]
     public async Task WasmMenu_ShouldMatchServerSidebar(string persona)
@@ -42,7 +42,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
         var actual = await HrefsAsync(wasmLinks);
 
         Assert.Equal(expected, actual);
-        // 外框與 Server 頁同一份（AppShell）：頂端列的頁面標題、使用者選單上的名字都在。
+        // 外框與一般頁面同一份（AppShell）：頂端列的頁面標題、使用者選單上的名字都在。
         await Expect(page.Locator(".top-row-title")).ToBeVisibleAsync();
         await Expect(page.Locator(".user-menu-name")).ToHaveTextAsync(user.Name.Length > 0 ? user.Name : user.Account);
         await Expect(page.Locator(".wasm-home-user")).ToHaveTextAsync(user.Name.Length > 0 ? user.Name : user.Account);
@@ -50,7 +50,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "WASM-02")]
-    [Trait("Title", "WASM 空殼頁與 Server 頁可以互相切換")]
+    [Trait("Title", "WASM 空殼頁與一般頁面可以互相切換（點選單連結、程式內導覽）")]
     [Trait("Page", "WASM 預覽")]
     [Trait("Persona", "主責團隊成員")]
     public async Task WasmAndServerPages_ShouldNavigateBothWays()
@@ -60,12 +60,12 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
         await page.GotoAsync("/wasm");
         await Expect(page.GetByText("WASM 預覽").First).ToBeVisibleAsync();
 
-        // WASM → Server：點選單連結，整頁載入成 Blazor Server 頁。
+        // 空殼頁 → 會議紀錄：點選單連結。
         await page.Locator("a[href='/meetings']").First.ClickAsync();
         await page.WaitForURLAsync(new Regex("/meetings$"));
         await Expect(page.GetByText("會議標題").First).ToBeVisibleAsync();
 
-        // Server → WASM：在 Server 頁內部導覽（不是直接輸入網址），也要整頁載入成 WASM。
+        // 會議紀錄 → 空殼頁：程式內導覽（不是直接輸入網址）。
         await page.EvaluateAsync("() => Blazor.navigateTo('/wasm')");
         await page.WaitForURLAsync(new Regex("/wasm$"));
         await Expect(page.GetByText("WASM 預覽").First).ToBeVisibleAsync();
@@ -250,7 +250,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "WASM-09")]
-    [Trait("Title", "分類清單在 WASM 執行：從 Server 頁切過去整頁載入、資料走分類 API、點欄位排序會把條件送給伺服器")]
+    [Trait("Title", "分類清單在 WASM 執行：從儀表板切過去、資料走分類 API、點欄位排序會把條件送給伺服器")]
     [Trait("Page", "分類清單")]
     [Trait("Persona", "管理者")]
     public async Task CategoryPage_ShouldRunOnWasm_AndSortThroughApi()

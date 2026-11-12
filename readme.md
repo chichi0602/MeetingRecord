@@ -312,11 +312,11 @@ dotnet run --project MeetingRecord.Web/MeetingRecord.Web.csproj
 - [系統使用說明](docs/guides/系統使用說明.md) — ⚠️ 寫給終端使用者，同時是系統內 `/help` 頁的內容來源。
 - [畫面與欄位字典](docs/guides/畫面與欄位字典.md) — 每個畫面、每個欄位的意義、對應程式屬性與坑（給開發與測試）。
 - [上架前人工測試清單](docs/guides/上架前人工測試清單.md) — 上線前逐項人工驗收的流程清單。
-- [建立一個新 CRUD 操作網頁說明](docs/guides/建立一個新%20CRUD%20操作網頁說明.md) — 以 `RoleViewView` 為藍本複刻新 CRUD 頁面。
+- [建立一個新 CRUD 操作網頁說明](docs/guides/建立一個新%20CRUD%20操作網頁說明.md) — 用 `scripts/New-CrudModule.ps1` 產生 WASM 頁＋API＋服務＋授權測試。
 - [EFCore 指令備忘](docs/guides/EFCore.md) — Migration 指令範本（SQLite 單軌）。
 - [測試指南](docs/guides/測試指南.md) — 測試類別涵蓋矩陣、本機執行、整合測試與覆蓋率。
 - [腳手架新專案啟動流程](docs/guides/腳手架新專案啟動流程.md) — 🗄️ 已封存：樣板時期「複製成新系統」的檢查清單。
-- `scripts/New-StarterProject.ps1`、`scripts/New-CrudModule.ps1` — 樣板遺留工具，本系統日常開發不需使用。
+- `scripts/New-CrudModule.ps1` — 產生新 CRUD 模組（見上方說明）；`scripts/New-StarterProject.ps1` — 樣板遺留工具，本系統日常開發不需使用。
 
 ### 維運與部署（operations）
 

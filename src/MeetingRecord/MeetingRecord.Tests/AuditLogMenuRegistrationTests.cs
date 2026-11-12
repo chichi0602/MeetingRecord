@@ -24,7 +24,7 @@ public sealed class AuditLogMenuRegistrationTests
         Assert.Equal([UserManagementId, RoleManagementId, AuditLogId], group.SubMenu.Select(x => x.Id));
         var node = group.SubMenu[^1];
 
-        // name 是頁面標題（MainLayout 依 Menu.json 顯示），與常數一字不差。
+        // name 是頁面標題（AppShell 依 Menu.json 顯示），與常數一字不差。
         Assert.Equal(MagicObjectHelper.角色_稽核紀錄, node.Name);
         Assert.Equal("/audit-logs", node.Url);
         Assert.Equal("fact_check", node.Icon);

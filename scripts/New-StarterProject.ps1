@@ -39,7 +39,7 @@ Get-ChildItem -LiteralPath $repoRoot -Force | ForEach-Object {
 
 $textExtensions = @(
     ".cs", ".csproj", ".slnx", ".json", ".md", ".razor", ".css", ".js",
-    ".ps1", ".yml", ".yaml", ".config", ".xml"
+    ".ps1", ".yml", ".yaml", ".config", ".xml", ".cmd", ".mjs"
 )
 
 Get-ChildItem -LiteralPath $destinationFullPath -Recurse -File |

@@ -1,10 +1,10 @@
 ﻿# 文件目錄索引
 
-- 文件版本：6.37
+- 文件版本：6.38
 - 文件狀態：維護中
-- 現行系統版本：1.1.48
+- 現行系統版本：1.1.52
 - 首次實作版本：0.2.8
-- 最後核對日期：2026/11/11
+- 最後核對日期：2026/11/12
 
 本目錄收錄 MeetingRecord（AI 會議記錄小助手）的所有設計、規範與教學文件（本系統源自 NET10-Blazor-Starter 樣板，樣板時期的規劃與規格已標記封存）。文件依「特性」分類到下列子目錄；新增文件時請先依特性歸入既有分類，**若沒有任何分類適用，請自動新增一個語意明確的英文小寫分類目錄**，並同步更新本檔與主 [`readme.md`](../readme.md) 第 9 節「文件索引」。
 
@@ -76,7 +76,7 @@
 - [測試指南](guides/測試指南.md)
 - [腳手架新專案啟動流程](guides/腳手架新專案啟動流程.md)（已封存：樣板時期指南）
 
-> 樣板遺留腳本：`scripts/New-StarterProject.ps1`（複製新專案並替換 namespace / project 名稱）、`scripts/New-CrudModule.ps1`（產生新 CRUD 模組骨架），本系統日常開發不需使用。其他腳本：`scripts/Test-DocsEncoding.ps1`（文件編碼檢查）、`scripts/Backfill-AiUsageCost.mjs`（AI 用量費用回補，見[日誌與設定檔說明](operations/日誌與設定檔說明.md)）。
+> 腳本：`scripts/New-CrudModule.ps1`（產生新 CRUD 模組：WASM 頁＋API＋服務＋授權測試，見[建立一個新 CRUD 操作網頁說明](guides/建立一個新%20CRUD%20操作網頁說明.md)）、`scripts/Run-E2E.ps1`／`New-TestReport.ps1`（全套測試與報告，見[測試指南](guides/測試指南.md)）、`scripts/New-StarterProject.ps1`（樣板遺留：複製成新專案並替換名稱，日常開發不需使用）。其他腳本：`scripts/Test-DocsEncoding.ps1`（文件編碼檢查）、`scripts/Backfill-AiUsageCost.mjs`（AI 用量費用回補，見[日誌與設定檔說明](operations/日誌與設定檔說明.md)）。
 
 ### operations — 維運與部署
 - [啟動與停止系統](operations/啟動與停止系統.md)

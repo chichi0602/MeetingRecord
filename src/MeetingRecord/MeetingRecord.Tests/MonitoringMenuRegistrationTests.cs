@@ -52,7 +52,7 @@ public sealed class MonitoringMenuRegistrationTests
         var monitoring = Flatten(LoadMenu()).Single(x => x.Id == MonitoringGroupId);
         var node = monitoring.SubMenu.Single(x => x.Id == id);
 
-        // name 是頁面標題（MainLayout 依 Menu.json 顯示），與常數一字不差。
+        // name 是頁面標題（AppShell 依 Menu.json 顯示），與常數一字不差。
         Assert.Equal(name, node.Name);
         Assert.Equal(url, node.Url);
         Assert.Contains(id, SidebarMenuService.AdminOnlyMenuIds);

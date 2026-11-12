@@ -1,26 +1,25 @@
-﻿# 執行端對端（E2E）測試並產生基準測試報告（1.0.61，WASM 遷移前置工作 M0）。
+﻿# 跑全套測試（L1～L5）並產生測試報告。
 #
-# 流程：publish MeetingRecord.Web → 跑單元／服務／API 測試（L1、L2）→ 跑 Playwright 端對端測試（L3）
-#       → 以 New-TestReport.ps1 彙整兩份 .trx 成 docs/testing/ 下的 Markdown 報告。
+# 流程：publish MeetingRecord.Web 到暫存資料夾 → 統計 WASM 下載量與修剪警告（L5，results/l5-build.json）
+#       → 跑單元／服務／API 測試（L1、L2）→ 跑 Playwright 端對端測試（L3～L5）
+#       → 以 New-TestReport.ps1 彙整成 docs/testing/ 下的 Markdown 報告。
 #
 # 需求：本機已安裝 Microsoft Edge（Playwright 以 msedge channel 驅動，不另外下載瀏覽器）。
 # 網站以 E2E 環境啟動：假 AI（不會打到付費 API）、臨時資料夾、獨立資料庫，跑完自動刪除。
 #
 # 用法：
-#   pwsh scripts/Run-E2E.ps1                     # 全部跑完並產生報告
+#   pwsh scripts/Run-E2E.ps1                     # 全部跑完並產生報告「日期-測試報告-版本.md」
 #   pwsh scripts/Run-E2E.ps1 -Filter "LGN"       # 只跑情境編號含 LGN 的端對端測試，不產生報告
 #   pwsh scripts/Run-E2E.ps1 -SkipUnitTests      # 只跑端對端測試
 #   pwsh scripts/Run-E2E.ps1 -Headed             # 開出瀏覽器視窗看它操作
-#   pwsh scripts/Run-E2E.ps1 -Milestone M1       # 遷移分支的里程碑報告（1.1.3），檔名「…-M1-里程碑測試報告-版本.md」
-#
-# L5（1.1.50）：發佈後統計 WASM 下載量與修剪警告（results/l5-build.json），端對端 L5-* 情境量載入時間、API p95、伺服器記憶體，
-# 一併寫進報告第五節。
+#   pwsh scripts/Run-E2E.ps1 -NoReport           # 不產生報告
+#   pwsh scripts/Run-E2E.ps1 -Milestone M7       # 里程碑報告（多一節 L6 人工驗收），檔名「日期-M7-里程碑測試報告-版本.md」
 param(
     [string]$Filter = "",
     [switch]$SkipUnitTests,
     [switch]$Headed,
     [switch]$NoReport,
-    [string]$Milestone = "M0"
+    [string]$Milestone = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +36,7 @@ $publishExit = $LASTEXITCODE
 $publishOutput | ForEach-Object { Write-Host $_ }
 if ($publishExit -ne 0) { throw "dotnet publish 失敗。" }
 
-# L5（1.1.50）：WASM 下載量（_framework 的 Brotli 檔；ICU 語系檔只會下載其中一個，以最大的那個計）與修剪警告數。
+# L5：WASM 下載量（_framework 的 Brotli 檔；ICU 語系檔只會下載其中一個，以最大的那個計）與修剪警告數。
 $framework = Join-Path $publishPath "wwwroot/_framework"
 $brotli = @(Get-ChildItem $framework -Filter "*.br" -ErrorAction SilentlyContinue)
 $icu = @($brotli | Where-Object Name -like "icudt*")
@@ -61,7 +60,7 @@ if (-not $SkipUnitTests -and [string]::IsNullOrEmpty($Filter)) {
     $unitTrx = Join-Path $resultsPath "unit.trx"
 }
 
-Write-Host "== L3：端對端測試（Playwright／Edge）"
+Write-Host "== L3～L5：端對端測試（Playwright／Edge）"
 $env:MEETINGRECORD_E2E = "1"
 $env:MEETINGRECORD_E2E_APP = $publishPath
 if ($Headed) { $env:E2E_HEADED = "1" }

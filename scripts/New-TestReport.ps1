@@ -1,22 +1,26 @@
-﻿# 把 dotnet test 的 .trx 彙整成測試報告（1.0.61，格式見 docs/planning/09-Blazor-WASM-遷移評估與測試策略.md 第九節）。
+﻿# 把 dotnet test 的 .trx 彙整成 docs/testing/ 下的 Markdown 測試報告（分層與門檻見 docs/guides/測試指南.md）。
 #
-# M0 產出「基準報告」：只有 Server 欄；WASM 遷移完成後再跑一次，把 WASM 的 e2e.trx 用 -WasmE2ETrx 帶進來就是並列的最終報告。
-# 情境編號、標題、人物取自端對端測試原始碼上的 [Trait("Scenario"/"Title"/"Persona", ...)]。
+# 分層：
+#   L1 單元／服務   MeetingRecord.Tests 裡不啟動測試主機的測試
+#   L2 API 整合     MeetingRecord.Tests 裡標了 [Collection(nameof(ApiHostCollection))] 的類別（以 WebApplicationFactory 啟動測試主機），
+#                   由本腳本掃原始碼決定，新加的 API 測試類別只要照慣例標上集合就會自動算進 L2
+#   L3 端對端       MeetingRecord.E2ETests 裡情境編號不是 L4-、L5- 開頭的
+#   L4 即時與長時間 情境編號 L4- 開頭
+#   L5 非功能       情境編號 L5- 開頭；它們在測試輸出寫「L5METRIC|項目|門檻|實測|判定」，
+#                   與 -L5Json（Run-E2E.ps1 發佈後統計的下載量、修剪警告）一起組成第五節
+# 情境編號、標題、人物取自端對端測試原始碼上的 [Trait("Scenario"/"Title"/"Persona"/"Page", ...)]。
 #
-# 遷移分支的里程碑報告（1.1.3）：-Milestone M1（M2…）只換標題與檔名（「M1 里程碑報告」「…-M1-里程碑測試報告-版本.md」），內容同一套。
-# -Milestone M6（1.1.51）是遷移的最終報告：全部頁面都在瀏覽器執行、Server 版已移除，所以不再並列兩版；
-# 端對端矩陣的結果欄就是本版（WASM），檔名「…-M6-WASM遷移最終測試報告-版本.md」。
+# 報告種類：
+#   （不帶 -Milestone）  一般測試報告，L1～L5，檔名「日期-測試報告-版本.md」
+#   -Milestone Mx       里程碑報告，多一節 L6 人工驗收，檔名「日期-Mx-里程碑測試報告-版本.md」
+#   -Milestone M6       WASM 遷移的最終報告格式（1.1.51），檔名「日期-M6-WASM遷移最終測試報告-版本.md」
 #
 # 用法（通常由 Run-E2E.ps1 呼叫）：
-#   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-WasmE2ETrx wasm-e2e.trx] [-Milestone M1] [-L5Json l5-build.json] [-OutputPath 檔案]
-#
-# L5（1.1.50）：端對端 Scenario 以 L5- 開頭的情境自成一層；它們在測試輸出寫「L5METRIC|項目|門檻|實測|判定」，
-# 與 -L5Json（Run-E2E.ps1 發佈後統計的下載量、修剪警告）一起組成第五節。
+#   pwsh scripts/New-TestReport.ps1 -UnitTrx unit.trx -E2ETrx e2e.trx [-Milestone M7] [-L5Json l5-build.json] [-OutputPath 檔案]
 param(
     [string]$UnitTrx,
     [Parameter(Mandatory = $true)][string]$E2ETrx,
-    [string]$WasmE2ETrx,
-    [string]$Milestone = "M0",
+    [string]$Milestone = "",
     [string]$L5Json,
     [string]$OutputPath
 )
@@ -94,12 +98,17 @@ function Get-Argument([string]$testName) {
 
 $unit = @(Read-Trx $UnitTrx)
 $e2e = @(Read-Trx $E2ETrx)
-$wasm = @(Read-Trx $WasmE2ETrx)
-$hasWasm = $wasm.Count -gt 0
 
-$apiClasses = "ApiIntegrationTests|ApiAuthorizationConventionTests|GoLiveReviewApiTests|ApiResultTests|JwtTokenServiceTests"
-$l2 = @($unit | Where-Object { $_.Name -match "\.($apiClasses)\." })
-$l1 = @($unit | Where-Object { $_.Name -notmatch "\.($apiClasses)\." })
+# L2 ＝ 啟動測試主機的類別：原始碼上標了 [Collection(nameof(ApiHostCollection))] 的類別。
+$hostClasses = @(Get-ChildItem (Join-Path $solutionRoot "MeetingRecord.Tests") -Filter "*.cs" -Recurse | ForEach-Object {
+    $text = Get-Content -Raw -Encoding UTF8 $_.FullName
+    [regex]::Matches($text, '\[Collection\(nameof\(ApiHostCollection\)\)\]\s*(?:\[[^\]]*\]\s*)*(?:public\s+|internal\s+)?(?:sealed\s+|static\s+|abstract\s+)*(?:partial\s+)?class\s+(\w+)') |
+        ForEach-Object { $_.Groups[1].Value }
+} | Sort-Object -Unique)
+if ($hostClasses.Count -eq 0) { throw "找不到標了 ApiHostCollection 的測試類別，無法區分 L1／L2。" }
+$hostPattern = "\.(" + ($hostClasses -join "|") + ")\."
+$l2 = @($unit | Where-Object { $_.Name -match $hostPattern })
+$l1 = @($unit | Where-Object { $_.Name -notmatch $hostPattern })
 
 $version = ((Get-Content -Raw -Encoding UTF8 (Join-Path $solutionRoot "MeetingRecord.Web/appsettings.json") | ConvertFrom-Json).SystemSettings.SystemInformation.SystemVersion)
 $versionNumber = ($version -split " ")[0]
@@ -118,7 +127,7 @@ $l3 = @($e2e | Where-Object { (& $scenarioOf $_) -notlike "L4-*" -and (& $scenar
 $counts = [ordered]@{
     "L1 單元／服務" = Count-Outcomes $l1
     "L2 API 整合"  = Count-Outcomes $l2
-    "L3 E2E 對照"  = Count-Outcomes $l3
+    "L3 端對端"    = Count-Outcomes $l3
     "L4 即時與長時間" = Count-Outcomes $l4
 }
 if ($l5.Count -gt 0) { $counts["L5 非功能"] = Count-Outcomes $l5 }
@@ -126,34 +135,31 @@ $failedTotal = ($counts.Values | Measure-Object -Property Failed -Sum).Sum
 $lastLayer = if ($l5.Count -gt 0) { "L5" } else { "L4" }
 $conclusion = if ($failedTotal -eq 0) { "✅ 通過（L1～$lastLayer 全部通過）" } else { "❌ 不通過（$failedTotal 則失敗）" }
 $isFinal = $Milestone -eq "M6"
-$kind = if ($hasWasm) { "最終報告（Server 與 WASM 並列）" } elseif ($isFinal) { "M6 最終報告（遷移完成，全部頁面在瀏覽器執行）" } elseif ($Milestone -eq "M0") { "M0 基準報告（只有 Server 版）" } else { "$Milestone 里程碑報告（Server 版＋已遷移的 WASM 頁）" }
+$isMilestone = -not [string]::IsNullOrEmpty($Milestone)
 
 $sb = [System.Text.StringBuilder]::new()
 function Line([string]$text = "") { [void]$sb.AppendLine($text) }
 
-Line "# Blazor WASM 遷移測試報告：$kind"
+if ($isFinal) { Line "# Blazor WASM 遷移測試報告：M6 最終報告（遷移完成，全部頁面在瀏覽器執行）" }
+elseif ($isMilestone) { Line "# 測試報告：$Milestone 里程碑報告" }
+else { Line "# 測試報告" }
 Line
 Line "- 文件版本：1.0"
-Line "- 文件狀態：已產出（由 scripts/New-TestReport.ps1 自動產生，第六、七節人工填寫）"
+Line "- 文件狀態：已產出（由 scripts/New-TestReport.ps1 自動產生，$(if ($isMilestone) { '第六、七節' } else { '第六節' })人工填寫）"
 Line "- 現行系統版本：$versionNumber"
 Line "- 首次實作版本：1.0.61"
 Line "- 最後核對日期：$today"
 Line
-Line "> 測試策略與完成門檻見 [09-Blazor-WASM-遷移評估與測試策略](../planning/09-Blazor-WASM-遷移評估與測試策略.md) 第八、九節。"
+if ($isFinal) { Line "> 測試策略與完成門檻見 [09-Blazor-WASM-遷移評估與測試策略](../planning/09-Blazor-WASM-遷移評估與測試策略.md) 第八、九節。" }
+else { Line "> 分層、執行方式與門檻見 [測試指南](../guides/測試指南.md)。" }
 Line
 Line "## 1. 摘要"
 Line
 Line "| 項目 | 內容 |"
 Line "|------|------|"
 Line "| 結論 | $conclusion |"
-if ($isFinal) {
-    Line "| 版本 | $version，commit ``$commit``$dirty |"
-    Line "| 頁面 | 全部在瀏覽器執行（Blazor WebAssembly）；伺服器只靜態算繪登入、登出與錯誤頁，Blazor Server 互動模式已移除（1.1.46） |"
-}
-else {
-    Line "| Server 版本 | $version，commit ``$commit``$dirty |"
-    Line "| WASM 版本 | $(if ($hasWasm) { '見 WASM 端 .trx' } else { '—（尚未遷移）' }) |"
-}
+Line "| 版本 | $version，commit ``$commit``$dirty |"
+Line "| 頁面 | 全部在瀏覽器執行（Blazor WebAssembly）；伺服器只靜態算繪登入、登出、等待核准與錯誤頁 |"
 Line "| 測試日期 | $today |"
 Line "| 執行環境 | Windows $([Environment]::OSVersion.Version)、.NET SDK $dotnetVersion、Microsoft Edge $edgeVersion（Playwright 無頭模式） |"
 Line "| 網站與資料 | 以 publish 輸出、E2E 環境啟動（假 AI，不呼叫付費 API）；獨立 SQLite 與臨時資料夾，種子資料見 ``E2ESeeder`` |"
@@ -168,19 +174,10 @@ foreach ($key in $counts.Keys) {
 }
 if ($l5.Count -eq 0) { Line "| L5 非功能 | — | — | — | 本次未執行 |" }
 Line
-Line "## 3. E2E 對照矩陣"
+Line "## 3. 端對端情境矩陣（L3～L5）"
 Line
-if ($isFinal) {
-    Line "Server 版已移除，結果欄就是本版（WASM）；情境與 M0 基準同一套，遷移期間依 WASM 行為調整或新增的情境見各里程碑報告。"
-    Line
-    Line "| 情境 | 說明 | 頁面 | 人物 | 結果 | — | 備註 |"
-}
-else {
-    Line "| 情境 | 說明 | 頁面 | 人物 | Server | WASM | 備註 |"
-}
-Line "|------|------|------|------|--------|------|------|"
-$wasmByName = @{}
-foreach ($r in $wasm) { $wasmByName[(Get-MethodKey $r.Name) + "|" + (Get-Argument $r.Name)] = $r }
+Line "| 情境 | 說明 | 頁面 | 人物 | 結果 | 備註 |"
+Line "|------|------|------|------|------|------|"
 $rows = foreach ($r in $e2e) {
     $key = Get-MethodKey $r.Name
     $meta = $scenarioMeta[$key]
@@ -190,13 +187,12 @@ $rows = foreach ($r in $e2e) {
         Title    = (@($meta.Title, $arg) | Where-Object { $_ }) -join "："
         Page     = $meta.Page
         Persona  = $meta.Persona
-        Server   = Mark $r.Outcome
-        Wasm     = if ($hasWasm) { Mark $wasmByName["$key|$arg"].Outcome } else { "—" }
+        Result   = Mark $r.Outcome
         Note     = if ($r.Outcome -eq "Failed") { $r.Message -replace "\|", "／" } else { "" }
     }
 }
 foreach ($row in ($rows | Sort-Object Scenario, Title)) {
-    Line "| $($row.Scenario) | $($row.Title) | $($row.Page) | $($row.Persona) | $($row.Server) | $($row.Wasm) | $($row.Note) |"
+    Line "| $($row.Scenario) | $($row.Title) | $($row.Page) | $($row.Persona) | $($row.Result) | $($row.Note) |"
 }
 Line
 Line "## 4. 授權矩陣（L2，API 端點）"
@@ -217,7 +213,7 @@ foreach ($endpoint in ($authz.Keys | Sort-Object)) {
     $e = $authz[$endpoint]
     Line "| $endpoint | $(Mark $e['401']) | $(Mark $e['403']) | $(Mark $e['ok']) |"
 }
-$convention = $l2 | Where-Object { $_.Name -match "ApiAuthorizationConventionTests" }
+$convention = $unit | Where-Object { $_.Name -match "ApiAuthorizationConventionTests" }
 Line
 Line "授權守門掃描（``ApiAuthorizationConventionTests``，每支端點都要有授權屬性）：$(if (@($convention | Where-Object Outcome -ne 'Passed').Count -eq 0 -and @($convention).Count -gt 0) { '✅ 通過' } else { '❌ 未通過或未執行' })"
 Line
@@ -253,14 +249,16 @@ Line "| 差異 | 影響 | 接受理由 | 決定者／日期 |"
 Line "|------|------|----------|--------------|"
 Line "| （人工填寫） | | | |"
 Line
-Line "## 7. 人工驗收（L6）與簽核"
-Line
-Line "| 項目 | 結果 | 驗收者／日期 |"
-Line "|------|------|--------------|"
-foreach ($item in "AntDesign 樣式與覆寫", "元件樣式（scoped CSS）", "全站字型", "HoverTip 提示", "Material Icons 圖示", "側邊欄三層浮出選單", "對話窗尺寸", "圖層順序（z-index）") {
-    Line "| $item | （人工填寫） | |"
+if ($isMilestone) {
+    Line "## 7. 人工驗收（L6）與簽核"
+    Line
+    Line "| 項目 | 結果 | 驗收者／日期 |"
+    Line "|------|------|--------------|"
+    foreach ($item in "AntDesign 樣式與覆寫", "元件樣式（scoped CSS）", "全站字型", "HoverTip 提示", "Material Icons 圖示", "側邊欄三層浮出選單", "對話窗尺寸", "圖層順序（z-index）") {
+        Line "| $item | （人工填寫） | |"
+    }
+    Line
 }
-Line
 if ($failedTotal -gt 0) {
     Line "## 附錄：失敗的測試"
     Line
@@ -271,7 +269,7 @@ if ($failedTotal -gt 0) {
 }
 
 if ([string]::IsNullOrEmpty($OutputPath)) {
-    $label = if ($hasWasm) { "WASM遷移最終測試報告" } elseif ($isFinal) { "M6-WASM遷移最終測試報告" } elseif ($Milestone -eq "M0") { "M0-基準測試報告" } else { "$Milestone-里程碑測試報告" }
+    $label = if ($isFinal) { "M6-WASM遷移最終測試報告" } elseif ($isMilestone) { "$Milestone-里程碑測試報告" } else { "測試報告" }
     $OutputPath = Join-Path $repoRoot ("docs/testing/" + (Get-Date -Format "yyyy-MM-dd") + "-$label-$versionNumber.md")
 }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null

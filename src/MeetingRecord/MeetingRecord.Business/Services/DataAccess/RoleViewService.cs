@@ -47,7 +47,7 @@ public class RoleViewService
     }
 
     /// <summary>取得目前操作者作為稽核 actor；未登入（Id==0）時回 null。</summary>
-    /// <remarks>1.1.11：優先用 <see cref="IAuditActorProvider"/>（API 呼叫時從 claims 取）；以前只看 CurrentUserService，API 呼叫時操作者是空的。</remarks>
+    /// <remarks>1.1.11：優先用 <see cref="IAuditActorProvider"/>（API 請求時從 claims 取）；只看 CurrentUserService 的話，API 請求時它是空的，操作者會記成空白。</remarks>
     private (int? ActorUserId, string? ActorAccount) ResolveActor()
     {
         if (actorProvider is not null)

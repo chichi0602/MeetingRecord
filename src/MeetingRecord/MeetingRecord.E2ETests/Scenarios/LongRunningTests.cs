@@ -8,11 +8,11 @@ namespace MeetingRecord.E2ETests.Scenarios;
 
 /// <summary>
 /// L4 即時與長時間功能（1.0.66）：大檔上傳、斷線續傳、取消、進度推播、斷線重連、登入過期。
-/// 見 docs/planning/09-Blazor-WASM-遷移評估與測試策略.md §8 L4——WASM 遷移時這一層最容易壞。
+/// 測試分層見 docs/planning/09-Blazor-WASM-遷移評估與測試策略.md §8 L4。
 ///
 /// <para>
 /// 本機上傳很快、假 AI 轉錄瞬間完成，要看到「上傳中」或來得及按取消，用 <see cref="E2ETestBase.ThrottleUploadsAsync"/> 放慢分塊；
-/// 要模擬上傳時網路中斷，只攔上傳分塊（不動 Blazor 連線），才能分開驗證「上傳重試」與「連線重連」。
+/// 要模擬上傳時網路中斷，只攔上傳分塊（不動推播通道），才能分開驗證「上傳重試」與「推播通道重連」。
 /// </para>
 /// </summary>
 public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(app)
@@ -159,9 +159,8 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     [Trait("Persona", "管理者")]
     public async Task OfflineTenSeconds_ShouldRecoverWithoutReload()
     {
-        // 以前驗的是 Blazor Server 連線斷線重連（1.1.23 起用還沒搬的 Server 頁：使用說明頁、1.1.30 起稽核紀錄頁）。
-        // 1.1.43 最後一個 Server 頁（稽核紀錄）也搬到 WASM，應用程式的頁面不再有 Blazor Server 連線，這則改成在 WASM 頁斷網 10 秒：
-        // 斷網中查詢只跳錯誤、頁面不會重新載入；恢復後同一頁照常查詢（走 API）。推播通道的斷線重連見 L4-10。
+        // 在稽核紀錄頁斷網 10 秒：斷網中查詢只跳錯誤、頁面不會重新載入；恢復後同一頁照常查詢（走 API）。
+        // 推播通道的斷線重連見 L4-10。
         var page = await LoginAsAsync(Seed.Admin);
         await GotoAsync(page, "/audit-logs", "發生時間");
         await page.EvaluateAsync("() => window.__e2eMarker = 'L4-05'");
@@ -198,7 +197,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         }
         catch (PlaywrightException ex) when (ex.Message.Contains("net::ERR_ABORTED"))
         {
-            // 1.1.23 會議頁是 WASM 頁：清掉 Cookie 後，頁面背景的 API 呼叫（例如推播觸發的進度查詢）拿到 401 會自己先導到登入頁，
+            // 清掉 Cookie 後，頁面背景的 API 呼叫（例如推播觸發的進度查詢）拿到 401 會自己先導到登入頁，
             // 打斷這次進頁面。終點一樣是登入頁，所以不算失敗。
         }
 
@@ -212,8 +211,8 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     [Trait("Persona", "主責團隊成員")]
     public async Task ExpiredLogin_Upload_ShouldFailCleanly()
     {
-        // 1.1.23 會議頁搬到 WASM：存檔、查進度都是 API 呼叫，登入一失效就整頁導回登入頁（以前停在頁面上顯示「登入已失效」）。
-        // 所以改成上傳途中才讓登入失效：要能導得回登入頁（上傳中的「確定要離開嗎？」不能擋住），會議保留、沒有存進影音檔。
+        // 存檔、查進度都是 API 呼叫，登入一失效就整頁導回登入頁。
+        // 所以在上傳途中才讓登入失效：要能導得回登入頁（上傳中的「確定要離開嗎？」不能擋住），會議保留、沒有存進影音檔。
         var page = await LoginAsAsync(Seed.Owner);
         var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
         await ThrottleUploadsAsync(page, TimeSpan.FromSeconds(1.5));
@@ -235,10 +234,8 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     [Trait("Persona", "主責團隊成員")]
     public async Task LeavingDuringUpload_ShouldAskFirst()
     {
-        // 1.1.6（WASM 遷移）：兩種頁面之間切換是整頁載入，上傳會中斷，所以離開前要先問。
-        // 1.1.23 會議頁搬到 WASM：上傳改由整個前端共用，WASM 頁之間切換不中斷（見 L4-09），要問的是往還沒遷移的舊版頁
-        // （1.1.26 起用使用說明頁，1.1.30 起稽核紀錄頁；1.1.43 稽核紀錄頁也搬了，改用 /not-found；1.1.45 /not-found 也是 WASM 頁，
-        // 改用仍由伺服器處理的登出頁 /Auths/Logout——上傳中按登出本來就該先問。
+        // 1.1.6：會整頁載入的離開會中斷上傳，所以離開前要先問。上傳由整個前端共用，頁面之間切換不中斷（見 L4-09），
+        // 要問的是關分頁、重新整理，以及往伺服器處理的頁面（這裡用登出頁 /Auths/Logout——上傳中按登出本來就該先問；
         // 確認框在導覽之前出現、選留下不會真的進頁）。
         var page = await LoginAsAsync(Seed.Owner);
         var (title, _) = await FillNewMeetingWithMediaAsync(page, 40 * MB);
@@ -252,7 +249,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
         // 用事件驗而不真的關頁：Playwright 觸發關頁後會中斷攔截中的上傳請求。
         Assert.True(await BeforeUnloadBlockedAsync(page), "上傳中關分頁沒有提醒");
 
-        // 切到舊版頁：系統的確認框，選留下就不離開。
+        // 切到伺服器處理的登出頁：系統的確認框，選留下就不離開。
         await page.EvaluateAsync("() => Blazor.navigateTo('/Auths/Logout')");
         await Expect(page.Locator(".ant-modal-confirm").GetByText("上傳還在進行")).ToBeVisibleAsync();
         await ConfirmAsync(page, "留下");
@@ -271,7 +268,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
 
     [E2EFact]
     [Trait("Scenario", "L4-09")]
-    [Trait("Title", "上傳中換到其他 WASM 頁不中斷、不必確認，回來看到轉錄完成、檔案無誤")]
+    [Trait("Title", "上傳中換到其他頁面不中斷、不必確認，回來看到轉錄完成、檔案無誤")]
     [Trait("Page", "會議紀錄")]
     [Trait("Persona", "主責團隊成員")]
     public async Task SwitchingWasmPagesDuringUpload_ShouldKeepUploading()
@@ -302,7 +299,7 @@ public sealed partial class LongRunningTests(E2EAppFixture app) : E2ETestBase(ap
     [Trait("Persona", "主責團隊成員")]
     public async Task WasmPage_PushChannel_ShouldRecoverFromStartFailureAndOutage()
     {
-        // 1.1.23：WASM 頁沒有 Blazor Server 連線，要撐過網路問題的是推播通道（/hubs/app，進度面板、通知鈴靠它）。
+        // 1.1.23：要撐過網路問題的是推播通道（/hubs/app，進度面板、通知鈴靠它）。
         var page = await LoginAsAsync(Seed.Owner);
         var sockets = 0;
         IWebSocketRoute? hubSocket = null;

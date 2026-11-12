@@ -13,7 +13,7 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.Helps;
 
 /// <summary>
-/// 使用說明頁（1.1.30 從 Blazor Server 的 <c>HelpView</c> 搬到 WASM）。畫面與操作不變。
+/// 使用說明頁（1.0.42 起）。
 ///
 /// <para>
 /// 內容<b>不寫在這裡</b>，而是 <c>docs/guides/系統使用說明.md</c> 那一份：伺服器把它嵌在 Web 組件裡，

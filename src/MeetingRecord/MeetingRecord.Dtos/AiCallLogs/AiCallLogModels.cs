@@ -1,6 +1,6 @@
 using MeetingRecord.Share.Enums;
 
-// 1.1.38（WASM 遷移 M5）：從 Models 搬來，AI 對話紀錄 API 與 WASM 頁共用。
+// 1.1.38：AI 對話紀錄 API 與 WASM 頁共用。
 namespace MeetingRecord.Dtos.AiCallLogs;
 
 /// <summary>

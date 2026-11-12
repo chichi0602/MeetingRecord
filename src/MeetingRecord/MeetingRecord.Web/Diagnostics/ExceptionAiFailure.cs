@@ -1,6 +1,6 @@
 namespace MeetingRecord.Web.Diagnostics;
 
-/// <summary>AI 例外分析失敗時給使用者看的訊息（1.1.40 從 <c>ExceptionLogView</c> 抽出，畫面與 API 共用）。</summary>
+/// <summary>AI 例外分析失敗時給使用者看的訊息（1.1.40，API 用）。</summary>
 public static class ExceptionAiFailure
 {
     public static string Describe(Exception error)

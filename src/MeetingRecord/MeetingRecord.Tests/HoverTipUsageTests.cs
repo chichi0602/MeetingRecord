@@ -6,8 +6,8 @@ namespace MeetingRecord.Tests;
 /// 釘住 1.0.38 的決定：提示一律用 <c>HoverTip</c>（瀏覽器端顯示），不用 AntDesign 的 Tooltip 元件。
 ///
 /// <para>
-/// AntDesign Tooltip 的顯示／隱藏要經 Blazor 連線來回，連到遠端主機時滑鼠快速掃過，
-/// 「離開」事件會漏掉，提示框一個個卡在畫面上（使用者在正式機回報）。
+/// AntDesign Tooltip 的顯示／隱藏靠元件事件；當年頁面在伺服器執行（Blazor Server），連到遠端主機時滑鼠快速掃過，
+/// 「離開」事件會漏掉，提示框一個個卡在畫面上（使用者在正式機回報）。HoverTip 純由瀏覽器處理，沒有這個問題。
 /// 新頁面照舊範本複製一份工具列就會把它帶回來，編譯與畫面都不會報錯，所以用測試擋。
 /// </para>
 /// </summary>

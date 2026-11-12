@@ -215,7 +215,7 @@ public class TodoChangeRecorder
     }
 
     /// <summary>
-    /// 存檔成功之後呼叫：放掉剛寫進去的異動與通知的追蹤（DbContext 是整條 Blazor 連線共用的，
+    /// 存檔成功之後呼叫：放掉剛寫進去的異動與通知的追蹤（DbContext 是整個 scope 共用的，
     /// 留著會越積越多），再讓收件人的鈴鐺即時更新。
     /// </summary>
     public void Publish(IReadOnlyList<int> recipients)

@@ -17,7 +17,7 @@ using MeetingRecord.Web.Auth;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M1（1.1.0）：Web API 改成「帶 Bearer 走 JWT，否則走登入 Cookie」，WASM 前端用 Cookie 打 API。
+/// Web API 的驗證（1.1.0）：「帶 Bearer 走 JWT，否則走登入 Cookie」，WASM 前端用 Cookie 打 API。
 /// 這裡用真的網頁登入表單取得 Cookie（不偽造 claims），驗證 Cookie 路徑的驗證、CSRF 防偽標頭與 Session API。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

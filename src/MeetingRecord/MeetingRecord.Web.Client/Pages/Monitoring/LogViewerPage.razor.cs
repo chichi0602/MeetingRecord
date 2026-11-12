@@ -11,7 +11,7 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 日誌檢視（0.4.121，移植自 NET10-Blazor-Starter；1.1.42 從 Blazor Server 的 LogViewerView 搬到 WASM，畫面不變）。**管理者限定**。
+/// 日誌檢視（0.4.121，移植自 NET10-Blazor-Starter）。**管理者限定**。
 ///
 /// <para>讀 NLog 的檔案目標（<c>api/v1/monitoring/logs/query</c>），可篩選、展開堆疊、複製、匯出 .log，
 /// 並可把查詢結果中最新 100 筆送給 AI 分析（會產生費用：先確認、邊生成邊顯示、關閉視窗即取消、寫入用量帳本）。

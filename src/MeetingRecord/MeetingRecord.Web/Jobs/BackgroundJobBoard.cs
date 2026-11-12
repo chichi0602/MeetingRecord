@@ -7,15 +7,15 @@ using MeetingRecord.Dtos.Jobs;
 namespace MeetingRecord.Web.Jobs;
 
 /// <summary>
-/// 背景工作進度的伺服器端邏輯（1.1.15，原本寫在 <c>BackgroundJobProgressPanel</c> 裡）：
-/// Server 頁的面板資料來源與 <c>JobController</c> 共用，可見性、取消、關閉的規則只有一份。
+/// 背景工作進度的伺服器端邏輯（1.1.15）：
+/// 給 <c>JobController</c>（WASM 頁右下角的進度面板）用，可見性、取消、關閉的規則只有一份。
 ///
 /// <para>
 /// 通知器是全行程共用的，一律以呼叫者的資料範圍過濾（<see cref="ProjectAccess.CanViewMeeting"/>）——
 /// 否則會把別人專案的會議標題洩漏給看不到那筆資料的使用者。取消與關閉也只能動自己看得到的工作，看不到的當成不存在。
 /// </para>
 /// <para>
-/// ⚠️ 成員資格要用自己開的 scope 查：Server 頁的面板由背景事件觸發，拿頁面那個 DbContext 查會和頁面正在跑的查詢撞在一起。
+/// ⚠️ 成員資格用自己開的短命 scope 查，不借呼叫端的 DbContext，免得和同一個 scope 裡正在跑的查詢撞在一起。
 /// </para>
 /// </summary>
 public sealed class BackgroundJobBoard(

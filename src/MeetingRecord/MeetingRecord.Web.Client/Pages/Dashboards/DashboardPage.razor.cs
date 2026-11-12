@@ -7,8 +7,8 @@ using MeetingRecord.Web.Client.Api;
 namespace MeetingRecord.Web.Client.Pages.Dashboards;
 
 /// <summary>
-/// 儀表板（1.1.12 從 Blazor Server 的 DashboardView 搬到 WASM）。所有數字都取自既有欄位，本頁不寫入任何資料；
-/// 資料改走 <see cref="DashboardApi"/>，看不到的專案名稱由伺服器改成「其他專案」。
+/// 儀表板。所有數字都取自既有欄位，本頁不寫入任何資料；
+/// 資料走 <see cref="DashboardApi"/>，看不到的專案名稱由伺服器改成「其他專案」。
 /// </summary>
 public partial class DashboardPage : ComponentBase
 {

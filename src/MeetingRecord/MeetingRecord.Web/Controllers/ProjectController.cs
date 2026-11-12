@@ -16,7 +16,7 @@ using MeetingRecord.Web.Uploads;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 專案項目 API。1.1.24（WASM 遷移 M3）起全部走 <see cref="ProjectService"/>（畫面同一套規則），<c>ProjectRepository</c> 已刪除。
+/// 專案項目 API。1.1.24 起全部走 <see cref="ProjectService"/>（畫面同一套規則）。
 ///
 /// <para>
 /// 既有的五支（GetById／Search／Create／Update／Delete）回應只加欄位，原本的相容行為照舊：新增沒帶主責團隊時用自己 Id 最小的團隊、
@@ -241,7 +241,7 @@ public class ProjectController(
     public async Task<ActionResult<ApiResult<List<string>>>> EnabledCategories()
         => Ok(ApiResult<List<string>>.SuccessResult(await categoryService.GetAllEnabledNamesAsync()));
 
-    /// <summary>專案選擇器的團隊篩選選項（全部啟用中的團隊，1.1.26，同 Server 頁）；只要檢視權限。</summary>
+    /// <summary>專案選擇器的團隊篩選選項（全部啟用中的團隊，1.1.26）；只要檢視權限。</summary>
     [HttpGet("teams/filter")]
     [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.View)]
     public async Task<ActionResult<ApiResult<List<TeamOptionDto>>>> FilterTeams()
@@ -270,7 +270,7 @@ public class ProjectController(
             .ToList()));
     }
 
-    /// <summary>畫面的新增（整筆、可帶附件、日期可留空），規則與 Server 頁同一份。</summary>
+    /// <summary>畫面的新增（整筆、可帶附件、日期可留空），規則在 <see cref="ProjectService"/>。</summary>
     [HttpPost("form")]
     [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.Create)]
     public Task<ActionResult<ApiResult<ProjectSaveResultDto>>> CreateForm([FromBody] ProjectFormDto form)
@@ -326,7 +326,7 @@ public class ProjectController(
             UpdatedAt = now,
         };
 
-        // 欄位驗證與 Server 頁的表單同一份（ProjectAdapterModel 的標註與 IValidatableObject）。
+        // 欄位驗證用 ProjectAdapterModel 的標註與 IValidatableObject。
         var validation = new List<ValidationResult>();
         if (!Validator.TryValidateObject(model, new ValidationContext(model), validation, validateAllProperties: true))
         {

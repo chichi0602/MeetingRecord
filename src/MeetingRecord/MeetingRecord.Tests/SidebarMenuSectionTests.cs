@@ -124,7 +124,7 @@ public sealed class SidebarMenuSectionTests
     [Fact]
     public void MenuItemMapping_ShouldKeepSectionAndChildrenRecursively()
     {
-        // Server 頁與 WASM 頁的側邊欄畫的是同一份 MenuItemDto：漏掉 Section 會讓分區全部歸到預設區塊，漏掉子項第三層會不見。
+        // WASM 頁的側邊欄畫的是 Session API 回傳的 MenuItemDto：漏掉 Section 會讓分區全部歸到預設區塊，漏掉子項第三層會不見。
         var item = new SidebarMenuItemModel
         {
             Id = 3,

@@ -6,7 +6,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.Filters;
 
 /// <summary>
-/// Web API 的 CSRF 防護（1.1.0，WASM 遷移 M1）：用登入 Cookie 驗證、會改資料（不是 GET／HEAD／OPTIONS／TRACE）的請求，
+/// Web API 的 CSRF 防護（1.1.0）：用登入 Cookie 驗證、會改資料（不是 GET／HEAD／OPTIONS／TRACE）的請求，
 /// 一定要帶自訂標頭 <see cref="MagicObjectHelper.ClientRequestHeader"/>，否則回 403 <see cref="ApiResult"/>。
 ///
 /// <para>

@@ -535,8 +535,7 @@ public sealed partial class ApiIntegrationTests : IClassFixture<ApiTestApplicati
     [Fact]
     public async Task ProjectUpdate_WithoutGlossaryFields_ShouldNotWipeExistingLists()
     {
-        // ⚠️ 迴歸測試。ProjectRepository.UpdateAsync 用 CurrentValues.SetValues 覆寫所有純量欄位，
-        // 而 controller 傳進去的是 mapper.Map<Project>(dto) 產生的全新實體——不特別保留的話，
+        // ⚠️ 迴歸測試。服務層的修改是整筆覆寫（名單傳空就清空），對外的 PUT 要由 controller 把沒帶的名單補回現有值——不特別保留的話，
         // 一次不含名單的 PUT 就會把使用者建好的名詞表清光，而且完全不會報錯。
         using var client = factory.CreateClient();
         await AuthorizeAsync(client);

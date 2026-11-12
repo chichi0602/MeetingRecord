@@ -567,7 +567,7 @@ public sealed class ProjectAccessTests
     [Fact]
     public async Task UpdateProject_Rejected_ShouldNotLeakChangesIntoLaterSaves()
     {
-        // 0.4.114：DbContext 是整條 Blazor 連線共用的。被拒絕的修改不能留在追蹤裡，
+        // 0.4.114：同一個請求裡的服務共用一個 DbContext。被拒絕的修改不能留在追蹤裡，
         // 否則下一次任何服務 SaveChanges 時會被一起寫進資料庫。
         await using var fixture = await Fixture.CreateAsync();
         var rd = await fixture.AddTeamAsync("研發部");

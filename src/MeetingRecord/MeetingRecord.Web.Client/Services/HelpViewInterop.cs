@@ -6,12 +6,11 @@ namespace MeetingRecord.Web.Services;
 
 /// <summary>
 /// 使用說明頁（1.0.42）的前端橋接：/ 快速搜尋、關鍵字高亮、跨分類錨點。
-/// 1.1.30 頁面搬到 WASM，這個類別跟著搬到 Web.Client（命名空間不變）。
+/// 類別放在 Web.Client，命名空間沿用 <c>MeetingRecord.Web.Services</c>。
 ///
 /// <para>
 /// ⚠️ 失敗一律吞掉並記 log，不往上拋（理由同 <see cref="TodoAutoFitInterop"/>）：
-/// 高亮或快捷鍵掛不上只是少了便利，元件事件裡的未處理例外卻會把整個 circuit 斷掉。
-/// 離開頁面時 <c>JSDisconnectedException</c>（繼承自 <see cref="JSException"/>）是常態。
+/// 高亮或快捷鍵掛不上只是少了便利，元件事件裡的未處理例外卻會讓版面的 <c>ErrorBoundary</c> 把整塊頁面換成錯誤畫面。
 /// </para>
 ///
 /// 對應的前端實作在 <c>wwwroot/js/help-view.js</c>。

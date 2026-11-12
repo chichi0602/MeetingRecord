@@ -3,7 +3,7 @@ using MeetingRecord.Dtos.Diagnostics;
 namespace MeetingRecord.Web.Export;
 
 /// <summary>
-/// 系統例外 CSV 的欄位（0.4.122；1.1.40 從 <c>ExceptionLogView.CsvColumns</c> 搬來，匯出改由伺服器產生）。
+/// 系統例外 CSV 的欄位（0.4.122；1.1.40 起匯出由伺服器產生）。
 /// 含帳號：這份是管理者自己下載的，不會送給 AI。
 /// </summary>
 public static class ExceptionLogCsv

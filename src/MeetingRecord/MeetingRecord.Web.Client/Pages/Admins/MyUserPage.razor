@@ -1,7 +1,7 @@
 @page "/myusers"
 @using MeetingRecord.Dtos.Users
 
-@* 使用者管理（1.1.10 搬到 WASM，只限管理者）：由 Blazor Server 的 MyUserView 改寫，畫面、文字、按鈕都不變；資料改走使用者 API。 *@
+@* 使用者管理（只限管理者）：資料走使用者 API。 *@
 <PageTitle>使用者管理</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)

@@ -1,7 +1,7 @@
 @page "/roleviews"
 @using MeetingRecord.Dtos.Roles
 
-@* 角色管理（1.1.11 搬到 WASM，只限管理者）：由 Blazor Server 的 RoleViewView 改寫，畫面、權限矩陣、文字都不變；資料改走角色 API。 *@
+@* 角色管理（只限管理者）：資料走角色 API。 *@
 <PageTitle>角色管理</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)

@@ -9,7 +9,7 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Api;
 
 /// <summary>
-/// WASM 頁的 AI 問答資料來源（1.1.22）：<c>api/v1/ai-chat/{project|meeting}/{targetId}</c>。
+/// AI 問答視窗的資料來源（1.1.22）：<c>api/v1/ai-chat/{project|meeting}/{targetId}</c>。
 /// 提問與重新產生讀串流（每行一筆 JSON：delta…done／error）。失敗一律丟 <see cref="InvalidOperationException"/>（訊息是伺服器給的原文）。
 /// </summary>
 public sealed class AiChatApi(ApiClient api) : IAiChatSource

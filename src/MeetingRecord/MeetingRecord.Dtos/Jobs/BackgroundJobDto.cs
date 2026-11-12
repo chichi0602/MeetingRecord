@@ -15,8 +15,8 @@ public static class BackgroundJobKinds
 }
 
 /// <summary>
-/// 右下角背景工作進度面板的一列（1.1.15，WASM 遷移 M3）。由伺服器把兩個進度通知器的項目轉成同一種形狀，
-/// 階段文字也在伺服器組好，Server 頁與 WASM 頁顯示的字一模一樣。
+/// 右下角背景工作進度面板的一列（1.1.15）。由伺服器把兩個進度通知器的項目轉成同一種形狀，
+/// 階段文字也在伺服器組好，前端照著顯示。
 /// </summary>
 public sealed class BackgroundJobDto
 {

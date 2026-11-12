@@ -64,14 +64,14 @@ public sealed record TranscriptionProgressItem(
 ///
 /// <para>
 /// 刻意只放在記憶體、不進資料庫：進度只在工作進行中有意義，而通知器是 Singleton，
-/// 跨 circuit、跨頁面重新整理都還在；應用程式重啟時 <c>Program.cs</c> 已會把殘留的
+/// 跨請求、跨頁面重新整理都還在；應用程式重啟時 <c>Program.cs</c> 已會把殘留的
 /// 「處理中」標記為失敗，所以不會留下卡住的百分比。最終狀態本來就存在
 /// <c>Meeting.TranscriptionStatus</c>，這裡不重複保存。
 /// </para>
 ///
 /// <para>
-/// <see cref="Changed"/> 由背景執行緒引發，訂閱端（Blazor 元件）必須自行以
-/// <c>InvokeAsync(StateHasChanged)</c> 切回 UI 執行緒，並在 <c>Dispose</c> 解除訂閱。
+/// <see cref="Changed"/> 由背景執行緒引發，訂閱端（<c>JobProgressHubBridge</c>）不能在事件裡做耗時或會丟例外的事，
+/// 並要在停止時解除訂閱。
 /// </para>
 /// </summary>
 public interface ITranscriptionProgressNotifier

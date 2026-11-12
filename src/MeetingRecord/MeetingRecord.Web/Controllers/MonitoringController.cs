@@ -17,8 +17,8 @@ using MeetingRecord.Web.Streaming;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 監控與診斷（WASM 遷移 M5，1.1.32 起逐頁加端點）。**只限管理者**（同畫面：這些頁的權限鍵刻意不在角色權限目錄裡）。
-/// 畫面以前自己寫的稽核改由這裡寫（動作代碼不變，detail 加 <c>via=Api</c>）。
+/// 監控與診斷（1.1.32 起逐頁加端點）。**只限管理者**（同畫面：這些頁的權限鍵刻意不在角色權限目錄裡）。
+/// 稽核由這裡寫（detail 加 <c>via=Api</c>）。
 /// </summary>
 [Route("api/v1/monitoring")]
 [ApiController]

@@ -26,7 +26,7 @@ namespace MeetingRecord.Web.Components.Auths
         public IAuditLogService AuditLogService { get; set; } = default!;
 
         /// <summary>
-        /// 被系統強制登出的原因（1.0.33，<see cref="LogoutReasons"/>）。由 <c>AuthenticationStateHelper.Check</c> 帶過來；
+        /// 被系統強制登出的原因（1.0.33，<see cref="LogoutReasons"/>）。由 WASM 端的 <c>WasmLayout</c> 依 Session API 的判斷帶過來；
         /// 使用者自己按登出時沒有。
         /// </summary>
         [SupplyParameterFromQuery(Name = "reason")]

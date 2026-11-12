@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-// 1.1.32（WASM 遷移 M5）：從 Web/Diagnostics/StorageUsageService.cs 搬來，檔案儲存用量 API 與 WASM 頁共用同一份型別。
+// 1.1.32：檔案儲存用量 API 與 WASM 頁共用同一份型別。
 namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>一個外部目錄的用量。</summary>

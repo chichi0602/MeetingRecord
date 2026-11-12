@@ -3,7 +3,7 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
-/// 待辦的選項與顯示規則（1.1.19，WASM 遷移 M3）：從 <c>TodoAdapterModel</c> 抽出來，伺服器（服務層、Server 頁）
+/// 待辦的選項與顯示規則（1.1.19）：從 <c>TodoAdapterModel</c> 抽出來，伺服器（服務層）
 /// 與 WASM 頁（<c>TodoDto</c>）共用一份，「逾期」「截止日文字」不會兩邊各算各的。
 /// </summary>
 public static class TodoRules

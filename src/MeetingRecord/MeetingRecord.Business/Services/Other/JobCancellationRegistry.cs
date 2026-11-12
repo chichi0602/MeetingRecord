@@ -69,7 +69,7 @@ public sealed class JobCancellationHandle : IDisposable
 /// 背景工作的取消登記處。轉錄與草稿生成共用同一份。
 ///
 /// <para>
-/// 必須是 Singleton：發出取消的是 Blazor circuit（Scoped），執行工作的是背景服務（Singleton），
+/// 必須是 Singleton：發出取消的是 API 請求（Scoped），執行工作的是背景服務（Singleton），
 /// 兩者要透過同一個實例才碰得到面。
 /// </para>
 /// </summary>

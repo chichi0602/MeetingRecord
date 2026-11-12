@@ -101,7 +101,7 @@
    app.css 的全域 .markdown-content 是為「對話框裡的一小塊預覽」設計的
    （max-height: 60vh + overflow: auto）。套在這裡會變成兩層捲軸：
    內框捲到底之後還要再捲外框，使用者會以為內容已經到底了。
-   比照 HelpView.razor.css 的既有作法解除。 */
+   比照 HelpPage.razor.css 的既有作法解除。 */
 .markdown-editor-preview ::deep .markdown-content {
     max-height: none;
     overflow: visible;

@@ -14,7 +14,7 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Pages.Teams
 {
     /// <summary>
-    /// 團隊清單（1.1.8 從 Blazor Server 的 TeamViewView 搬到 WASM）。畫面行為不變，資料改走 <see cref="TeamApi"/>：
+    /// 團隊清單。資料走 <see cref="TeamApi"/>：
     /// 名稱與代號重複、成員同步、主責團隊不能刪等規則都在伺服器（TeamService），這裡只顯示結果。
     /// </summary>
     public partial class TeamPage
@@ -107,7 +107,7 @@ namespace MeetingRecord.Web.Client.Pages.Teams
         async Task OnTableChange(QueryModel<TeamDto> args)
         {
             _pageIndex = args.PageIndex;
-            // 明確賦值，不賭 @bind-PageSize 與 AntDesign 內部 callback 的先後順序（同 TodoViewView）。
+            // 明確賦值，不賭 @bind-PageSize 與 AntDesign 內部 callback 的先後順序（同待辦頁）。
             _pageSize = args.PageSize;
 
             var sorted = args.SortModel?.FirstOrDefault(x => x.SortDirection == SortDirection.Ascending || x.SortDirection == SortDirection.Descending);

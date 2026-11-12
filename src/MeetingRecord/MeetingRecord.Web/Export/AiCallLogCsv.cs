@@ -3,7 +3,7 @@ using MeetingRecord.Dtos.AiCallLogs;
 namespace MeetingRecord.Web.Export;
 
 /// <summary>
-/// AI 對話紀錄 CSV 的欄位（1.0.30；1.1.38 從 <c>AiCallLogView.CsvColumns</c> 搬來，匯出改由伺服器產生）。
+/// AI 對話紀錄 CSV 的欄位（1.0.30；1.1.38 起匯出由伺服器產生）。
 /// 只有中繼資料，**不含送出內容與回應**（那是逐字稿等敏感全文）。
 /// </summary>
 public static class AiCallLogCsv

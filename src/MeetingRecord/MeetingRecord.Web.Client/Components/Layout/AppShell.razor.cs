@@ -8,8 +8,8 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Components.Layout;
 
 /// <summary>
-/// 全站共用的外框（1.1.5，WASM 遷移）。原本是 MainLayout 的畫面與互動，抽出來讓 Blazor Server 頁（MainLayout）
-/// 與 WASM 頁（WasmLayout）共用；資料（選單、使用者、關於）與動作（變更密碼）都由外面傳入，這裡不碰伺服器服務。
+/// 全站共用的外框（1.1.5 起），由 <c>WasmLayout</c> 掛上；資料（選單、使用者、關於）與動作（變更密碼）都由外面傳入，
+/// 這裡不直接打 API。
 /// </summary>
 public partial class AppShell : ComponentBase, IDisposable
 {
@@ -22,7 +22,7 @@ public partial class AppShell : ComponentBase, IDisposable
     [Parameter]
     public RenderFragment? NotificationContent { get; set; }
 
-    /// <summary>常駐浮層（Server 頁的背景工作進度面板）。</summary>
+    /// <summary>常駐浮層（WasmLayout 放進來的背景工作進度面板）。</summary>
     [Parameter]
     public RenderFragment? OverlayContent { get; set; }
 

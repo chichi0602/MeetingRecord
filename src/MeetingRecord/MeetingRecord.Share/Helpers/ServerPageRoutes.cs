@@ -1,11 +1,11 @@
 namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
-/// 仍由伺服器靜態算繪（static SSR）的頁面路徑（1.1.45 起；取代遷移期間的 <c>WasmRoutes</c>）。
+/// 由伺服器靜態算繪（static SSR）的頁面路徑（1.1.45 起）。
 ///
 /// <para>
-/// WASM 遷移 M5（1.1.43）後應用程式的頁面全部在瀏覽器執行，M6（1.1.45）首頁 <c>/</c> 與 <c>/not-found</c> 也搬過去，
-/// 伺服器只剩登入、登出、等待核准（<c>/Auths/*</c>，要寫 Cookie）與 <c>/Error</c>（例外處理頁）。
+/// 應用程式的頁面（含首頁 <c>/</c> 與 <c>/not-found</c>）全部在瀏覽器執行，
+/// 伺服器只算繪登入、登出、等待核准（<c>/Auths/*</c>，要寫 Cookie）與 <c>/Error</c>（例外處理頁）。
 /// 這裡列的以外一律是 WASM 頁；往這些路徑要整頁載入（兩邊的 Router 都依這份判斷）。
 /// </para>
 /// </summary>

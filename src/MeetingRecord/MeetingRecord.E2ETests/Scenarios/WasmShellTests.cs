@@ -119,7 +119,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
         await Expect(owner.Locator(".notification-bell-trigger")).ToBeVisibleAsync();
         var before = await UnreadAsync(owner);
 
-        // 協作成員在 Server 待辦頁改狀態（與 NTF-01 同樣的步驟），會寫通知給負責人。
+        // 協作成員在待辦頁改狀態（與 NTF-01 同樣的步驟），會寫通知給負責人。
         var collaborator = await LoginAsAsync(Seed.Collaborator);
         await GotoAsync(collaborator, "/todos", "待辦事項");
         await collaborator.GetByPlaceholder("搜尋關鍵字").FillAsync(title);
@@ -145,7 +145,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "主責團隊成員")]
     public async Task PublishedWasm_ShouldCompress_AndUseWebSocket()
     {
-        // M1 的本機部署驗證（1.1.3）：端對端網站本來就是 dotnet publish 的輸出，與部署的檔案相同。
+        // 本機部署驗證（1.1.3）：端對端網站本來就是 dotnet publish 的輸出，與部署的檔案相同。
         var page = await LoginAsAsync(Seed.Owner);
         var sockets = new List<string>();
         var wasmFiles = new List<string>();
@@ -255,7 +255,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "管理者")]
     public async Task CategoryPage_ShouldRunOnWasm_AndSortThroughApi()
     {
-        // 1.1.7：第一個搬到 WASM 的實際頁面。MD-01／02／05／06 驗功能；這裡驗「真的在 WASM 跑」與排序欄位名在修剪後仍正確。
+        // 1.1.7：MD-01／02／05／06 驗功能；這裡驗分類清單「真的在 WASM 跑」（資料走 API）與排序欄位名在修剪後仍正確。
         var page = await LoginAsAsync(Seed.Admin);
         await GotoAsync(page, "/dashboard", "營運概況");
 
@@ -279,7 +279,7 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "主責＋協作＋無團隊")]
     public async Task JobPanel_OnWasmPage_ShouldShowLiveProgress_ByScope()
     {
-        // 1.1.15：進度面板在 WASM 頁改由 api/v1/jobs＋推播 JobsChanged 提供。比照 L4-04，只是看的人停在 WASM 頁（儀表板）。
+        // 1.1.15：進度面板由 api/v1/jobs＋推播 JobsChanged 提供。比照 L4-04，只是看的人停在儀表板。
         const int mb = 1024 * 1024;
         var title = Unique("E2E WASM推播會議");
         await using (var db = App.CreateDbContext())

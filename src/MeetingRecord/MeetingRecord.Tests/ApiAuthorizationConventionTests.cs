@@ -8,7 +8,7 @@ namespace MeetingRecord.Tests;
 
 /// <summary>
 /// API 授權守門（1.0.58）：掃描 Web 組件所有 Controller 的每一個 action，
-/// 沒有授權屬性的端點一律讓測試變紅。WASM 遷移要新增上百支 API，這道防線先建好。
+/// 沒有授權屬性的端點一律讓測試變紅，新增 API 時漏掉授權屬性會當場被擋下。
 /// <para>
 /// 每個 action 必須是下列其一：
 /// 1. 在 <see cref="AnonymousAllowList"/>（明列可匿名的端點）；

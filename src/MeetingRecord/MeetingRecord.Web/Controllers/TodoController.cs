@@ -16,7 +16,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 待辦事項 API。1.1.18（WASM 遷移 M3）起改走畫面用的同一套 <see cref="TodoService"/>：資料範圍、封存唯讀、子項目、
+/// 待辦事項 API。1.1.18 起改走畫面用的同一套 <see cref="TodoService"/>：資料範圍、封存唯讀、子項目、
 /// 只限負責人刪除、甲方只能刪自己建立的、改期限要附原因、異動紀錄與通知，全部只有一份規則。
 /// 既有五支（GetById／Search／Create／Update／Delete）的路由與回應形狀不變、只多帶欄位；
 /// 畫面專用的形狀另開端點（清單樹、負責人面板、異動紀錄、可選主待辦與專案、勾選完成）。

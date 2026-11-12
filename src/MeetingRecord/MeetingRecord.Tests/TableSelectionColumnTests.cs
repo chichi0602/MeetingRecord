@@ -8,15 +8,16 @@ namespace MeetingRecord.Tests;
 /// <para>
 /// AntDesign 1.6.0（1.6.2 也一樣）的 <c>Selection.Dispose</c> 寫的是 <c>Table?.Selection.Type</c>，
 /// 表頭那顆 Selection 不在時 <c>Table.Selection</c> 是 null，清掉列上的 Selection 就丟
-/// <see cref="NullReferenceException"/>：Blazor 連線當場斷掉，同一個例外接著在 finalizer 執行緒再丟一次，
-/// **整個伺服器行程跟著當掉**（所有人都斷線，IIS 重啟應用程式集區）。
+/// <see cref="NullReferenceException"/>。當年頁面在伺服器執行（Blazor Server），這個例外讓連線當場斷掉、
+/// 接著在 finalizer 執行緒再丟一次，**整個伺服器行程跟著當掉**（所有人都斷線，IIS 重啟應用程式集區）。
 /// 1.0.53 的會議紀錄頁、專案頁歷史會議、待辦頁用「這頁有沒有可以刪的列」決定要不要畫勾選欄，
-/// 進頁面（資料還沒載入）與每次存檔重載都會讓勾選欄一下有一下沒有——正式機的「重新連線」與網站重啟就是這個。
+/// 進頁面（資料還沒載入）與每次存檔重載都會讓勾選欄一下有一下沒有——當時正式機的「重新連線」與網站重啟就是這個。
+/// 現在頁面在瀏覽器執行，不會再拖垮伺服器，但例外照樣會發生，規則維持。
 /// </para>
 ///
 /// <para>
 /// 規則：<c>&lt;Selection&gt;</c> 要嘛無條件出現，要嘛包在 <c>@if (屬性名)</c> 裡，而且那個屬性只由
-/// <c>PermissionView.Can(...)</c> 組成（權限在頁面存活期間不會變；1.1.46 前 Server 頁用 <c>AuthenticationStateHelper.CheckAccessAction(...)</c>，已隨 Server 頁移除）。
+/// <c>PermissionView.Can(...)</c> 組成（權限在頁面存活期間不會變）。
 /// 不能勾的列用 <c>Disabled</c> 擋，不要用拿掉整欄的方式。
 /// </para>
 /// </summary>
@@ -80,7 +81,7 @@ public sealed partial class TableSelectionColumnTests
         Assert.True(IsPermissionOnly("CanBatch", code));
         Assert.True(IsPermissionOnly("CanDeleteWasm", code));
         Assert.False(IsPermissionOnly("ShowWasm", code));
-        Assert.False(IsPermissionOnly("CanDeleteOld", code));   // 1.1.46 起 Server 頁的寫法已不存在，不再放行
+        Assert.False(IsPermissionOnly("CanDeleteOld", code));   // 不是 PermissionView.Can 的權限寫法一律不放行
     }
 
     private static bool IsPermissionOnly(string condition, string codeBehind)

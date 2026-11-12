@@ -41,7 +41,7 @@ public class MeetingDto : MeetingCreateUpdateDto
     [JsonPropertyName("transcriptionCompletedAt")]
     public DateTime? TranscriptionCompletedAt { get; set; }
 
-    // ---- 1.1.20（WASM 遷移 M3）起多帶的唯讀欄位：只加不改，舊的呼叫端照用 ----
+    // ---- 1.1.20 起多帶的唯讀欄位：只加不改，舊的呼叫端照用 ----
 
     /// <summary>所屬專案；null＝未歸屬（只有上傳者與管理者看得到）。歸屬改用 <c>PUT {id}/project</c>。</summary>
     [JsonPropertyName("projectId")]

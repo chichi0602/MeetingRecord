@@ -8,7 +8,7 @@
 @inject MessageService MessageService
 @inject NotificationService NotificationService
 
-@* 設定 API 密碼（1.1.13 搬到 WASM）：畫面、文字、驗證都照原頁；已有本地密碼才要填「目前密碼」。 *@
+@* 設定 API 密碼：已有本地密碼才要填「目前密碼」。 *@
 <PageTitle>設定 API 密碼</PageTitle>
 
 @if (!string.IsNullOrWhiteSpace(roleMessage))
@@ -138,7 +138,7 @@ else
             }
 
             await MessageService.SuccessAsync("API 密碼已設定。");
-            // 會議紀錄頁還是舊版頁面：整頁載入。
+            // 回會議紀錄頁（整頁載入）。
             NavigationManager.NavigateTo("/meetings", forceLoad: true);
         }
         finally

@@ -7,7 +7,7 @@ using MeetingRecord.Web.Auth;
 
 namespace MeetingRecord.Tests;
 
-/// <summary>AI 呼叫的觸發者（1.1.28）：Blazor 與背景工作用 CurrentUserService，API 從 claims 取；名稱優先序 姓名 → 帳號。</summary>
+/// <summary>AI 呼叫的觸發者（1.1.28）：背景工作用 CurrentUserService（有填就優先），API 請求從 claims 取；名稱優先序 姓名 → 帳號。</summary>
 public sealed class AiCallerProviderTests
 {
     [Fact]

@@ -10,7 +10,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 自己的帳號（1.1.6，WASM 遷移）。只需登入、只動呼叫者自己。
+/// 自己的帳號（1.1.6）。只需登入、只動呼叫者自己。
 /// <list type="bullet">
 /// <item><c>change-password</c>：使用者選單的對話窗（至少 6 字）。</item>
 /// <item><c>change-own-password</c>、<c>password-status</c>、<c>api-password</c>（1.1.13）：變更密碼頁與設定 API 密碼頁，規則照原頁

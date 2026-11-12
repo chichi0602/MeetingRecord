@@ -13,7 +13,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.7）：分類 API 改走畫面用的 <c>CategoryService</c>，規則與畫面一致。
+/// 分類 API（1.1.7）走畫面用的 <c>CategoryService</c>，規則與畫面一致。
 /// 這裡釘住外部呼叫端看得到的行為變更：名稱重複不分大小寫與前後空白、團隊同步（沒帶不動、空陣列清空）、
 /// 啟用切換與稽核、搜尋的啟用篩選與排序。用 WASM 前端的路徑（登入 Cookie＋防偽標頭）呼叫。
 /// </summary>

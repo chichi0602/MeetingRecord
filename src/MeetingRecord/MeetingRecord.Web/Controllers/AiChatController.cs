@@ -15,7 +15,7 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// AI 問答（1.1.21，WASM 遷移 M3）：<c>api/v1/ai-chat/{project|meeting}/{targetId}/...</c>。
+/// AI 問答（1.1.21）：<c>api/v1/ai-chat/{project|meeting}/{targetId}/...</c>。
 /// 規則都在 <see cref="AiChatService"/>：資料範圍（看不到的當成不存在 → 404）、附件格式與大小、額度與用量帳本。
 /// 動作權限依範圍決定（<see cref="AiChatPermissionAttribute"/>）：專案看專案項目，會議看會議紀錄或專案項目。
 ///

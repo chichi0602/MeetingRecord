@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations;
 namespace MeetingRecord.Web.Auth;
 
 /// <summary>
-/// Blazor UI 登入 Cookie 的效期設定。與 <see cref="JwtSettings"/> 平行 ——
-/// 那一份管 API 的 session 長度，這一份管畫面的。
+/// 網頁登入 Cookie 的效期設定。與 <see cref="JwtSettings"/> 平行 ——
+/// 那一份管外部用戶端（JWT）的 session 長度，這一份管網頁的（WASM 前端也用這個 Cookie 打 API）。
 ///
 /// <para>⚠️ 0.4.119 之前這些值**完全沒有設定**，吃的是框架隱藏預設（14 天 ＋ 滑動續期），
 /// 導致「登入能撐多久」這件事在設定檔裡查不到、也無法依環境調整。</para>
@@ -34,8 +34,8 @@ public class CookieSettings
     ///
     /// <para>⚠️ 規則不是「每次請求都續」：**已用掉超過一半效期時的那一次請求**才續期，
     /// 並從那一刻起重新算滿。設 <c>false</c> 則到期就是到期。</para>
-    /// <para>⚠️ Blazor Server 特有：續期只發生在真正的 HTTP 請求上，
-    /// circuit 內的 SignalR 換頁不經過 cookie 中介軟體。</para>
+    /// <para>⚠️ 續期只發生在經 cookie 中介軟體驗證的 HTTP 請求上（WASM 頁打的 API 也算）；
+    /// WASM 頁在瀏覽器裡換頁本身不送請求，不會續期。</para>
     /// </summary>
     public bool SlidingExpiration { get; set; } = true;
 }

@@ -1,9 +1,9 @@
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// 原始碼掃描測試要看的元件來源（1.1.5，WASM 遷移）：Blazor Server 的 <c>MeetingRecord.Web/Components</c>，
-/// 加上 WASM 前端 <c>MeetingRecord.Web.Client</c>（共用元件與遷移後的頁面搬到這裡）。只掃一邊的話，
-/// 元件一搬家規則就失守，測試還是綠的。<c>bin</c>／<c>obj</c> 底下的產生檔不算。
+/// 原始碼掃描測試要看的元件來源（1.1.5）：伺服器靜態算繪的 <c>MeetingRecord.Web/Components</c>（登入、登出、錯誤頁），
+/// 加上 WASM 前端 <c>MeetingRecord.Web.Client</c>（應用程式的頁面與共用元件）。兩邊都掃，
+/// 元件換專案時規則才不會失守、測試卻還是綠的。<c>bin</c>／<c>obj</c> 底下的產生檔不算。
 /// </summary>
 internal static class ComponentSourceRoots
 {

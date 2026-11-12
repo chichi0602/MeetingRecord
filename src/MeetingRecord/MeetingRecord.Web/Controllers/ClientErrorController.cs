@@ -9,8 +9,8 @@ using MeetingRecord.Web.Diagnostics;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 瀏覽器端錯誤回報（WASM 遷移 M6，1.1.47）：WASM 頁的 <c>client-error-reporter.js</c> 捕捉後送到這裡，
-/// 記進日誌檔與系統例外紀錄（來源「瀏覽器」）。以前經 Blazor Server 的 circuit 回報，WASM 頁的錯誤送不出去。
+/// 瀏覽器端錯誤回報（1.1.47）：WASM 頁的 <c>client-error-reporter.js</c> 捕捉後送到這裡，
+/// 記進日誌檔與系統例外紀錄（來源「瀏覽器」）。
 ///
 /// <para>任何登入者都能回報自己頁面上的錯誤；匿名者 401，無從灌資料。依帳號限流（<see cref="BrowserErrorReporter"/>）。</para>
 /// </summary>

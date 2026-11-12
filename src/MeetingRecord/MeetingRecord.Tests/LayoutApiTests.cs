@@ -15,7 +15,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.6）：版面需要的 API——通知清單與標已讀、變更密碼、關於、頁面拒絕稽核。
+/// 版面需要的 API（1.1.6）——通知清單與標已讀、變更密碼、關於、頁面拒絕稽核。
 /// 用真的網頁登入 Cookie 呼叫（WASM 前端的路徑）；寫入請求都帶防偽標頭。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

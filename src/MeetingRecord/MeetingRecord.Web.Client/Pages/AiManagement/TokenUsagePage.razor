@@ -7,7 +7,7 @@
 @using MeetingRecord.Share.Helpers
 @using MeetingRecord.Web.Components.Commons.Charts
 
-@* Token 用量（1.1.37 搬到 WASM）：由 Blazor Server 的 TokenUsageView 改寫，畫面不變；資料改走 api/v1/ai-usage。 *@
+@* Token 用量：資料走 api/v1/ai-usage。 *@
 <PageTitle>Token 用量</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@

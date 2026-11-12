@@ -5,7 +5,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.Client.Pages.Projects;
 
 /// <summary>
-/// 專案表單的繫結模型（1.1.26 搬到 WASM）。驗證訊息與 Server 的 <c>ProjectAdapterModel</c> 一字不差（伺服器存檔時也會用那一份再驗一次）。
+/// 專案表單的繫結模型（1.1.26）。驗證訊息與伺服器端的 <c>ProjectAdapterModel</c> 一字不差（伺服器存檔時也會用那一份再驗一次）。
 /// </summary>
 public sealed class ProjectFormModel : IValidatableObject
 {

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-// 1.1.12（WASM 遷移）：從 Business/Services/Dashboard 搬來，儀表板 API 與 WASM 頁、圖表元件共用同一份型別。
+// 1.1.12：儀表板 API 與 WASM 頁、圖表元件共用同一份型別。
 namespace MeetingRecord.Dtos.Dashboards;
 
 /// <summary>圓餅圖的一個切片，或長條圖的一列。</summary>

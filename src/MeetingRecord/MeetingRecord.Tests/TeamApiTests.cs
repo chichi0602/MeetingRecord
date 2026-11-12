@@ -13,7 +13,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.8）：團隊 API 改走畫面用的 <c>TeamService</c>，規則與畫面一致。
+/// 團隊 API（1.1.8）走畫面用的 <c>TeamService</c>，規則與畫面一致。
 /// 釘住外部呼叫端看得到的行為變更：名稱與代號重複不分大小寫與前後空白、成員同步（沒帶不動、空陣列清空）、
 /// 仍是專案主責團隊的不能刪（非管理者，含刪除前檢查端點）、啟用切換與稽核、搜尋篩選與排序、可選成員。
 /// </summary>

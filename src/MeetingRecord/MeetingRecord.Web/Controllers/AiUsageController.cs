@@ -16,7 +16,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// Token 用量（WASM 遷移 M5，1.1.36）：<c>api/v1/ai-usage</c>，**只限管理者**（同畫面：看得到全公司的用量與人名、不套團隊過濾）。
+/// Token 用量（1.1.36）：<c>api/v1/ai-usage</c>，**只限管理者**（同畫面：看得到全公司的用量與人名、不套團隊過濾）。
 ///
 /// <para>
 /// 規則都在 <see cref="AiUsageAnalysisService"/>；CSV、PDF 改由伺服器產生（以前在畫面）。

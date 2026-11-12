@@ -5,7 +5,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.Filters;
 
 /// <summary>
-/// AI 問答 API 的動作權限（1.1.21，WASM 遷移 M3）：要的權限依路由的範圍而定，所以不能用固定的 <see cref="HasPermissionAttribute"/>。
+/// AI 問答 API 的動作權限（1.1.21）：要的權限依路由的範圍而定，所以不能用固定的 <see cref="HasPermissionAttribute"/>。
 /// <list type="bullet">
 /// <item><c>project</c>（整個專案）：專案項目的該動作。</item>
 /// <item><c>meeting</c>（單一會議）：會議紀錄**或**專案項目的該動作——會議頁開的問答看會議紀錄的權限，

@@ -4,7 +4,7 @@ using MeetingRecord.Dtos.AiUsage;
 namespace MeetingRecord.Web.Export;
 
 /// <summary>
-/// Token 用量 CSV 的欄位（1.0.31；1.1.36 從 <c>TokenUsageView.CsvColumns</c> 搬來，匯出改由伺服器產生）。
+/// Token 用量 CSV 的欄位（1.0.31；1.1.36 起匯出由伺服器產生）。
 /// 數字一律 InvariantCulture，金額不加千分位，試算表才算得動。
 /// </summary>
 public static class AiUsageCsv

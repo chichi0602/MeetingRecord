@@ -2,7 +2,7 @@
 @using MeetingRecord.Dtos.AuditLogs
 @using MeetingRecord.Share.Helpers
 
-@* 稽核紀錄（1.1.43 搬到 WASM）：由 Blazor Server 的 AuditLogView 改寫，畫面不變；資料改走 api/v1/audit-logs。 *@
+@* 稽核紀錄：資料走 api/v1/audit-logs。 *@
 <PageTitle>稽核紀錄</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@

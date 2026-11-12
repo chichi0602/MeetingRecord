@@ -2,7 +2,7 @@
 @using MeetingRecord.Dtos.Models
 @using MeetingRecord.Dtos.Commons
 
-@* 團隊清單（1.1.8 搬到 WASM）：由 Blazor Server 的 TeamViewView 改寫，畫面、文字、按鈕都不變；資料改走團隊 API。 *@
+@* 團隊清單：資料走團隊 API。 *@
 <PageTitle>團隊清單</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)
@@ -16,7 +16,7 @@ else
     <div>
         <div class="team-view-toolbar">
             <div class="team-view-toolbar-left">
-                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109；WASM 頁用 PermissionView，規則同伺服器）。 *@
+                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109；用 PermissionView，規則同伺服器的 [HasPermission]）。 *@
                 @if (PermissionView.Can(MagicObjectHelper.角色_團隊清單, PermissionActions.Create))
                 {
                     <HoverTip Title="新增">

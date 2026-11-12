@@ -4,7 +4,7 @@ using MeetingRecord.AccessDatas;
 namespace MeetingRecord.Business.Services.DataAccess;
 
 /// <summary>
-/// 待辦子項目的規則（1.0.45），Web（<see cref="TodoService"/>）與 API（<c>TodoRepository</c>）共用同一份。
+/// 待辦子項目的規則（1.0.45），由 <see cref="TodoService"/> 套用，頁面與對外 API 走同一份。
 ///
 /// <para>
 /// 使用者要「同一個功能的子功能」：子項目是完整的待辦（自己的負責人、期限、狀態），掛在一筆主待辦底下。

@@ -14,8 +14,8 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Pages.Admins
 {
     /// <summary>
-    /// 角色管理（1.1.11 從 Blazor Server 的 RoleViewView 搬到 WASM），只限管理者。畫面與權限矩陣的勾選連動不變；
-    /// 資料改走 <see cref="RoleApi"/>，權限樹轉權限鍵、目錄檢查、刪除時的重新指派都在伺服器。
+    /// 角色管理，只限管理者。畫面上處理權限矩陣的勾選連動；
+    /// 資料走 <see cref="RoleApi"/>，權限樹轉權限鍵、目錄檢查、刪除時的重新指派都在伺服器。
     /// </summary>
     public partial class RoleViewPage
     {
@@ -58,7 +58,7 @@ namespace MeetingRecord.Web.Client.Pages.Admins
 
         protected override async Task OnInitializedAsync()
         {
-            // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過；這頁只看是不是管理者（同 Server 頁的 CheckIsAdmin）。
+            // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過；這頁只看是不是管理者（API 端是 [AdminOnly]）。
             await PermissionView.LoadAsync();
             if (!PermissionView.IsAdmin)
             {

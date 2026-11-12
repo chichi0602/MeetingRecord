@@ -14,7 +14,7 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Pages.Categories
 {
     /// <summary>
-    /// 分類清單（1.1.7 從 Blazor Server 的 CategoryViewView 搬到 WASM）。畫面行為不變，資料改走 <see cref="CategoryApi"/>：
+    /// 分類清單。資料走 <see cref="CategoryApi"/>：
     /// 名稱重複、團隊同步等規則都在伺服器（CategoryService），這裡只顯示結果。
     /// </summary>
     public partial class CategoryPage
@@ -108,7 +108,7 @@ namespace MeetingRecord.Web.Client.Pages.Categories
         async Task OnTableChange(QueryModel<CategoryDto> args)
         {
             _pageIndex = args.PageIndex;
-            // 明確賦值，不賭 @bind-PageSize 與 AntDesign 內部 callback 的先後順序（同 TodoViewView）。
+            // 明確賦值，不賭 @bind-PageSize 與 AntDesign 內部 callback 的先後順序（同待辦頁）。
             _pageSize = args.PageSize;
 
             var sorted = args.SortModel?.FirstOrDefault(x => x.SortDirection == SortDirection.Ascending || x.SortDirection == SortDirection.Descending);

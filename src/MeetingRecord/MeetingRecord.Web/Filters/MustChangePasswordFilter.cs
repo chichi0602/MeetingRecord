@@ -8,11 +8,11 @@ using MeetingRecord.Web.Auth;
 namespace MeetingRecord.Web.Filters;
 
 /// <summary>
-/// 須改密碼的帳號，除了少數例外端點，Web API 一律回 403（1.1.4，WASM 遷移）。
+/// 須改密碼的帳號，除了少數例外端點，Web API 一律回 403（1.1.4）。
 ///
 /// <para>
-/// 網頁（Blazor Server）靠 <c>AuthenticationStateHelper.Check</c> 把這種人導去改密碼頁；但 WASM 前端用登入 Cookie 直接打 API，
-/// 以前不擋，等於繞過「第一次登入先改密碼」。JWT 也一樣擋（權杖發出後管理者才重設密碼的情況）。
+/// WASM 前端會依 Session API 把這種人導去改密碼頁，但它用登入 Cookie 直接打 API；只靠前端導向的話，
+/// 直接呼叫 API 就繞過了「第一次登入先改密碼」，所以伺服器端也要擋。JWT 也一樣擋（權杖發出後管理者才重設密碼的情況）。
 /// </para>
 ///
 /// <para>

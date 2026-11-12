@@ -8,7 +8,7 @@ using MeetingRecord.Web.Client.Auth;
 namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 資料庫用量（0.4.120；1.1.32 從 Blazor Server 的 DatabaseUsageView 搬到 WASM，畫面不變）。**管理者限定**、唯讀。
+/// 資料庫用量（0.4.120）。**管理者限定**、唯讀。
 ///
 /// <para>上半部是 SQLite，下半部「檔案儲存用量」是資料庫外的影音、逐字稿與附件——本系統真正吃空間的地方。
 /// 兩者都在伺服器量（<c>api/v1/monitoring/database-usage</c>、<c>storage-usage</c>），這裡只顯示。</para>

@@ -14,9 +14,9 @@ public sealed record ExceptionContext(string Source, string? Page, string? Accou
 /// <summary>
 /// 以 <see cref="AsyncLocal{T}"/> 承載 <see cref="ExceptionContext"/>。
 ///
-/// 設定點有三處：<c>ApplicationCircuitHandler.CreateInboundActivityHandler</c>（Blazor 互動）、
-/// <c>UseHttpRequestLogging</c>（HTTP／API）、<c>Program.cs</c> 的啟動區段。
-/// 三者都在「工作開始前」設定，所以該次工作內部的所有 <c>LogError</c> 都讀得到。
+/// 主要設定點：<c>UseHttpRequestLogging</c>（HTTP／API）、<c>Program.cs</c> 的啟動區段；
+/// 另有各背景服務、瀏覽器錯誤回報（<c>BrowserErrorReporter</c>）與程序層級例外（<c>ProcessExceptionHooks</c>）。
+/// 都在「工作開始前」設定，所以該次工作內部的所有 <c>LogError</c> 都讀得到。
 ///
 /// ⚠️ <b>Suppressed 是防遞迴的第二道保險</b>：背景寫入器執行期間全程開啟，
 /// 讓寫入過程中自己拋出的例外不會再被收進管線。

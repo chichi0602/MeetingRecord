@@ -14,7 +14,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M5（1.1.38）：AI 對話紀錄 API（<c>api/v1/ai-call-logs</c>），只限管理者。
+/// AI 對話紀錄 API（<c>api/v1/ai-call-logs</c>，1.1.38），只限管理者。
 /// 查看明細也寫稽核；JSON、PDF、CSV 由伺服器產生並寫稽核（via=Api）。用假 PDF 的測試主機。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

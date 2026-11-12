@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-// 1.1.36（WASM 遷移 M5）：從 Business/Services/AiUsage/AiQuotaService.cs 搬來，Token 用量 API 與 WASM 頁共用。
+// 1.1.36：Token 用量 API 與 WASM 頁共用的型別。
 namespace MeetingRecord.Dtos.AiUsage;
 
 /// <summary>上限的範圍。</summary>

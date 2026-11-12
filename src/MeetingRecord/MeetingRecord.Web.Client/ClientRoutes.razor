@@ -6,7 +6,7 @@
 @inject ModalService ModalService
 
 @* WASM 端的路由（1.1.1）。1.1.45 起應用程式的頁面全部在這裡（含首頁與找不到頁）；只有 ServerPageRoutes 列的
-   登入、登出與錯誤頁由伺服器靜態算繪，往那裡要整頁載入。 *@
+   登入、登出、等待核准與錯誤頁由伺服器靜態算繪，往那裡要整頁載入。 *@
 <ConfigProvider>
     <Router AppAssembly="typeof(ClientRoutes).Assembly" NotFoundPage="typeof(Pages.NotFoundPage)" OnNavigateAsync="OnNavigateAsync">
         <Found Context="routeData">
@@ -26,8 +26,8 @@
     }
 
     /// <summary>
-    /// 1.1.23：上傳由整個前端共用（<see cref="MeetingUploadManager"/>），WASM 頁之間切換不會中斷；
-    /// 要去的是伺服器頁（登入、登出、錯誤頁，1.1.45 起見 <see cref="ServerPageRoutes"/>）就是整頁載入，上傳會中斷，先問（1.1.6）。
+    /// 1.1.23：上傳由整個前端共用（<see cref="MeetingUploadManager"/>），頁面之間切換不會中斷；
+    /// 要去的是伺服器頁（登入、登出、等待核准、錯誤頁，1.1.45 起見 <see cref="ServerPageRoutes"/>）就是整頁載入，上傳會中斷，先問（1.1.6）。
     /// </summary>
     private async ValueTask OnLocationChangingAsync(LocationChangingContext context)
     {

@@ -3,9 +3,8 @@ using MeetingRecord.Dtos.Notifications;
 namespace MeetingRecord.Web.Components.Commons;
 
 /// <summary>
-/// 通知鈴的資料來源（1.1.6，WASM 遷移）。鈴鐺本身只有一份（<see cref="NotificationBell"/>），兩種頁面各自提供資料：
-/// Blazor Server 頁直接用伺服器服務與程序內的通知事件（<c>ServerNotificationSource</c>），
-/// WASM 頁打 API、靠推播通道得知變動（<c>ApiNotificationSource</c>）。
+/// 通知鈴（<see cref="NotificationBell"/>）的資料來源（1.1.6 起）。實作是 <c>ApiNotificationSource</c>：
+/// 打 API、靠推播通道得知變動。
 /// </summary>
 public interface INotificationSource
 {

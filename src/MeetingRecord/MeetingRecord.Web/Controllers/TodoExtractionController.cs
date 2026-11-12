@@ -10,12 +10,12 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 從會議紀錄抽出待辦（1.1.25，WASM 遷移 M3）：專案頁的「抽出待辦」視窗用。
+/// 從會議紀錄抽出待辦（1.1.25）：專案頁的「抽出待辦」視窗用。
 ///
 /// <para>
-/// 權限同 Server 專案頁：要「待辦事項」的新增（抽出來就是要建待辦；更新既有待辦也在同一個視窗裡）。
+/// 權限：要「待辦事項」的新增（抽出來就是要建待辦；更新既有待辦也在同一個視窗裡）。
 /// 抽取會花 AI 費用，資料範圍、封存（1.1.25 起服務層也擋）、用量上限都在 <c>TodoExtractionService</c>；
-/// 新增與更新走 <c>TodoService</c>，規則與 Server 頁同一份，稽核來源照舊記 <c>via=AiExtract</c>。
+/// 新增與更新走 <c>TodoService</c>，規則只有一份，稽核來源記 <c>via=AiExtract</c>。
 /// </para>
 /// </summary>
 [Route("api/v1/todo-extraction")]

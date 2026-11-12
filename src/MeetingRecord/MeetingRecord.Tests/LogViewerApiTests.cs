@@ -58,7 +58,7 @@ public sealed class LogViewerTestApplicationFactory : AiChatTestApplicationFacto
 }
 
 /// <summary>
-/// WASM 遷移 M5（1.1.42）：日誌檢視 API（<c>api/v1/monitoring/logs/…</c>），只限管理者。
+/// 日誌檢視 API（<c>api/v1/monitoring/logs/…</c>，1.1.42），只限管理者。
 /// 匯出 .log 與 AI 日誌分析都由伺服器依同一組條件重查（不收前端給的日誌），稽核由伺服器寫（via=Api）。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

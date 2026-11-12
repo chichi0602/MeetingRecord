@@ -13,8 +13,7 @@ namespace MeetingRecord.Web.Components.Commons;
 /// </para>
 ///
 /// <para>
-/// 1.1.6（WASM 遷移）起鈴鐺放在 WASM 專案、兩種頁面共用：資料經 <see cref="INotificationSource"/> 取得——
-/// Server 頁直接用伺服器服務，WASM 頁打 API 並靠推播通道得知變動。
+/// 資料經 <see cref="INotificationSource"/> 取得（1.1.6 起）：打 API，並靠推播通道 <c>/hubs/app</c> 得知變動。
 /// </para>
 /// </summary>
 public partial class NotificationBell : ComponentBase, IDisposable

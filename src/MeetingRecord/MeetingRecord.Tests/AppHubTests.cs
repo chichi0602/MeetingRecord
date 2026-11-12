@@ -13,7 +13,7 @@ using MeetingRecord.Web.Hubs;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M1（1.1.2）：WASM 前端的推播通道 <see cref="AppHub"/> 與未讀數 API。
+/// WASM 前端的推播通道（1.1.2） <see cref="AppHub"/> 與未讀數 API。
 /// 用真的網頁登入 Cookie 連 Hub（TestServer 不支援 WebSocket，改用 LongPolling）。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

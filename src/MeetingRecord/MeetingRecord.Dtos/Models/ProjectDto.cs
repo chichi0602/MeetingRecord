@@ -11,7 +11,7 @@ public class ProjectDto : ProjectCreateUpdateDto
     {
     }
 
-    // ---- 1.1.24（WASM 遷移 M3）起多帶的唯讀欄位：只加不改，舊的呼叫端照用 ----
+    // ---- 1.1.24 起多帶的唯讀欄位：只加不改，舊的呼叫端照用 ----
 
     [JsonPropertyName("primaryTeamName")]
     public string PrimaryTeamName { get; set; } = string.Empty;

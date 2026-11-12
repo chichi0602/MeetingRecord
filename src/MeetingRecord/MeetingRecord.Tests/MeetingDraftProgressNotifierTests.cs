@@ -287,7 +287,7 @@ public sealed class MeetingDraftProgressNotifierTests
     [Fact]
     public void ReportGeneratedCharacters_ShouldNotifyOnlyWhenPercentChanges()
     {
-        // 每個 SSE 片段只有幾個字，逐片通知會用上百次重繪轟炸 Blazor circuit。
+        // 每個 SSE 片段只有幾個字，逐片通知會用上百次推播與重繪轟炸看進度的頁面。
         var notifier = new MeetingDraftProgressNotifier();
         notifier.Enqueued(5, "需求確認會議", projectId: null, createdByUserId: null);
         notifier.ReportGenerating(5);

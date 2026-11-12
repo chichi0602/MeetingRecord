@@ -1,7 +1,7 @@
-// 滑鼠移上去時的提示（1.0.38），搭配 Components/Commons/HoverTip.razor。
+// 滑鼠移上去時的提示（1.0.38），搭配 Web.Client 的 Components/Commons/HoverTip.razor。
 //
-// 全部在瀏覽器端處理、不經 Blazor 連線：AntDesign <Tooltip> 的顯示／隱藏要跟伺服器來回，
-// 連到遠端主機有延遲時「離開」事件會漏掉，提示框就卡在畫面上。
+// 全部在 JS 處理、不經 .NET 事件：1.0.38 當時頁面在伺服器執行，AntDesign <Tooltip> 的顯示／隱藏要跟伺服器來回，
+// 連到遠端主機有延遲時「離開」事件會漏掉，提示框就卡在畫面上，所以改由這裡直接處理。
 //
 // 整頁只有一個泡泡，掛在 body 下、position: fixed——不會被表格的捲動容器或固定欄裁掉。
 (function () {

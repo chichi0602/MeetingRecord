@@ -5,12 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MeetingRecord.E2ETests.Scenarios;
 
-/// <summary>WASM 遷移 M6（1.1.45）：首頁與找不到頁也在瀏覽器執行，應用程式不再用到 Blazor Server 連線。</summary>
+/// <summary>導覽與錯誤回報：首頁與找不到頁在瀏覽器執行（1.1.45），不會建立 <c>/_blazor</c> 連線；頁面上的錯誤記進系統例外紀錄。</summary>
 public sealed class NavigationTests(E2EAppFixture app) : E2ETestBase(app)
 {
     [E2EFact]
     [Trait("Scenario", "NAV-01")]
-    [Trait("Title", "首頁導到會議紀錄、亂打網址顯示找不到頁（不會一直重新載入），全程沒有 Blazor Server 連線")]
+    [Trait("Title", "首頁導到會議紀錄、亂打網址顯示找不到頁（不會一直重新載入），全程不建立 /_blazor 連線")]
     [Trait("Page", "首頁與找不到頁")]
     [Trait("Persona", "主責團隊成員")]
     public async Task HomeAndUnknownUrl_ShouldStayInWasm()
@@ -49,7 +49,7 @@ public sealed class NavigationTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "主責團隊成員")]
     public async Task BrowserError_OnWasmPage_ShouldReachTheExceptionLog()
     {
-        // 1.1.47：以前經 Blazor Server 的連線回報，WASM 頁的錯誤送不出去；改走 POST api/v1/client-errors。
+        // 1.1.47：瀏覽器錯誤經 POST api/v1/client-errors 回報。
         var page = await LoginAsAsync(Seed.Owner);
         await GotoAsync(page, "/meetings", "會議標題");
         var message = $"e2e-browser-error-{Guid.NewGuid():N}";

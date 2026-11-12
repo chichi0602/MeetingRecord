@@ -3,8 +3,8 @@ using MeetingRecord.Dtos.Jobs;
 namespace MeetingRecord.Web.Components.Commons;
 
 /// <summary>
-/// 背景工作進度面板的資料來源（1.1.15，比照通知鈴的 <see cref="INotificationSource"/>）：面板放在 WASM 專案、兩種頁面共用。
-/// Server 頁直接讀進度通知器（<c>ServerJobProgressSource</c>），WASM 頁打 <c>api/v1/jobs</c> 並聽推播（<c>ApiJobProgressSource</c>）。
+/// 背景工作進度面板的資料來源（1.1.15 起，比照通知鈴的 <see cref="INotificationSource"/>）。
+/// 實作是 <c>ApiJobProgressSource</c>：打 <c>api/v1/jobs</c> 並聽推播。
 /// </summary>
 public interface IJobProgressSource
 {

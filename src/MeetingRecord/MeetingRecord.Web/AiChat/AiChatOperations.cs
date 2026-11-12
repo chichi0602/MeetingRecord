@@ -9,8 +9,8 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.AiChat;
 
 /// <summary>
-/// AI 問答在 Web 這一層的共用操作（1.1.22）：<c>AiChatController</c>（WASM 頁）與 <see cref="ServerAiChatSource"/>（Blazor Server 頁）
-/// 都用這一份——匯出 PDF、讀附件（下載才寫稽核）、型別轉換。規則仍在 <see cref="AiChatService"/>。
+/// AI 問答在 Web 這一層的操作（1.1.22），給 <c>AiChatController</c> 用——匯出 PDF、讀附件（下載才寫稽核）、型別轉換。
+/// 規則仍在 <see cref="AiChatService"/>。
 /// </summary>
 public sealed class AiChatOperations(
     AiChatService chatService,

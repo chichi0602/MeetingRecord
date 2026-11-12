@@ -5,8 +5,8 @@ using MeetingRecord.Business.Services.Transcription;
 namespace MeetingRecord.Web.Hubs;
 
 /// <summary>
-/// 把兩個進度通知器的變動轉送到 <see cref="AppHub"/>（1.1.15，WASM 遷移 M3）：送不帶資料的 <see cref="AppHub.JobsChanged"/>，
-/// WASM 頁的進度面板收到後重查 API。Blazor Server 頁的面板照舊直接訂閱通知器，兩邊並存。
+/// 把兩個進度通知器的變動轉送到 <see cref="AppHub"/>（1.1.15）：送不帶資料的 <see cref="AppHub.JobsChanged"/>，
+/// WASM 頁的進度面板收到後重查 API。
 ///
 /// <para>
 /// 進度回報很密（上傳每個百分比、轉錄每一段、生成每一批字），所以節流：第一個變動後等 <see cref="Interval"/> 才送一次，

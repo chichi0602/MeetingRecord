@@ -2,7 +2,7 @@ namespace MeetingRecord.Dtos.Todos;
 
 /// <summary>
 /// 從會議紀錄抽出待辦的結果（<c>POST api/v1/todo-extraction/meetings/{meetingId}</c>，1.1.25）。會花 AI 費用。
-/// 先前已加入過的標題與本專案未完成的待辦一起回傳，畫面用來標示「已加入過」「對應既有」（同 Server 頁的確認視窗）。
+/// 先前已加入過的標題與本專案未完成的待辦一起回傳，畫面的確認視窗用來標示「已加入過」「對應既有」。
 /// </summary>
 public class TodoExtractionResultDto
 {

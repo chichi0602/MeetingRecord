@@ -16,7 +16,7 @@ namespace MeetingRecord.Web.Components.Commons;
 /// </summary>
 public partial class AiChatModal : ComponentBase
 {
-    /// <summary>資料來源（1.1.22）：Server 頁直接呼叫服務，WASM 頁打 API（見 <see cref="IAiChatSource"/>）。</summary>
+    /// <summary>資料來源（1.1.22 起）：打 API（見 <see cref="IAiChatSource"/>）。</summary>
     [Inject]
     private IAiChatSource Source { get; set; } = default!;
 

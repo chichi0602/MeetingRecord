@@ -11,8 +11,8 @@ using MeetingRecord.Web.Auth;
 namespace MeetingRecord.Web.Filters;
 
 /// <summary>
-/// 只限管理者的 API（1.1.10，WASM 遷移）：使用者管理、角色管理這類頁面本來就只看「是不是管理者」，不看權限鍵
-/// （畫面用 <c>AuthenticationStateHelper.CheckIsAdmin</c>、選單在 <c>SidebarMenuService.AdminOnlyMenuIds</c>）。
+/// 只限管理者的 API（1.1.10）：使用者管理、角色管理這類頁面只看「是不是管理者」，不看權限鍵
+/// （頁面用 <c>PermissionView.IsAdmin</c>、選單在 <c>SidebarMenuService.AdminOnlyMenuIds</c>）。
 /// <para>
 /// 每次都查資料庫：啟用中而且 <c>IsAdmin</c> 才通過（停用的管理者手上的權杖也不能用，比照 <see cref="IPermissionChecker"/>）。
 /// 未登入 401；不是管理者 403 並寫一筆 <see cref="AuditActions.PermissionDenied"/>。可以代替 <see cref="HasPermissionAttribute"/>，

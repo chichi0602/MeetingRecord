@@ -14,9 +14,8 @@ namespace MeetingRecord.Web.Services;
 ///
 /// <para>
 /// ⚠️ 失敗一律吞掉並記 log，不往上拋。量不到高度只是「列數退回預設值」，
-/// 但在 Blazor Server 上，元件事件裡的未處理例外會把整個 circuit 斷掉——
+/// 但元件事件裡的未處理例外會被版面的 <c>ErrorBoundary</c> 接住、整塊頁面內容換成錯誤畫面——
 /// 為了一個版面微調賠掉使用者正在做的事，這個交換太糟了。
-/// 離開頁面時 <c>JSDisconnectedException</c>（繼承自 <see cref="JSException"/>）是常態，不是錯誤。
 /// </para>
 ///
 /// 對應的前端實作在 <c>wwwroot/js/todo-auto-fit.js</c>。

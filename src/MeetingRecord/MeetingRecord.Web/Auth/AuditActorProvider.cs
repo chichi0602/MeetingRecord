@@ -5,7 +5,7 @@ namespace MeetingRecord.Web.Auth;
 /// <summary>
 /// 稽核的「目前操作者」（1.0.34）。Scoped。
 /// <list type="number">
-/// <item>Blazor：<see cref="CurrentUserService"/>（由 <c>AuthenticationStateHelper.Check</c> 填入）。</item>
+/// <item>背景工作：<see cref="CurrentUserService"/>（背景工作自開 scope 時把上傳者填進去）。</item>
 /// <item>API：CurrentUserService 是空的，改從 HttpContext 的 claims 取（<see cref="RequestActorResolver"/>，Cookie 與 JWT 的對應相反）。</item>
 /// <item>都沒有（背景排程、匿名）：<c>(null, null)</c>。</item>
 /// </list>

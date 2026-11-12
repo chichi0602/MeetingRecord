@@ -11,8 +11,7 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.Admins;
 
 /// <summary>
-/// 稽核紀錄（1.0.32，移植自 NET10-Blazor-Starter 的 /audit-logs，畫面依本專案規範；1.1.43 從 Blazor Server 的 AuditLogView
-/// 搬到 WASM，畫面不變——這是最後一個應用程式的 Server 頁）。**只限管理者**。
+/// 稽核紀錄（1.0.32，移植自 NET10-Blazor-Starter 的 /audit-logs，畫面依本專案規範）。**只限管理者**。
 ///
 /// <para>資料由伺服器的 <c>IAuditLogService</c> 在各業務流程寫入。本頁負責查詢、明細、匯出 CSV、清除 N 天前與全部清除，
 /// 全部走 <c>api/v1/audit-logs</c>；刻意<b>沒有</b>單筆刪除。匯出與清除本身也寫稽核（伺服器寫，清除類在刪除<b>之後</b>）。</para>

@@ -8,15 +8,15 @@ namespace MeetingRecord.Web.Uploads;
 /// 分塊上傳的工作階段登記處（1.0.59，singleton，單機記憶體，與既有佇列一致）。
 ///
 /// <para>
-/// 為什麼要有它：影音檔與專案附件原本經 Blazor 連線（SignalR）串流上傳，IIS 上傳一個 127 MB 的檔案
+/// 為什麼要有它：大檔不能整個經一條長連線（SignalR）串流上傳——IIS 上傳一個 127 MB 的檔案
 /// 約 11 秒就斷線，而且連帶拖垮整條連線（見 docs/changelog/2026-10-08-會議上傳進度與連線中斷.md）。
-/// 現在改成瀏覽器以 HTTP 一塊一塊送（<c>UploadChunkController</c>），位元組不再經過 SignalR。
+/// 所以瀏覽器以 HTTP 一塊一塊送（<c>UploadChunkController</c>）。
 /// </para>
 ///
 /// <para>
-/// 設計重點：**只有「傳位元組」改走 HTTP**。每個工作階段對外提供一個 <see cref="ChunkedUploadSession.Stream"/>，
-/// 元件把它當成原本 <c>IBrowserFile.OpenReadStream()</c> 的替代品交給既有的服務層——
-/// 驗證、進度、取消、取消時刪會議、失敗回報全部沿用，服務層一行都不用改。
+/// 設計重點：每個工作階段對外提供一個 <see cref="ChunkedUploadSession.Stream"/>，
+/// 由 <c>MeetingMediaUploadJobs</c>／<c>ProjectAttachmentUploads</c> 當成一般的檔案串流交給服務層——
+/// 驗證、進度、取消、取消時刪會議、失敗回報都在服務層，這裡只負責把分塊接成串流。
 /// </para>
 /// </summary>
 public sealed class ChunkedUploadStore

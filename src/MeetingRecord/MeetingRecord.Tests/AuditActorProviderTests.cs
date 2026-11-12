@@ -6,7 +6,7 @@ using MeetingRecord.Web.Auth;
 
 namespace MeetingRecord.Tests;
 
-/// <summary>稽核的「目前操作者」（1.0.34）：Blazor 用 CurrentUserService，API 從 claims 取。</summary>
+/// <summary>稽核的「目前操作者」（1.0.34）：背景工作用 CurrentUserService（有填就優先），API 請求從 claims 取。</summary>
 public sealed class AuditActorProviderTests
 {
     [Fact]

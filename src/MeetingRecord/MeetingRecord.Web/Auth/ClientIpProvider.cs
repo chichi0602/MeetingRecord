@@ -6,7 +6,6 @@ namespace MeetingRecord.Web.Auth;
 /// <summary>
 /// 來源 IP（1.0.32，稽核紀錄用，移植自 NET10-Blazor-Starter）。Scoped：一個 HTTP 請求一份，取目前 <see cref="HttpContext"/> 的連線 IP；
 /// 反向代理後面靠 <c>UseForwardedHeaders</c> 換成真實 IP。
-/// 1.1.46 起拿掉 Blazor 連線記下 IP 的那一段（以前互動式 Blazor 沒有可靠的 HttpContext，由 circuit handler 先記下）。
 /// </summary>
 public sealed class ClientIpProvider : IClientIpProvider
 {

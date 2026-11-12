@@ -3,8 +3,7 @@
 @using MeetingRecord.Dtos.Projects
 @using MeetingRecord.Share.Enums
 
-@* 專案項目（1.1.26 搬到 WASM，原 Server 的 ProjectViewView）：畫面、文字、按鈕、確認框全部照舊；
-   資料走 ProjectApi／TodoExtractionApi，附件走 ProjectAttachmentUploader，生成進度來自 api/v1/jobs＋推播。 *@
+@* 專案項目：資料走 ProjectApi／TodoExtractionApi，附件走 ProjectAttachmentUploader，生成進度來自 api/v1/jobs＋推播。 *@
 <PageTitle>專案項目</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)
@@ -568,8 +567,8 @@ else
 
                         @* 兩份名單都跨整列：輸入框加上標籤列橫向長，塞進兩欄格線會很擠。
 
-                           ⚠️ 這裡**刻意不用** AntDesign 的 SelectMode.Tags。0.4.71 實測過：
-                           那個元件的搜尋輸入框在 Blazor Server ＋ 中文輸入法下會把組字中途的注音
+                           ⚠️ 這裡**刻意不用** AntDesign 的 SelectMode.Tags。0.4.71 實測過（當時頁面還跑在伺服器端）：
+                           那個元件的搜尋輸入框在中文輸入法下會把組字中途的注音
                            留在欄位裡（症狀是「艾ㄑ－艾琪」這種殘留），元件內部雖然有 IsComposing
                            處理但擋不住逐鍵回傳伺服器的時間差。普通 <Input> 則量測確認正常
                            （用 CDP 的 Input.imeSetComposition 真實組字驗過）。

@@ -14,13 +14,13 @@ using MeetingRecord.Web.Streaming;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 使用說明（1.1.29，WASM 遷移 M4）：說明內容與「問 AI 助理」。都要使用說明頁的檢視權限（同畫面）。
+/// 使用說明（1.1.29）：說明內容與「問 AI 助理」。都要使用說明頁的檢視權限（同畫面）。
 ///
 /// <para>
 /// 提問會花 AI 費用、要邊產生邊顯示：回應是串流（一行一筆 JSON，見 <see cref="HelpAssistantStreamEventDto"/>）。
 /// 要不要把「管理員」章節送給 AI 由伺服器依呼叫者判斷（一般使用者不送，1.0.43 使用者決定），不收前端的值。
 /// 前端按「停止」＝中斷請求：請求的取消權杖傳進服務層，AI 呼叫跟著停（帳本記成 Cancelled）。
-/// 稽核由伺服器寫，內容同 Server 頁，另加 <c>via=Api</c>。
+/// 稽核由伺服器寫，detail 加 <c>via=Api</c>。
 /// </para>
 /// </summary>
 [Route("api/v1/help")]
@@ -108,7 +108,7 @@ public sealed partial class HelpController(
             var error => $"失敗：{error.GetType().Name}",
         };
 
-        // 問題全文已經在 AI 對話紀錄裡，稽核只記長度與結果（同 Server 頁）。斷線也要記得到，所以不傳請求的取消權杖。
+        // 問題全文已經在 AI 對話紀錄裡，稽核只記長度與結果。斷線也要記得到，所以不傳請求的取消權杖。
         await auditLogService.WriteForCurrentUserAsync(
             AuditActions.HelpAiAsk,
             success: outcome.Error is null,
@@ -121,7 +121,7 @@ public sealed partial class HelpController(
     private Task BadRequestAsync(string message)
         => new BadRequestObjectResult(ApiResult.FailureResult(message)).ExecuteResultAsync(ControllerContext);
 
-    /// <summary>同 Server 頁：額度用完記 warning、使用者停止不記、其他記 error。</summary>
+    /// <summary>額度用完記 warning、使用者停止不記、其他記 error。</summary>
     private Exception LogFailure(Exception error, CancellationToken cancellationToken)
     {
         if (error is AiQuotaExceededException)

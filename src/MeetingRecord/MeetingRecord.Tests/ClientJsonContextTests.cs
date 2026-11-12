@@ -7,7 +7,7 @@ namespace MeetingRecord.Tests;
 /// WASM 端 JSON 原始碼產生器的設定（1.1.37）。
 ///
 /// <para>
-/// 1.1.37 Token 用量頁搬到 WASM 時整頁變成錯誤畫面：<c>ApiResult&lt;AiUsagePagedResult&gt;</c> 取了別名
+/// 1.1.37 Token 用量頁曾整頁變成錯誤畫面：<c>ApiResult&lt;AiUsagePagedResult&gt;</c> 取了別名
 /// <c>TypeInfoPropertyName = "AiUsagePagedResult"</c>，跟產生器替內層型別 <c>AiUsagePagedResult</c> 自動取的名字撞名，
 /// 內層型別就沒有中繼資料（執行期 <c>NotSupportedException: NoMetadataForType</c>）。建置照樣成功，只有實際讀到那支 API 才炸。
 /// 這裡把每一個型別資訊都拿一次，撞名或漏註冊在單元測試就會失敗。

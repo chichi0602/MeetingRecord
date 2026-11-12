@@ -17,7 +17,7 @@ using MeetingRecord.Web.Testing;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M5（1.1.40）：系統例外 API（<c>api/v1/exception-logs</c>），只限管理者。
+/// 系統例外 API（<c>api/v1/exception-logs</c>，1.1.40），只限管理者。
 /// CSV、刪除、清除、AI 分析與 PDF 的稽核由伺服器寫（via=Api）；AI 分析送出的內容由伺服器依例外編號組、不含帳號。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

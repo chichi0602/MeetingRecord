@@ -2,7 +2,7 @@ using MeetingRecord.Dtos.Systems;
 
 namespace MeetingRecord.Web.Components.Layout;
 
-/// <summary>「關於」對話窗一行一行的內容（1.1.6）：Server 頁與 WASM 頁共用同一個排版。</summary>
+/// <summary>「關於」對話窗一行一行的內容（1.1.6）：由 <see cref="SystemAboutDto"/> 排成固定的欄位順序。</summary>
 public static class AboutItems
 {
     public static IReadOnlyList<KeyValuePair<string, string>> From(SystemAboutDto about) =>

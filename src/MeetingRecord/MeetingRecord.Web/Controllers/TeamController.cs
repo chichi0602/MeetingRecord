@@ -11,7 +11,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 團隊 API。1.1.8（WASM 遷移）起呼叫畫面用的同一個 <see cref="TeamService"/>，規則與畫面一致：
+/// 團隊 API。1.1.8 起呼叫畫面用的同一個 <see cref="TeamService"/>，規則與畫面一致：
 /// 名稱與代號重複判斷去頭尾空白、不分大小寫；新增與修改一併同步成員；仍是專案主責團隊的不能刪（管理者例外）。
 /// </summary>
 [Route("api/[controller]")]

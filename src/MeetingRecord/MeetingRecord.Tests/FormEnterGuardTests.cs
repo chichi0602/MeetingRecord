@@ -16,7 +16,7 @@ public sealed partial class FormEnterGuardTests
 {
     /// <summary>
     /// 有 Enter 送出的 CRUD 表單（方案根目錄下的相對路徑，不含副檔名）。
-    /// 1.1.7 起搬到 WASM 的頁面在 <c>MeetingRecord.Web.Client/Pages</c>，搬家時改這裡的路徑、不要拿掉。
+    /// 頁面在 <c>MeetingRecord.Web.Client/Pages</c>；頁面換位置時改這裡的路徑、不要拿掉。
     /// </summary>
     public static TheoryData<string> CrudForms =>
     [

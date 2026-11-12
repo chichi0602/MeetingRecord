@@ -34,7 +34,7 @@ public sealed class AdminTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "管理者")]
     public async Task Admin_EditTeams_BatchTeam_ToggleStatus_ButNotSelf()
     {
-        // 1.1.10（使用者管理搬到 WASM）：ADM-01 只驗新增，補上修改、批次團隊、啟用切換，以及搬進伺服器的「不能停用自己」。
+        // 1.1.10：ADM-01 只驗新增，補上修改、批次團隊、啟用切換，以及由伺服器擋下的「不能停用自己」。
         var account = Unique("e2e.member");
         int userId;
         await using (var db = App.CreateDbContext())
@@ -138,7 +138,7 @@ public sealed class AdminTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "管理者")]
     public async Task Admin_CreateRoleWithActionPermissions_ThenDelete()
     {
-        // 1.1.11（角色管理搬到 WASM）：權限樹經 API 轉成權限鍵、伺服器檢查目錄。ADM-03 只看矩陣顯示，這裡驗存檔結果。
+        // 1.1.11：權限樹經 API 轉成權限鍵、伺服器檢查目錄。ADM-03 只看矩陣顯示，這裡驗存檔結果。
         var page = await LoginAsAsync(Seed.Admin);
         await GotoAsync(page, "/roleviews", "名稱");
         var name = Unique("E2E角色");

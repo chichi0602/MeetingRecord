@@ -9,12 +9,12 @@ using MeetingRecord.Web.Client.Api;
 namespace MeetingRecord.Web.Client.Uploads;
 
 /// <summary>
-/// WASM 端的會議影音檔上傳（1.1.23）。整個前端一份（WASM 的 Scoped 就是整個分頁），所以換到其他 WASM 頁上傳照樣繼續；
-/// 關分頁、重新整理、換到還是 Blazor Server 的頁面才會中斷，前兩者靠 <c>beforeunload</c> 提醒、後者由 <c>ClientRoutes</c> 先確認。
+/// 會議影音檔上傳（1.1.23）。整個前端一份（WASM 的 Scoped 就是整個分頁），所以換到其他頁面上傳照樣繼續；
+/// 關分頁、重新整理、前往伺服器頁（例如登出）才會中斷，前兩者靠 <c>beforeunload</c> 提醒、後者由 <c>ClientRoutes</c> 先確認。
 ///
 /// <para>
 /// 流程：<c>POST api/v1/uploads</c> 建工作階段（伺服器先跑上傳檢查）→ 既有的 <c>chunk-upload.js</c> 一塊一塊送 →
-/// 每秒查一次 <c>GET api/v1/uploads/{id}</c> 直到結束 → 依結果跳通知（文字同 Server 頁）、觸發 <see cref="Changed"/> 讓清單重載。
+/// 每秒查一次 <c>GET api/v1/uploads/{id}</c> 直到結束 → 依結果跳通知、觸發 <see cref="Changed"/> 讓清單重載。
 /// 瀏覽器送不下去（重試用完、登入失效）就回報 <c>fail</c>，伺服器立刻結束這趟上傳、會議保留。
 /// </para>
 /// </summary>
@@ -52,7 +52,7 @@ public sealed class MeetingUploadManager
 
     public int ActiveCount => uploads.Count;
 
-    /// <summary>這筆會議正在由這個分頁上傳（清單上的「取消上傳」只對這些出現，同 Server 頁「只在發起上傳的頁面」）。</summary>
+    /// <summary>這筆會議正在由這個分頁上傳（清單上的「取消上傳」只對這些出現，只在發起上傳的分頁）。</summary>
     public bool IsUploading(int meetingId) => uploads.ContainsKey(meetingId);
 
     /// <summary>取消時會不會連會議一起刪（這筆是存檔時才新增的），確認框要照實講。</summary>
@@ -60,7 +60,7 @@ public sealed class MeetingUploadManager
 
     /// <summary>
     /// 開始上傳。<paramref name="input"/> 是選檔的 input：JS 在呼叫當下就拿到 File 物件，之後表單重設、元件釋放都不影響這趟上傳。
-    /// 建立工作階段被擋下時回原因（呼叫端照 Server 頁補上「會議資料已保留」）；開始了回 null。
+    /// 建立工作階段被擋下時回原因（呼叫端再補上「會議資料已保留」）；開始了回 null。
     /// </summary>
     public async Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel)
     {
@@ -101,7 +101,7 @@ public sealed class MeetingUploadManager
         return null;
     }
 
-    /// <summary>取消（等同 Server 頁的「取消上傳」）。已經結束的回 false，呼叫端照 Server 頁說「來不及取消」。</summary>
+    /// <summary>取消（清單上的「取消上傳」）。已經結束的回 false，呼叫端說「來不及取消」。</summary>
     public async Task<bool> CancelAsync(int meetingId)
     {
         if (!uploads.TryGetValue(meetingId, out var upload))
@@ -114,7 +114,7 @@ public sealed class MeetingUploadManager
         return true;
     }
 
-    /// <summary>已確認要離開到 Blazor Server 頁（或登入失效）：拿掉關分頁提醒，免得整頁載入時瀏覽器再問一次。</summary>
+    /// <summary>已確認要離開到伺服器頁（例如登出，或登入失效）：拿掉關分頁提醒，免得整頁載入時瀏覽器再問一次。</summary>
     public Task ReleaseLeaveGuardAsync() => SetLeaveGuardAsync(false);
 
     internal async Task ReportFailureAsync(Guid uploadId, string message)
@@ -160,7 +160,7 @@ public sealed class MeetingUploadManager
         Changed?.Invoke();
     }
 
-    /// <summary>結果通知，文字與種類同 Server 頁（成功、取消用「系統訊息」一般通知，失敗用錯誤通知）。</summary>
+    /// <summary>結果通知（成功、取消用「系統訊息」一般通知，失敗用錯誤通知）。</summary>
     private void Notify(UploadStatusDto status)
     {
         switch (status.State)
@@ -224,7 +224,7 @@ public sealed class MeetingUploadManager
     }
 }
 
-/// <summary><c>chunk-upload.js</c> 送不下去時呼叫（方法名稱與 Server 頁的 <c>BrowserUploadCallback</c> 相同）。</summary>
+/// <summary><c>chunk-upload.js</c> 送不下去時呼叫（方法名稱 <c>OnFailed</c> 要與 JS 端的 <c>invokeMethodAsync</c> 一致）。</summary>
 public sealed class ChunkUploadCallback
 {
     private readonly MeetingUploadManager manager;

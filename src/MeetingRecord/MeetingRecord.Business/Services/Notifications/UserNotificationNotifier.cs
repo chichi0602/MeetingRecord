@@ -5,8 +5,8 @@
 ///
 /// <para>
 /// 形狀比照 <c>TranscriptionProgressNotifier</c>：Singleton＋事件。通知本身存在資料庫，
-/// 這裡只負責說「哪些人該重新查一次」；鈴鐺只在名單含自己時才查，避免每則通知都讓所有連線打一次資料庫。
-/// ⚠️ 事件在寫入的那條執行緒上觸發，訂閱者要用 <c>InvokeAsync</c> 切回自己的連線。
+/// 這裡只負責說「哪些人該重新查一次」；推播只送給名單上那些人的群組（<c>HubNotificationBridge</c>），避免每則通知都讓所有連線打一次 API。
+/// ⚠️ 事件在寫入的那條執行緒上同步觸發，訂閱者不能在事件裡做耗時的事（推播要丟到背景送）。
 /// </para>
 /// </summary>
 public interface IUserNotificationNotifier

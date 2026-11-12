@@ -67,14 +67,14 @@ public sealed record MeetingDraftProgressItem(
 ///
 /// <para>
 /// 同樣刻意只放記憶體、不進資料庫：進度只在工作進行中有意義，通知器是 Singleton
-/// 所以跨 circuit 與頁面重新整理都還在；<c>Program.cs</c> 啟動時已會把殘留的
+/// 所以跨請求與頁面重新整理都還在；<c>Program.cs</c> 啟動時已會把殘留的
 /// <c>DraftStatus.Processing</c> 標記為失敗，不會留下卡住的百分比。最終狀態本來就存在
 /// <c>Meeting.DraftStatus</c>。
 /// </para>
 ///
 /// <para>
-/// <see cref="Changed"/> 由背景執行緒引發，訂閱端必須自行以
-/// <c>InvokeAsync(StateHasChanged)</c> 切回 UI 執行緒，並在 <c>Dispose</c> 解除訂閱。
+/// <see cref="Changed"/> 由背景執行緒引發，訂閱端（<c>JobProgressHubBridge</c>）不能在事件裡做耗時或會丟例外的事，
+/// 並要在停止時解除訂閱。
 /// </para>
 /// </summary>
 public interface IMeetingDraftProgressNotifier
@@ -189,7 +189,7 @@ public sealed class MeetingDraftProgressNotifier : IMeetingDraftProgressNotifier
     /// 回報串流已產生的字元數。
     ///
     /// <para>
-    /// 每個 SSE 片段只有幾個字，逐片引發 <see cref="Changed"/> 會用上百次重繪轟炸 Blazor circuit。
+    /// 每個 SSE 片段只有幾個字，逐片引發 <see cref="Changed"/> 會讓訂閱端收到上百次通知。
     /// 因此字典一律更新（畫面下次讀到的就是最新值），但**只有換算出的整數百分比真的變了才通知**——
     /// 生成階段只有 70～99 這 30 個值，整段生成最多引發 29 次事件。
     /// </para>

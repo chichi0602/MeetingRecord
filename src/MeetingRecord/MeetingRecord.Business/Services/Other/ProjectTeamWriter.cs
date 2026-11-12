@@ -6,7 +6,7 @@ namespace MeetingRecord.Business.Services.Other;
 
 /// <summary>
 /// 把 <see cref="ProjectAccess.ResolveProjectTeams"/> 的結果寫進專案的 <see cref="ProjectTeam"/>（0.4.102）。
-/// 畫面（<c>ProjectService</c>）與 API（<c>ProjectRepository</c>）共用，兩邊規則才不會分岔。
+/// 由 <c>ProjectService</c> 呼叫，頁面與對外 API 走同一份，規則才不會分岔。
 /// </summary>
 public static class ProjectTeamWriter
 {

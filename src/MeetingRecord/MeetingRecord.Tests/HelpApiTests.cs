@@ -13,8 +13,8 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M4（1.1.29）：使用說明 API。說明內容與 AI 助理（串流）都要使用說明頁的檢視權限；
-/// 要不要送「管理員」章節由伺服器依呼叫者判斷；稽核由伺服器寫（同 Server 頁，加 via=Api）。
+/// 使用說明 API（1.1.29）。說明內容與 AI 助理（串流）都要使用說明頁的檢視權限；
+/// 要不要送「管理員」章節由伺服器依呼叫者判斷；稽核由伺服器寫（加 via=Api）。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
 public sealed class HelpApiTests(AiChatTestApplicationFactory factory) : IClassFixture<AiChatTestApplicationFactory>

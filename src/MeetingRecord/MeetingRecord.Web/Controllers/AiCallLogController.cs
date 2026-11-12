@@ -15,7 +15,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// AI 對話紀錄（WASM 遷移 M5，1.1.38）：<c>api/v1/ai-call-logs</c>，**只限管理者**（同畫面）。
+/// AI 對話紀錄（1.1.38）：<c>api/v1/ai-call-logs</c>，**只限管理者**（同畫面）。
 ///
 /// <para>
 /// ⚠️ 內容含會議逐字稿與 AI 問答全文：**查看明細也寫稽核**（同畫面）。CSV 只有中繼資料、不含內容；

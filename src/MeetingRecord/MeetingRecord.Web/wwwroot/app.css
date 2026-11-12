@@ -339,7 +339,7 @@ body .ant-spin-dot-item {
    改由共用的 MarkdownEditorModal 掛這個 class。AI 問答的 .ai-chat-bubble-markdown 仍是各自的複本。
 
    ⚠️ max-height: 60vh 是為「對話框裡的一小塊預覽」設計的。整頁手冊或左右分欄的編輯器套上去
-   會變成兩層捲軸，那些地方要用 ::deep 解除（見 HelpView.razor.css 與 MarkdownEditorModal.razor.css）。 */
+   會變成兩層捲軸，那些地方要用 ::deep 解除（見 HelpPage.razor.css 與 MarkdownEditorModal.razor.css）。 */
 .markdown-content {
     max-height: 60vh;
     overflow: auto;
@@ -464,12 +464,12 @@ body .ant-spin-dot-item {
 }
 
 /* ===== 收合側邊欄：滑過選單時讓收合鈕讓路（0.4.111）=====
-   收合鈕（MainLayout 的 .sidebar-toggle-edge）固定在視窗正中間、騎在側邊欄右緣，圖層又高於側邊欄。
+   收合鈕（AppShell 的 .sidebar-toggle-edge）固定在視窗正中間、騎在側邊欄右緣，圖層又高於側邊欄。
    正好落在某個選單項目（例如「系統管理」）上時，滑鼠從圖示往右移向飛出子選單會先碰到收合鈕，
    選單項目失去 hover、子選單立刻關掉，永遠點不到。滑過或鍵盤聚焦收合態的選單項目時，
    收合鈕淡出且不接收滑鼠事件，事件落回底下的選單項目。
-   放全站樣式而不放 MainLayout.razor.css：:has() 裡比對的是 NavMenu 元件的元素，
-   元件隔離樣式會在選擇器加上 MainLayout 自己的 scope 屬性而比對不到。
+   放全站樣式而不放 AppShell.razor.css：:has() 裡比對的是 NavMenu 元件的元素，
+   元件隔離樣式會在選擇器加上 AppShell 自己的 scope 屬性而比對不到。
    0.4.120 起鍵盤條件改成「項目內任何元素聚焦」：收合選單有第三層後，焦點會停在飛出面板裡的群組列與連結。 */
 @media (min-width: 641px) {
     .page:has(.collapsed-menu-item:hover) .sidebar-toggle-edge,
@@ -480,8 +480,8 @@ body .ant-spin-dot-item {
 }
 
 /* ===== 錯誤邊界的錯誤畫面（0.4.122）=====
-   Routes.razor 兩層 LoggingErrorBoundary 的 ErrorContent。放全站樣式：Routes 沒有自己的版面，
-   而浮層那一層渲染在 AntContainer 的位置（頁面最底），要固定在視窗下緣才看得到。 */
+   WASM 端 WasmLayout 的 ErrorBoundary 的 ErrorContent，以及 Session 載入失敗的訊息。
+   浮層樣式（.app-error-banner-overlay）給渲染在 AntContainer 位置（頁面最底）的錯誤畫面用，要固定在視窗下緣才看得到。 */
 .app-error-banner {
     margin: 16px;
     padding: 12px 16px;

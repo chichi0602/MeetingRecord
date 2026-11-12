@@ -31,7 +31,7 @@ public sealed class ModalSizeClassTests
     ];
 
     /// <summary>
-    /// 不受下面兩條規則約束的檔案。以前放沒掛路由的示範檔 <c>RoleViewViewSample</c>，1.1.46 已刪除，目前沒有例外。
+    /// 不受下面兩條規則約束的檔案。目前沒有例外。
     /// </summary>
     private static readonly HashSet<string> ExcludedFiles = [];
 

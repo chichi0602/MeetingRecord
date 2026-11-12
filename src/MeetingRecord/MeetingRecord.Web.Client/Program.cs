@@ -49,16 +49,16 @@ builder.Services.AddSingleton(dotNetErrorForwarder);
 builder.Logging.AddProvider(new MeetingRecord.Web.Client.Services.ClientErrorLoggerProvider(dotNetErrorForwarder));
 builder.Services.AddScoped<AuditLogApi>();
 
-// 1.1.23：會議影音檔上傳由整個前端共用一份（WASM 的 Scoped 就是整個分頁），換 WASM 頁不中斷。
+// 1.1.23：會議影音檔上傳由整個前端共用一份（WASM 的 Scoped 就是整個分頁），換頁不中斷。
 builder.Services.AddScoped<MeetingRecord.Web.Client.Uploads.MeetingUploadManager>();
 
-// 1.1.17：前端互動（剪貼簿、下載、文字編輯器、待辦自動欄寬），與 Server 頁共用同一份類別（命名空間 MeetingRecord.Web.Services）。
+// 1.1.17：前端互動（剪貼簿、下載、文字編輯器、待辦自動欄寬），類別在 Web.Client/Services（命名空間沿用 MeetingRecord.Web.Services）。
 builder.Services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.TodoAutoFitInterop>();
 
-// 1.1.30：使用說明頁的前端互動（/ 快速搜尋、高亮、錨點、問答串捲動），頁面搬到 WASM 後只有這裡用。
+// 1.1.30：使用說明頁的前端互動（/ 快速搜尋、高亮、錨點、問答串捲動）。
 builder.Services.AddScoped<MeetingRecord.Web.Services.HelpViewInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Components.Commons.IJobProgressSource, ApiJobProgressSource>();
 builder.Services.AddScoped<AuthenticationStateProvider, SessionAuthenticationStateProvider>();

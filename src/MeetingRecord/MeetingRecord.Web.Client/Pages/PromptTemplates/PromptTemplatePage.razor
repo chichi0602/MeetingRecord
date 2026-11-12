@@ -1,7 +1,7 @@
 @page "/prompttemplates"
 @using MeetingRecord.Dtos.Models
 
-@* 會議紀錄提示詞清單（1.1.9 搬到 WASM）：由 Blazor Server 的 PromptTemplateViewView 改寫，畫面、文字、按鈕都不變；資料改走提示詞 API。 *@
+@* 會議紀錄提示詞清單：資料走提示詞 API。 *@
 <PageTitle>提示詞清單</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)

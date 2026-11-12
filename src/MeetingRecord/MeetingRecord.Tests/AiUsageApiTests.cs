@@ -14,8 +14,8 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M5（1.1.36）：Token 用量 API（<c>api/v1/ai-usage</c>），只限管理者。
-/// CSV、PDF 由伺服器產生；以前畫面寫的稽核改由伺服器寫（via=Api）。用假 PDF 的測試主機，PDF 也測得到。
+/// Token 用量 API（<c>api/v1/ai-usage</c>，1.1.36），只限管理者。
+/// CSV、PDF 由伺服器產生，稽核由伺服器寫（via=Api）。用假 PDF 的測試主機，PDF 也測得到。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
 public sealed class AiUsageApiTests(AiChatTestApplicationFactory factory) : IClassFixture<AiChatTestApplicationFactory>

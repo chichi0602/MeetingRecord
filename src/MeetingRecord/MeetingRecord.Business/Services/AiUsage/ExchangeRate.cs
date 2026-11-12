@@ -32,7 +32,7 @@ public enum ExchangeRateSource
 }
 
 /// <summary>
-/// 目前生效的匯率。<b>Singleton</b>：背景服務寫、Blazor circuit 與背景工作的 scope 讀，
+/// 目前生效的匯率。<b>Singleton</b>：背景服務寫、API 請求與背景工作的 scope 讀，
 /// 必須是同一個實例（理由與 <c>AiChatStore</c>、<c>IJobCancellationRegistry</c> 相同）。
 ///
 /// <para>

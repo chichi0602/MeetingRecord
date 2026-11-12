@@ -4,7 +4,7 @@ namespace MeetingRecord.E2ETests.Infrastructure;
 
 /// <summary>
 /// 端對端測試的基底：每則測試自己的瀏覽器 context（不共用登入），結束時關掉。
-/// 定位一律用角色、可見文字、placeholder（不加 data-testid），讓同一套腳本之後能直接對 WASM 版跑。
+/// 定位一律用角色、可見文字、placeholder（不加 data-testid），腳本不綁元件的實作細節。
 /// </summary>
 [Collection(E2ECollection.Name)]
 public abstract class E2ETestBase : IAsyncLifetime
@@ -20,7 +20,7 @@ public abstract class E2ETestBase : IAsyncLifetime
 
     protected E2ESeedData Seed => App.Seed;
 
-    /// <summary>Blazor Server 關掉預先算繪，頁面要等連線建立才出現內容；預設等待放寬到 20 秒。</summary>
+    /// <summary>頁面要等瀏覽器下載並啟動 WASM 才出現內容；預設等待放寬到 20 秒。</summary>
     protected const float Timeout = 20_000;
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -248,7 +248,7 @@ public abstract class E2ETestBase : IAsyncLifetime
 
     /// <summary>
     /// 讓這個瀏覽器的每個上傳分塊晚 <paramref name="delay"/> 才送出（L4）：本機上傳太快，不放慢就看不到「上傳中」、也來不及按取消。
-    /// 只影響 <c>/api/v1/uploads/</c>，Blazor 連線不受影響。
+    /// 只影響 <c>/api/v1/uploads/</c>，其他 API 與推播通道不受影響。
     /// </summary>
     protected static Task ThrottleUploadsAsync(IPage page, TimeSpan delay)
         => page.RouteAsync("**/api/v1/uploads/**", async route =>

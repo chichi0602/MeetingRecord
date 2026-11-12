@@ -3,7 +3,7 @@ using System.Xml.Linq;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移（1.1.1）：瀏覽器端專案 <c>MeetingRecord.Web.Client</c> 只能相依 Dtos／Share／Models。
+/// 瀏覽器端專案（1.1.1） <c>MeetingRecord.Web.Client</c> 只能相依 Dtos／Share／Models。
 /// 參考到 Business／AccessDatas／Web 的話，伺服器的程式（含 EF Core、檔案存取、金鑰設定）會被一起打包送到瀏覽器。
 /// </summary>
 public sealed class WebClientArchitectureTests

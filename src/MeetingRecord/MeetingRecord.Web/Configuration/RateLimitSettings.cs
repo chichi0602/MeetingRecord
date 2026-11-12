@@ -11,7 +11,7 @@ namespace MeetingRecord.Web.Configuration;
 /// </para>
 ///
 /// <para>
-/// 只套用在 Web API（<c>MapControllers().RequireRateLimiting("api")</c>）；網頁本身（Blazor 連線）不受影響，
+/// 只套用在 Web API（<c>MapControllers().RequireRateLimiting("api")</c>）；靜態檔與 <c>/hubs/app</c> 推播通道不受影響，
 /// 上傳分塊端點另外免除（<c>[DisableRateLimiting]</c>，1 GB 就要 128 塊）。
 /// </para>
 /// </summary>
@@ -24,8 +24,8 @@ public class RateLimitSettings
     public int PermitLimitPerUser { get; set; } = 120;
 
     /// <summary>
-    /// 網頁本身（靠登入 Cookie 的請求，依帳號）每個時間窗可以呼叫幾次（1.1.19，WASM 遷移）。預設 600。
-    /// WASM 頁的每個操作都是好幾支 API（待辦頁開一次約 12 支、新增一筆約 6 支），以前這些走 Blazor 連線、不受限流；
+    /// 網頁本身（靠登入 Cookie 的請求，依帳號）每個時間窗可以呼叫幾次（1.1.19）。預設 600。
+    /// WASM 頁的每個操作都是好幾支 API（待辦頁開一次約 12 支、新增一筆約 6 支），
     /// 與外部程式共用 120 次會誤擋正常操作，所以分開計算、額度較高。
     /// </summary>
     [Range(1, 100_000_000)]

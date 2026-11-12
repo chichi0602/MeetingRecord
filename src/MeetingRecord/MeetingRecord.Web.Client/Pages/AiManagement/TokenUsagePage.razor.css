@@ -56,7 +56,7 @@
 }
 
 /* 指標卡片。
-   ⚠️ 不能直接借用儀表板的 .dashboard-cards——那條規則在 DashboardView.razor.css 裡是
+   ⚠️ 不能直接借用儀表板的 .dashboard-cards——那條規則在 DashboardPage.razor.css 裡是
    **scoped** 的（會被編成 [b-xxxxx]），在這一頁完全不生效，卡片會變成一張一列。 */
 .ai-usage-cards {
     display: grid;

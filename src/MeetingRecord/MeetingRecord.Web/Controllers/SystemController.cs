@@ -7,7 +7,7 @@ using MeetingRecord.Web.Health;
 
 namespace MeetingRecord.Web.Controllers;
 
-/// <summary>系統資訊（1.1.6，WASM 遷移）：「關於」對話窗的內容。只需登入——Server 頁本來就讓所有登入者看得到。</summary>
+/// <summary>系統資訊（1.1.6）：「關於」對話窗的內容。只需登入——所有登入者都看得到。</summary>
 [Route("api/v1/system")]
 [ApiController]
 [Authorize(AuthenticationSchemes = MagicObjectHelper.ApiScheme)]

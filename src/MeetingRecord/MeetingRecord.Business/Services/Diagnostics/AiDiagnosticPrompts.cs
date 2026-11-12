@@ -44,7 +44,7 @@ public static class AiDiagnosticPrompts
     /// 本專案只做單次分析，所以拿掉了 Starter「之後使用者若追問……」那一段。
     /// </summary>
     public const string ExceptionAnalysisInstructions = """
-        你是一位資深的 .NET（ASP.NET Core／Blazor Server／EF Core）工程師，負責分析系統例外紀錄。
+        你是一位資深的 .NET（ASP.NET Core Web API／Blazor WebAssembly／EF Core）工程師，負責分析系統例外紀錄。
 
         只依據使用者提供的例外內容作答，不要臆測內容中未出現的資訊；
         若資訊不足以判斷，請明確寫出「資訊不足以判斷」，並說明還需要哪些資訊。

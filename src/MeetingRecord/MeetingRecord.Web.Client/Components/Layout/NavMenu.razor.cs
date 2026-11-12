@@ -6,9 +6,8 @@ using MeetingRecord.Dtos.Sessions;
 namespace MeetingRecord.Web.Components.Layout;
 
 /// <summary>
-/// 側邊選單（1.1.5 起放在 WASM 專案，Blazor Server 頁與 WASM 頁共用同一份畫面）。
-/// 選單與系統名稱由外框（<c>AppShell</c>）傳入：Server 頁來自 <c>SidebarMenuService</c>，WASM 頁來自 <c>GET /api/v1/session/menu</c>，
-/// 兩邊用同一套權限過濾規則。以前這裡自己再載一次選單（與 MainLayout 重複）。
+/// 側邊選單（1.1.5 起）。選單與系統名稱由外框（<c>AppShell</c>）傳入，來源是 <c>GET /api/v1/session/menu</c>
+/// （伺服器以 <c>SidebarMenuService</c> 依權限過濾好）；這裡不自己再載一次選單。
 /// </summary>
 public partial class NavMenu : ComponentBase, IDisposable
 {

@@ -11,18 +11,18 @@ using MeetingRecord.Models.Systems;
 namespace MeetingRecord.Web.Uploads;
 
 /// <summary>
-/// WASM 頁的會議影音檔上傳（1.1.16，WASM 遷移 M3，singleton）。
+/// WASM 頁的會議影音檔上傳（1.1.16，singleton）。
 ///
 /// <para>
-/// Server 頁是元件自己拿著 <see cref="ChunkedUploadSession.Stream"/> 呼叫 <c>MeetingService.SaveMediaAsync</c>，
-/// 連線還在，元件就一直在等。WASM 頁沒有那條連線：API 建好工作階段就回應，讀串流、存檔改在伺服器背景跑，
-/// 瀏覽器照舊以 HTTP 一塊一塊送，最後以 <c>GET api/v1/uploads/{id}</c> 查結果。驗證、進度（共用通知器）、
+/// 頁面和伺服器之間沒有一直連著的連線，不能讓請求一路等到檔案存完：API 建好工作階段就回應，
+/// 讀串流（<see cref="ChunkedUploadSession.Stream"/>）、呼叫 <c>MeetingService.SaveMediaAsync</c> 存檔在伺服器背景跑，
+/// 瀏覽器以 HTTP 一塊一塊送，最後以 <c>GET api/v1/uploads/{id}</c> 查結果。驗證、進度（共用通知器）、
 /// 從進度面板取消、取消時刪會議、失敗原因全部沿用服務層，這裡一行規則都不寫。
 /// </para>
 ///
 /// <para>
-/// ⚠️ 背景沒有請求，也沒有 Blazor 使用者：自開 scope，把上傳者填進 <see cref="CurrentUserService"/>——
-/// 資料範圍（<c>RecordAccessScopeProvider</c>）與稽核的操作者（<c>AuditActorProvider</c>）都優先讀它。
+/// ⚠️ 背景沒有請求，也就沒有登入身分：自開 scope，把上傳者填進 <see cref="CurrentUserService"/>——
+/// 資料範圍（<c>RecordAccessScopeProvider</c>）、稽核的操作者（<c>AuditActorProvider</c>）與 AI 用量的觸發者（<c>AiCallerProvider</c>）都優先讀它。
 /// 起背景工作時不帶執行內容（<see cref="ExecutionContext.SuppressFlow"/>），免得拿到已經結束的請求的 HttpContext。
 /// </para>
 /// </summary>
@@ -96,7 +96,7 @@ public sealed class MeetingMediaUploadJobs(IServiceScopeFactory scopeFactory, Ch
 
                 if (result.Success)
                 {
-                    // 取消只作用在寫檔：按下取消時檔案已經寫完，就會走到這裡（同 Server 頁的「來不及取消」）。
+                    // 取消只作用在寫檔：按下取消時檔案已經寫完，就會走到這裡（「來不及取消」）。
                     job.Finish(UploadStates.Succeeded, null, cancelTooLate: job.Cancellation.IsCancellationRequested);
                 }
                 else if (result.Message == MeetingService.UploadCancelledAndMeetingDeletedMessage)
@@ -105,8 +105,8 @@ public sealed class MeetingMediaUploadJobs(IServiceScopeFactory scopeFactory, Ch
                 }
                 else if (result.Message == MeetingService.UploadCancelledMessage)
                 {
-                    // WASM 頁建好工作階段就能取消，可能早在服務層開始收檔之前（Server 頁的取消鈕要等上傳開始才出現）；
-                    // 那時服務層還沒開始上傳，不會替「新增時附檔」的會議刪資料列，這裡補刪，結果與 Server 頁一致。
+                    // 頁面建好工作階段就能取消，可能早在服務層開始收檔之前；
+                    // 那時服務層還沒開始上傳，不會替「新增時附檔」的會議刪資料列，這裡補刪，結果與上傳中取消一致。
                     if (request.DeleteMeetingOnCancel
                         && (await services.GetRequiredService<MeetingService>().DeleteAsync(job.MeetingId)).Success)
                     {
@@ -180,7 +180,7 @@ public sealed class MeetingMediaUploadJob(Guid uploadId, int ownerUserId, int me
 
     public int ChunkCount { get; } = chunkCount;
 
-    /// <summary><c>DELETE api/v1/uploads/{id}</c> 觸發；等同 Server 頁按「取消上傳」。</summary>
+    /// <summary><c>DELETE api/v1/uploads/{id}</c> 觸發（使用者按「取消上傳」）。</summary>
     public CancellationTokenSource Cancellation { get; } = new();
 
     public string State => state;

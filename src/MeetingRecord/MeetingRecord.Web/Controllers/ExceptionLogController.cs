@@ -19,7 +19,7 @@ using MeetingRecord.Web.Streaming;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 系統例外紀錄（WASM 遷移 M5，1.1.40）：<c>api/v1/exception-logs</c>，**只限管理者**（同畫面）。
+/// 系統例外紀錄（1.1.40）：<c>api/v1/exception-logs</c>，**只限管理者**（同畫面）。
 ///
 /// <para>
 /// 清單、堆疊、CSV、刪除與清除；稽核由伺服器寫（目標 <c>ExceptionLog</c>，內容同畫面，另加 <c>via=Api</c>），不記例外內容。

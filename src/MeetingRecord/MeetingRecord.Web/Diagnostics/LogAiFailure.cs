@@ -1,6 +1,6 @@
 namespace MeetingRecord.Web.Diagnostics;
 
-/// <summary>AI 日誌分析失敗時給使用者看的訊息（1.1.42 從 <c>LogViewerView.DescribeFailure</c> 搬來，API 用）。</summary>
+/// <summary>AI 日誌分析失敗時給使用者看的訊息（1.1.42，API 用）。</summary>
 public static class LogAiFailure
 {
     /// <summary>把常見失敗翻成使用者看得懂、知道下一步的話。</summary>

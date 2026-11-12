@@ -18,7 +18,7 @@ public static class AuditVia
 }
 
 /// <summary>
-/// 被系統強制登出的原因（1.0.33）：<c>AuthenticationStateHelper.Check</c> 導向 <c>/Auths/Logout?reason=…</c>，
+/// 被系統強制登出的原因（1.0.33）：WASM 端的 <c>WasmLayout</c> 依 Session API 的判斷導向 <c>/Auths/Logout?reason=…</c>，
 /// 登出頁只認這裡列的值，其他一律當成使用者自己登出。
 /// </summary>
 public static class LogoutReasons

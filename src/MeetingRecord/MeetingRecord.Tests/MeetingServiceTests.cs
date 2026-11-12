@@ -1913,7 +1913,7 @@ public sealed class MeetingServiceTests
         Take = 0,
     };
 
-    /// <summary>模擬上傳中途斷線：一讀就丟例外，就像 Blazor 讀檔串流逾時。</summary>
+    /// <summary>模擬上傳中途斷線：一讀就丟例外，就像上傳的檔案串流中途斷掉。</summary>
     private sealed class ThrowingStream : MemoryStream
     {
         public override int Read(byte[] buffer, int offset, int count) => throw new TimeoutException("Did not receive any data in the allotted time.");

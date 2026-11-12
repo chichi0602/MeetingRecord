@@ -37,8 +37,7 @@
 </head>
 
 <body>
-    @* 1.1.1（WASM 遷移 M1）起逐頁搬到瀏覽器端的 ClientRoutes；1.1.45 起只剩 ServerPageRoutes 列的登入、登出、錯誤頁
-       由伺服器靜態算繪，其餘全部是 WASM 頁。 *@
+    @* 只有 ServerPageRoutes 列的登入、登出、錯誤頁由伺服器靜態算繪（1.1.45），其餘全部是瀏覽器端 ClientRoutes 的 WASM 頁。 *@
     @if (IsWasmPage)
     {
         <MeetingRecord.Web.Client.ClientRoutes @rendermode="WasmRenderMode" />

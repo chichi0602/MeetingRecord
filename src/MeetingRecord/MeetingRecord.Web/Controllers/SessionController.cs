@@ -13,11 +13,10 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 目前登入者的狀態與選單（1.1.0，WASM 遷移 M1）。WASM 前端開頁時先問這裡，再決定導向（登出、改密碼）與畫選單。
+/// 目前登入者的狀態與選單（1.1.0）。WASM 前端開頁時先問這裡，再決定導向（登出、改密碼）與畫選單。
 ///
 /// <para>
-/// 判斷規則與 Blazor Server 頁的 <see cref="AuthenticationStateHelper.Check"/> 同一份（<see cref="UserSessionService"/>）；
-/// 選單過濾與網頁側邊欄同一份（<see cref="SidebarMenuService"/>）。只需登入、不看權限鍵——回的都是呼叫者自己的資料。
+/// 狀態判斷在 <see cref="UserSessionService"/>；選單過濾在 <see cref="SidebarMenuService"/>（頁面權限用 <see cref="AuthenticationStateHelper.CanAccessPage"/>）。只需登入、不看權限鍵——回的都是呼叫者自己的資料。
 /// </para>
 /// </summary>
 [Route("api/v1/session")]

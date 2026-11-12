@@ -42,9 +42,8 @@ public sealed class DatabaseUsageService : IDatabaseUsageService
         var report = new DatabaseUsageReport();
 
         // 走 EF 的 OpenConnectionAsync／CloseConnectionAsync 而非直接對 DbConnection 開關：
-        // EF 內部有開啟計數，若連線已被其他查詢開著，這裡的開關只會增減計數而不會關掉別人的。
-        // 特別重要的是本頁在 Blazor Server 上，scope 是整個 circuit 而非單一請求，
-        // 同一個 DbContext 可能活很久 —— 更該把連線狀態原樣還回去。
+        // EF 內部有開啟計數，若連線已被其他查詢開著，這裡的開關只會增減計數而不會關掉別人的，
+        // 連線狀態原樣還給同一個 scope 裡的其他使用者。
         await context.Database.OpenConnectionAsync(cancellationToken);
 
         try

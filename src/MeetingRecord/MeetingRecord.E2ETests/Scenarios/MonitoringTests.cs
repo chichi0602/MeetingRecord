@@ -45,7 +45,7 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
         var page = await LoginAsAsync(Seed.Owner);
 
         await page.GotoAsync(path);
-        // 等頁面畫好（使用者名稱出現在頁首）再判斷內容不存在，避免連線還沒建立就誤判成「看不到」。
+        // 等頁面畫好（使用者名稱出現在頁首）再判斷內容不存在，避免頁面還沒載入完成就誤判成「看不到」。
         await Expect(page.GetByText(Seed.Owner.Name).First).ToBeVisibleAsync();
         await page.WaitForTimeoutAsync(1500);
 
@@ -54,12 +54,12 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "AIM-01")]
-    [Trait("Title", "Token 用量（WASM 頁）：明細看得到單筆內容、匯出 CSV 由伺服器產生並留稽核")]
+    [Trait("Title", "Token 用量：明細看得到單筆內容、匯出 CSV 由伺服器產生並留稽核")]
     [Trait("Page", "Token 用量")]
     [Trait("Persona", "管理者")]
     public async Task TokenUsage_DetailAndCsvExport_ShouldWork()
     {
-        // 1.1.37 Token 用量頁搬到 WASM：明細、匯出改走 api/v1/ai-usage，CSV 由伺服器產生、稽核由伺服器寫。
+        // 1.1.37：明細、匯出走 api/v1/ai-usage，CSV 由伺服器產生、稽核由伺服器寫。
         var model = $"e2e-model-{Guid.NewGuid():N}"[..20];
         await using (var seed = App.CreateDbContext())
         {
@@ -101,12 +101,12 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "AIM-02")]
-    [Trait("Title", "AI 對話紀錄（WASM 頁）：從呼叫識別碼直接開明細、查看與刪除的稽核由伺服器寫")]
+    [Trait("Title", "AI 對話紀錄：從呼叫識別碼直接開明細、查看與刪除的稽核由伺服器寫")]
     [Trait("Page", "AI 對話紀錄")]
     [Trait("Persona", "管理者")]
     public async Task AiCallLog_DeepLinkAndDelete_ShouldWork()
     {
-        // 1.1.39 AI 對話紀錄頁搬到 WASM：明細、刪除改走 api/v1/ai-call-logs，查看也要由伺服器寫稽核（內容含逐字稿）。
+        // 1.1.39：明細、刪除走 api/v1/ai-call-logs，查看也要由伺服器寫稽核（內容含逐字稿）。
         var model = $"e2e-call-{Guid.NewGuid():N}"[..20];
         var callId = Guid.NewGuid();
         int id;
@@ -154,12 +154,12 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "EXC-01")]
-    [Trait("Title", "系統例外（WASM 頁）：明細按 AI 分析邊產生邊顯示，稽核由伺服器寫")]
+    [Trait("Title", "系統例外：明細按 AI 分析邊產生邊顯示，稽核由伺服器寫")]
     [Trait("Page", "系統例外紀錄")]
     [Trait("Persona", "管理者")]
     public async Task ExceptionLog_AiAnalysis_ShouldStreamAndAudit()
     {
-        // 1.1.41 系統例外頁搬到 WASM：AI 分析改走 api/v1/exception-logs 的串流，送出內容由伺服器組、稽核由伺服器寫。
+        // 1.1.41：AI 分析走 api/v1/exception-logs 的串流，送出內容由伺服器組、稽核由伺服器寫。
         var message = $"e2e-exception-{Guid.NewGuid():N}";
         int id;
         await using (var seed = App.CreateDbContext())
@@ -204,12 +204,12 @@ public sealed class MonitoringTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "LOG-01")]
-    [Trait("Title", "日誌檢視（WASM 頁）：匯出 .log 與 AI 分析由伺服器重查產生，稽核由伺服器寫")]
+    [Trait("Title", "日誌檢視：匯出 .log 與 AI 分析由伺服器重查產生，稽核由伺服器寫")]
     [Trait("Page", "日誌檢視")]
     [Trait("Persona", "管理者")]
     public async Task LogViewer_ExportAndAiAnalysis_ShouldWork()
     {
-        // 1.1.42 日誌檢視搬到 WASM：查詢、匯出、AI 分析改走 api/v1/monitoring/logs；伺服器依同一組條件重查，不收前端給的日誌。
+        // 1.1.42：查詢、匯出、AI 分析走 api/v1/monitoring/logs；伺服器依同一組條件重查，不收前端給的日誌。
         // 測試主機的 NLog 寫在這次執行自己的資料夾，啟動與請求都會留下日誌，預設的「最近 1 小時」一定查得到。
         var page = await LoginAsAsync(Seed.Admin);
         await page.GotoAsync("/logs");

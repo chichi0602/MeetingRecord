@@ -15,7 +15,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// 1.1.4（WASM 遷移）：須改密碼的帳號不能用 Cookie 或 JWT 直接打 API 繞過「先改密碼」。
+/// 1.1.4：須改密碼的帳號不能用 Cookie 或 JWT 直接打 API 繞過「先改密碼」。
 /// 例外：Session API（前端靠它知道該導去改密碼）。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

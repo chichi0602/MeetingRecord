@@ -13,7 +13,7 @@ namespace MeetingRecord.Web.Diagnostics;
 /// 這裡把 <see cref="ExternalFileSystem"/> 各目錄與日誌目錄逐一量出大小與檔案數，並依磁碟去重列出可用空間。</para>
 ///
 /// <para>⚠️ 量的是磁碟現況（同 <see cref="DirectorySizeCalculator"/>）：資料庫已刪、檔案還在的孤兒檔也會算進去。
-/// 影音目錄可能有數 GB、上萬個檔案，呼叫端要在背景執行緒跑，不要卡住 Blazor circuit。</para>
+/// 影音目錄可能有數 GB、上萬個檔案，呼叫端要在背景執行緒跑，不要卡住請求執行緒。</para>
 /// </summary>
 public sealed class StorageUsageService
 {

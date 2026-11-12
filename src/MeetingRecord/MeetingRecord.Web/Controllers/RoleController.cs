@@ -13,7 +13,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 角色管理 API（1.1.11，WASM 遷移），**只限管理者**（<see cref="AdminOnlyAttribute"/>）。規則都在 <see cref="RoleViewService"/>；
+/// 角色管理 API（1.1.11），**只限管理者**（<see cref="AdminOnlyAttribute"/>）。規則都在 <see cref="RoleViewService"/>；
 /// 這裡另外檢查權限樹：群組、頁面、動作都要在權限目錄（<see cref="RolePermissionService.GetRoleListPermissionAllName"/>）裡，
 /// 免得 API 送進任意名稱變成權限鍵（以前只有畫面在把關）。
 /// </summary>

@@ -14,7 +14,7 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Pages.Admins
 {
     /// <summary>
-    /// 使用者管理（1.1.10 從 Blazor Server 的 MyUserView 搬到 WASM），只限管理者。畫面行為不變，資料改走 <see cref="UserApi"/>：
+    /// 使用者管理，只限管理者。資料走 <see cref="UserApi"/>：
     /// 不能刪除或停用自己與 support、不能拿掉自己的管理者身分、帳號不可重複等規則都在伺服器（MyUserService），這裡只顯示結果。
     /// </summary>
     public partial class MyUserPage
@@ -64,7 +64,7 @@ namespace MeetingRecord.Web.Client.Pages.Admins
 
         protected override async Task OnInitializedAsync()
         {
-            // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過；這頁只看是不是管理者（同 Server 頁的 CheckIsAdmin）。
+            // 登入狀態（未登入、停用、須改密碼）WasmLayout 已先處理過；這頁只看是不是管理者（API 端是 [AdminOnly]）。
             await PermissionView.LoadAsync();
             if (!PermissionView.IsAdmin)
             {

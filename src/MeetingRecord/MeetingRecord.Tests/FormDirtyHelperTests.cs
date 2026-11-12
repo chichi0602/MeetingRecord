@@ -144,7 +144,7 @@ public sealed class FormDirtyHelperTests
     [Fact]
     public void IsDirty_PermissionDictionaryKeyAdded_ShouldBeTrue()
     {
-        // ⚠️ 這條同時釘住一個**已知且接受**的誤判：RoleViewView 的
+        // ⚠️ 這條同時釘住一個**已知且接受**的誤判：RoleViewPage 的
         // OnPermissionActionChanged 是 node.Actions[action] = value，所以使用者把一個
         // 原本不存在的 key 勾起來、再取消勾，字典會多出 "edit": false ——
         // 語意沒變但快照變了，會多問一次。

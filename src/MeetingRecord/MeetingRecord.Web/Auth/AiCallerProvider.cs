@@ -7,7 +7,7 @@ namespace MeetingRecord.Web.Auth;
 /// <summary>
 /// AI 呼叫的觸發者（1.1.28）。Scoped。
 /// <list type="number">
-/// <item>Blazor 頁、背景工作：<see cref="CurrentUserService"/>（背景工作自己把上傳者填進去）。</item>
+/// <item>背景工作：<see cref="CurrentUserService"/>（背景工作自開 scope 時把上傳者填進去）。</item>
 /// <item>API：CurrentUserService 是空的，改從 claims 取（<see cref="RequestActorResolver"/>）。
 /// 顯示名稱的優先序同 <see cref="AiUsageAttribution"/>：姓名 → 帳號。Cookie 的 <c>Name</c> 是姓名；
 /// JWT 的 <c>Name</c> 是帳號、沒有姓名，就記帳號。</item>

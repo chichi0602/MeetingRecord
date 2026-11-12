@@ -18,7 +18,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Business.Services.DataAccess;
 
 /// <summary>
-/// 會議紀錄的 Blazor 服務層。CRUD 骨架比照 <see cref="PromptTemplateService"/>；
+/// 會議紀錄的服務層（頁面經 API 與對外 API 共用）。CRUD 骨架比照 <see cref="PromptTemplateService"/>；
 /// 資料權限跟著專案的主責與協作團隊走（<see cref="ProjectAccessService"/>，0.4.102），取代原本的團隊標籤；
 /// 影音檔與逐字稿的實體檔案操作一律委派給 <see cref="MeetingFileStore"/>。
 /// </summary>
@@ -97,10 +97,10 @@ public class MeetingService
     /// 組出背景工作的請求，把「是誰按的」一起帶進佇列。
     ///
     /// <para>
-    /// ⚠️ 必須在這裡取使用者。這支跑在使用者的請求裡（Blazor circuit 或 API），拿得到觸發者；
-    /// 但背景服務為每筆工作自建的 scope 裡 CurrentUserService 是空白物件（Id=0），
+    /// ⚠️ 必須在這裡取使用者。這支跑在使用者的 API 請求裡（或已填入上傳者的上傳背景工作裡），拿得到觸發者；
+    /// 但轉錄／生成背景服務為每筆工作自建的 scope 裡 CurrentUserService 是空白物件（Id=0），
     /// 等到 runner 才去問，用量帳本的「誰」就永遠是空的。
-    /// 1.1.28：經 <see cref="IAiCallerProvider"/> 取，API 請求（WASM 頁）也認得。
+    /// 1.1.28：經 <see cref="IAiCallerProvider"/> 取，API 請求從 claims 認得觸發者。
     /// </para>
     /// </summary>
     private MeetingJobRequest BuildJobRequest(int meetingId)
@@ -206,7 +206,7 @@ public class MeetingService
     }
 
     /// <summary>
-    /// 對外 API 的會議搜尋（<c>POST api/Meeting/search</c>，1.1.20 從 <c>MeetingRepository.GetPagedAsync</c> 搬來，行為不變）：
+    /// 對外 API 的會議搜尋（<c>POST api/Meeting/search</c>，1.1.20）：
     /// 關鍵字比對標題、描述、影音檔名；可依轉錄狀態篩選；預設依更新時間新到舊。
     /// 畫面清單（分類篩選、畫面欄位排序）是 <see cref="GetAsync(DataRequest)"/>。
     /// </summary>
@@ -306,7 +306,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to create meeting. Title={Title}", paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "新增會議紀錄失敗。", ex);
@@ -394,7 +394,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update meeting. MeetingId={MeetingId}, Title={Title}", paraObject.Id, paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "修改會議紀錄失敗。", ex);
@@ -476,7 +476,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to delete meeting. MeetingId={MeetingId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除會議紀錄失敗。", ex);
@@ -694,9 +694,9 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
-            // ⚠️ 大檔上傳中 Blazor 連線被終止時，DbContext 已隨之釋放，Clear 會再丟 ObjectDisposedException，
-            //    蓋掉真正的錯誤、也跳過下面的紀錄與孤兒檔清理（0.4.116）。連線都沒了，也沒有追蹤要清。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
+            // ⚠️ 大檔上傳中途 scope 被結束時，DbContext 已隨之釋放，Clear 會再丟 ObjectDisposedException，
+            //    蓋掉真正的錯誤、也跳過下面的紀錄與孤兒檔清理（0.4.116）。scope 都沒了，也沒有追蹤要清。
             try
             {
                 context.ChangeTracker.Clear();
@@ -909,7 +909,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to requeue transcription. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "重新轉錄失敗。", ex);
@@ -1020,7 +1020,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to attach meeting to project. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "歸屬會議紀錄失敗。", ex);
@@ -1119,7 +1119,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to detach meeting from project. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "移除會議紀錄失敗。", ex);
@@ -1260,7 +1260,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to request meeting draft. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "排入會議紀錄生成失敗。", ex);
@@ -1372,7 +1372,7 @@ public class MeetingService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update meeting draft. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "修改會議紀錄失敗。", ex);
@@ -1400,7 +1400,7 @@ public class MeetingService
 
     /// <summary>
     /// 同步轉發的進度回報。不用 <see cref="Progress{T}"/>：它會把回呼丟回建立當下的同步內容，
-    /// 在 Blazor 裡等於排隊等 UI 執行緒，進度會落後甚至在上傳結束後才補送。
+    /// 有同步內容時等於排隊等那條執行緒，進度會落後甚至在上傳結束後才補送。
     /// </summary>
     private sealed class ForwardingProgress(Action<int> onReport) : IProgress<int>
     {

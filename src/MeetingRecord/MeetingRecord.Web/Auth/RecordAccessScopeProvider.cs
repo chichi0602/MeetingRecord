@@ -8,9 +8,9 @@ namespace MeetingRecord.Web.Auth;
 
 /// <summary>
 /// 解析目前使用者的紀錄存取範圍：
-/// - Blazor 互動情境：使用已填入的 <see cref="CurrentUserService"/>。
+/// - 背景工作：使用自開 scope 時填入上傳者的 <see cref="CurrentUserService"/>（API 請求時它是空的）。
 /// - Web API／檔案下載（JWT/Cookie）情境：由 HttpContext 的 Sid claim 載入使用者與其角色團隊。
-/// 兩者皆無法解析時，回傳「非管理員、無團隊」，僅能看到無團隊（公開）紀錄。
+/// 兩者皆無法解析時，回傳「非管理員、無團隊」，看不到任何專案的紀錄（沒有公開專案）。
 /// </summary>
 public sealed class RecordAccessScopeProvider : IRecordAccessScopeProvider
 {

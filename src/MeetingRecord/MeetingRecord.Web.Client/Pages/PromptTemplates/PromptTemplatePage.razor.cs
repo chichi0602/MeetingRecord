@@ -14,7 +14,7 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Pages.PromptTemplates;
 
 /// <summary>
-/// 會議紀錄提示詞清單（1.1.9 從 Blazor Server 的 PromptTemplateViewView 搬到 WASM）。畫面行為不變，資料改走 <see cref="PromptTemplateApi"/>：
+/// 會議紀錄提示詞清單。資料走 <see cref="PromptTemplateApi"/>：
 /// 名稱重複、內建範本、分類正規化等規則都在伺服器（PromptTemplateService），未知變數的提醒在前端（<see cref="PromptVariableHelper"/>，只提醒、不阻擋）。
 /// </summary>
 public partial class PromptTemplatePage

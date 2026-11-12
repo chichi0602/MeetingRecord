@@ -18,7 +18,7 @@ using MeetingRecord.Web.Testing;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M3（1.1.25）：專案頁裡的會議與待辦抽取 API。用假 AI、假 PDF 的測試主機（<see cref="AiChatTestApplicationFactory"/>）。
+/// 專案頁裡的會議與待辦抽取 API（1.1.25）。用假 AI、假 PDF 的測試主機（<see cref="AiChatTestApplicationFactory"/>）。
 /// 重點：只看「專案項目」權限（不借用會議紀錄頁）、會議要屬於這個專案、移出的權限與上傳者規則、稽核 <c>page=Project; via=Api</c>、
 /// 待辦抽取在已完成的專案被擋（1.1.25 服務層補上）。
 /// </summary>

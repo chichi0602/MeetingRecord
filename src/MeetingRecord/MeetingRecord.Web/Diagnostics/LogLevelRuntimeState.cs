@@ -15,7 +15,7 @@ namespace MeetingRecord.Web.Diagnostics;
 /// 只會讓「應用程式日誌」變多，不會引來框架日誌洪水；反過來說，調高等級也無法靜音
 /// 那些框架規則。這個不對稱是刻意保留的，畫面上有說明。
 ///
-/// 鎖的責任完全在這裡：LoggingRules 是普通的 IList，改動發生在 Blazor circuit
+/// 鎖的責任完全在這裡：LoggingRules 是普通的 IList，改動發生在 API 請求的
 /// 執行緒上，而其他執行緒同時正在寫日誌。
 ///
 /// 0.4.120 移植自 NET10-Blazor-Starter（「監控與診斷 → 日誌等級設定」）。

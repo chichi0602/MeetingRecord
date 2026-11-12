@@ -11,7 +11,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 分類 API。1.1.7（WASM 遷移）起呼叫畫面用的同一個 <see cref="CategoryService"/>，規則與畫面一致：
+/// 分類 API。1.1.7 起呼叫畫面用的同一個 <see cref="CategoryService"/>，規則與畫面一致：
 /// 名稱重複判斷去頭尾空白、不分大小寫；新增與修改一併同步負責團隊；另有啟用切換與可選團隊。
 /// </summary>
 [Route("api/[controller]")]

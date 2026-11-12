@@ -6,7 +6,7 @@ namespace MeetingRecord.Tests;
 
 /// <summary>
 /// WASM 頁的按鈕與進頁判斷（1.1.7，<see cref="PermissionView"/>）要與伺服器的規則一致：
-/// 進頁面同 <see cref="AuthenticationStateHelper.CanAccessPage"/>，動作同 <c>AuthenticationStateHelper.CheckAccessAction</c>。
+/// 進頁面同 <see cref="AuthenticationStateHelper.CanAccessPage"/>，動作同 <see cref="AuthenticationStateHelper.CanDoAction"/>。
 /// </summary>
 public sealed class PermissionViewTests
 {

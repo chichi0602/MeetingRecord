@@ -13,13 +13,13 @@ public readonly record struct TextEditorState(int Caret, double ScrollTop);
 /// 而那件事只有 DOM 做得到。
 ///
 /// <para>
-/// 找字與取代**不在這裡**，在 <c>MeetingRecord.Business.Helpers.TextSearchHelper</c>：
+/// 找字與取代**不在這裡**，在 <c>MeetingRecord.Share.Helpers.TextSearchHelper</c>：
 /// 那些是純字串運算，留在 C# 才測得到。這支只負責把算好的索引變成畫面上的反白。
 /// </para>
 ///
 /// <para>
 /// ⚠️ 失敗一律吞掉並記 log，不往上拋。反白不成功只是「使用者要自己找一下」，
-/// 但在 Blazor Server 上，元件事件裡的未處理例外會把整個 circuit 斷掉——
+/// 但元件事件裡的未處理例外會被版面的 <c>ErrorBoundary</c> 接住、整塊頁面內容換成錯誤畫面——
 /// 為了一個視覺輔助賠掉使用者正在編修的內容，這個交換太糟了。
 /// </para>
 ///

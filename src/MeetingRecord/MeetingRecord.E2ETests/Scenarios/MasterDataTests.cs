@@ -89,7 +89,7 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "管理者")]
     public async Task Team_EditMembersAndDelete()
     {
-        // 1.1.8（團隊清單搬到 WASM）：以前只有 MD-03 一個團隊情境，補上修改成員與刪除。
+        // 1.1.8：MD-03 只驗新增，這裡補上修改成員與刪除。
         var page = await LoginAsAsync(Seed.Admin);
         await GotoAsync(page, "/teams", "成員數");
         var name = Unique("E2E成員團隊");
@@ -143,7 +143,7 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "管理者")]
     public async Task Category_DuplicateName_ShouldKeepTheForm()
     {
-        // 1.1.19：AntDesign 按「確定」時會先關窗再呼叫存檔；WASM 頁以前雙向繫結，被擋下時視窗已經關了、輸入跟著不見。
+        // 1.1.19：AntDesign 按「確定」時會先關窗再呼叫存檔；視窗若用雙向繫結（@bind-Visible），被擋下時視窗已經關了、輸入跟著不見。
         var page = await LoginAsAsync(Seed.Admin);
         await GotoAsync(page, "/categories", "名稱");
         var name = Unique("E2E重複分類");
@@ -170,7 +170,7 @@ public sealed class MasterDataTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "管理者")]
     public async Task PromptTemplate_AddSinglePreset_EditCategoryAndUnknownVariable()
     {
-        // 1.1.9（提示詞清單搬到 WASM）：MD-04 只驗「建立全部內建範本」，補上單一範本、分類與變數提醒（PromptVariableHelper 在 WASM 執行）。
+        // 1.1.9：MD-04 只驗「建立全部內建範本」，補上單一範本、分類與變數提醒（PromptVariableHelper 在瀏覽器執行）。
         var preset = MeetingRecord.Business.Helpers.PromptTemplatePresets.All[^1].Name;
         var category = Unique("E2E提示詞分類");
         await using (var db = App.CreateDbContext())

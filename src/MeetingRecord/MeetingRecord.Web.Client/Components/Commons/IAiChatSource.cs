@@ -4,9 +4,9 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Web.Components.Commons;
 
 /// <summary>
-/// AI 問答視窗的資料來源（1.1.22，比照通知鈴的 <see cref="INotificationSource"/>）：視窗放在 WASM 專案、兩種頁面共用。
-/// Server 頁直接呼叫服務（<c>ServerAiChatSource</c>），WASM 頁打 <c>api/v1/ai-chat</c>（<c>AiChatApi</c>，提問與重新產生讀串流）。
-/// 失敗一律丟 <see cref="InvalidOperationException"/>，訊息是給使用者看的原文（視窗照舊顯示「…失敗：原因」）。
+/// AI 問答視窗的資料來源（1.1.22 起，比照通知鈴的 <see cref="INotificationSource"/>）。
+/// 實作是 <c>AiChatApi</c>：打 <c>api/v1/ai-chat</c>，提問與重新產生讀串流。
+/// 失敗一律丟 <see cref="InvalidOperationException"/>，訊息是給使用者看的原文（視窗顯示「…失敗：原因」）。
 /// </summary>
 public interface IAiChatSource
 {

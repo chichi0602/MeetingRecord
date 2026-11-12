@@ -1,7 +1,7 @@
 @page "/system-health"
 @using MeetingRecord.Dtos.Diagnostics
 
-@* 系統健康監控（1.1.35 搬到 WASM）：由 Blazor Server 的 SystemHealthView 改寫，畫面不變；資料改走監控 API。 *@
+@* 系統健康監控：資料走監控 API。 *@
 <PageTitle>系統健康監控</PageTitle>
 
 @* 權限判定完成前不渲染任何內容，否則非管理者會先看到頁面框架。 *@

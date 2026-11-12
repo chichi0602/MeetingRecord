@@ -12,7 +12,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M5：監控與診斷 API（<c>api/v1/monitoring</c>），只限管理者。
+/// 監控與診斷 API（<c>api/v1/monitoring</c>），只限管理者。
 /// 1.1.32：資料庫用量、檔案儲存用量。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
@@ -81,7 +81,7 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
         Assert.NotNull(report.Warnings);
     }
 
-    /// <summary>1.1.33：套用與還原日誌等級，稽核由伺服器寫（以前是畫面寫）。</summary>
+    /// <summary>1.1.33：套用與還原日誌等級，稽核由伺服器寫。</summary>
     [Fact]
     public async Task LogLevel_ApplyAndRestore_ShouldChangeTheRuntimeLevel_AndAudit()
     {

@@ -12,8 +12,8 @@ namespace MeetingRecord.Tests;
 /// </para>
 ///
 /// <para>
-/// 1.1.5（WASM 遷移）起外觀抽成共用的 <c>AppShell</c>，全站樣式與錯誤提示列掛在 AppShell；通知鈴與進度面板由版面經插槽傳進去。
-/// 1.1.46 起 Server 頁的 <c>MainLayout</c> 已移除，只剩 WASM 頁的 <c>WasmLayout</c>。
+/// 外觀是共用的 <c>AppShell</c>（1.1.5），全站樣式與錯誤提示列掛在 AppShell；
+/// 版面 <c>WasmLayout</c> 掛上 AppShell，通知鈴與進度面板由它經插槽傳進去。
 /// </para>
 /// </summary>
 public sealed partial class LayoutMountTests

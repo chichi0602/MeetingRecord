@@ -173,7 +173,7 @@ public sealed record ProjectTeamResolution(int PrimaryTeamId, IReadOnlyList<int>
 /// 都要經過這裡取得 <see cref="ProjectAccess"/>，不要在各服務自己查 <c>ProjectTeam</c>／<c>UserTeam</c>。
 ///
 /// <para>
-/// 刻意不快取：Blazor 的 scope 跟著整條連線活很久，團隊成員在這段期間可能被管理者改掉；
+/// 刻意不快取：團隊成員隨時可能被管理者改掉，每次都查才不會用到舊的成員資格；
 /// 一次只撈 Id，代價很小。
 /// </para>
 /// </summary>
@@ -192,9 +192,8 @@ public sealed class ProjectAccessService
         => await LoadAsync(context, await scopeProvider.GetAsync());
 
     /// <summary>
-    /// 用指定的 DbContext 載入存取範圍。給背景事件觸發的元件（右下角進度面板）用：
-    /// 它和頁面共用同一條 Blazor 連線，拿頁面的 DbContext 查會撞上「同一個 context 並行兩個操作」，
-    /// 所以要自己開一個短命的 scope 查。
+    /// 用指定的 DbContext 載入存取範圍。給要自己開短命 scope 查的呼叫端用（<c>BackgroundJobBoard</c>）：
+    /// 拿呼叫端 scope 的 DbContext 查，可能撞上「同一個 context 並行兩個操作」。
     /// </summary>
     public static async Task<ProjectAccess> LoadAsync(BackendDBContext context, RecordAccessScope scope)
     {

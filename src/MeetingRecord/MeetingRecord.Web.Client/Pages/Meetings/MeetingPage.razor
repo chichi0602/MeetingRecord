@@ -4,8 +4,7 @@
 @using MeetingRecord.Dtos.Models
 @using MeetingRecord.Share.Enums
 
-@* 會議紀錄（1.1.23 搬到 WASM，原 Server 的 MeetingViewView）：畫面、文字、按鈕、確認框全部照舊；
-   資料走 MeetingApi，上傳走整個前端共用的 MeetingUploadManager，進度來自 api/v1/jobs＋推播。 *@
+@* 會議紀錄：資料走 MeetingApi，上傳走整個前端共用的 MeetingUploadManager，進度來自 api/v1/jobs＋推播。 *@
 <PageTitle>會議紀錄</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)
@@ -153,7 +152,7 @@ else
                 <ActionColumn Fixed="ColumnFixPlacement.Right" Title="操作">
                     @* 上傳在背景跑（1.0.27），只鎖住正在上傳的那一筆，其他紀錄照常操作。
                        看背景工作而不是本頁狀態：別的分頁正在上傳的同一筆也會一起鎖住。
-                       「取消上傳」只出現在發起上傳的這個分頁（1.1.23 起上傳由整個前端共用，換過 WASM 頁回來照樣有）；
+                       「取消上傳」只出現在發起上傳的這個分頁（1.1.23 起上傳由整個前端共用，換過頁面再回來照樣有）；
                        其他分頁可從右下角面板取消（1.0.37）。 *@
                     @if (GetLiveProgress(IdOf(context)) is { IsUploading: true })
                     {

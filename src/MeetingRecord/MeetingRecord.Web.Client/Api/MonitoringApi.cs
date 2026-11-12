@@ -4,7 +4,7 @@ using MeetingRecord.Dtos.Diagnostics;
 
 namespace MeetingRecord.Web.Client.Api;
 
-/// <summary>監控與診斷（WASM 遷移 M5）：<c>api/v1/monitoring</c>，只限管理者。</summary>
+/// <summary>監控與診斷：<c>api/v1/monitoring</c>，只限管理者。</summary>
 public sealed class MonitoringApi(ApiClient api)
 {
     private const string Base = "api/v1/monitoring";

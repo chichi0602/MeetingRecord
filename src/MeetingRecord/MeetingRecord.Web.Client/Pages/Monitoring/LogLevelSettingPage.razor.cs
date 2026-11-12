@@ -9,7 +9,7 @@ using MeetingRecord.Web.Client.Auth;
 namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 日誌等級設定（0.4.120；1.1.33 從 Blazor Server 的 LogLevelSettingView 搬到 WASM，畫面不變）。**管理者限定**。
+/// 日誌等級設定（0.4.120）。**管理者限定**。
 ///
 /// <para>只改伺服器記憶體中 NLog 的 <c>&lt;logger name="*"&gt;</c> 規則，重新啟動就回到 nlog.config 的值。
 /// 套用與還原都走 <c>api/v1/monitoring/log-level</c>，稽核由伺服器寫。</para>

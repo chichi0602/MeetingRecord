@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 namespace MeetingRecord.Web.Client.Realtime;
 
 /// <summary>
-/// 連伺服器的推播通道 <c>/hubs/app</c>（1.1.2，WASM 遷移 M1）。同網域，瀏覽器自動帶登入 Cookie。
+/// 連伺服器的推播通道 <c>/hubs/app</c>（1.1.2 起）。同網域，瀏覽器自動帶登入 Cookie。
 ///
 /// <para>
 /// 推播不帶資料，只說「什麼變了」，訂閱者收到後自己打 API 重查；斷線會自動重連，重連後也要重查（斷線期間可能漏掉推播）。

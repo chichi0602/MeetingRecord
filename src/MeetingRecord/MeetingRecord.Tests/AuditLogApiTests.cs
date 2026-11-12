@@ -14,7 +14,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M5（1.1.43）：稽核紀錄 API（<c>api/v1/audit-logs</c>），只限管理者。
+/// 稽核紀錄 API（<c>api/v1/audit-logs</c>，1.1.43），只限管理者。
 /// 匯出與清除的稽核由伺服器寫（via=Api），清除類在刪除<b>之後</b>才寫，這筆會留在清空後的表裡。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

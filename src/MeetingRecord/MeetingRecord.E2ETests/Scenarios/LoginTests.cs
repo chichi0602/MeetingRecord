@@ -69,7 +69,7 @@ public sealed class LoginTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "須改密碼帳號")]
     public async Task MustChangePassword_AfterChanging_ShouldEnterTheApp()
     {
-        // 1.1.13（變更密碼頁搬到 WASM）：WASM 版面對「須改密碼」會導向這頁，這頁本身不能再導向自己。
+        // 1.1.13：版面（WasmLayout）對「須改密碼」會導向這頁，這頁本身不能再導向自己。
         // 另建一個帳號，不動種子帳號（LGN-04、WASM-04 要用它的「須改密碼」狀態）。
         var account = Unique("e2e.firstlogin");
         const string initial = "E2e-First-Pass-1";

@@ -13,8 +13,8 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.12）：儀表板 API（<c>api/v1/dashboard</c>）。登入即可看；看不到的專案名稱併成「其他專案」，
-/// 而且是用 API 呼叫者自己的資料範圍判斷（不是畫面上的 Blazor 使用者）。
+/// 儀表板 API（<c>api/v1/dashboard</c>，1.1.12）。登入即可看；看不到的專案名稱併成「其他專案」，
+/// 而且是用 API 呼叫者自己的資料範圍判斷。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
 public sealed class DashboardApiTests(ApiTestApplicationFactory factory) : IClassFixture<ApiTestApplicationFactory>

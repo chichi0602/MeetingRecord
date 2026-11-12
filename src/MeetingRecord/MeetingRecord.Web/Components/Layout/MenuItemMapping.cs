@@ -3,8 +3,7 @@ using MeetingRecord.Dtos.Sessions;
 namespace MeetingRecord.Web.Components.Layout;
 
 /// <summary>
-/// 伺服器端選單模型轉成共用的 <see cref="MenuItemDto"/>（1.1.5）。Session 選單 API 與 Server 頁的 MainLayout 共用，
-/// 兩種頁面畫的選單才會一模一樣（WASM-01 端對端情境比對兩邊的連結）。
+/// 伺服器端選單模型轉成共用的 <see cref="MenuItemDto"/>（1.1.5），給 Session 選單 API 回傳、WASM 前端畫側邊欄用。
 /// </summary>
 public static class MenuItemMapping
 {

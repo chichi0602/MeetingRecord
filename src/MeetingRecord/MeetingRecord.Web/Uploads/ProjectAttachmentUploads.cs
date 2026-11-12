@@ -6,11 +6,11 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.Uploads;
 
 /// <summary>
-/// WASM 頁的專案附件上傳（1.1.24，WASM 遷移 M3，singleton）。比照 Server 頁：選好檔案就開始傳、先落到暫存檔
+/// WASM 頁的專案附件上傳（1.1.24，singleton）：選好檔案就開始傳、先落到暫存檔
 /// （<see cref="PendingUploadTempFiles.DefaultDirectory"/>），按存檔時才把暫存檔交給 <c>ProjectService</c>。
 ///
 /// <para>
-/// 瀏覽器照舊以 <c>chunk-upload.js</c> 分塊送，這裡在背景把分塊接成的串流寫進暫存檔；前端以 <c>GET api/v1/uploads/{id}</c> 查到
+/// 瀏覽器以 <c>chunk-upload.js</c> 分塊送，這裡在背景把分塊接成的串流寫進暫存檔；前端以 <c>GET api/v1/uploads/{id}</c> 查到
 /// <see cref="UploadStates.Succeeded"/> 才算選好。存檔成功才刪暫存檔（<see cref="Release"/>），失敗時留著讓使用者直接重送；
 /// 沒用到的由網站啟動時的 <see cref="PendingUploadTempFiles.DeleteStale"/>（24 小時）與這裡的過期清理收掉。
 /// </para>
@@ -86,7 +86,7 @@ public sealed class ProjectAttachmentUploads(ChunkedUploadStore store, ILogger<P
         }
         catch (UploadInterruptedException ex)
         {
-            // 瀏覽器端放棄（登入失效、重試用完）或逾時：講明原因（同 Server 頁 1.0.67），使用者才知道要重新登入還是重選。
+            // 瀏覽器端放棄（登入失效、重試用完）或逾時：講明原因（1.0.67），使用者才知道要重新登入還是重選。
             TryDelete(upload.TempPath);
             upload.Finish(UploadStates.Failed, $"{upload.FileName} 上傳失敗：{ex.Message}");
         }

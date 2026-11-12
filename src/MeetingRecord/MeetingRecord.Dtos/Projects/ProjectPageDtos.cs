@@ -2,7 +2,7 @@ namespace MeetingRecord.Dtos.Projects;
 
 /// <summary>
 /// 專案項目頁的表單存檔（<c>POST api/v1/Project/form</c>、<c>PUT api/v1/Project/{id}/form</c>，1.1.24）。
-/// 與對外的 <c>POST</c>／<c>PUT</c> 不同：整筆覆寫（名單傳空就清空）、日期可留空、可帶附件，規則與 Server 頁同一份。
+/// 與對外的 <c>POST</c>／<c>PUT</c> 不同：整筆覆寫（名單傳空就清空）、日期可留空、可帶附件，規則在服務層。
 /// </summary>
 public class ProjectFormDto
 {
@@ -39,7 +39,7 @@ public class ProjectFormDto
 
 /// <summary>
 /// 表單存檔結果。新增時專案已建立、但附件存不進去，回 400 也會帶 <see cref="ProjectId"/>：
-/// 畫面要切成修改模式重送附件，不然再按一次會多建一筆（同 Server 頁）。
+/// 畫面要切成修改模式重送附件，不然再按一次會多建一筆。
 /// </summary>
 public class ProjectSaveResultDto
 {

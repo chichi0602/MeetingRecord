@@ -14,7 +14,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M3（1.1.15）：背景工作進度 API（<c>api/v1/jobs</c>）。規則同 Server 頁的進度面板：
+/// 背景工作進度 API（<c>api/v1/jobs</c>，1.1.15），右下角進度面板的資料來源：
 /// 只看得到自己資料範圍內的會議的工作，取消與關閉也只動得到看得到的（看不到回 404）；取消要會議紀錄的修改權限，
 /// 上傳中的取消要用「上傳」種類。
 /// </summary>

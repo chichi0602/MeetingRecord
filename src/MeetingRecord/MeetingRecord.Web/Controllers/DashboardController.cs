@@ -8,7 +8,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 儀表板（1.1.12，WASM 遷移）：登入即可看（0.4.97 起不檢查頁面權限），只放全公司的彙總數字、不含明細。
+/// 儀表板（1.1.12）：登入即可看（0.4.97 起不檢查頁面權限），只放全公司的彙總數字、不含明細。
 /// 呼叫者看不到的專案，名稱由 <see cref="DashboardService"/> 改成「其他專案」（API 呼叫時同樣以呼叫者的資料範圍判斷）。
 /// </summary>
 [Route("api/v1/dashboard")]

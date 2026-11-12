@@ -16,8 +16,8 @@ using MeetingRecord.Web.Uploads;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M3（1.1.16）：上傳工作階段 API（<c>api/v1/uploads</c>）。建立前先跑服務層的上傳檢查；
-/// 讀檔存檔在伺服器背景跑，而且是以上傳者的身分（資料範圍與稽核操作者都對）；取消等同 Server 頁的「取消上傳」。
+/// 上傳工作階段 API（<c>api/v1/uploads</c>，1.1.16）。建立前先跑服務層的上傳檢查；
+/// 讀檔存檔在伺服器背景跑，而且是以上傳者的身分（資料範圍與稽核操作者都對）；取消就是右下角面板的「取消上傳」。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
 public sealed class UploadSessionApiTests(ApiTestApplicationFactory factory) : IClassFixture<ApiTestApplicationFactory>
@@ -153,7 +153,7 @@ public sealed class UploadSessionApiTests(ApiTestApplicationFactory factory) : I
     }
 
     /// <summary>
-    /// 瀏覽器送不下去（1.1.23）：回報後立刻結束成「失敗」、帶出原因，會議保留（就算是新增時附的檔也不刪，比照 Server 頁）；
+    /// 瀏覽器送不下去（1.1.23）：回報後立刻結束成「失敗」、帶出原因，會議保留（就算是新增時附的檔也不刪）；
     /// 別人回報不到。
     /// </summary>
     [Fact]

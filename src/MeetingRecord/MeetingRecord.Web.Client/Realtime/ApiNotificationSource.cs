@@ -5,7 +5,7 @@ using MeetingRecord.Web.Components.Commons;
 namespace MeetingRecord.Web.Client.Realtime;
 
 /// <summary>
-/// WASM 頁的通知鈴資料來源（1.1.6）：打 <c>/api/v1/notifications</c>；伺服器推播「通知有變動」或推播通道重連後通知鈴重查
+/// 通知鈴的資料來源（1.1.6）：打 <c>/api/v1/notifications</c>；伺服器推播「通知有變動」或推播通道重連後通知鈴重查
 /// （斷線期間的推播可能漏掉）。userId 參數用不到——API 一律以登入身分為準，只看得到自己的。
 /// </summary>
 public sealed class ApiNotificationSource(NotificationApi api, AppHubConnection hub) : INotificationSource

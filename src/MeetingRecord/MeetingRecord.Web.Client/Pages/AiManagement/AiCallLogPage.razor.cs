@@ -13,8 +13,7 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.AiManagement;
 
 /// <summary>
-/// AI 對話紀錄（1.0.30，移植自 NET10-Blazor-Starter 的 /ai-call-logs，畫面依本專案規範；1.1.39 從 Blazor Server 的 AiCallLogView
-/// 搬到 WASM，畫面不變）。**只限管理者**。
+/// AI 對話紀錄（1.0.30，移植自 NET10-Blazor-Starter 的 /ai-call-logs，畫面依本專案規範）。**只限管理者**。
 ///
 /// <para>資料由 <c>AiCallGateway</c> 在每次付費 AI 呼叫時寫入（1.0.29 起）。本頁負責查詢、明細（完整送出內容與回應）、
 /// 匯出 CSV（不含內容）、下載 JSON、匯出 PDF 與刪除／清除，全部走 <c>api/v1/ai-call-logs</c>（1.1.38）。
@@ -190,7 +189,7 @@ public partial class AiCallLogPage : ComponentBase
             rows = page.Items.ToList();
             _total = page.TotalCount;
 
-            // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照 TodoViewView）。
+            // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照待辦頁）。
             if (rows.Count == 0 && _total > 0 && _pageIndex > 1)
             {
                 _pageIndex = Math.Max(1, (_total + _pageSize - 1) / _pageSize);

@@ -4,7 +4,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Web.Helps;
 
 /// <summary>
-/// 使用說明的內容（1.1.29 從 Server 的 <c>HelpView</c> 抽出）。1.1.30 起頁面是 WASM，只有 <c>api/v1/help</c> 用它。Singleton，讀一次就快取。
+/// 使用說明的內容（1.1.29），給 <c>api/v1/help</c> 用。Singleton，讀一次就快取。
 ///
 /// <para>
 /// 內容來源是 <c>docs/guides/系統使用說明.md</c>，建置時以內嵌資源放進 Web 組件（見 <c>MeetingRecord.Web.csproj</c>）。

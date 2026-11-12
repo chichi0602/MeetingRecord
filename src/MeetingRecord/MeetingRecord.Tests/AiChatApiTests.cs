@@ -49,7 +49,7 @@ public class AiChatTestApplicationFactory : ApiTestApplicationFactory
 }
 
 /// <summary>
-/// WASM 遷移 M3（1.1.21）：AI 問答 API。提問與重新產生是串流（一行一筆 JSON）；第一段文字前就失敗回一般的 404／400。
+/// AI 問答 API（1.1.21）。提問與重新產生是串流（一行一筆 JSON）；第一段文字前就失敗回一般的 404／400。
 /// 動作權限依範圍：專案看專案項目，會議看會議紀錄或專案項目；資料範圍由服務層檢查。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
@@ -176,7 +176,7 @@ public sealed class AiChatApiTests(AiChatTestApplicationFactory factory) : IClas
     [Fact]
     public async Task CreateConversation_Automatic_ShouldNotBeAudited()
     {
-        // 1.1.22：開視窗時自動建的第一段對話不算使用者的動作（同 Server 頁），使用者按「開新對話」才寫稽核。
+        // 1.1.22：開視窗時自動建的第一段對話不算使用者的動作，使用者按「開新對話」才寫稽核。
         var world = await SeedAsync([MagicObjectHelper.角色_會議紀錄]);
         using var client = await LoginAsync(world.Account);
         var baseUrl = $"/api/v1/ai-chat/meeting/{world.MeetingId}";
@@ -202,7 +202,7 @@ public sealed class AiChatApiTests(AiChatTestApplicationFactory factory) : IClas
     [Fact]
     public async Task Ask_ShouldAttributeUsageToTheCaller()
     {
-        // 1.1.28：經 API 提問時，用量帳本要記到呼叫者（每人額度靠它）。以前服務層只看 CurrentUserService，API 呼叫時是空的。
+        // 1.1.28：經 API 提問時，用量帳本要記到呼叫者（每人額度靠它）。CurrentUserService 只有背景工作會填，API 請求時是空的，不能只看它。
         var world = await SeedAsync([MagicObjectHelper.角色_會議紀錄]);
         using var client = await LoginAsync(world.Account);
         var baseUrl = $"/api/v1/ai-chat/meeting/{world.MeetingId}";

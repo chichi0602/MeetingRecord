@@ -1,4 +1,4 @@
-/* 系統健康監控（0.4.123 改版）。工具列、面板、提示框照 DatabaseUsageView 的寫法；
+/* 系統健康監控（0.4.123 改版）。工具列、面板、提示框照 DatabaseUsagePage 的寫法；
    燈號只用 --oat-ok／--oat-warn／--oat-err 與對應的 -bg 權杖，不寫死色碼。 */
 .health-toolbar {
     display: flex;

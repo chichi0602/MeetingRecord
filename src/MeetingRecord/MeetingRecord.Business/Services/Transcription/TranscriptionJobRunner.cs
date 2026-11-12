@@ -15,7 +15,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 /// <summary>
 /// 單一會議的轉錄工作流程：轉檔切段 → 逐段送 STT → 串接逐字稿 → 落檔 → 更新狀態。
 ///
-/// 由背景服務在自己的 DI scope 內解析執行，不經過任何 Blazor circuit，
+/// 由背景服務在自己的 DI scope 內解析執行，不在任何使用者的請求裡，
 /// 所以這裡刻意不做團隊權限檢查（入列的動作已在服務層檢查過）。
 /// </summary>
 public class TranscriptionJobRunner

@@ -8,8 +8,8 @@ using MeetingRecord.Web.Client.Api;
 namespace MeetingRecord.Web.Client.Uploads;
 
 /// <summary>
-/// WASM 專案頁的附件上傳（1.1.26）。比照 Server 頁：選好檔案就開始傳、等傳完才列進「待上傳」，按存檔時把上傳編號交給
-/// <c>POST／PUT api/v1/Project/…/form</c>。位元組照舊由 <c>chunk-upload.js</c> 分塊送，伺服器先寫到暫存檔（1.1.24）。
+/// 專案頁的附件上傳（1.1.26）：選好檔案就開始傳、等傳完才列進「待上傳」，按存檔時把上傳編號交給
+/// <c>POST／PUT api/v1/Project/…/form</c>。位元組由 <c>chunk-upload.js</c> 分塊送，伺服器先寫到暫存檔（1.1.24）。
 ///
 /// <para>
 /// 與會議影音檔不同，這裡**等上傳結束才回來**（表單上顯示讀取中），不是背景上傳：附件是表單內容的一部分，
@@ -22,7 +22,7 @@ public sealed class ProjectAttachmentUploader(UploadApi api, IJSRuntime js, ILog
 
     /// <summary>
     /// 上傳 <paramref name="input"/> 裡第 <paramref name="fileIndex"/> 個檔案。成功回上傳編號；失敗回原因
-    /// （文字照 Server 頁：「{檔名} 上傳失敗：…」「{檔名} 讀取失敗，請重新選擇。」）。
+    /// （例如「{檔名} 上傳失敗：…」「{檔名} 讀取失敗，請重新選擇。」）。
     /// </summary>
     public async Task<(Guid? UploadId, string? Error)> UploadAsync(ElementReference input, int fileIndex, IBrowserFile file)
     {
@@ -72,7 +72,7 @@ public sealed class ProjectAttachmentUploader(UploadApi api, IJSRuntime js, ILog
     public Task CancelAsync(Guid uploadId) => api.CancelAsync(uploadId);
 }
 
-/// <summary><c>chunk-upload.js</c> 送不下去時呼叫（方法名稱同 Server 頁的 <c>BrowserUploadCallback</c>）。</summary>
+/// <summary><c>chunk-upload.js</c> 送不下去時呼叫（方法名稱 <c>OnFailed</c> 要與 JS 端的 <c>invokeMethodAsync</c> 一致）。</summary>
 public sealed class AttachmentChunkCallback
 {
     private readonly UploadApi api;

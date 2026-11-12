@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-// 1.1.32（WASM 遷移 M5）：從 Web/Diagnostics 搬來，資料庫用量 API 與 WASM 頁共用同一份型別。
+// 1.1.32：資料庫用量 API 與 WASM 頁共用同一份型別。
 namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>

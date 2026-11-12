@@ -18,7 +18,7 @@ using MeetingRecord.Web.Uploads;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M3（1.1.24）：專案 API 改走 <c>ProjectService</c>。既有端點的相容行為由 <c>ApiIntegrationTests</c> 的專案案例把關；
+/// 專案 API 走 <c>ProjectService</c>（1.1.24）。既有端點的相容行為由 <c>ApiIntegrationTests</c> 的專案案例把關；
 /// 這裡驗新的畫面端點：表單整筆存檔（含附件上傳、移除）、附件下載、權限旗標、上次選的專案、選擇器，以及「同名改成允許」。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
@@ -82,7 +82,7 @@ public sealed class ProjectApiTests(ApiTestApplicationFactory factory) : IClassF
         }
     }
 
-    /// <summary>表單是整筆覆寫（名單傳空就清空，同 Server 頁）；對外的 PUT 照舊「空的就保留」。</summary>
+    /// <summary>表單是整筆覆寫（名單傳空就清空）；對外的 PUT 照舊「空的就保留」。</summary>
     [Fact]
     public async Task Form_Update_ShouldOverwriteLists_WhileExternalPutKeepsThem()
     {

@@ -6,8 +6,8 @@ namespace MeetingRecord.Web.Services;
 /// 把文字複製到瀏覽器的剪貼簿。
 ///
 /// <para>
-/// ⚠️ <b>會失敗，而且不算罕見。</b>Blazor Server 的點擊要先送到伺服器、處理完再回頭呼叫 JS，
-/// 此時瀏覽器認定的「使用者手勢」可能已經過期——Chromium 對作用中分頁通常放行，
+/// ⚠️ <b>會失敗，而且不算罕見。</b>點擊處理在呼叫 JS 之前只要先 await 過（例如先打 API 取內容），
+/// 瀏覽器認定的「使用者手勢」就可能已經過期——Chromium 對作用中分頁通常放行，
 /// Firefox 多半會擋；非安全來源（區網 HTTP）連 <c>navigator.clipboard</c> 都沒有。
 /// </para>
 ///

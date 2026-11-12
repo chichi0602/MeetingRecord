@@ -15,7 +15,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.11）：角色管理 API（<c>api/v1/Role</c>，只限管理者）。
+/// 角色管理 API（<c>api/v1/Role</c>，只限管理者，1.1.11）。
 /// 釘住：只有管理者能用、權限樹轉成正確的權限鍵（整頁與只勾部分動作）、目錄外的名稱擋下（以前只有畫面在把關）、
 /// 刪除有人用的角色時那些人改用其他角色、建立預設角色可重複呼叫、稽核的操作者是 API 呼叫者。
 /// </summary>

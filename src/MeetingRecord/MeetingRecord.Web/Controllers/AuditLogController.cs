@@ -13,7 +13,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 稽核紀錄（WASM 遷移 M5，1.1.43）：<c>api/v1/audit-logs</c>，**只限管理者**（同畫面）。
+/// 稽核紀錄（1.1.43）：<c>api/v1/audit-logs</c>，**只限管理者**（同畫面）。
 ///
 /// <para>
 /// 查詢、動作選項、CSV、清除 N 天前、全部清除；刻意<b>沒有</b>單筆刪除（同畫面）。匯出與清除本身也寫稽核，

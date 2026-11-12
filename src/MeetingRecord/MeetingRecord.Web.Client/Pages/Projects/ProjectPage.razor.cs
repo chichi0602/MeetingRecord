@@ -22,7 +22,7 @@ namespace MeetingRecord.Web.Client.Pages.Projects;
 public sealed record ProjectSelectorItem(int Id, string SelectorLabel);
 
 /// <summary>
-/// 專案項目（1.1.26 搬到 WASM，原 Server 的 <c>ProjectViewView</c>）：畫面、文字、確認框、通知全部照舊。
+/// 專案項目。
 /// <list type="bullet">
 /// <item>資料走 <see cref="ProjectApi"/>（規則都在伺服器的 ProjectService、MeetingService）；按鈕依 <see cref="PermissionView"/>，
 /// 能不能刪專案、換負責人、改團隊由 API 依呼叫者算好（<see cref="ProjectDto.IsProjectOwner"/> 等旗標），會議的上傳者看 <see cref="MeetingDto.IsUploader"/>。</item>
@@ -461,7 +461,7 @@ public partial class ProjectPage : IDisposable
 
         if (await RefreshJobsAsync())
         {
-            // 存檔中先記下，存完再載（同 Server 頁）。
+            // 存檔中先記下，存完再載。
             if (isSaving)
             {
                 pendingContextReload = true;

@@ -86,12 +86,12 @@ namespace MeetingRecord.Web
 
                 #region 系統使用服務
                 // Add services to the container.
-                // 1.1.46（WASM 遷移 M6）：應用程式的頁面全部是 WASM，Blazor Server 互動模式（AddInteractiveServerComponents、
-                // circuit、10 MB 的 Hub 訊息上限）一併移除；伺服器只靜態算繪登入、登出與錯誤頁。
+                // 1.1.46：應用程式的頁面全部是 WASM，不啟用伺服器互動模式；
+                // 伺服器只靜態算繪登入、登出與錯誤等少數頁（ServerPageRoutes）。
                 builder.Services.AddRazorComponents()
                 .AddInteractiveWebAssemblyComponents();
 
-                // 1.1.2（WASM 遷移 M1）：WASM 前端的推播通道 AppHub（通知鈴、背景工作進度）。
+                // 1.1.2：WASM 前端的推播通道 AppHub（通知鈴、背景工作進度）。
                 builder.Services.AddSignalR();
                 builder.Services.AddControllers(options =>
                 {
@@ -200,7 +200,7 @@ namespace MeetingRecord.Web
                                 context, StatusCodes.Status403Forbidden, ApiResult.ForbiddenResult("目前使用者沒有權限存取此 API。")),
                         };
                     })
-                    // 1.1.0（WASM 遷移 M1）：API 帶 Bearer 走 JWT（外部用戶端），否則走登入 Cookie（WASM 前端）。
+                    // 1.1.0：API 帶 Bearer 走 JWT（外部用戶端），否則走登入 Cookie（WASM 前端）。
                     .AddPolicyScheme(MagicObjectHelper.ApiScheme, "Bearer 或 Cookie", options =>
                     {
                         options.ForwardDefaultSelector = context =>

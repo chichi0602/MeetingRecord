@@ -9,7 +9,7 @@ using MeetingRecord.Web.Client.Auth;
 namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 系統健康監控（0.4.123 改版；1.1.35 從 Blazor Server 的 SystemHealthView 搬到 WASM，畫面不變）。**管理者限定**、唯讀、不自動刷新。
+/// 系統健康監控（0.4.123 改版）。**管理者限定**、唯讀、不自動刷新。
 ///
 /// <para>上半部是全部檢查（<c>GET api/v1/monitoring/health</c>，在伺服器跑）；下半部「最近 24 小時警告以上日誌」
 /// 預設收合、第一次展開才讀（<c>logs/recent-warnings</c>），不拖慢開頁。</para>

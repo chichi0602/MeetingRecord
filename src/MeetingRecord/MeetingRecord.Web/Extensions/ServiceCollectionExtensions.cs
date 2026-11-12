@@ -65,7 +65,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddSingleton<SystemStartupState>();
-        // 1.1.6：「關於」的內容，Server 頁 MainLayout 與 GET /api/v1/system/about 共用。
+        // 1.1.6：「關於」的內容，給 GET /api/v1/system/about 用。
         services.AddScoped<SystemAboutProvider>();
         services.AddScoped<ISystemHealthService, SystemHealthService>();
 
@@ -126,11 +126,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<AuditLogQueryService>();
 
-        // 來源 IP（1.0.32）：一個 HTTP 請求一份（1.1.46 起不再有 Blazor 連線記下的 IP）。
+        // 來源 IP（1.0.32）：一個 HTTP 請求一份。
         services.AddScoped<ClientIpProvider>();
         services.AddScoped<IClientIpProvider>(sp => sp.GetRequiredService<ClientIpProvider>());
 
-        // 稽核的目前操作者（1.0.34）：Blazor 用 CurrentUserService，API 從 claims 取。
+        // 稽核的目前操作者（1.0.34）：背景工作用自己填入的 CurrentUserService，API 請求從 claims 取。
         services.AddScoped<IAuditActorProvider, AuditActorProvider>();
 
         // AI 呼叫的觸發者（1.1.28）：同上，API 請求從 claims 取——用量帳本與每人額度靠它。
@@ -160,9 +160,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TodoChangeRecorder>();
         services.AddSingleton<MeetingRecord.Business.Services.Notifications.IUserNotificationNotifier, MeetingRecord.Business.Services.Notifications.UserNotificationNotifier>();
         services.AddScoped<MeetingRecord.Business.Services.Notifications.UserNotificationService>();
-        // 1.1.2（WASM 遷移 M1）：把「誰有新通知」轉送到 AppHub，WASM 前端靠它即時更新未讀數。
+        // 1.1.2：把「誰有新通知」轉送到 AppHub，WASM 前端靠它即時更新未讀數。
         services.AddHostedService<MeetingRecord.Web.Hubs.HubNotificationBridge>();
-        // 1.1.15（WASM 遷移 M3）：背景工作進度。規則只有一份（BackgroundJobBoard），JobController 用；
+        // 1.1.15：背景工作進度。規則只有一份（BackgroundJobBoard），JobController 用；
         // 進度變動節流後推給 AppHub，WASM 頁的面板據此重查。
         services.AddScoped<MeetingRecord.Web.Jobs.BackgroundJobBoard>();
         services.AddHostedService<MeetingRecord.Web.Hubs.JobProgressHubBridge>();
@@ -187,7 +187,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAiCallLogRecorder>(sp => sp.GetRequiredService<AiCallLogService>());
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.IAiQuotaService, MeetingRecord.Business.Services.AiUsage.AiQuotaService>();
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiCallGateway>();
-        // 分塊上傳（1.0.59）：工作階段登記處是全站共用的；網頁元件用的入口一條連線一個。
+        // 分塊上傳（1.0.59）：工作階段登記處是全站共用的。
         services.AddSingleton<MeetingRecord.Web.Uploads.ChunkedUploadStore>();
         // 使用說明的內容（1.1.29）：內嵌資源讀一次就快取，給 api/v1/help 用（1.1.30 起頁面是 WASM）。
         services.AddSingleton<MeetingRecord.Web.Helps.HelpManualProvider>();
@@ -205,13 +205,13 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddTranscriptionServices(this IServiceCollection services)
     {
-        // 取消登記處必須是 Singleton：發出取消的是 Blazor circuit（Scoped），
+        // 取消登記處必須是 Singleton：發出取消的是 API 請求（Scoped），
         // 執行工作的是背景服務（Singleton），兩者要透過同一個實例才碰得到面。
         services.AddSingleton<IJobCancellationRegistry, JobCancellationRegistry>();
 
         services.AddSingleton<ITranscriptionQueue, TranscriptionQueue>();
 
-        // 進度只存在記憶體：跨 circuit 共用、隨行程重啟消失（重啟時殘留的「處理中」本來就會被標記為失敗）。
+        // 進度只存在記憶體：跨請求共用、隨行程重啟消失（重啟時殘留的「處理中」本來就會被標記為失敗）。
         services.AddSingleton<ITranscriptionProgressNotifier, TranscriptionProgressNotifier>();
 
         services.AddHostedService<TranscriptionBackgroundService>();
@@ -275,7 +275,7 @@ public static class ServiceCollectionExtensions
     /// 匯率換算（0.4.88）：把用量金額從定價幣別換算成顯示幣別。
     ///
     /// <para>
-    /// ⚠️ <c>ExchangeRateCache</c> 必須是 Singleton：背景服務寫、Blazor circuit 與背景工作的
+    /// ⚠️ <c>ExchangeRateCache</c> 必須是 Singleton：背景服務寫、API 請求與背景工作的
     /// scope 讀，理由與 <c>AiChatStore</c>、<c>IJobCancellationRegistry</c> 相同。
     /// 而且它刻意只有同步的欄位讀取——記帳路徑跑在使用者等待中的 AI 呼叫裡，
     /// <b>不得</b>在那裡 await 任何 HTTP。

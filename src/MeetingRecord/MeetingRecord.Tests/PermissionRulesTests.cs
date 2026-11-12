@@ -13,8 +13,7 @@ using MeetingRecord.Models.Systems;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// 權限與登入狀態的判斷規則。1.1.46 起取代 <c>AuthenticationStateHelperTests</c>：Blazor Server 頁拆除後，
-/// 以前經 <c>Check</c> 驗的規則改成直接驗純函式（預設角色的權限矩陣）與 <see cref="UserSessionService"/>（帳號狀態，Session API 用）。
+/// 權限與登入狀態的判斷規則（1.1.46）：直接驗純函式（預設角色的權限矩陣）與 <see cref="UserSessionService"/>（帳號狀態，Session API 用）。
 /// </summary>
 public sealed class PermissionRulesTests
 {

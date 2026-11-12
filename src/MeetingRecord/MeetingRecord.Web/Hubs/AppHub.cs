@@ -6,8 +6,8 @@ using MeetingRecord.Web.Auth;
 namespace MeetingRecord.Web.Hubs;
 
 /// <summary>
-/// WASM 前端的即時推播通道（1.1.2，WASM 遷移 M1）：<c>/hubs/app</c>。Blazor Server 頁靠自己的連線收伺服器事件，
-/// WASM 前端沒有那條連線，改由這裡推。
+/// WASM 前端的即時推播通道（1.1.2）：<c>/hubs/app</c>。頁面在瀏覽器執行，收不到伺服器程序內的事件，
+/// 由這裡推給它。
 ///
 /// <para>
 /// 連線時加入自己的群組 <see cref="UserGroup"/>，伺服器只對群組送。推播**不帶資料**、只說「什麼變了」，

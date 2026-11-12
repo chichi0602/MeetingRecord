@@ -12,7 +12,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.13）：變更密碼頁與設定 API 密碼頁的 API。規則照原頁（<c>ChangeOwnPasswordAsync</c>、<c>SetOwnApiPasswordAsync</c>）：
+/// 變更密碼頁與設定 API 密碼頁的 API（1.1.13）。規則在服務層（<c>ChangeOwnPasswordAsync</c>、<c>SetOwnApiPasswordAsync</c>）：
 /// 要確認新密碼、稽核 <c>via=FirstLogin</c>；須改密碼的帳號也能改，改完標記清掉；沒有本地密碼的帳號設定 API 密碼免驗目前密碼。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
@@ -30,7 +30,7 @@ public sealed class AccountPasswordPagesApiTests(ApiTestApplicationFactory facto
         await AssertRejectedAsync(await Post(client, "change-own-password", "wrong-pass", "new-pass-1", "new-pass-1"), "目前密碼不正確。");
         await AssertRejectedAsync(await Post(client, "change-own-password", Password, "new-pass-1", "different"), "新密碼與確認密碼不一致。");
 
-        // 須改密碼的帳號也能改（就是要它改），沒有字數下限（照原頁）。
+        // 須改密碼的帳號也能改（就是要它改），沒有字數下限（ChangeOwnPasswordAsync 的規則）。
         using (var ok = await Post(client, "change-own-password", Password, "abc", "abc"))
         {
             Assert.Equal(HttpStatusCode.OK, ok.StatusCode);

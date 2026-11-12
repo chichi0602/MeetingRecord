@@ -16,7 +16,7 @@ namespace MeetingRecord.Business.Services.TextGeneration;
 /// <summary>
 /// 單一會議的草稿生成工作流程：讀逐字稿 → 切段 → （多段時）逐段摘要 → 套提示詞 → 落庫。
 ///
-/// 由背景服務在自己的 DI scope 內解析執行，不經過任何 Blazor circuit，
+/// 由背景服務在自己的 DI scope 內解析執行，不在任何使用者的請求裡，
 /// 所以這裡刻意不做團隊權限檢查（入列的動作已在服務層檢查過）。
 /// </summary>
 public class MeetingDraftJobRunner

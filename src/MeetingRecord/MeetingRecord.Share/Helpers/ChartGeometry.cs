@@ -3,7 +3,7 @@ using System.Globalization;
 namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
-/// 圖表的純幾何計算（1.1.12 從 Business 的 <c>DashboardMetrics</c> 搬來）：圓餅圖元件已搬到 WASM 專案，
+/// 圖表的純幾何計算（1.1.12）：圓餅圖元件在 WASM 專案，
 /// 伺服器端（<c>DashboardMetrics.BuildArcPath</c> 轉呼叫這裡）與瀏覽器共用同一份。
 /// </summary>
 public static class ChartGeometry

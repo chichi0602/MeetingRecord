@@ -1,4 +1,4 @@
-/* 高度與底線都必須與 MainLayout 的 .top-row 完全一致（min-height: 4.5rem + 1px 底線），
+/* 高度與底線都必須與 AppShell 的 .top-row 完全一致（min-height: 4.5rem + 1px 底線），
    否則側邊欄與內容區的頁首邊界會錯開一截、看起來像兩條沒對齊的線。
    垂直 padding 拿掉改靠 align-items: center，高度就只由 min-height 決定。 */
 .top-row {

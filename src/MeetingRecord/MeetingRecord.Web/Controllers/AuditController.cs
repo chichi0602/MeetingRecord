@@ -10,8 +10,8 @@ using MeetingRecord.Web.Auth;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// WASM 頁寫的稽核（1.1.6，WASM 遷移）。Server 頁擋下使用者時呼叫 <c>AuthenticationStateHelper.RecordPageAccessDeniedAsync</c>；
-/// WASM 頁在瀏覽器裡判斷，改打這支 API，寫出來的紀錄格式相同（目標 <c>Page#路由</c>），只有 <c>via=Wasm</c> 不同。
+/// WASM 頁寫的稽核（1.1.6）。WASM 頁在瀏覽器裡判斷權限，擋下使用者時（<c>PageAccessApi.RecordPageDeniedAsync</c>）打這支 API，
+/// 由伺服器寫一筆頁面拒絕存取的紀錄（目標 <c>Page#路由</c>，detail 帶 <c>via=Wasm</c>）。
 /// </summary>
 [Route("api/v1/audit")]
 [ApiController]

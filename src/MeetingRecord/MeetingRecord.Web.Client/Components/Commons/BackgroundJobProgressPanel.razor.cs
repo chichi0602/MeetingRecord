@@ -8,7 +8,7 @@ namespace MeetingRecord.Web.Components.Commons;
 /// 右下角常駐的背景工作進度面板（形式比照雲端硬碟的上傳進度）。
 ///
 /// <para>
-/// 掛在版面（Server 頁的 <c>MainLayout</c>、1.1.15 起 WASM 頁的 <c>WasmLayout</c>），所以切到任何頁面都看得到。
+/// 掛在版面（<c>WasmLayout</c> 放進 <c>AppShell</c> 的常駐浮層），所以切到任何頁面都看得到。
 /// 同時顯示語音轉錄與會議紀錄生成兩種工作——兩者都固定在右下角，各做一個面板會直接重疊，因此合併成同一個。
 /// 資料來自 <see cref="IJobProgressSource"/>：可見性過濾、取消與關閉的規則都在伺服器（<c>BackgroundJobBoard</c>）。
 /// </para>
@@ -78,7 +78,7 @@ public partial class BackgroundJobProgressPanel : ComponentBase, IDisposable
     private async Task Dismiss(BackgroundJobDto job)
     {
         await Source.DismissAsync(job);
-        await RefreshAsync(); // WASM 頁不必等推播繞一圈才消失。
+        await RefreshAsync(); // 不必等推播繞一圈才消失。
     }
 
     private async Task DismissAll()

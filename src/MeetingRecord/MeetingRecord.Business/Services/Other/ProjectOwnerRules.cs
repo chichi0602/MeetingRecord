@@ -10,7 +10,7 @@ public sealed record ProjectOwnerCandidate(int Id, string Name, string Account)
 }
 
 /// <summary>
-/// 專案負責人的規則（1.0.52），畫面（<c>ProjectService</c>）與 API（<c>ProjectRepository</c>）共用。
+/// 專案負責人的規則（1.0.52），由 <c>ProjectService</c> 套用，頁面與對外 API 走同一份。
 /// <list type="bullet">
 /// <item>候選人：主責＋協作團隊裡啟用中的帳號——負責人一定看得到這個專案。</item>
 /// <item>誰能換負責人：主責團隊成員、目前的負責人、管理者（不然協作團隊的人可以把自己設成負責人，拿到刪除權）。</item>

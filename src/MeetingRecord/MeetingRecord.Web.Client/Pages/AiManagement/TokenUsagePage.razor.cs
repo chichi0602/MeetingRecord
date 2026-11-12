@@ -14,7 +14,7 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.AiManagement;
 
 /// <summary>
-/// Token 用量（1.0.30 由「AI 用量分析」改名；1.1.37 從 Blazor Server 的 TokenUsageView 搬到 WASM，畫面不變）。**只限管理者**——
+/// Token 用量（1.0.30 由「AI 用量分析」改名）。**只限管理者**——
 /// 這一頁看得到全公司的用量與人名，而且不套團隊過濾。
 ///
 /// <para>

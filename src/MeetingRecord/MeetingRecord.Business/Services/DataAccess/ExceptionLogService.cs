@@ -23,7 +23,7 @@ namespace MeetingRecord.Business.Services.DataAccess;
 ///
 /// 0.4.122 移植自 NET10-Blazor-Starter。Starter 用 <c>IDbContextFactory</c>；本專案沒有註冊，
 /// 改注入 scoped <see cref="BackendDBContext"/>——背景寫入器每筆例外自建一個 scope，
-/// 畫面端由 View 的早退避免同一個 circuit 的 DbContext 被並行使用。
+/// 查詢與刪除經 API 呼叫，一個請求一個 DbContext。
 /// </summary>
 public class ExceptionLogService
 {

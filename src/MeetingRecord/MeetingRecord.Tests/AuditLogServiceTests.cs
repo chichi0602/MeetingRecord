@@ -49,7 +49,7 @@ public sealed class AuditLogServiceTests
 
     /// <summary>
     /// 1.0.32：寫入改用自己新建的 context。呼叫端 context 裡還沒存的變更不能被順便存進去
-    /// （以前共用 Blazor 連線的 context 時就會）。
+    /// （共用呼叫端的 context 就會）。
     /// </summary>
     [Fact]
     public async Task WriteAsync_ShouldNotFlushCallerPendingChanges()

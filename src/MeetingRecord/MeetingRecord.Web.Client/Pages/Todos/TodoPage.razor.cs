@@ -18,8 +18,7 @@ using Microsoft.JSInterop;
 namespace MeetingRecord.Web.Client.Pages.Todos;
 
 /// <summary>
-/// 待辦事項（1.1.19 搬到 WASM，原 Server 的 <c>TodoViewView</c>）：畫面、文字、確認框、通知、自動列數、負責人面板全部照舊；
-/// 資料改走 <see cref="TodoApi"/>（規則都在伺服器的 TodoService），按鈕顯示依 <see cref="PermissionView"/>，
+/// 待辦事項：資料走 <see cref="TodoApi"/>（規則都在伺服器的 TodoService），按鈕顯示依 <see cref="PermissionView"/>，
 /// 能不能刪由 API 依呼叫者算好（<see cref="TodoDto.CanDelete"/>）。
 /// </summary>
 public partial class TodoPage : IAsyncDisposable

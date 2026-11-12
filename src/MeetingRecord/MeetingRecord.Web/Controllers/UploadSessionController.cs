@@ -11,7 +11,7 @@ using MeetingRecord.Web.Uploads;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 上傳工作階段（1.1.16，WASM 遷移 M3）：WASM 頁上傳會議影音檔用。建立 → 瀏覽器照舊以
+/// 上傳工作階段（1.1.16）：WASM 頁上傳會議影音檔用。建立 → 瀏覽器以
 /// <c>PUT api/v1/uploads/{id}/chunks/{i}</c>（<see cref="UploadChunkController"/>，只認網頁 Cookie）送分塊 → 查狀態。
 /// 讀檔、存檔、排入轉錄在伺服器背景跑（<see cref="MeetingMediaUploadJobs"/>），規則全在 <c>MeetingService</c>。
 ///
@@ -114,7 +114,7 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
             : NotFound(ApiResult<UploadStatusDto>.NotFoundResult("找不到這趟上傳。"));
     }
 
-    /// <summary>取消上傳（等同 Server 頁的「取消上傳」）：新增時附的檔，會議一起刪。已經寫完的來不及取消，照樣排入轉錄。</summary>
+    /// <summary>取消上傳（使用者按「取消上傳」）：新增時附的檔，會議一起刪。已經寫完的來不及取消，照樣排入轉錄。</summary>
     [HttpDelete("{uploadId:guid}")]
     public ActionResult<ApiResult> Cancel(Guid uploadId)
     {
@@ -140,7 +140,7 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
     }
 
     /// <summary>
-    /// 瀏覽器送不下去（1.1.23）：等同 Server 頁 <c>BrowserUploadCallback.OnFailed</c>——讓服務層走「上傳失敗」流程
+    /// 瀏覽器送不下去（1.1.23）：讓服務層走「上傳失敗」流程
     /// （會議保留、原因帶到畫面），不必等 2 分鐘逾時。已經收齊或已結束的不受影響。
     /// </summary>
     [HttpPost("{uploadId:guid}/fail")]

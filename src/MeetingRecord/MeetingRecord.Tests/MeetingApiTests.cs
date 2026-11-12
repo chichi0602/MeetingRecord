@@ -20,7 +20,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M3（1.1.20）：會議 API 改走 <c>MeetingService</c> 之後的畫面用端點與行為。
+/// 會議 API 走 <c>MeetingService</c> 的畫面用端點與行為（1.1.20）。
 /// 規則本身（只限上傳者、封存唯讀、背景工作進行中）在服務層測；這裡驗 API 怎麼回、稽核怎麼寫。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

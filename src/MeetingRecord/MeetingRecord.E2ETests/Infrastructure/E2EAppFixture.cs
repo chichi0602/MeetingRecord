@@ -82,7 +82,7 @@ public sealed class E2EAppFixture : IAsyncLifetime
 
         Seed = await E2ESeeder.SeedAsync(CreateDbContext);
 
-        // Blazor Server 關掉預先算繪，畫面要等連線建立；斷言的預設等待從 5 秒放寬到 20 秒，與操作一致。
+        // 頁面要等瀏覽器下載並啟動 WASM 才出現內容；斷言的預設等待從 5 秒放寬到 20 秒，與操作一致。
         SetDefaultExpectTimeout(20_000);
         playwright = await Playwright.CreateAsync();
         Browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions

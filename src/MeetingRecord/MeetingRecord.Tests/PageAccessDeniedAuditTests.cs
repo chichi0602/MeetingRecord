@@ -11,8 +11,7 @@ public sealed partial class PageAccessDeniedAuditTests
     [Fact]
     public void EveryDenialBranch_ShouldRecordPageAccessDenied()
     {
-        // 1.1.46（WASM 遷移 M6）起頁面全部在 WASM 專案（Web.Client），擋下時呼叫 PageAccessApi.RecordPageDeniedAsync。
-        // 以前 Server 頁（Components/Views）呼叫 AuthenticationStateHelper.RecordPageAccessDeniedAsync，已隨 Server 頁移除。
+        // 頁面全部在 WASM 專案（Web.Client），擋下時呼叫 PageAccessApi.RecordPageDeniedAsync。
         var root = FindSourceRoot();
         var files = ComponentSourceRoots.EnumerateFiles("*.razor.cs")
             .Where(path => path.StartsWith(ComponentSourceRoots.WebClient, StringComparison.Ordinal))
@@ -28,7 +27,7 @@ public sealed partial class PageAccessDeniedAuditTests
             .Select(path => Path.GetRelativePath(root, path))
             .ToList();
 
-        // 17 是 1.1.46 時全部會擋人的頁面數（M2～M5 搬過去的那些）；少於這個數代表掃描範圍錯了，不是少了頁面。
+        // 17 是 1.1.46 時全部會擋人的頁面數；少於這個數代表掃描範圍錯了，不是少了頁面。
         Assert.True(denialFiles.Count >= 17, $"只找到 {denialFiles.Count} 個拒絕分支，掃描範圍可能錯了。");
         Assert.True(missing.Count == 0, "這些頁面擋下使用者時沒有寫稽核：\n" + string.Join('\n', missing));
     }

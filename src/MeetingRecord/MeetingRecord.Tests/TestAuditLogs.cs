@@ -46,7 +46,7 @@ internal sealed class TestAuditActor : IAuditActorProvider
     /// <summary>固定的操作者。</summary>
     public static TestAuditActor Fixed(int userId, string account) => new(() => (userId, account));
 
-    /// <summary>跟著 <see cref="CurrentUserService"/> 走（比照正式環境的 Blazor 路徑）。</summary>
+    /// <summary>跟著 <see cref="CurrentUserService"/> 走（比照正式環境的背景工作：自開 scope 時把上傳者填進去）。</summary>
     public static TestAuditActor From(CurrentUserService currentUserService)
         => new(() => currentUserService.CurrentUser.Id > 0
             ? (currentUserService.CurrentUser.Id, currentUserService.CurrentUser.Account)

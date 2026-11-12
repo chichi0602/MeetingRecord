@@ -128,7 +128,7 @@ public static class DashboardMetrics
         double radius,
         double startDegrees,
         double sweepDegrees)
-        => ChartGeometry.BuildArcPath(centerX, centerY, radius, startDegrees, sweepDegrees); // 1.1.12：搬到 Share，WASM 的圓餅圖也要用
+        => ChartGeometry.BuildArcPath(centerX, centerY, radius, startDegrees, sweepDegrees); // 1.1.12：實作在 Share，WASM 的圓餅圖也要用
 
     /// <summary>耗時的顯示文字。沒有資料時回「—」，不要回「0 秒」——那會被誤讀成「非常快」。</summary>
     public static string DescribeDuration(TimeSpan? duration)

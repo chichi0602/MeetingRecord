@@ -68,7 +68,7 @@ public sealed partial class ApiIntegrationTests
         ["Meeting.Create"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Create),
         ["Meeting.Update"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
         ["Meeting.Delete"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
-        // 1.1.20：會議改走 MeetingService 後畫面用的端點（歸屬專案、產生會議紀錄、下載與 PDF 另在 MeetingApiTests 驗）。
+        // 1.1.20：會議走 MeetingService 的畫面用端點（歸屬專案、產生會議紀錄、下載與 PDF 另在 MeetingApiTests 驗）。
         ["Meeting.List"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
         ["Meeting.LinkedTodos"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit),
         ["Meeting.Transcript"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
@@ -77,7 +77,7 @@ public sealed partial class ApiIntegrationTests
         ["Meeting.SelectableProjects"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
         ["Meeting.SelectablePromptTemplates"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
         ["Meeting.EnabledCategories"] = (MagicObjectHelper.角色_會議紀錄, PermissionActions.View),
-        // 1.1.18：待辦改走 TodoService，並多了畫面用的端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
+        // 1.1.18：待辦走 TodoService 的畫面用端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
         ["Todo.GetById"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.Search"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.Create"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.Create),
@@ -89,7 +89,7 @@ public sealed partial class ApiIntegrationTests
         ["Todo.ByOwner"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.Changes"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
         ["Todo.SelectableProjects"] = (MagicObjectHelper.角色_待辦事項, PermissionActions.View),
-        // 1.1.24：專案改走 ProjectService，並多了畫面用的端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
+        // 1.1.24：專案走 ProjectService 的畫面用端點。刪除只要 edit（負責人可能沒有 delete，1.0.52）。
         ["Project.GetById"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         ["Project.Search"] = (MagicObjectHelper.角色_專案項目, PermissionActions.View),
         ["Project.Create"] = (MagicObjectHelper.角色_專案項目, PermissionActions.Create),

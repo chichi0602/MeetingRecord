@@ -6,7 +6,7 @@ namespace MeetingRecord.Business.Services.Other;
 public sealed record RecordAccessScope(bool IsAdmin, IReadOnlyList<string> Teams, int UserId = 0);
 
 /// <summary>
-/// 解析目前使用者的紀錄存取範圍。需同時支援 Blazor（CurrentUserService）
+/// 解析目前使用者的紀錄存取範圍。需同時支援背景工作（自己填入上傳者的 CurrentUserService）
 /// 與 Web API／檔案下載（HttpContext claims）兩種情境。
 /// </summary>
 public interface IRecordAccessScopeProvider

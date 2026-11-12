@@ -8,7 +8,6 @@ namespace MeetingRecord.Tests;
 /// <para>
 /// AntDesign 1.6 的 Modal 按「確定」時，會先送出 <c>VisibleChanged(false)</c> 再呼叫 <c>OnOk</c>。雙向繫結下，
 /// 伺服器擋下（400／409，例如名稱重複、改期限沒附原因）時視窗已經關了，處理器裡再設回 true 也打不開，使用者填的內容跟著不見。
-/// Blazor Server 頁時序剛好讓它重新打開，所以以前沒出事；WASM 頁每次都會。
 /// 單向 <c>Visible="@..."</c> 之下，開關一律由頁面自己決定（存檔成功、取消才關）。
 /// </para>
 /// </summary>

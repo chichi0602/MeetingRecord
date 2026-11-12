@@ -49,7 +49,7 @@ public sealed class TextSearchHelperTests
     public void FindAll_ShouldReturnEmpty_WhenEitherSideIsBlank(string? text, string? term)
     {
         // 搜尋框被清空是常態操作。不擋的話 IndexOf 會一直回傳同一個位置 → 無限迴圈，
-        // 整個 Blazor circuit 卡死（畫面停在那裡，連錯誤都看不到）。
+        // 整個頁面卡死（瀏覽器端只有一條執行緒，畫面停在那裡，連錯誤都看不到）。
         Assert.Empty(TextSearchHelper.FindAll(text, term));
     }
 
@@ -179,7 +179,7 @@ public sealed class TextSearchHelperTests
     public void ReplaceAt_ShouldReturnSourceUnchanged_WhenIndexOutOfRange(int index)
     {
         // matches 會因為使用者繼續打字而過期。過期時原樣回傳比丟例外好——
-        // 在 Blazor Server 上，元件事件裡的未處理例外會把整個 circuit 斷掉。
+        // 元件事件裡的未處理例外會讓整頁變成錯誤畫面。
         const string text = "會議紀錄、會議時間、會議室";
         var matches = TextSearchHelper.FindAll(text, "會議");
 

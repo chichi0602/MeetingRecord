@@ -11,7 +11,7 @@ public class MagicObjectHelper
     }
     public const string CookieScheme = "CookieAuthenticationScheme";
     /// <summary>
-    /// Web API 用的驗證方式（1.1.0，WASM 遷移 M1）：帶 <c>Authorization: Bearer</c> 走 JWT（外部用戶端），
+    /// Web API 用的驗證方式（1.1.0）：帶 <c>Authorization: Bearer</c> 走 JWT（外部用戶端），
     /// 否則走登入 Cookie（WASM 前端）。Cookie 路徑會改資料的請求另要防偽標頭 <see cref="ClientRequestHeader"/>。
     /// </summary>
     public const string ApiScheme = "MeetingRecordApi";
@@ -67,7 +67,7 @@ public class MagicObjectHelper
     /// 「系統管理 → AI 管理」群組與底下的頁面（1.0.30）。⚠️ 與 Menu.json 的 name 一字不差、尾端不加空白
     /// （上面幾個常數尾端有空白是既有資料的既成事實，新常數不要跟著加）。
     /// 兩頁都**只限管理者**、不在權限目錄裡（對話紀錄含會議逐字稿全文；用量含全公司的人名與金額），
-    /// 頁面以 <c>CheckIsAdmin()</c> 守門，側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者。
+    /// 頁面以 <c>PermissionView.IsAdmin</c> 守門、API 以 <c>[AdminOnly]</c> 擋下，側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者。
     /// </summary>
     public const string 角色_AI管理 = "AI 管理";
     public const string 角色_AI對話紀錄 = "AI 對話紀錄";
@@ -87,7 +87,7 @@ public class MagicObjectHelper
 
     /// <summary>
     /// 「帳號與權限」底下的稽核紀錄頁（1.0.32）。**只限管理者**、刻意不放進權限目錄：
-    /// 稽核紀錄是追究責任的證據，不能讓被稽核的人自己看或清。頁面以 <c>CheckIsAdmin()</c> 守門，
+    /// 稽核紀錄是追究責任的證據，不能讓被稽核的人自己看或清。頁面以 <c>PermissionView.IsAdmin</c> 守門、API 以 <c>[AdminOnly]</c> 擋下，
     /// 側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者。與 Menu.json 的 name 一字不差。
     /// </summary>
     public const string 角色_稽核紀錄 = "稽核紀錄";
@@ -96,7 +96,7 @@ public class MagicObjectHelper
     /// <summary>
     /// 「監控與診斷」底下的管理者限定頁面（0.4.120 起；0.4.93～0.4.119 名為「系統健康度」且可開給角色）。
     /// ⚠️ 這些名稱**刻意不放進** <c>RolePermissionService.GetRoleListPermissionAllName()</c>：
-    /// 日誌、例外堆疊可能含敏感資訊，只有管理者看得到。頁面一律以 <c>CheckIsAdmin()</c> 守門，
+    /// 日誌、例外堆疊可能含敏感資訊，只有管理者看得到。頁面一律以 <c>PermissionView.IsAdmin</c> 守門、API 以 <c>[AdminOnly]</c> 擋下，
     /// 側邊欄以 <c>SidebarMenuService.AdminOnlyMenuIds</c> 排除非管理者——不靠權限鍵，
     /// 舊資料庫殘留的權限列也開不了門。與 Menu.json 的 name 一字不差、尾端不加空白。
     /// </summary>

@@ -14,7 +14,7 @@ using MeetingRecord.Share.Enums;
 namespace MeetingRecord.Business.Services.DataAccess;
 
 /// <summary>
-/// 待辦事項的 Blazor 服務層。CRUD 骨架比照 <see cref="PromptTemplateService"/>。
+/// 待辦事項的服務層（頁面經 API 與對外 API 共用）。CRUD 骨架比照 <see cref="PromptTemplateService"/>。
 ///
 /// 0.4.99 起**跟著專案走**：只看得到、改得到自己是成員的專案底下的待辦（管理者不受限），
 /// 判斷一律經 <see cref="ProjectAccessService"/>。0.4.66～0.4.98 期間所有待辦對所有人可見。
@@ -194,7 +194,7 @@ public class TodoService
     }
 
     /// <summary>
-    /// 對外 API 的待辦搜尋（<c>POST api/Todo/search</c>，1.1.18 從 <c>TodoRepository.GetPagedAsync</c> 搬來，行為不變）：
+    /// 對外 API 的待辦搜尋（<c>POST api/Todo/search</c>，1.1.18）：
     /// **平面**清單，主待辦與子項目一樣逐筆分頁；關鍵字比對標題、描述、負責人；可依專案、狀態、優先度篩選；
     /// 預設依更新時間新到舊。畫面的清單（只分頁主層、子項目跟著主待辦）是 <see cref="GetAsync(DataRequest)"/>。
     /// </summary>
@@ -292,7 +292,7 @@ public class TodoService
             return VerifyRecordResultFactory.Build(false, "找不到指定的專案項目。");
         }
 
-        // 來源會議要看得到、而且屬於同一個專案（0.4.114，1.1.18 從 TodoRepository 搬來，所有入口都適用）：
+        // 來源會議要看得到、而且屬於同一個專案（0.4.114，所有入口都適用）：
         // 否則可以把看不到的會議掛上來，之後讀回的會議標題就洩漏了那場會議。畫面上來源會議只會由 AI 抽待辦帶入（同專案）。
         if (paraObject.MeetingId is { } sourceMeetingId)
         {
@@ -362,7 +362,7 @@ public class TodoService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to create todo. Title={TodoTitle}", paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "新增待辦事項失敗。", ex);
@@ -459,7 +459,7 @@ public class TodoService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update todo. TodoId={TodoId}, Title={TodoTitle}", paraObject.Id, paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "修改待辦事項失敗。", ex);
@@ -532,7 +532,7 @@ public class TodoService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to update todo from extraction. TodoId={TodoId}", todoId);
             return VerifyRecordResultFactory.Build(false, "更新既有待辦失敗。", ex);
@@ -725,7 +725,7 @@ public class TodoService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to set todo completion. TodoId={TodoId}", id);
             return VerifyRecordResultFactory.Build(false, "更新完成狀態失敗。", ex);
@@ -789,7 +789,7 @@ public class TodoService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條連線共用的：失敗留下的追蹤實體會在下一次任何人存檔時被寫進去（0.4.115）。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次存檔時被寫進去（0.4.115）。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to delete todo. TodoId={TodoId}", id);
             return VerifyRecordResultFactory.Build(false, "刪除待辦事項失敗。", ex);

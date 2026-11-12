@@ -5,7 +5,7 @@ using MeetingRecord.E2ETests.Infrastructure;
 namespace MeetingRecord.E2ETests.Scenarios;
 
 /// <summary>
-/// L5 非功能（WASM 遷移 M6，1.1.50；門檻見 09 號文件 §8 L5）。每則把量到的數字以
+/// L5 非功能（1.1.50；門檻見 09 號文件 §8 L5）。每則把量到的數字以
 /// <c>L5METRIC|項目|門檻|實測|判定</c> 一行寫進測試輸出，<c>New-TestReport.ps1</c> 據此產生報告第五節。
 ///
 /// <para>

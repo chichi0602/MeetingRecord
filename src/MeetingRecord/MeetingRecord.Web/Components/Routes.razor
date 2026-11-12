@@ -1,6 +1,5 @@
 @* 伺服器端的路由（1.1.46 起只剩靜態算繪的頁）：登入、登出、等待核准（/Auths/*，要寫 Cookie）與 /Error。
-   應用程式的頁面全部是 WASM（ClientRoutes）；App.razor 依 ServerPageRoutes 決定用哪一個。
-   以前這裡是 Blazor Server 頁的路由，有 MainLayout、兩層 LoggingErrorBoundary 與往 WASM 頁的整頁載入，WASM 遷移完成後一併移除。 *@
+   應用程式的頁面全部是 WASM（ClientRoutes）；App.razor 依 ServerPageRoutes 決定用哪一個。 *@
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.NoFooterLayout)" />

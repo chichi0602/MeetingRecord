@@ -1,7 +1,7 @@
 @page "/categories"
 @using MeetingRecord.Dtos.Models
 
-@* 分類清單（1.1.7 搬到 WASM）：由 Blazor Server 的 CategoryViewView 改寫，畫面、文字、按鈕都不變；資料改走分類 API。 *@
+@* 分類清單：資料走分類 API。 *@
 <PageTitle>分類清單</PageTitle>
 
 @if (string.IsNullOrEmpty(RoleMessage) == false)
@@ -15,7 +15,7 @@ else
     <div>
         <div class="category-view-toolbar">
             <div class="category-view-toolbar-left">
-                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109；WASM 頁用 PermissionView，規則同伺服器）。 *@
+                @* 新增、修改、刪除依角色的動作權限顯示（0.4.109；用 PermissionView，規則同伺服器的 [HasPermission]）。 *@
                 @if (PermissionView.Can(MagicObjectHelper.角色_分類清單, PermissionActions.Create))
                 {
                     <HoverTip Title="新增">

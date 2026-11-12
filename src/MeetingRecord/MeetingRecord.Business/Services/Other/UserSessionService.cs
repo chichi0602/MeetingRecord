@@ -29,11 +29,10 @@ public sealed record UserSessionEvaluation(UserSessionStatus Status, MyUserAdapt
 }
 
 /// <summary>
-/// 判斷登入者目前的狀態（1.1.0，WASM 遷移 M1）：刪除、停用、沒有角色、需要改密碼。
+/// 判斷登入者目前的狀態（1.1.0）：刪除、停用、沒有角色、需要改密碼。
 ///
 /// <para>
-/// 從 <see cref="AuthenticationStateHelper.Check"/> 拆出來：那邊判斷完直接用 NavigationManager 導向，只能給 Blazor Server 頁用；
-/// WASM 前端改由 Session API 取得同一份判斷、自己導向。兩邊共用這一份規則，不會各說各話。
+/// 只判斷、不導向：WASM 前端由 Session API 取得這份判斷、自己導向（登出、改密碼）。規則只有這一份，不會各說各話。
 /// </para>
 /// </summary>
 public sealed class UserSessionService

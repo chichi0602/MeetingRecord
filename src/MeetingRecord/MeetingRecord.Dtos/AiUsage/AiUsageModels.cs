@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using MeetingRecord.Dtos.Dashboards;
 using MeetingRecord.Share.Enums;
 
-// 1.1.36（WASM 遷移 M5）：從 Business/Services/AiUsage 搬來，Token 用量 API 與 WASM 頁共用。
+// 1.1.36：Token 用量 API 與 WASM 頁共用的型別。
 namespace MeetingRecord.Dtos.AiUsage;
 
 /// <summary>

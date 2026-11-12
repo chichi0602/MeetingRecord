@@ -18,7 +18,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 專案項目頁裡的會議（1.1.25，WASM 遷移 M3）：歷史會議、產生與修改會議紀錄、逐字稿、PDF、移出專案、待辦 PDF。
+/// 專案項目頁裡的會議（1.1.25）：歷史會議、產生與修改會議紀錄、逐字稿、PDF、移出專案、待辦 PDF。
 ///
 /// <para>
 /// 權限一律看「專案項目」（同 Server 專案頁），不借用會議紀錄頁的權限——有專案權限、沒有會議紀錄頁權限的人也要能用。

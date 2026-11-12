@@ -1,4 +1,4 @@
-/* 資料庫用量（0.4.120）。工具列、卡片格、面板照 AiUsageView 的既有寫法複製
+/* 資料庫用量（0.4.120）。工具列、卡片格、面板照 Token 用量頁（TokenUsagePage）的既有寫法複製
    （scoped CSS 沒有共用元件）；顏色一律用 --oat-* 權杖。 */
 .db-usage-toolbar {
     display: flex;

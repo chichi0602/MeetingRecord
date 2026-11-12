@@ -161,7 +161,7 @@ public class ProjectService
     }
 
     /// <summary>
-    /// 對外 API 的搜尋（1.1.24 從 <c>ProjectRepository</c> 搬來，行為不變）：關鍵字比對名稱、負責人與狀態完全相同、
+    /// 對外 API 的搜尋（1.1.24）：關鍵字比對名稱、負責人與狀態完全相同、
     /// 開始日期與完成度區間；沒指定排序時依更新時間由新到舊。只回看得到的專案。
     /// </summary>
     public async Task<(List<ProjectAdapterModel> Items, int TotalCount)> SearchFlatAsync(MeetingRecord.Dtos.Commons.ProjectSearchRequestDto request)
@@ -229,7 +229,7 @@ public class ProjectService
     }
 
     /// <summary>
-    /// 對外 API 新增專案只帶負責人姓名時（1.0.52 以前的呼叫端；1.1.24 從 <c>ProjectRepository</c> 搬來）：
+    /// 對外 API 新增專案只帶負責人姓名時（1.0.52 以前的呼叫端；1.1.24）：
     /// 在專案團隊的啟用帳號裡找，剛好一位才採用，找不到回 null（未指定）。團隊不合法也回 null，由新增時的檢查擋下並說明原因。
     /// </summary>
     public async Task<int?> MatchOwnerByNameAsync(string? ownerName, int? primaryTeamId, IEnumerable<int>? collaboratorTeamIds)
@@ -276,7 +276,7 @@ public class ProjectService
 
     /// <param name="via">入口（稽核用）：API 呼叫傳 <see cref="AuditVia.Api"/>（1.1.24）。</param>
     /// <param name="legacyOwnerName">
-    /// 只給對外 API 用（1.1.24 從 <c>ProjectRepository</c> 搬來的相容規則）：1.0.52 以前的呼叫端只帶負責人姓名，
+    /// 只給對外 API 用（1.1.24 的相容規則）：1.0.52 以前的呼叫端只帶負責人姓名，
     /// 對不到帳號時（<see cref="ProjectAdapterModel.OwnerUserId"/> 是 null）照舊建立、保留這段姓名當「未指定（原：…）」；畫面一律要選帳號，不傳。
     /// </param>
     public async Task<VerifyRecordResult> AddAsync(
@@ -344,7 +344,7 @@ public class ProjectService
         }
         catch (Exception ex)
         {
-            // DbContext 是整條 Blazor 連線共用的：失敗留下的追蹤實體會在下一次任何人 SaveChanges 時被寫進去。
+            // DbContext 是整個 scope 共用的：失敗留下的追蹤實體會在同一個 scope 下一次 SaveChanges 時被寫進去。
             context.ChangeTracker.Clear();
             Logger.LogError(ex, "Failed to create project. Title={Title}", paraObject.Title);
             return VerifyRecordResultFactory.Build(false, "新增專案失敗。", ex);
@@ -395,7 +395,7 @@ public class ProjectService
 
             // 主責沒變時照原樣保留（就算不是自己的團隊，協作團隊的人也要能存檔）；改主責才檢查是不是自己的團隊。
             // ⚠️ 一定要在改欄位之前驗證（0.4.114）：currentItem 是被追蹤的，先改欄位再 return 的話，
-            //    被拒絕的修改會留在共用的 DbContext 裡，下一次任何人 SaveChanges 就被寫進資料庫。
+            //    被拒絕的修改會留在 scope 共用的 DbContext 裡，同一個 scope 下一次 SaveChanges 就被寫進資料庫。
             var existingPrimary = currentItem.Teams.FirstOrDefault(x => x.IsPrimary)?.TeamId;
             // 1.0.47：不是主責團隊的成員時，團隊設定不能變（協作團隊的人不能把主責團隊換掉）。
             var teams = await ProjectTeamWriter.ValidateAsync(context, access.ResolveProjectTeams(

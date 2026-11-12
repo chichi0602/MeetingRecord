@@ -17,7 +17,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 會議紀錄 API。1.1.20（WASM 遷移 M3）起改走畫面用的同一套 <see cref="MeetingService"/>：資料範圍、只限上傳者、
+/// 會議紀錄 API。1.1.20 起改走畫面用的同一套 <see cref="MeetingService"/>：資料範圍、只限上傳者、
 /// 封存唯讀、背景工作進行中不能動，全部只有一份規則。
 /// 既有五支（GetById／Search／Create／Update／Delete）的路由與回應形狀不變、只多帶欄位；畫面專用的另開端點
 /// （清單、重新轉錄、產生與修改會議紀錄、歸屬專案、逐字稿、下載與匯出、選項）。

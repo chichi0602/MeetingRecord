@@ -16,7 +16,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.9）：提示詞 API 改走畫面用的 <c>PromptTemplateService</c>，規則與畫面一致。
+/// 提示詞 API（1.1.9）走畫面用的 <c>PromptTemplateService</c>，規則與畫面一致。
 /// 釘住外部呼叫端看得到的行為變更：名稱重複不分大小寫與前後空白、分類（新欄位 categoryNames 與舊的儲存格式）、
 /// 內建範本（全部、單一）、啟用切換與稽核、啟用分類清單、搜尋篩選與排序。
 /// 內建範本會動到全表（同名略過），所以這組測試只檢查自己造的名稱或「第二次全部略過」。

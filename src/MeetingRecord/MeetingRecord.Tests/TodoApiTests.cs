@@ -17,7 +17,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M3（1.1.18）：待辦 API 改走 <see cref="TodoService"/> 之後，HTTP 層的狀態碼與畫面用端點。
+/// 待辦 API 走 <see cref="TodoService"/>（1.1.18）：HTTP 層的狀態碼與畫面用端點。
 /// 規則本身（改期限原因、只限負責人刪除、封存、子項目、甲方）在 <c>TodoChangeAndNotificationTests</c> 逐條測；這裡驗 API 怎麼回。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]
@@ -249,7 +249,7 @@ public sealed class TodoApiTests(ApiTestApplicationFactory factory) : IClassFixt
         using (response)
         {
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            // 既有的新增／修改／刪除照舊放在 Errors["Validation"]（外部相容）；新端點放 ErrorMessage（M2 慣例）。
+            // 既有的新增／修改／刪除照舊放在 Errors["Validation"]（外部相容）；畫面用端點放 ErrorMessage。
             var result = await ReadAsync<object>(response);
             Assert.Equal(message, result.ErrorMessage ?? result.Errors?["Validation"].FirstOrDefault());
         }

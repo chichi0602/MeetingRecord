@@ -9,8 +9,8 @@ using MeetingRecord.Web.Jobs;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 背景工作進度（1.1.15，WASM 遷移 M3）：WASM 頁右下角的進度面板用；收到 <c>AppHub.JobsChanged</c> 推播後重查。
-/// 規則與 Server 頁的面板同一份（<see cref="BackgroundJobBoard"/>）：只看得到、也只動得到自己資料範圍內的會議的工作，
+/// 背景工作進度（1.1.15）：WASM 頁右下角的進度面板用；收到 <c>AppHub.JobsChanged</c> 推播後重查。
+/// 規則在 <see cref="BackgroundJobBoard"/>：只看得到、也只動得到自己資料範圍內的會議的工作，
 /// 看不到的回 404；取消要會議紀錄的修改權限。
 /// </summary>
 [Route("api/v1/jobs")]

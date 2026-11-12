@@ -13,7 +13,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M2（1.1.10）：使用者管理 API（<c>api/v1/User</c>，只限管理者）。
+/// 使用者管理 API（<c>api/v1/User</c>，只限管理者，1.1.10）。
 /// 釘住：只有管理者能用、回應不含任何密碼相關欄位、自己與 support 的保護（以前只在畫面上）、
 /// 修改時畫面以外的欄位不被清掉（Google 綁定、上次選的專案）、替別人重設密碼要對方下次改、稽核的操作者是 API 呼叫者。
 /// </summary>

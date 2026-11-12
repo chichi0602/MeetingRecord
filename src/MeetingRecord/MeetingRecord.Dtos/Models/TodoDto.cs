@@ -18,7 +18,7 @@ public class TodoDto : TodoCreateUpdateDto
     /// <summary>來源會議紀錄標題（唯讀）</summary>
     public string? MeetingTitle { get; set; }
 
-    // ---- 1.1.18（WASM 遷移 M3）起多帶的唯讀欄位：只加不改，舊的呼叫端照用 ----
+    // ---- 1.1.18 起多帶的唯讀欄位：只加不改，舊的呼叫端照用 ----
 
     /// <summary>所屬專案的狀態；「已完成」＝封存，待辦唯讀（管理者除外）。</summary>
     public string? ProjectStatus { get; set; }

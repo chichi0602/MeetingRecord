@@ -12,7 +12,7 @@ using MeetingRecord.Share.Helpers;
 namespace MeetingRecord.Tests;
 
 /// <summary>
-/// WASM 遷移 M6（1.1.47）：瀏覽器錯誤回報改走 <c>POST api/v1/client-errors</c>。
+/// 瀏覽器錯誤回報（1.1.47）走 <c>POST api/v1/client-errors</c>。
 /// 登入者才能回報；記進系統例外紀錄（來源「瀏覽器」、帶帳號、頁面只留路徑）；依帳號限流。
 /// </summary>
 [Collection(nameof(ApiHostCollection))]

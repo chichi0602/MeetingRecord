@@ -1,7 +1,7 @@
 namespace MeetingRecord.Share.Helpers;
 
 /// <summary>
-/// 專案的選項與限制（1.1.26，WASM 遷移 M3）：從 <c>ProjectAdapterModel</c>／<c>ProjectService</c> 抽出來，
+/// 專案的選項與限制（1.1.26）：從 <c>ProjectAdapterModel</c>／<c>ProjectService</c> 抽出來，
 /// 伺服器與 WASM 專案頁共用一份。封存規則在 <see cref="ProjectScopeRules"/>。
 /// </summary>
 public static class ProjectRules

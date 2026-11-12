@@ -11,7 +11,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 使用者管理 API（1.1.10，WASM 遷移），**只限管理者**（<see cref="AdminOnlyAttribute"/>），規則都在 <see cref="MyUserService"/>：
+/// 使用者管理 API（1.1.10），**只限管理者**（<see cref="AdminOnlyAttribute"/>），規則都在 <see cref="MyUserService"/>：
 /// 不能刪除或停用自己與 support、不能拿掉自己的管理者身分、帳號不可重複、替別人重設密碼時對方下次登入要改。
 /// ⚠️ 回應一律用 <see cref="UserDto"/>：不含密碼雜湊、Salt、兩步驟驗證金鑰、Google 編號。
 /// </summary>

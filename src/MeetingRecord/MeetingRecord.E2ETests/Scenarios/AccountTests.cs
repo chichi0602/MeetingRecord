@@ -3,7 +3,7 @@ using MeetingRecord.E2ETests.Infrastructure;
 
 namespace MeetingRecord.E2ETests.Scenarios;
 
-/// <summary>自己的帳號：設定 API 密碼（1.1.13 起 /Profile 是 WASM 頁）。</summary>
+/// <summary>自己的帳號：設定 API 密碼（/Profile，1.1.13）。</summary>
 public sealed class AccountTests(E2EAppFixture app) : E2ETestBase(app)
 {
     [E2EFact]

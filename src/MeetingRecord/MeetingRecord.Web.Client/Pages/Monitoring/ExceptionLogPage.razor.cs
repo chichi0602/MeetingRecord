@@ -12,8 +12,7 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.Monitoring;
 
 /// <summary>
-/// 系統例外紀錄（0.4.122，移植自 NET10-Blazor-Starter，不含 Email 告警與 AI 追問；1.1.41 從 Blazor Server 的 ExceptionLogView
-/// 搬到 WASM，畫面不變）。**管理者限定**。
+/// 系統例外紀錄（0.4.122，移植自 NET10-Blazor-Starter，不含 Email 告警與 AI 追問）。**管理者限定**。
 ///
 /// <para>資料由伺服器的 <c>ExceptionLogProvider</c> → 背景寫入器自動收集；本頁負責查詢、明細、複製、匯出 CSV、
 /// 清除與 AI 例外分析（會產生費用：先確認、邊生成邊顯示、關閉視窗即取消、寫入用量帳本），全部走 <c>api/v1/exception-logs</c>（1.1.40）。
@@ -166,7 +165,7 @@ public partial class ExceptionLogPage : ComponentBase, IDisposable
             rows = page.Items.ToList();
             _total = page.TotalCount;
 
-            // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照 TodoViewView）。
+            // 停在最後一頁時刪掉該頁唯一一筆：夾回最後一頁重載（比照待辦頁）。
             // ⚠️ Math.Max(1, ...) 不可省：PageIndex < 1 時 AntDesign 不會再觸發 OnChange。
             if (rows.Count == 0 && _total > 0 && _pageIndex > 1)
             {

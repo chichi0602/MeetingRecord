@@ -12,7 +12,7 @@ using MeetingRecord.Web.Filters;
 namespace MeetingRecord.Web.Controllers;
 
 /// <summary>
-/// 會議紀錄提示詞 API。1.1.9（WASM 遷移）起呼叫畫面用的同一個 <see cref="PromptTemplateService"/>，規則與畫面一致：
+/// 會議紀錄提示詞 API。1.1.9 起呼叫畫面用的同一個 <see cref="PromptTemplateService"/>，規則與畫面一致：
 /// 名稱重複判斷去頭尾空白、不分大小寫；分類一律存成標準格式。另有啟用切換、內建範本、啟用中的分類名稱。
 /// </summary>
 [Route("api/[controller]")]

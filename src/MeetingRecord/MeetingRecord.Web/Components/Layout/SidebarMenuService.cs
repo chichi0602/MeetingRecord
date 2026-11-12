@@ -65,8 +65,8 @@ public sealed class SidebarMenuService
     }
 
     /// <summary>
-    /// 依指定的權限判斷載入選單（1.1.0）：Session 選單 API 用 <see cref="AuthenticationStateHelper.CanAccessPage"/> 與權限鍵直接判斷，
-    /// 不經 Blazor 連線的 CurrentUserService。規則與網頁側邊欄同一套。
+    /// 依指定的權限判斷載入選單（1.1.0）：Session 選單 API 用 <see cref="AuthenticationStateHelper.CanAccessPage"/> 與登入者的權限鍵直接判斷，
+    /// 不看 CurrentUserService（API 請求時它是空的）。WASM 前端的側邊欄就是畫這份結果。
     /// </summary>
     public async Task<IReadOnlyList<SidebarMenuItemModel>> LoadAuthorizedMenuItemsAsync(Func<string, bool> canAccessPage, bool isAdmin)
     {
@@ -127,7 +127,7 @@ public sealed class SidebarMenuService
     /// <summary>
     /// 依權限過濾選單（遞迴、任何深度）。純函式，供單元測試直接呼叫。
     /// </summary>
-    /// <param name="canAccessPage">頁面權限判斷，正式環境是 <c>AuthenticationStateHelper.CheckAccessPage</c>（管理者恆真）。</param>
+    /// <param name="canAccessPage">頁面權限判斷，正式環境是 <see cref="AuthenticationStateHelper.CanAccessPage"/>（管理者恆真）。</param>
     /// <param name="isAdmin">是否為管理者；<see cref="AdminOnlyMenuIds"/> 只看這個值。</param>
     public static List<SidebarMenuItemModel> FilterAuthorizedMenuItems(
         IReadOnlyList<SidebarMenuItemModel> items,

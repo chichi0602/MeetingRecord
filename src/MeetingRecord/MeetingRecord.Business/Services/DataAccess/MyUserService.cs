@@ -43,8 +43,8 @@ public class MyUserService
 
     /// <summary>
     /// 取得目前操作者（稽核 actor，以及「是不是改自己」的判斷）；未登入時回 null。
-    /// 1.1.10：優先用 <see cref="IAuditActorProvider"/>——Blazor 頁看 <see cref="CurrentUserService"/>、API 改從 claims 取。
-    /// 以前只看 CurrentUserService，從 API 呼叫時操作者是空的，「替別人重設密碼」也會把自己當成別人。
+    /// 1.1.10：優先用 <see cref="IAuditActorProvider"/>——背景工作看 <see cref="CurrentUserService"/>、API 請求從 claims 取。
+    /// 只看 CurrentUserService 的話，API 請求時它是空的，操作者會記成空白，「替別人重設密碼」也會把自己當成別人。
     /// </summary>
     private (int? ActorUserId, string? ActorAccount) ResolveActor()
     {
@@ -784,7 +784,7 @@ public class MyUserService
     }
 
     /// <summary>
-    /// 自己改密碼的稽核（1.0.33）：操作者與目標都是本人。<c>ResolveActor()</c> 取不到（例如測試或非 Blazor 路徑）時用本人。
+    /// 自己改密碼的稽核（1.0.33）：操作者與目標都是本人。<c>ResolveActor()</c> 取不到（例如測試、沒有登入身分的路徑）時用本人。
     /// ⚠️ 摘要不放任何密碼內容。
     /// </summary>
     private Task WriteOwnPasswordAuditAsync(string action, MyUser user, bool success, string detail)

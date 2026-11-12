@@ -130,7 +130,7 @@ public sealed class RateLimitIntegrationTests(RateLimitTestApplicationFactory fa
     [Fact]
     public async Task WebPageCalls_ShouldUseTheHigherWebQuota()
     {
-        // 1.1.19（WASM 遷移）：網頁本身靠登入 Cookie 呼叫 API，額度另計（這台主機設 5 次），不受外部程式的 3 次限制。
+        // 1.1.19：網頁本身靠登入 Cookie 呼叫 API，額度另計（這台主機設 5 次），不受外部程式的 3 次限制。
         const string password = "rate-limit-web-pass";
         var (account, _) = await TestCookieLogin.CreateUserAsync(factory.Services, password, []);
         using var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });

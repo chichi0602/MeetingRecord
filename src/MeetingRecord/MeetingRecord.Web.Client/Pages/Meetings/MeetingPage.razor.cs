@@ -18,11 +18,11 @@ using MeetingRecord.Web.Services;
 namespace MeetingRecord.Web.Client.Pages.Meetings;
 
 /// <summary>
-/// 會議紀錄（1.1.23 搬到 WASM，原 Server 的 <c>MeetingViewView</c>）：畫面、文字、確認框、通知全部照舊。
+/// 會議紀錄。
 /// <list type="bullet">
 /// <item>資料走 <see cref="MeetingApi"/>（規則都在伺服器的 MeetingService）；按鈕依 <see cref="PermissionView"/>，
 /// 能不能刪、是不是上傳者由 API 依呼叫者算好（<see cref="MeetingDto.CanDelete"/>、<see cref="MeetingDto.IsUploader"/>）。</item>
-/// <item>上傳交給整個前端共用的 <see cref="MeetingUploadManager"/>：換到其他 WASM 頁照樣繼續，結果通知也由它跳。</item>
+/// <item>上傳交給整個前端共用的 <see cref="MeetingUploadManager"/>：換到其他頁面照樣繼續，結果通知也由它跳。</item>
 /// <item>轉錄、生成進度讀 <c>api/v1/jobs</c>，有推播（<see cref="IJobProgressSource"/>）就重查；工作結束才重新載入清單。</item>
 /// </list>
 /// </summary>
@@ -1390,7 +1390,7 @@ public partial class MeetingPage : IDisposable
 
     public void Dispose()
     {
-        // 不取消上傳：離開這一頁上傳照樣繼續（1.1.23 起換到其他 WASM 頁也不中斷），右下角面板看得到進度。
+        // 不取消上傳：離開這一頁上傳照樣繼續（1.1.23 起換到其他頁面也不中斷），右下角面板看得到進度。
         disposed = true;
         UploadManager.Changed -= OnUploadsChanged;
         jobSubscription?.Dispose();

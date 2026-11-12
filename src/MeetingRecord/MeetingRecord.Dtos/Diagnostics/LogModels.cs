@@ -1,4 +1,4 @@
-// 1.1.33（WASM 遷移 M5）：從 Web/Diagnostics 搬來，日誌等級、日誌檢視、系統健康的 API 與 WASM 頁共用。
+// 1.1.33：日誌等級、日誌檢視、系統健康的 API 與 WASM 頁共用。
 namespace MeetingRecord.Dtos.Diagnostics;
 
 /// <summary>

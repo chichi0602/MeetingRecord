@@ -68,7 +68,7 @@ public sealed class AiTests(E2EAppFixture app) : E2ETestBase(app)
     [Trait("Persona", "主責團隊成員")]
     public async Task HelpAssistant_Stop_ShouldCancelOnTheServer()
     {
-        // 1.1.30 使用說明頁搬到 WASM：「停止」＝中斷請求，伺服器要跟著停（不再繼續花費），稽核由伺服器寫。
+        // 1.1.30：「停止」＝中斷請求，伺服器要跟著停（不再繼續花費），稽核由伺服器寫。
         var page = await LoginAsAsync(Seed.Owner);
         await GotoAsync(page, "/help", "問 AI 助理");
         await using var db = App.CreateDbContext();
@@ -128,12 +128,12 @@ public sealed class AiTests(E2EAppFixture app) : E2ETestBase(app)
 
     [E2EFact]
     [Trait("Scenario", "AI-04")]
-    [Trait("Title", "會議 AI 問答（WASM 頁）：串流顯示回答並記入用量帳本")]
+    [Trait("Title", "會議 AI 問答：串流顯示回答並記入用量帳本")]
     [Trait("Page", "會議紀錄")]
     [Trait("Persona", "主責團隊成員")]
     public async Task MeetingAiChat_OnWasmPage_ShouldStreamAnswer()
     {
-        // 1.1.23 會議頁搬到 WASM：問答視窗改走 AiChatApi（打 API、邊收邊讀 NDJSON 串流），同 AI-01 的驗法。
+        // 1.1.23：問答視窗走 AiChatApi（打 API、邊收邊讀 NDJSON 串流），同 AI-01 的驗法。
         var page = await LoginAsAsync(Seed.Owner);
         await GotoAsync(page, "/meetings", "會議標題");
         await using var db = App.CreateDbContext();

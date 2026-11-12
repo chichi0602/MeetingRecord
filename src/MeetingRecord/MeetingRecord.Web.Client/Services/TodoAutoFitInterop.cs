@@ -49,7 +49,7 @@ public sealed class TodoAutoFitInterop
         }
         catch (InvalidOperationException ex)
         {
-            // 元件已經被處置，或是預先算繪階段還沒有 JS 可用。
+            // 元素還沒綁上（區塊沒有渲染）或元件已經被處置：略過即可。
             logger.LogDebug(ex, "Todo auto-fit observe skipped.");
         }
     }

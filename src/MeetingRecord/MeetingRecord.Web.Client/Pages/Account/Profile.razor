@@ -69,7 +69,7 @@ else
                     </Button>
                 </SpaceItem>
                 <SpaceItem>
-                    <Button OnClick="@(() => NavigationManager.NavigateTo("/meetings", forceLoad: true))" Disabled="@isSubmitting">
+                    <Button OnClick="@(() => NavigationManager.NavigateTo("/meetings"))" Disabled="@isSubmitting">
                         取消
                     </Button>
                 </SpaceItem>
@@ -138,8 +138,8 @@ else
             }
 
             await MessageService.SuccessAsync("API 密碼已設定。");
-            // 回會議紀錄頁（整頁載入）。
-            NavigationManager.NavigateTo("/meetings", forceLoad: true);
+            // 回會議紀錄頁。不必整頁載入：API 密碼不在外框用的登入資料（Session）裡（1.1.56）。
+            NavigationManager.NavigateTo("/meetings");
         }
         finally
         {

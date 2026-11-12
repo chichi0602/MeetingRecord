@@ -480,8 +480,7 @@ body .ant-spin-dot-item {
 }
 
 /* ===== 錯誤邊界的錯誤畫面（0.4.122）=====
-   WASM 端 WasmLayout 的 ErrorBoundary 的 ErrorContent，以及 Session 載入失敗的訊息。
-   浮層樣式（.app-error-banner-overlay）給渲染在 AntContainer 位置（頁面最底）的錯誤畫面用，要固定在視窗下緣才看得到。 */
+   WasmLayout 的 ErrorBoundary 的 ErrorContent，以及 Session 載入失敗的訊息。 */
 .app-error-banner {
     margin: 16px;
     padding: 12px 16px;
@@ -497,17 +496,6 @@ body .ant-spin-dot-item {
     color: inherit;
     font-weight: 700;
     text-decoration: underline;
-}
-
-/* 浮層錯誤：固定在下緣。z-index 落在外框（100～102）之上、AntDesign 浮層（1000 起）之下，
-   符合「自訂圖層介於 99 與 1000 之間」的規則。 */
-.app-error-banner-overlay {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    left: 16px;
-    z-index: 900;
-    margin: 0;
 }
 
 /* ============================================================

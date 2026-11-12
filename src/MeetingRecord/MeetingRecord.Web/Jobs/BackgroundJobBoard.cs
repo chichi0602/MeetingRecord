@@ -1,4 +1,3 @@
-using MeetingRecord.AccessDatas;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Business.Services.Transcription;
@@ -14,28 +13,19 @@ namespace MeetingRecord.Web.Jobs;
 /// 通知器是全行程共用的，一律以呼叫者的資料範圍過濾（<see cref="ProjectAccess.CanViewMeeting"/>）——
 /// 否則會把別人專案的會議標題洩漏給看不到那筆資料的使用者。取消與關閉也只能動自己看得到的工作，看不到的當成不存在。
 /// </para>
-/// <para>
-/// ⚠️ 成員資格用自己開的短命 scope 查，不借呼叫端的 DbContext，免得和同一個 scope 裡正在跑的查詢撞在一起。
-/// </para>
 /// </summary>
 public sealed class BackgroundJobBoard(
     ITranscriptionProgressNotifier transcriptionNotifier,
     IMeetingDraftProgressNotifier draftNotifier,
-    IRecordAccessScopeProvider accessScope,
-    IServiceScopeFactory scopeFactory,
+    ProjectAccessService projectAccessService,
     IJobCancellationRegistry cancellationRegistry,
     ILogger<BackgroundJobBoard> logger)
 {
     /// <summary>呼叫者看得到的工作；進行中的排前面，再依標題。</summary>
     public async Task<List<BackgroundJobDto>> GetVisibleAsync()
     {
-        var scope = await accessScope.GetAsync();
-        ProjectAccess access;
-        using (var serviceScope = scopeFactory.CreateScope())
-        {
-            var context = serviceScope.ServiceProvider.GetRequiredService<BackendDBContext>();
-            access = await ProjectAccessService.LoadAsync(context, scope);
-        }
+        // 每個 API 請求只依序呼叫一次，用請求自己的 DbContext 查即可（1.1.56；以前另開短命 scope）。
+        var access = await projectAccessService.GetAsync();
 
         var transcriptionJobs = transcriptionNotifier
             .GetSnapshot()

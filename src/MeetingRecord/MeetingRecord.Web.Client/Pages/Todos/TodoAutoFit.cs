@@ -74,7 +74,7 @@ public readonly record struct TodoFitDecision(int PageSize, TodoFitState State);
 public static class TodoAutoFit
 {
     /// <summary>
-    /// 還沒量到任何東西時的每頁筆數（預先算繪、JS 還沒回報）。
+    /// 還沒量到任何東西時的每頁筆數（JS 還沒回報）。
     /// 取 6 是 1366×768 筆電大致放得下的列數——控制器會從這個值往上補或往下縮。
     /// </summary>
     public const int FallbackRows = 6;

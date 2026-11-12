@@ -53,16 +53,13 @@ public sealed class HelpViewInterop
         {
             await jsRuntime.InvokeVoidAsync(identifier, args);
         }
-        catch (JSDisconnectedException)
-        {
-        }
         catch (JSException ex)
         {
             logger.LogWarning(ex, "Help view interop failed. Function={Function}", identifier);
         }
         catch (InvalidOperationException)
         {
-            // 預先算繪階段沒有 JS 可呼叫。
+            // 元素還沒綁上（區塊沒有渲染）或元件已經被處置：略過即可。
         }
     }
 }

@@ -191,11 +191,7 @@ public sealed class ProjectAccessService
     public async Task<ProjectAccess> GetAsync()
         => await LoadAsync(context, await scopeProvider.GetAsync());
 
-    /// <summary>
-    /// 用指定的 DbContext 載入存取範圍。給要自己開短命 scope 查的呼叫端用（<c>BackgroundJobBoard</c>）：
-    /// 拿呼叫端 scope 的 DbContext 查，可能撞上「同一個 context 並行兩個操作」。
-    /// </summary>
-    public static async Task<ProjectAccess> LoadAsync(BackendDBContext context, RecordAccessScope scope)
+    private static async Task<ProjectAccess> LoadAsync(BackendDBContext context, RecordAccessScope scope)
     {
         // 管理者也要查自己所屬的團隊：新專案的主責預設帶入建立者的團隊，管理者也一樣。
         var teamIds = scope.UserId == 0

@@ -161,10 +161,6 @@ public partial class AiChatModal : ComponentBase
             // 掛不上只是少了貼上與拖放，迴紋針仍然可用，不該讓整個視窗壞掉。
             Logger.LogWarning(ex, "Failed to attach AI chat paste/drop handlers.");
         }
-        catch (JSDisconnectedException)
-        {
-            // 使用者已經離開頁面，沒有東西可掛。
-        }
 
         await FollowChatLogAsync();
     }
@@ -193,10 +189,6 @@ public partial class AiChatModal : ComponentBase
         {
             // 捲不動只是要自己往下捲，不該讓整個視窗壞掉。
             Logger.LogWarning(ex, "Failed to scroll AI chat log.");
-        }
-        catch (JSDisconnectedException)
-        {
-            // 使用者已經離開頁面。
         }
     }
 

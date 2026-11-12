@@ -597,7 +597,14 @@ namespace MeetingRecord.Web
 
                 #region 註冊中介軟體
                 // Configure the HTTP request pipeline.
-                if (!app.Environment.IsDevelopment())
+                if (app.Environment.IsDevelopment())
+                {
+                    // WASM 偵錯代理（/_framework/debug/ws-proxy，1.1.57）：Visual Studio／瀏覽器偵錯 Web.Client 用，
+                    // 版本跟著 WebAssembly.Server 套件、與執行環境一致；launchSettings.json 的 inspectUri 指向它。
+                    // 沒掛的話 VS 只能用自己內建的代理，讀不到框架組件的中繼資料而終止偵錯。只在開發環境。
+                    app.UseWebAssemblyDebugging();
+                }
+                else
                 {
                     app.UseExceptionHandler("/Error");
                     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.

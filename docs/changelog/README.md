@@ -1,8 +1,8 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.123
+- 文件版本：7.124
 - 文件狀態：維護中
-- 現行系統版本：1.1.58
+- 現行系統版本：1.1.59
 - 首次實作版本：0.4.23
 - 最後核對日期：2026/11/13
 
@@ -10,8 +10,9 @@
 
 | 變更（版本）| 文件 |
 |------|------|
+| Visual Studio 偵錯 WASM 已由使用者確認：更新 1.1.57 的 changelog 與〈啟動與停止系統〉第三節的驗證結果（1.1.59）| [2026-11-12-修正VisualStudio無法偵錯WASM](2026-11-12-修正VisualStudio無法偵錯WASM.md) |
 | 第一次開啟的載入畫面（分支 `wasm-loading-screen`）：未登入開 WASM 頁由伺服器直接導到登入頁（帶 ReturnUrl）、WASM 下載期間顯示載入畫面（系統名稱、轉圈、百分比，20 秒後加提示）、登入頁在背景預先載入 WASM；4 Mbps 實測開網址到登入頁 12.95 → 0.43 秒（1.1.58）| [2026-11-13-第一次開啟的載入畫面](2026-11-13-第一次開啟的載入畫面.md) |
-| Visual Studio 偵錯 WASM 終止的處理（分支 `wasm-debugging`）：清掉舊的 Debug 建置輸出、ASP.NET Core WASM 相關套件升到 10.0.15 與執行環境同版、開發環境加 `UseWebAssemblyDebugging()` 與 `inspectUri`；經偵錯代理實測中斷點可停、變數可讀，VS 端待使用者確認（1.1.57）| [2026-11-12-修正VisualStudio無法偵錯WASM](2026-11-12-修正VisualStudio無法偵錯WASM.md) |
+| Visual Studio 偵錯 WASM 終止的處理（分支 `wasm-debugging`）：清掉舊的 Debug 建置輸出、ASP.NET Core WASM 相關套件升到 10.0.15 與執行環境同版、開發環境加 `UseWebAssemblyDebugging()` 與 `inspectUri`；經偵錯代理實測中斷點可停、變數可讀，使用者已在 VS 確認（2026/11/13）（1.1.57）| [2026-11-12-修正VisualStudio無法偵錯WASM](2026-11-12-修正VisualStudio無法偵錯WASM.md) |
 | 遷移後的程式小整理（分支 `code-cleanup-small`）：刪除沒人用的錯誤浮層樣式；「設定 API 密碼」頁存檔與取消不再整頁重新載入；背景工作進度改用請求的 `ProjectAccessService`、不再另開 scope；拿掉 WASM 不會發生的 `JSDisconnectedException` 攔截，「預先算繪」的錯誤說明改正（1.1.56）| [2026-11-12-遷移後的程式小整理](2026-11-12-遷移後的程式小整理.md) |
 | 程式註解更新到遷移後現況（分支 `code-comments-refresh`）：約 370 處註解拿掉「Server 頁」、circuit、已移除元件與遷移期說法，`CurrentUserService` 的說明更正為「只由背景工作填入」；端對端標題、`/wasm` 說明文字與 AI 例外分析提示詞的架構描述同步現況（1.1.55）| [2026-11-12-程式註解更新到遷移後現況](2026-11-12-程式註解更新到遷移後現況.md) |
 | 頁面上的 .NET 例外送到系統例外紀錄（分支 `client-dotnet-error-reporting`）：`ErrorBoundary` 接住的與算繪時沒接住的 .NET 例外經 `DotNetErrorForwarder` 送到 `POST api/v1/client-errors`（種類 `dotnet`），以前只寫到瀏覽器主控台；系統例外紀錄頁的提示不再提使用者看不到的追蹤碼；新增端對端 ERR-02（1.1.54）| [2026-11-12-頁面NET例外送到系統例外紀錄](2026-11-12-頁面NET例外送到系統例外紀錄.md) |

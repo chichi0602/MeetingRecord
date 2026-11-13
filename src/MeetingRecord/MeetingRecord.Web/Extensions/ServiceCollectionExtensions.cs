@@ -217,6 +217,8 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<TranscriptionBackgroundService>();
 
         services.AddScoped<IMediaConverter, FfmpegMediaConverter>();
+        // 1.1.61：轉錄結果疑似被截斷時把該段對半切再重轉。端對端測試替換掉的是 IMediaConverter，這個照樣是真的 FFmpeg。
+        services.AddScoped<IMediaSegmentSplitter, FfmpegMediaConverter>();
         services.AddScoped<ITranscriptionProvider, AzureOpenAiTranscriptionProvider>();
         services.AddScoped<TranscriptionJobRunner>();
 

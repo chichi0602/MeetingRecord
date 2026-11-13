@@ -15,8 +15,13 @@ namespace MeetingRecord.Business.Services.Transcription;
 /// 不必為「檔案夠小就不切」多維護一個分支。
 /// 5 分鐘 @ 32kbps 約 1.2MB，遠低於上限。
 /// </para>
+///
+/// <para>
+/// 1.1.61 起切點落在停頓處：先跑一次 silencedetect 找停頓，再由 <see cref="TranscriptionSegmentPlanner"/>
+/// 決定切點，以 <c>-segment_times</c> 切。找不到停頓或量不到時長時，退回固定每 <see cref="SegmentSeconds"/> 秒一刀。
+/// </para>
 /// </summary>
-public class FfmpegMediaConverter : IMediaConverter
+public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter
 {
     /// <summary>每個分段的長度（秒）。</summary>
     public const int SegmentSeconds = MeetingRecord.Share.Helpers.MeetingMediaPolicy.TranscriptionSegmentSeconds;
@@ -54,8 +59,15 @@ public class FfmpegMediaConverter : IMediaConverter
 
         try
         {
+            // 第一趟只解碼、不輸出，找停頓與時長（1.1.61）。
+            var analysisOutput = await RunFfmpegAsync(BuildSilenceDetectArguments(sourceFullPath), cancellationToken);
+            var silences = TranscriptionSegmentPlanner.ParseSilences(analysisOutput);
+            var cutPoints = MediaDurationParser.TryParseDuration(analysisOutput) is { } sourceDuration
+                ? TranscriptionSegmentPlanner.PlanCutPoints(sourceDuration.TotalSeconds, silences, SegmentSeconds)
+                : [];
+
             var outputPattern = Path.Combine(workingDirectory, SegmentFileNamePattern);
-            var arguments = BuildSegmentArguments(sourceFullPath, outputPattern, SegmentSeconds);
+            var arguments = BuildSegmentArguments(sourceFullPath, outputPattern, SegmentSeconds, cutPoints);
 
             var ffmpegOutput = await RunFfmpegAsync(arguments, cancellationToken);
 
@@ -72,15 +84,22 @@ public class FfmpegMediaConverter : IMediaConverter
 
             var (totalDuration, isEstimated) = ResolveDuration(ffmpegOutput, segments);
 
+            // 切點與實際段數對得上才用切點算各段秒數；對不上（例如尾端太短 FFmpeg 沒切出來）就交給呼叫端推算。
+            var segmentSeconds = totalDuration is { } total && cutPoints.Count > 0 && cutPoints.Count + 1 == segments.Count
+                ? TranscriptionSegmentPlanner.SegmentDurations(total.TotalSeconds, cutPoints)
+                : null;
+
             logger.LogInformation(
                 "Converted media to mp3 segments. Source={Source}, SegmentCount={SegmentCount}, " +
-                "TotalSeconds={TotalSeconds}, DurationEstimated={DurationEstimated}",
+                "TotalSeconds={TotalSeconds}, DurationEstimated={DurationEstimated}, SilenceCount={SilenceCount}, CutPoints={CutPoints}",
                 sourceFullPath,
                 segments.Count,
                 totalDuration?.TotalSeconds,
-                isEstimated);
+                isEstimated,
+                silences.Count,
+                string.Join(",", cutPoints));
 
-            return new MediaSegmentSet(workingDirectory, segments, totalDuration, isEstimated);
+            return new MediaSegmentSet(workingDirectory, segments, totalDuration, isEstimated, segmentSeconds);
         }
         catch
         {
@@ -130,11 +149,106 @@ public class FfmpegMediaConverter : IMediaConverter
         return (TimeSpan.FromSeconds(seconds), true);
     }
 
+    public async Task<IReadOnlyList<(string FullPath, double Seconds)>?> SplitInHalfAsync(
+        string segmentFullPath,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ffmpegPath) || !File.Exists(segmentFullPath))
+        {
+            return null;
+        }
+
+        var analysisOutput = await RunFfmpegAsync(BuildSilenceDetectArguments(segmentFullPath), cancellationToken);
+        if (MediaDurationParser.TryParseDuration(analysisOutput) is not { } duration || duration.TotalSeconds < 2)
+        {
+            return null;
+        }
+
+        var total = duration.TotalSeconds;
+        var splitPoint = TranscriptionSegmentPlanner.PickSplitPoint(total, TranscriptionSegmentPlanner.ParseSilences(analysisOutput));
+
+        var directory = Path.GetDirectoryName(segmentFullPath)!;
+        var stem = Path.GetFileNameWithoutExtension(segmentFullPath);
+        await RunFfmpegAsync(
+            BuildCopySplitArguments(segmentFullPath, Path.Combine(directory, $"{stem}_half_%d.mp3"), splitPoint),
+            cancellationToken);
+
+        var halves = new[] { 0, 1 }
+            .Select(index => Path.Combine(directory, $"{stem}_half_{index}.mp3"))
+            .ToList();
+        if (!halves.All(File.Exists))
+        {
+            return null;
+        }
+
+        logger.LogInformation(
+            "Split segment in half. Segment={Segment}, TotalSeconds={TotalSeconds}, SplitPoint={SplitPoint}",
+            segmentFullPath,
+            total,
+            splitPoint);
+
+        return [(halves[0], splitPoint), (halves[1], total - splitPoint)];
+    }
+
+    /// <summary>
+    /// 只解碼、不輸出，讓 FFmpeg 在 stderr 印出時長與每一段停頓（1.1.61）。抽成純函式以便單元測試。
+    /// </summary>
+    internal static string BuildSilenceDetectArguments(string sourceFullPath)
+    {
+        return string.Join(' ',
+            "-hide_banner",
+            "-nostdin",
+            // info：Duration 與 silence_start／silence_end 都是 AV_LOG_INFO 等級（理由同 BuildSegmentArguments）。
+            "-loglevel", "info",
+            "-nostats",
+            "-i", Quote(sourceFullPath),
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-af", TranscriptionSegmentPlanner.SilenceDetectFilter,
+            "-f", "null",
+            "-");
+    }
+
+    /// <summary>
+    /// 不重新編碼，直接把 mp3 在指定秒數切成兩個檔。mp3 每個 frame 都能當切點，誤差約 26 毫秒。
+    /// </summary>
+    internal static string BuildCopySplitArguments(string sourceFullPath, string outputPattern, double splitPoint)
+    {
+        return string.Join(' ',
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel", "error",
+            "-nostats",
+            "-y",
+            "-i", Quote(sourceFullPath),
+            "-c", "copy",
+            "-f", "segment",
+            "-segment_times", FormatSeconds(splitPoint),
+            "-reset_timestamps", "1",
+            Quote(outputPattern));
+    }
+
+    private static string FormatSeconds(double seconds) =>
+        seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>
     /// 組出 FFmpeg 的命令列參數。抽成純函式以便單元測試。
     /// </summary>
-    internal static string BuildSegmentArguments(string sourceFullPath, string outputPattern, int segmentSeconds)
+    /// <param name="cutPoints">
+    /// 1.1.61：切在停頓處的切點（秒）。有值時用 <c>-segment_times</c> 照切點切；
+    /// 沒有（音檔不到一段長、或量不到時長）時退回 <c>-segment_time</c> 固定長度。
+    /// </param>
+    internal static string BuildSegmentArguments(
+        string sourceFullPath,
+        string outputPattern,
+        int segmentSeconds,
+        IReadOnlyList<double>? cutPoints = null)
     {
+        string[] split = cutPoints is { Count: > 0 }
+            ? ["-segment_times", string.Join(",", cutPoints.Select(FormatSeconds))]
+            : ["-segment_time", segmentSeconds.ToString()];
+
         // -vn 丟棄視訊軌（mp4 等影片只取聲音）；-ac 1 -ar 16000 -b:a 32k 壓到語音辨識足夠的品質，
         // 讓每個分段都遠小於轉錄 API 的單檔上限。
         return string.Join(' ',
@@ -155,7 +269,7 @@ public class FfmpegMediaConverter : IMediaConverter
             "-c:a", "libmp3lame",
             "-b:a", "32k",
             "-f", "segment",
-            "-segment_time", segmentSeconds.ToString(),
+            split[0], split[1],
             "-segment_format", "mp3",
             "-reset_timestamps", "1",
             Quote(outputPattern));

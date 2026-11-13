@@ -23,6 +23,14 @@ public class TranscriptionJobRunner
     /// <summary>分段逐字稿之間的接合字串。</summary>
     private const string SegmentSeparator = "\n\n";
 
+    /// <summary>
+    /// 疑似被截斷時最多再對半切幾層（1.1.61）。兩層＝最多拆成四份，5 分鐘一段時每份約 75 秒。
+    /// </summary>
+    private const int MaxSplitDepth = 2;
+
+    /// <summary>短於這個秒數的段落不再對半切：不可能講出接近輸出上限的字數，切了只是白花錢。</summary>
+    private const double MinSplitSeconds = 60;
+
     private readonly BackendDBContext context;
     private readonly IMediaConverter mediaConverter;
     private readonly IEnumerable<ITranscriptionProvider> transcriptionProviders;
@@ -31,7 +39,11 @@ public class TranscriptionJobRunner
     private readonly ITranscriptionProgressNotifier progressNotifier;
     private readonly AiCallGateway gateway;
     private readonly ILogger<TranscriptionJobRunner> logger;
+    private readonly IMediaSegmentSplitter? segmentSplitter;
 
+    /// <param name="segmentSplitter">
+    /// 1.1.61：疑似被截斷的段落用它對半切再重轉。選擇性參數——沒有註冊時（例如端對端測試的假轉檔）照常轉錄、只是少這道保險。
+    /// </param>
     public TranscriptionJobRunner(
         BackendDBContext context,
         IMediaConverter mediaConverter,
@@ -40,8 +52,10 @@ public class TranscriptionJobRunner
         IOptions<LlmSettings> llmSettings,
         ITranscriptionProgressNotifier progressNotifier,
         AiCallGateway gateway,
-        ILogger<TranscriptionJobRunner> logger)
+        ILogger<TranscriptionJobRunner> logger,
+        IMediaSegmentSplitter? segmentSplitter = null)
     {
+        this.segmentSplitter = segmentSplitter;
         this.context = context;
         this.mediaConverter = mediaConverter;
         this.transcriptionProviders = transcriptionProviders;
@@ -122,8 +136,8 @@ public class TranscriptionJobRunner
             using var segments = await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
 
             // 每一段各自的秒數：轉錄按時長計費，而最後一段通常不是整整 5 分鐘。
-            // 全部算成整段會把費用高估。
-            var segmentSeconds = MediaDurationParser.SplitSegmentSeconds(
+            // 全部算成整段會把費用高估。1.1.61 起切在停頓處，各段不一樣長，以轉檔器算好的為準。
+            var segmentSeconds = segments.SegmentSeconds ?? MediaDurationParser.SplitSegmentSeconds(
                 segments.TotalDuration,
                 segments.SegmentFullPaths.Count,
                 FfmpegMediaConverter.SegmentSeconds);
@@ -142,42 +156,21 @@ public class TranscriptionJobRunner
 
                 var thisSegmentSeconds = index < segmentSeconds.Count ? segmentSeconds[index] : (double?)null;
 
-                // 記帳與 AI 對話紀錄由 gateway 處理（失敗時音檔多半已上傳、已計費，照樣記）。
-                // ⚠️ gateway 在呼叫結束時就記帳，所以下面兩個 continue（指令洩漏被丟棄、整段無人說話）不會漏記——
-                //    那一次轉錄照樣花了錢。轉錄每段一筆（每 5 分鐘一段），按時長計費。
-                string segmentText;
-                await using (var segmentStream = File.OpenRead(segmentPath))
-                {
-                    segmentText = await gateway.TranscribeAsync(
-                        provider,
-                        callContext with
-                        {
-                            RelatedInfo = $"會議 #{meeting.Id}〈{meeting.Title}〉語音轉錄 {index + 1}/{segments.SegmentFullPaths.Count}",
-                        },
-                        segmentStream,
-                        Path.GetFileName(segmentPath),
-                        thisSegmentSeconds,
-                        segments.IsDurationEstimated,
-                        index + 1,
-                        segments.SegmentFullPaths.Count,
-                        cancellationToken);
-                }
+                var segmentText = await TranscribeSegmentAsync(
+                    provider,
+                    callContext,
+                    meeting,
+                    segmentPath,
+                    thisSegmentSeconds,
+                    segments.IsDurationEstimated,
+                    index + 1,
+                    segments.SegmentFullPaths.Count,
+                    label: string.Empty,
+                    depth: 0,
+                    cancellationToken);
 
                 // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
                 progressNotifier.ReportSegment(meetingId, index + 1, segments.SegmentFullPaths.Count);
-
-                // 沒有可辨識語音時，供應商可能不回空字串，而是把自己的系統指令當成結果吐回來。
-                // 這種段落等同無語音，直接丟棄；記 Warning 是為了日後看得出模型在漏指令，而不是默默吃掉。
-                if (TranscriptionNoiseFilter.IsProviderInstructionLeak(segmentText))
-                {
-                    logger.LogWarning(
-                        "Discarded transcription segment because the provider returned its own instructions. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}",
-                        meetingId,
-                        index + 1,
-                        segments.SegmentFullPaths.Count);
-
-                    continue;
-                }
 
                 if (string.IsNullOrWhiteSpace(segmentText))
                 {
@@ -245,6 +238,121 @@ public class TranscriptionJobRunner
             logger.LogError(ex, "Transcription failed. MeetingId={MeetingId}", meetingId);
             await MarkFailedAsync(meeting, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 轉錄一個分段，回傳可以接進逐字稿的文字（無語音、指令洩漏時回空字串）。
+    ///
+    /// <para>
+    /// 1.1.61 截斷保險：結果長到接近轉錄模型的輸出上限（<see cref="TranscriptionSegmentPlanner.LooksTruncated"/>）時，
+    /// 該段後半很可能已被靜默截掉——把音檔在中間的停頓對半切、兩半各自重轉，取代原本的結果。
+    /// 最多 <see cref="MaxSplitDepth"/> 層。⚠️ 原本那次與重轉的兩半都會計費（原本那次音檔已上傳、照樣收錢），
+    /// 所以只在真的頂到上限時才做；5 分鐘一段的正常會議不會觸發。
+    /// </para>
+    /// </summary>
+    private async Task<string> TranscribeSegmentAsync(
+        ITranscriptionProvider provider,
+        AiCallContext callContext,
+        AccessDatas.Models.Meeting meeting,
+        string segmentPath,
+        double? seconds,
+        bool isDurationEstimated,
+        int segmentNumber,
+        int segmentCount,
+        string label,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 記帳與 AI 對話紀錄由 gateway 處理（失敗時音檔多半已上傳、已計費，照樣記）。
+        // ⚠️ gateway 在呼叫結束時就記帳，所以下面回空字串的分支（指令洩漏被丟棄、整段無人說話）不會漏記——
+        //    那一次轉錄照樣花了錢。轉錄每段一筆（約每 5 分鐘一段），按時長計費。
+        string segmentText;
+        await using (var segmentStream = File.OpenRead(segmentPath))
+        {
+            segmentText = await gateway.TranscribeAsync(
+                provider,
+                callContext with
+                {
+                    RelatedInfo = $"會議 #{meeting.Id}〈{meeting.Title}〉語音轉錄 {segmentNumber}/{segmentCount}{label}",
+                },
+                segmentStream,
+                Path.GetFileName(segmentPath),
+                seconds,
+                isDurationEstimated,
+                segmentNumber,
+                segmentCount,
+                cancellationToken);
+        }
+
+        // 沒有可辨識語音時，供應商可能不回空字串，而是把自己的系統指令當成結果吐回來。
+        // 這種段落等同無語音，直接丟棄；記 Warning 是為了日後看得出模型在漏指令，而不是默默吃掉。
+        if (TranscriptionNoiseFilter.IsProviderInstructionLeak(segmentText))
+        {
+            logger.LogWarning(
+                "Discarded transcription segment because the provider returned its own instructions. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}{Label}",
+                meeting.Id,
+                segmentNumber,
+                segmentCount,
+                label);
+
+            return string.Empty;
+        }
+
+        if (segmentSplitter is null
+            || depth >= MaxSplitDepth
+            || seconds is < MinSplitSeconds
+            || !TranscriptionSegmentPlanner.LooksTruncated(segmentText))
+        {
+            return segmentText?.Trim() ?? string.Empty;
+        }
+
+        logger.LogWarning(
+            "Transcription segment looks truncated; splitting in half and retrying. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}{Label}, EstimatedTokens={EstimatedTokens}",
+            meeting.Id,
+            segmentNumber,
+            segmentCount,
+            label,
+            TranscriptionSegmentPlanner.EstimateTokens(segmentText));
+
+        var halves = await segmentSplitter.SplitInHalfAsync(segmentPath, cancellationToken);
+        if (halves is not { Count: 2 })
+        {
+            // 切不開就保留原本的結果：可能少了尾巴，但總比整段沒有好。
+            logger.LogWarning(
+                "Could not split truncated segment; keeping the original text. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}{Label}",
+                meeting.Id,
+                segmentNumber,
+                segmentCount,
+                label);
+
+            return segmentText.Trim();
+        }
+
+        var parts = new List<string>(2);
+        for (var half = 0; half < halves.Count; half++)
+        {
+            var text = await TranscribeSegmentAsync(
+                provider,
+                callContext,
+                meeting,
+                halves[half].FullPath,
+                halves[half].Seconds,
+                isDurationEstimated,
+                segmentNumber,
+                segmentCount,
+                $"{label}（{(half == 0 ? "前半" : "後半")}）",
+                depth + 1,
+                cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                parts.Add(text);
+            }
+        }
+
+        return string.Join("\n", parts);
     }
 
     /// <summary>

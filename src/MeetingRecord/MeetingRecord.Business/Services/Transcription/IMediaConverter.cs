@@ -22,16 +22,19 @@ public sealed class MediaSegmentSet : IDisposable
     /// 整個音檔的時長；取不到時為 null。**選擇性參數**是為了讓既有的建構呼叫不必全部改寫。
     /// </param>
     /// <param name="isDurationEstimated">時長是以 mp3 位元組推估而非 FFmpeg 實測。</param>
+    /// <param name="segmentSeconds">每一段實際的秒數（1.1.61 起切在停頓處，各段不一樣長）；null 表示各段等長。</param>
     public MediaSegmentSet(
         string workingDirectory,
         IReadOnlyList<string> segmentFullPaths,
         TimeSpan? totalDuration = null,
-        bool isDurationEstimated = false)
+        bool isDurationEstimated = false,
+        IReadOnlyList<double>? segmentSeconds = null)
     {
         this.workingDirectory = workingDirectory;
         SegmentFullPaths = segmentFullPaths;
         TotalDuration = totalDuration;
         IsDurationEstimated = isDurationEstimated;
+        SegmentSeconds = segmentSeconds;
     }
 
     /// <summary>依序排列的 mp3 分段完整路徑。</summary>
@@ -48,6 +51,11 @@ public sealed class MediaSegmentSet : IDisposable
     /// 帳本要標記起來，不要讓推估值看起來跟實測值一樣可信。
     /// </summary>
     public bool IsDurationEstimated { get; }
+
+    /// <summary>
+    /// 每一段實際的秒數（轉錄按時長計費，一段記一筆）。null 時呼叫端以「各段等長、最後一段拿剩下的」推算。
+    /// </summary>
+    public IReadOnlyList<double>? SegmentSeconds { get; }
 
     public void Dispose()
     {

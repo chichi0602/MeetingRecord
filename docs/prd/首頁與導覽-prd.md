@@ -1,10 +1,10 @@
 ﻿# 首頁與導覽 PRD
 
-- 文件版本：1.15
+- 文件版本：1.16
 - 文件狀態：已實作
-- 現行系統版本：1.1.53
+- 現行系統版本：1.1.58
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能（「關於」對話窗為 0.4.24 新增）
-- 最後核對日期：2026/11/12
+- 最後核對日期：2026/11/13
 
 ## 一、目標與範圍
 
@@ -19,7 +19,7 @@
 
 | 路由 | 選單 | 所需權限 | 主要使用者 |
 | --- | --- | --- | --- |
-| `/` | 非選單（導向 `/meetings`） | 登入即可（未登入由 `WasmLayout` 導到登入頁） | 已登入使用者 |
+| `/` | 非選單（導向 `/meetings`） | 登入即可（未登入由伺服器直接導到登入頁，1.1.58 起） | 已登入使用者 |
 | `/not-found` | 非選單 | 登入即可 | 打錯網址的使用者 |
 | `/dashboard` | 選單 id=11「儀表板」 | 無，登入即可看（0.4.97 起；列在 `PublicMenuIds`） | 已登入使用者（0.4.54 新增） |
 | `/meetings` | 選單 id=61「會議紀錄」 | 頁面鍵「會議紀錄」（管理員豁免） | 已登入使用者（0.4.45 起的登入降落點） |
@@ -28,7 +28,11 @@
 
 ## 三、畫面與欄位
 
-- 首頁 `/`（`Web.Client/Pages/HomePage.razor`）：登入狀態交給 `WasmLayout`（未登入、停用、須改密碼各自導向），判斷期間只顯示「載入中…」，通過後換到 `/meetings`（`replace`，上一頁不會回到 `/`）。沒有品牌開場畫面。
+- 首頁 `/`（`Web.Client/Pages/HomePage.razor`）：登入狀態交給 `WasmLayout`（停用、須改密碼各自導向；未登入在伺服器就導走了），通過後換到 `/meetings`（`replace`，上一頁不會回到 `/`）。沒有品牌開場畫面。
+- **載入畫面**（1.1.58 起）：所有 WASM 頁在瀏覽器下載、啟動 WASM 的期間，畫面中央顯示系統名稱（`SystemSettings.SystemInformation.SystemName`）、轉圈動畫、「系統載入中，第一次開啟需要較長時間，請稍候…」與下載百分比。
+  - 超過 20 秒還沒載完，多一段提示「載入時間比平常久，請確認網路連線；若一直沒有反應，請重新整理頁面或聯絡系統管理員。」與「重新整理」按鈕。
+  - 外框（或「無法取得登入狀態」的訊息）畫好後才消失，中間不會閃一下空白。
+  - 以前第一次開網址要先下載約 4.8 MB，這段時間一片空白，使用者分不出是系統壞了還是自己操作錯。開過一次以後檔案在瀏覽器快取裡，載入畫面通常一閃即過。
 - 找不到頁 `/not-found`（`Web.Client/Pages/NotFoundPage.razor`）：「找不到這個頁面」，附回會議紀錄的連結；是 `ClientRoutes` 的 `NotFoundPage`，伺服器回 404 時也轉到這裡（`UseStatusCodePagesWithReExecute("/not-found")`）。不認得的網址只顯示一次這頁，不會反覆重新載入。
 - 登入降落（0.4.45 起）：帳密登入、Google 登入、根路徑 `/` 三條路都導向 `/meetings`（會議紀錄）。
 - 全站外框（`Web.Client/Components/Layout/AppShell.razor`，由 `WasmLayout` 掛上）：側邊欄、頂端列（頁面標題依目前網址比對 `Menu.json` 的項目名稱，比對不到顯示「系統首頁」）、通知鈴、使用者選單、變更密碼與「關於」對話窗、全站唯一的 `FormModalHelper`、背景工作進度面板與 `#blazor-error-ui`。頁面內容外包一層 `ErrorBoundary`，出錯時顯示「這個頁面發生未預期的錯誤，請重新整理頁面；若持續發生請聯絡系統管理員。」。
@@ -55,15 +59,18 @@
 
 ## 四、內部系統運作
 
-1. `WasmLayout` 開頁時同時呼叫 `GET api/v1/session`（登入狀態與權限鍵）與 `GET api/v1/session/menu`（已過濾的選單）：未登入（401）由 `ApiClient` 整頁導到 `/Auths/Login`；帳號刪除、停用或沒有角色導到 `/Auths/Logout?reason=…`；須改密碼導到 `/ChangePassword`；通過才畫出 `AppShell`，並註冊瀏覽器錯誤回報。
-2. 選單 API（`SessionController.GetMenu`）呼叫 `SidebarMenuService.LoadAuthorizedMenuItemsAsync` 讀取選單並過濾：
+1. 伺服器送出 WASM 頁之前（`Web/Components/App.razor.cs`，1.1.58 起）：
+   - 未登入就直接導到 `/Auths/Login?ReturnUrl=<原網址>`，不必先下載 WASM；登入後導回原網址。缺檔的 404 重新執行到 `/not-found` 時不導，維持 404。
+   - 已登入就送出載入畫面（`#app-loading`，純 HTML／CSS）與 `wwwroot/js/app-loading.js`（20 秒提示、提供 `meetingRecordAppLoading.hide()`）；百分比是 `blazor.web.js` 寫在 `<html>` 的 `--blazor-load-percentage-text`。
+2. `WasmLayout` 開頁時同時呼叫 `GET api/v1/session`（登入狀態與權限鍵）與 `GET api/v1/session/menu`（已過濾的選單）：登入在這期間失效（401）由 `ApiClient` 整頁導到 `/Auths/Login`；帳號刪除、停用或沒有角色導到 `/Auths/Logout?reason=…`；須改密碼導到 `/ChangePassword`；通過才畫出 `AppShell`，並註冊瀏覽器錯誤回報。外框或錯誤訊息畫好後呼叫 `meetingRecordAppLoading.hide()` 拿掉載入畫面；要整頁導走的不拿，留到換頁。
+3. 選單 API（`SessionController.GetMenu`）呼叫 `SidebarMenuService.LoadAuthorizedMenuItemsAsync` 讀取選單並過濾：
    - `ReadMenuItemsFromDisk` 由 `MagicObjectHelper.Menu結構定義`（`Datas/Menu.json`）反序列化，經 `ICacheService` 快取（key `sidebar:menu:raw`）。
    - `ApplyPermissionStructure` 依每項唯一 `id` 從 `MenuPermissionMap`（id→權限鍵）填入 `PermissionName`；找不到對應時退回以 `Name` 為權限名。
    - `FilterAuthorizedMenuItems(items, canAccessPage, isAdmin)` 遞迴過濾（任何深度）：列在 `AdminOnlyMenuIds`（34、37、38、39、30、33、63、40）的項目非管理者一律排除、不看權限；其餘項目 id 列在 `PublicMenuIds`（免權限，0.4.97 起只有儀表板）、項目自身權限（`Name` 或 `PermissionName` 任一）通過，或其子項尚有可見項目時保留。列在 `GroupOnlyMenuIds`（1.0.30：35、36、62）的分組本身沒有權限，只看子項。
    - `ApplyPermissionStructure` 與 `FilterAuthorizedMenuItems` 皆為 `public static` 純函式，由 `MonitoringMenuRegistrationTests` 直接測試。
-3. 進頁判定規則為 `AuthenticationStateHelper.CanAccessPage(權限鍵, isAdmin, name)`（純函式；有整頁鍵或「頁面:view」即可）：權限鍵由 `IPermissionChecker.GetEffectivePermissionKeysAsync`（RBAC 多角色聯集）供給；管理員短路一律通過。前端 `PermissionView.CanAccessPage` 用同一套規則決定頁面能不能進。
-4. `Menu.json` 以 `id` 對應權限鍵，重排選單順序不會錯位。
-5. 「關於」對話窗於**點擊當下**經 `GET api/v1/system/about` 取資料：伺服器端 `SystemAboutProvider` 讀 `IOptions<SystemSettings>`、`IWebHostEnvironment` 與 Singleton `SystemStartupState`，已運作時間在呼叫當下計算，所以每次開啟都是最新值。
+4. 進頁判定規則為 `AuthenticationStateHelper.CanAccessPage(權限鍵, isAdmin, name)`（純函式；有整頁鍵或「頁面:view」即可）：權限鍵由 `IPermissionChecker.GetEffectivePermissionKeysAsync`（RBAC 多角色聯集）供給；管理員短路一律通過。前端 `PermissionView.CanAccessPage` 用同一套規則決定頁面能不能進。
+5. `Menu.json` 以 `id` 對應權限鍵，重排選單順序不會錯位。
+6. 「關於」對話窗於**點擊當下**經 `GET api/v1/system/about` 取資料：伺服器端 `SystemAboutProvider` 讀 `IOptions<SystemSettings>`、`IWebHostEnvironment` 與 Singleton `SystemStartupState`，已運作時間在呼叫當下計算，所以每次開啟都是最新值。
 
 ## 五、權限與安全
 
@@ -80,7 +87,8 @@
 ## 六、錯誤與邊界
 
 - 找不到／無法解析 `Menu.json`：記錄警告或錯誤並回傳空清單，選單顯示「尚無可用選單」，不致中斷頁面。
-- 未登入者進入 `/meetings` 等受保護頁：Session API 回 401，整頁導到 `/Auths/Login`；帳號停用、刪除或缺角色導到 `/Auths/Logout?reason=…`，需改密碼者導到 `/ChangePassword`（都在 `WasmLayout` 處理）。
+- 未登入者進入 `/meetings` 等受保護頁：伺服器直接導到 `/Auths/Login?ReturnUrl=…`（1.1.58 起），登入後回到原網址。已登入、但在頁面上登入失效：Session API 回 401，整頁導到 `/Auths/Login`。帳號停用、刪除或缺角色導到 `/Auths/Logout?reason=…`，需改密碼者導到 `/ChangePassword`（這些在 `WasmLayout` 處理）。
+- WASM 載入很慢或下載失敗：載入畫面一直在，20 秒後出現提示與「重新整理」按鈕。
 - 取得登入狀態失敗（非 401／403）：版面顯示「無法取得登入狀態：…」，不畫外框。
 - 頁面元件發生未預期的例外：`WasmLayout` 的 `ErrorBoundary` 顯示錯誤橫幅，外框與選單照常可用。
 - 使用者無任一項目權限：選單為空，僅顯示提示文字。
@@ -92,12 +100,14 @@
 - `MeetingRecord.Tests/AiManagementMenuRegistrationTests.cs`（1.0.30）：「AI 管理」分組在系統管理下、依序為 AI 對話紀錄與 Token 用量、Token 用量已離開「監控與診斷」、兩頁只限管理者、分組列在 `GroupOnlyMenuIds`、權限目錄不含這兩頁與退役鍵。
 - 手動驗收：以不同角色登入，確認選單僅顯示具權限之項目；管理員可見全部；重排 `Menu.json` 順序不影響權限對應；收合側邊欄後，經第二層 flyout 可點到每個第三層項目。
 - 手動驗收（關於）：點右上角使用者名稱 →「關於」，對話窗顯示七列資訊，系統版本須與 `appsettings.json` 之 `SystemVersion` 一致；關閉後再次開啟，「已運作時間」應有增加。
+- `MeetingRecord.Tests/WasmPageEntryTests.cs`（1.1.58）：未登入開 WASM 頁 302 到登入頁並帶 ReturnUrl、缺檔維持 404、登入頁沒有載入畫面但有背景預先載入、已登入的 WASM 頁有載入畫面與系統名稱、帶 ReturnUrl 登入後回原頁。端對端 LGN-09（未登入開內頁 → 登入 → 回原網址）、WASM-11（WASM 下載期間顯示載入畫面，畫好後消失、不擋操作）。
 - 權限判定來源之測試見 `PermissionCheckerTests.cs`（規則見〈權限與資料可見範圍總覽〉）。
 
 ## 八、相關程式與文件
 
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/HomePage.razor`（`/`）、`NotFoundPage.razor`（`/not-found`）
-- `src/MeetingRecord/MeetingRecord.Web.Client/Layout/WasmLayout.razor`（Session／選單 API、導向、`ErrorBoundary`、瀏覽器錯誤回報註冊）
+- `src/MeetingRecord/MeetingRecord.Web/Components/App.razor`、`App.razor.cs`（未登入導向、載入畫面）、`wwwroot/js/app-loading.js`、`wwwroot/app.css` 的 `.app-loading*`
+- `src/MeetingRecord/MeetingRecord.Web.Client/Layout/WasmLayout.razor`（Session／選單 API、導向、`ErrorBoundary`、瀏覽器錯誤回報註冊、拿掉載入畫面）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Components/Layout/AppShell.razor`、`AppShell.razor.cs`（外框、頁面標題、使用者選單、變更密碼與「關於」對話窗）、`AboutItems.cs`
 - `src/MeetingRecord/MeetingRecord.Web.Client/Components/Layout/NavMenu.razor`、`NavMenu.razor.css`、`SidebarMenuNode.razor`（收合 flyout 第三層）
 - `src/MeetingRecord/MeetingRecord.Web/Datas/Menu.json`

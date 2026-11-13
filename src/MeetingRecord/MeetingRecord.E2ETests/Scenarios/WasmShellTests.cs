@@ -315,6 +315,36 @@ public sealed class WasmShellTests(E2EAppFixture app) : E2ETestBase(app)
         await Expect(row).ToHaveCountAsync(0);
     }
 
+    [E2EFact]
+    [Trait("Scenario", "WASM-11")]
+    [Trait("Title", "WASM 下載期間顯示載入畫面（系統名稱、載入中說明），頁面畫好後載入畫面消失、不擋操作")]
+    [Trait("Page", "儀表板")]
+    [Trait("Persona", "主責團隊成員")]
+    public async Task LoadingScreen_ShouldShowWhileDownloading_AndGoAwayAfterwards()
+    {
+        var page = await LoginAsAsync(Seed.Owner);
+
+        // 1.1.58：放慢 WASM 檔的下載（攔截請求也會讓瀏覽器不用快取），模擬第一次開啟。
+        await page.RouteAsync("**/_framework/*.wasm", async route =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(0.3));
+            await route.ContinueAsync();
+        });
+        await page.GotoAsync("/dashboard", new() { WaitUntil = WaitUntilState.Commit });
+
+        var loading = page.Locator("#app-loading");
+        await Expect(loading).ToBeVisibleAsync();
+        await Expect(loading).ToContainTextAsync("系統載入中");
+        await Expect(loading.Locator(".app-loading-name")).Not.ToBeEmptyAsync();
+
+        await Expect(page.GetByText("營運概況").First).ToBeVisibleAsync(new() { Timeout = 60_000 });
+        await Expect(loading).ToHaveCountAsync(0);
+
+        // 載入畫面拿掉後，外框可以操作。
+        await page.Locator(".sidebar a[href='/meetings']").First.ClickAsync();
+        await page.WaitForURLAsync(new Regex("/meetings$"));
+    }
+
     /// <summary>通知鈴按鈕的可及名稱是「通知，N 則未讀」，沒有未讀時只有「通知」。</summary>
     private static async Task<int> UnreadAsync(IPage page)
     {

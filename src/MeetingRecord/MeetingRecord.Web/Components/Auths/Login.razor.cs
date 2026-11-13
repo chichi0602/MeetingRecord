@@ -17,6 +17,9 @@ namespace MeetingRecord.Web.Components.Auths
         /// <summary>登入頁底部音波帶的條數。純視覺，改這個值不影響任何行為。</summary>
         private const int WaveBarCount = 76;
 
+        /// <summary>背景預先載入 WASM 的元件（1.1.58）：瀏覽器端互動、不預先算繪。</summary>
+        private static readonly IComponentRenderMode WarmupRenderMode = new Microsoft.AspNetCore.Components.Web.InteractiveWebAssemblyRenderMode(prerender: false);
+
         string captchaCode = string.Empty;
 
         [CascadingParameter]

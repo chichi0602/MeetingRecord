@@ -94,6 +94,7 @@ else
     }
 
     private DotNetObjectReference<MeetingRecord.Web.Client.Services.ClientErrorReporter>? clientErrorReporterRef;
+    private bool appLoadingHidden;
 
     /// <summary>
     /// 登入狀態確認後，把瀏覽器錯誤回報接到 API（1.1.47 起 client-error-reporter.js；1.1.54 起另有 .NET 例外的 DotNetErrorForwarder）。版面在換頁時不會重建，只註冊一次；
@@ -101,6 +102,20 @@ else
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // 1.1.58：外框或錯誤訊息畫好了才拿掉 App.razor 的載入畫面，中間不會閃一下空白。
+        // 要整頁導走的（401、須改密碼、停用）不拿掉，留到換頁。
+        if (!appLoadingHidden && (session is not null || errorMessage is not null))
+        {
+            appLoadingHidden = true;
+            try
+            {
+                await JS.InvokeVoidAsync("meetingRecordAppLoading.hide");
+            }
+            catch (JSException)
+            {
+            }
+        }
+
         if (session is null || clientErrorReporterRef is not null)
         {
             return;

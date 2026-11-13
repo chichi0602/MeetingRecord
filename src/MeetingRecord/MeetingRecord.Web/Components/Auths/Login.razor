@@ -110,3 +110,6 @@
         }
     </div>
 </div>
+
+@* 1.1.58：趁輸入帳密時在背景下載 WASM（第一次開啟時，登入後不必再等好幾 MB 下載完）。見 WasmWarmup.razor。 *@
+<MeetingRecord.Web.Client.Components.WasmWarmup @rendermode="WarmupRenderMode" />

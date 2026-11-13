@@ -1,10 +1,10 @@
 ﻿# 登入與帳號流程 PRD
 
-- 文件版本：1.8
+- 文件版本：1.9
 - 文件狀態：已實作
-- 現行系統版本：1.1.53
+- 現行系統版本：1.1.58
 - 首次實作版本：樣板（NET10-Blazor-Starter）既有核心功能
-- 最後核對日期：2026/11/12
+- 最後核對日期：2026/11/13
 
 ## 一、目標與範圍
 
@@ -28,6 +28,7 @@
 ## 三、畫面與欄位
 
 - **登入頁**：帳號、密碼、驗證碼（4 碼數字，前端產生存於隱藏欄位 `CaptchaCode`，以 `Ordinal` 比對）、「記住我」核取方塊。`GoogleOAuthSettings.IsConfigured` 為真時顯示「使用 Google 登入」按鈕，連結至 `/Auths/Google/Login`（帶 `returnUrl`）。前端逐項檢查空值與驗證碼，錯誤顯示「請輸入帳號／密碼／驗證碼」「驗證碼錯誤」。
+- **登入頁背景預先載入**（1.1.58 起）：登入頁放了一個瀏覽器端、什麼都不畫的元件 `WasmWarmup`，趁使用者輸入帳密時在背景下載並啟動 WASM。第一次開啟時，登入後不必再等好幾 MB 下載完（4 Mbps 實測：登入後到畫面出現從約 14 秒變成約 2.5 秒）。它不打 API，所以登入頁不會因為 401 被導來導去。
 - **待審核頁**：靜態說明，告知 Google 帳號已建立但預設停用，須管理者啟用後再登入，提供返回登入頁連結。
 - **個人資料（設定 API 密碼）**：新密碼、確認新密碼；已有本地密碼者另需「目前密碼」。設定後可用「帳號（Email）＋此密碼」呼叫 `/api/v1/auth/login` 取得 JWT。`support` 開發帳號被禁止。
 - **變更密碼**：目前密碼、新密碼、確認新密碼（`[Compare]` 驗證一致）。`support` 開發帳號被禁止。
@@ -37,10 +38,10 @@
 - **本地登入**（`MyUserServiceLogin.LoginAsync`，伺服器登入頁 → Service → `BackendDBContext`）：以 `Account` 查 `MyUser`；帳號不存在或密碼錯誤一律回「帳號或者密碼不正確」（不區分，避免帳號枚舉）。密碼以 `SecurePasswordHasher.VerifyPassword`（PBKDF2）驗證。
 - **帳號鎖定**：失敗時 `AccessFailedCount++`，達 `MaxFailedAccessAttempts=5` 設 `LockoutEndUtc = UtcNow + 15 分`；鎖定期間回「帳號已鎖定，請稍後再試。」成功登入後將 `AccessFailedCount` 歸零、`LockoutEndUtc` 清空。
 - **雜湊自動升級**：驗證回傳 `SuccessRehashNeeded`（舊格式）時，即時以 PBKDF2 重新雜湊並存回。
-- **Cookie 簽發**（Login.razor.cs）：建立 `ClaimTypes.Role=User`、`Name`、`NameIdentifier=Account`、`Sid=Id`，以 `CookieAuthenticationScheme` `SignInAsync`；`IsPersistent = RememberMe`（記住我 → 持久性 Cookie，0.4.119 起另明寫 `ExpiresUtc = 現在 + CookieSettings.RememberMeDays 天`；沒勾則 `CookieSettings.ExpireMinutes`，皆滑動續期），`RedirectUri` 取 `ReturnUrl` 或 `/meetings`。Cookie 名稱 `.MeetingRecord.Auth`，以持久化的 Data Protection 金鑰加密，伺服器重啟、IIS 回收後仍有效（0.4.119）。
+- **Cookie 簽發**（Login.razor.cs）：建立 `ClaimTypes.Role=User`、`Name`、`NameIdentifier=Account`、`Sid=Id`，以 `CookieAuthenticationScheme` `SignInAsync`；`IsPersistent = RememberMe`（記住我 → 持久性 Cookie，0.4.119 起另明寫 `ExpiresUtc = 現在 + CookieSettings.RememberMeDays 天`；沒勾則 `CookieSettings.ExpireMinutes`，皆滑動續期），`RedirectUri` 取 `ReturnUrl` 或 `/meetings`（未登入開 WASM 頁時，伺服器導來登入頁就帶著原網址當 `ReturnUrl`，1.1.58 起）。Cookie 名稱 `.MeetingRecord.Auth`，以持久化的 Data Protection 金鑰加密，伺服器重啟、IIS 回收後仍有效（0.4.119）。
 - **Google 登入**（`ExternalAuthController` + `ExternalLoginService.FindOrCreateAsync`）：Callback 驗證 `ExternalCookieScheme` 後，依序「GoogleId 比對 → Email 連結既有帳號 → 自動建立停用新帳號」（`Status=false`、`IsAdmin=false`、`Password=""`、`Salt=null`、指派預設角色）。`!Status` 導向 `/Auths/Pending`，否則簽發 Cookie 並導回本地安全的 `returnUrl`。0.4.119 起 Google 登入一律比照勾了記住我（`IsPersistent = true`、`RememberMeDays` 天）。
 - **登出**（伺服器頁 `Logout.razor.cs`）：先取身分，`SignOutAsync(CookieScheme)` 後寫稽核，再 `NavigateTo("/Auths/Login", forceLoad: true)`。
-- **登入後狀態**（`UserSessionService.EvaluateAsync`，經 `GET api/v1/session` 交給前端）：判斷使用者存在、`Status` 啟用、具角色，以及是否須改密碼（`NeedChangePasswordAsync`）。`WasmLayout` 依結果導向：未登入（401）到 `/Auths/Login`；刪除、停用、沒有角色到 `/Auths/Logout?reason=…`；須改密碼且不在改密碼頁時到 `/ChangePassword`。伺服器端另由 `MustChangePasswordFilter` 對須改密碼的帳號一律回 403（原因 `must-change-password`，`ApiClient` 據此導到 `/ChangePassword`），只有標 `[AllowWhenMustChangePassword]` 的端點例外。0.4.113 起條件是「`MyUser.MustChangePassword` 為 true **或**密碼等於 `123456`」：管理者建立帳號、或替別人重設密碼時設旗標（改自己的不設；`support` 一律不設，因為它被禁止改密碼），本人透過任何一個改密碼入口改完就清掉。Session API 同時回傳權限鍵（`IPermissionChecker.GetEffectivePermissionKeysAsync`，RBAC 多角色聯集），前端 `PermissionView` 據此決定頁面與按鈕。
+- **登入後狀態**（`UserSessionService.EvaluateAsync`，經 `GET api/v1/session` 交給前端）：判斷使用者存在、`Status` 啟用、具角色，以及是否須改密碼（`NeedChangePasswordAsync`）。`WasmLayout` 依結果導向：頁面上登入失效（401）到 `/Auths/Login`（還沒登入的人在伺服器就導走了）；刪除、停用、沒有角色到 `/Auths/Logout?reason=…`；須改密碼且不在改密碼頁時到 `/ChangePassword`。伺服器端另由 `MustChangePasswordFilter` 對須改密碼的帳號一律回 403（原因 `must-change-password`，`ApiClient` 據此導到 `/ChangePassword`），只有標 `[AllowWhenMustChangePassword]` 的端點例外。0.4.113 起條件是「`MyUser.MustChangePassword` 為 true **或**密碼等於 `123456`」：管理者建立帳號、或替別人重設密碼時設旗標（改自己的不設；`support` 一律不設，因為它被禁止改密碼），本人透過任何一個改密碼入口改完就清掉。Session API 同時回傳權限鍵（`IPermissionChecker.GetEffectivePermissionKeysAsync`，RBAC 多角色聯集），前端 `PermissionView` 據此決定頁面與按鈕。
 - **API 登入**（`AuthController`）：`login` 以帳密換 `TokenResponseDto`（JWT + Refresh），`refresh` 換新 Token，`me` 回目前使用者；一律包 `ApiResult<T>`，失敗回 401。
   - 0.4.115：`login` 對需要改密碼的帳號（同 `NeedChangePasswordAsync` 的條件）回 401「請先登入網頁變更密碼後，再使用 API。」以前強制改密碼只在網頁生效。
   - 0.4.115：`refresh` 換發前以 `MyUserServiceLogin.GetUserForTokenRefreshAsync` 重查資料庫，停用、鎖定、刪除或待改密碼都回 401，身分以資料庫為準。以前只看舊權杖的內容，被停用的人在 7 天內都能一直換到新權杖。
@@ -73,11 +74,12 @@
 - `MeetingRecord.Tests/MyUserServicePasswordTests.cs`：`ChangeOwnPasswordAsync` 正確／錯誤舊密碼、空白新密碼、確認不一致、`support` 帳號被拒。
 - `MeetingRecord.Tests/SecurePasswordHasherTests.cs`：自述式雜湊、非決定性、新舊格式驗證與要求 rehash。
 - `MeetingRecord.Tests/PermissionRulesTests.cs`：`UserSessionService` 判斷查無使用者／停用／無角色（各帶登出原因）、需改密碼、正常；預設角色的頁面與動作權限。導向由 WASM 的 `WasmLayout` 依 Session API 結果處理（`CookieApiTests`）。
+- `MeetingRecord.Tests/WasmPageEntryTests.cs`（1.1.58）：未登入開 WASM 頁 302 到登入頁並帶 ReturnUrl、登入頁有背景預先載入、帶 ReturnUrl 登入後回原頁；端對端 LGN-09 另檢查登入頁沒有任何 `/api/` 請求。
 - `MeetingRecord.Tests/TotpServiceTests.cs`：TOTP 產碼／驗證（骨架，預設關閉）。
 
 ## 八、相關程式與文件
 
-- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor`（`<EditForm FormName="login">` 登入表單）、`Login.razor.cs`（`Login.LoginUser`：驗證與 Cookie 簽發）
+- `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Login.razor`（`<EditForm FormName="login">` 登入表單、背景預先載入的 `WasmWarmup`）、`Login.razor.cs`（`Login.LoginUser`：驗證與 Cookie 簽發）
 - `src/MeetingRecord/MeetingRecord.Web/Components/Auths/Logout.razor.cs`（`Logout.OnInitializedAsync`：登出）、`Pending.razor`（`@page "/Auths/Pending"`）
 - `src/MeetingRecord/MeetingRecord.Web.Client/Pages/Account/Profile.razor`（`OnSubmitAsync`）、`ChangePassword.razor`（`OnSubmitAsync`）：WASM 頁，經 `AccountApi` 呼叫 `AccountController` 的 `change-own-password`、`password-status`、`api-password`；規則在 `MyUserService.ChangeOwnPasswordAsync`／`SetOwnApiPasswordAsync`
 - `src/MeetingRecord/MeetingRecord.Business/Services/Other/MyUserServiceLogin.cs`（`MyUserServiceLogin.LoginAsync`：鎖定、PBKDF2、升級、稽核）

@@ -599,9 +599,9 @@ namespace MeetingRecord.Web
                 // Configure the HTTP request pipeline.
                 if (app.Environment.IsDevelopment())
                 {
-                    // WASM 偵錯代理（/_framework/debug/ws-proxy，1.1.57）：Visual Studio／瀏覽器偵錯 Web.Client 用，
-                    // 版本跟著 WebAssembly.Server 套件、與執行環境一致；launchSettings.json 的 inspectUri 指向它。
-                    // 沒掛的話 VS 只能用自己內建的代理，讀不到框架組件的中繼資料而終止偵錯。只在開發環境。
+                    // WASM 偵錯端點（/_framework/debug，1.1.57）：官方範本的標準設定，launchSettings.json 的 inspectUri 指向它，
+                    // 也可在瀏覽器按 Shift+Alt+D 用 DevTools 偵錯 Web.Client。代理來自 WebAssembly.Server 套件，版本要與執行環境一致
+                    // （Visual Studio 本身也是啟動這個套件的代理）。只在開發環境。
                     app.UseWebAssemblyDebugging();
                 }
                 else

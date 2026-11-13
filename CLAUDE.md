@@ -73,6 +73,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 * 每次有異動後，要確認相關文件也要進行更新
 
+* 若沒有特別指定或者說明，不需要做全套測試這個項目
+
 ---
 
 ## 專案速查與文件入口（MeetingRecord）

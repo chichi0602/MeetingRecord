@@ -18,7 +18,13 @@ internal static partial class TestCookieLogin
     /// <param name="client">不能自動跟隨轉址（要看得到登入後的 302），Cookie 由它自己的處理常式保存。</param>
     public static async Task LoginAsync(HttpClient client, string account, string password)
     {
-        var html = await client.GetStringAsync("/Auths/Login");
+        using var response = await LoginAsync(client, account, password, "/Auths/Login");
+    }
+
+    /// <summary>從 <paramref name="loginPath"/>（可帶 ReturnUrl）登入，回傳登入後的 302 回應（1.1.58）。</summary>
+    public static async Task<HttpResponseMessage> LoginAsync(HttpClient client, string account, string password, string loginPath)
+    {
+        var html = await client.GetStringAsync(loginPath);
         var fields = HiddenInputPattern().Matches(html)
             .Select(m => (Name: NamePattern().Match(m.Value).Groups[1].Value, Value: WebUtility.HtmlDecode(ValuePattern().Match(m.Value).Groups[1].Value)))
             .Where(x => x.Name.Length > 0)
@@ -27,9 +33,10 @@ internal static partial class TestCookieLogin
         fields["Input.Password"] = password;
         fields["Input.CaptchaInput"] = fields["Input.CaptchaCode"];
 
-        using var response = await client.PostAsync("/Auths/Login", new FormUrlEncodedContent(fields));
+        var response = await client.PostAsync(loginPath, new FormUrlEncodedContent(fields));
         Assert.True(response.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.Found, $"{account} 網頁登入失敗：{(int)response.StatusCode}");
         Assert.DoesNotContain("/Auths/Login", response.Headers.Location?.ToString() ?? string.Empty);
+        return response;
     }
 
     /// <summary>建一個帶指定權限鍵的角色與帳號，回傳帳號與 Id。</summary>

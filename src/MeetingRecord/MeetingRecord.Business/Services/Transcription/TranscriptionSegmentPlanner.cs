@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.Transcription;
 
@@ -166,10 +167,13 @@ public static partial class TranscriptionSegmentPlanner
     /// <summary>
     /// 估算轉錄結果的 token 數：中日韓文字一字約一個 token，其他非空白字元約四個字一個 token。
     /// 只用來判斷「是不是頂到輸出上限」，不用於計費。
+    /// 1.1.63：先去掉行首的「講者 A：」再估——代號是我們自己加的、不是模型的輸出，
+    /// 講者輪替多的段落會被代號灌水，誤判成截斷而對半重轉（重轉要再付錢）。
     /// </summary>
     public static int EstimateTokens(string? text)
     {
-        if (string.IsNullOrEmpty(text))
+        text = TranscriptSpeakerLabels.Strip(text);
+        if (text.Length == 0)
         {
             return 0;
         }

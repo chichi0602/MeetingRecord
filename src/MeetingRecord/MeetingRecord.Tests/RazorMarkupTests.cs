@@ -69,6 +69,55 @@ public sealed class RazorMarkupTests
                 + string.Join('\n', offenders));
     }
 
+    /// <summary>
+    /// 註解不可以夾在元件標籤的屬性列裡（<c>&lt;Modal Title="…"</c> 換行後接註解、再接 <c>Visible="…"</c>）。
+    /// 編譯器不會擋，但執行時整段註解會被當成參數名稱傳給元件，AntDesign 丟
+    /// 「does not have a property matching the name」，整頁渲染失敗。
+    /// 1.1.19 起 7 個頁面這樣寫：待辦事項頁直接打不開，AppShell 那一處讓每一頁底部都跳錯誤列（1.1.62 修正）。
+    /// 說明要寫在標籤的前一行。
+    /// </summary>
+    [Fact]
+    public void RazorComments_ShouldNotSitInsideATag()
+    {
+        var offenders = new List<string>();
+
+        foreach (var file in EnumerateRazorFiles())
+        {
+            // 屬性值裡的 lambda 箭頭不是標籤結尾，先抹掉免得誤判成「標籤已關閉」。
+            var text = File.ReadAllText(file).Replace("=>", "==", StringComparison.Ordinal);
+            var from = 0;
+
+            while (true)
+            {
+                var open = text.IndexOf(CommentOpen, from, StringComparison.Ordinal);
+                if (open < 0)
+                {
+                    break;
+                }
+
+                var lastLt = text.LastIndexOf('<', open);
+                var lastGt = text.LastIndexOf('>', open);
+                if (lastLt > lastGt && lastLt + 1 < text.Length && char.IsAsciiLetter(text[lastLt + 1]))
+                {
+                    offenders.Add($"{Path.GetFileName(file)}:{LineOf(text, open)}：註解夾在標籤屬性列裡");
+                }
+
+                var close = text.IndexOf(CommentClose, open + CommentOpen.Length, StringComparison.Ordinal);
+                if (close < 0)
+                {
+                    break;
+                }
+
+                from = close + CommentClose.Length;
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "Razor 註解要放在標籤前一行，夾在屬性列裡會被當成元件參數、整頁渲染失敗：\n"
+                + string.Join('\n', offenders));
+    }
+
     [Fact]
     public void Scanner_ShouldActuallyFindRazorFiles()
     {

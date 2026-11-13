@@ -173,6 +173,14 @@
     user-select: text;
 }
 
+/* 逐字稿有講者代號時的說明（1.1.63）。 */
+.markdown-editor-speaker-hint {
+    padding: 8px 16px 0;
+    background: #ffffff;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+}
+
 .markdown-editor-empty {
     margin: 0;
     color: var(--oat-ink-soft);

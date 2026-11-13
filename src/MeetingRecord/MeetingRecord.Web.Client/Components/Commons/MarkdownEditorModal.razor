@@ -45,6 +45,11 @@
     {
         @* 純文字、保留換行、可以選取複製。不走 Markdown：逐字稿不是 Markdown，硬轉會把行首的 - 或 # 誤當格式。 *@
         <div class="markdown-editor markdown-editor-readonly">
+            @* 1.1.63：diarize 轉錄的逐字稿有「講者 A：」代號，每段各自編號，要講清楚不是同一人。 *@
+            @if (TranscriptSpeakerLabels.HasLabels(Transcript))
+            {
+                <div class="markdown-editor-speaker-hint">講者代號由語音辨識自動標示，每約 5 分鐘重新編號，不同段落的「講者 A」不一定是同一人。</div>
+            }
             <div class="markdown-editor-pane markdown-editor-transcript">@Transcript</div>
         </div>
     }

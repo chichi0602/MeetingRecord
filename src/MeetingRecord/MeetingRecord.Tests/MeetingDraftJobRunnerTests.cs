@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
+using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.TextGeneration;
@@ -98,6 +99,22 @@ public sealed class MeetingDraftJobRunnerTests
         await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
 
         Assert.Equal("整理：內容", provider.Calls[0].UserPrompt);
+    }
+
+    [Fact]
+    public async Task RunAsync_ShouldExplainSpeakerLabels_WhenTranscriptHasThem()
+    {
+        // 1.1.63：diarize 逐字稿有「講者 A：」，要講清楚代號不是人名、每段重編；但不能觸發人名名單的尾部提醒。
+        await using var fixture = await DraftJobFixture.CreateAsync();
+        var template = await fixture.AddTemplateAsync("整理：{{transcript}}");
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", "講者 A：大家好\n講者 B：開始吧", template);
+
+        var provider = new FakeTextGenerationProvider("會議紀錄");
+        await fixture.CreateRunner(provider).RunAsync(meeting.Id, CancellationToken.None);
+
+        Assert.Equal(
+            NameGuidancePromptHelper.SpeakerLabelNote + "整理：講者 A：大家好\n講者 B：開始吧",
+            provider.Calls[0].UserPrompt);
     }
 
     #endregion

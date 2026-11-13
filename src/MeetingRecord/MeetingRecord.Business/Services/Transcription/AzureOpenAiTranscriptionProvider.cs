@@ -11,6 +11,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 ///
 /// 連線資訊一律取自 <see cref="LlmSettings"/>（禁止直接讀 IConfiguration）；
 /// 部署名稱取 <see cref="LlmProviderSettings.TranscriptionModel"/>，例如 gpt-4o-transcribe。
+/// 部署名稱含 <c>diarize</c> 時改要講者（見 <see cref="IsDiarizeModel"/>）。
 /// </summary>
 public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
 {
@@ -64,7 +65,14 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
         var audioContent = new StreamContent(audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/mpeg");
         content.Add(audioContent, "file", fileName);
-        content.Add(new StringContent("text"), "response_format");
+
+        // 1.1.63：diarize 模型要 diarized_json 才拿得到講者；輸入超過 30 秒時 chunking_strategy 是必填，不帶直接回 400。
+        var isDiarize = IsDiarizeModel(provider.TranscriptionModel);
+        content.Add(new StringContent(isDiarize ? "diarized_json" : "text"), "response_format");
+        if (isDiarize)
+        {
+            content.Add(new StringContent("auto"), "chunking_strategy");
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri) { Content = content };
         request.Headers.Add("api-key", provider.ApiKey);
@@ -88,8 +96,15 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
                     "語音轉錄", (int)response.StatusCode, response.ReasonPhrase, body, provider.TranscriptionModel, provider.Endpoint, modelKey));
         }
 
-        return body.Trim();
+        return isDiarize ? DiarizedTranscriptFormatter.Format(body) : body.Trim();
     }
+
+    /// <summary>
+    /// 部署是不是會分講者的 diarize 模型。Azure 的部署名稱是自訂的，這裡以名稱含 <c>diarize</c> 判斷，
+    /// 部署時名稱要保留這個字（例如 <c>gpt-4o-transcribe-diarize</c>）。
+    /// </summary>
+    internal static bool IsDiarizeModel(string? deploymentName) =>
+        deploymentName?.Contains("diarize", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>
     /// 組出 Azure OpenAI 的轉錄端點位址。抽成純函式以便單元測試。

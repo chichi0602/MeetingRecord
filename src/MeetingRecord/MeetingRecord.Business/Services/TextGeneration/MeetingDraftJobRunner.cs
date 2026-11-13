@@ -155,12 +155,18 @@ public class MeetingDraftJobRunner
                 TagStringHelper.ToList(glossaryTerms),
                 TagStringHelper.ToList(meeting.DraftAttendees));
 
+            // 1.1.63：逐字稿有「講者 A：」代號時，map 與 reduce 都要先講清楚代號不是人名、每段重編。
+            // 只在有代號時加，舊逐字稿的提示詞逐字元不變。不併進 guidance——併進去會觸發人名名單的尾部提醒。
+            var speakerNote = TranscriptSpeakerLabels.HasLabels(transcript)
+                ? NameGuidancePromptHelper.SpeakerLabelNote
+                : string.Empty;
+
             var condensed = await CondenseAsync(
-                provider, transcript, guidance, meeting, callContext, cancellationToken);
+                provider, transcript, speakerNote + guidance, meeting, callContext, cancellationToken);
 
             // 名單放最前面：範本形狀不可控，多數把 {{transcript}} 擺在結尾，
             // 附加在最後會緊貼逐字稿、容易被讀成逐字稿的一部分。
-            var userPrompt = guidance + PromptVariableHelper.Render(template, new Dictionary<string, string?>
+            var userPrompt = speakerNote + guidance + PromptVariableHelper.Render(template, new Dictionary<string, string?>
             {
                 ["transcript"] = condensed,
                 ["meetingTitle"] = meeting.Title,

@@ -99,9 +99,9 @@ else
         </div>
     </div>
 
+    @* 單向繫結（1.1.19）：AntDesign 按「確定」時會先送出「關閉」再呼叫 OnOk，用 @bind-Visible 的話伺服器擋下時視窗已經關了、填的內容也不見。開關一律由本頁決定。 *@
     <Modal Title="@modalTitle"
            Class="form-modal-compact"
-           @* 單向繫結（1.1.19）：AntDesign 按「確定」時會先送出「關閉」再呼叫 OnOk，用 @bind-Visible 的話伺服器擋下時視窗已經關了、填的內容也不見。開關一律由本頁決定。 *@
            Visible="@modalVisible"
            Keyboard="true"
            OnOk="OnModalOKHandleAsync"

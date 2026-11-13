@@ -359,10 +359,10 @@ else
         </div>
     </div>
 
+    @* 單向繫結（1.1.19）：AntDesign 按「確定」時會先送出「關閉」再呼叫 OnOk，用 @bind-Visible 的話伺服器擋下（400）時視窗已經關了、
+       填的內容也跟著不見。開關一律由這一頁決定：存檔成功、取消（含 Esc 與點遮罩）才關。 *@
     <Modal Title="@modalTitle"
            Class="form-modal-standard"
-           @* 單向繫結（1.1.19）：AntDesign 按「確定」時會先送出「關閉」再呼叫 OnOk，用 @bind-Visible 的話伺服器擋下（400）時視窗已經關了、
-              填的內容也跟著不見。開關一律由這一頁決定：存檔成功、取消（含 Esc 與點遮罩）才關。 *@
            Visible="@modalVisible"
            Keyboard="true"
            ConfirmLoading="@isSaving"

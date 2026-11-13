@@ -1,8 +1,8 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.10
+- 文件版本：2.11
 - 文件狀態：已實作
-- 現行系統版本：1.1.60
+- 現行系統版本：1.1.63
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
 - 最後核對日期：2026/11/13
 
@@ -194,7 +194,7 @@
 | 區段 | 鍵 | 現行值 | 說明 |
 |---|---|---|---|
 | `LlmSettings` | `Currency` | `USD` | 定價幣別 |
-| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-6.1-sol`（1.0.36）、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
+| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-4o-transcribe-diarize`（1.1.63）、`gpt-6.1-sol`（1.0.36）、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
 | `ExchangeRateSettings` | `Enabled` | `true` | 總開關；`false` 時整頁退回定價幣別 |
 | `ExchangeRateSettings` | `SourceUrl` | `https://open.er-api.com/v6/latest/USD` | 必須是 http(s) 絕對網址 |
 | `ExchangeRateSettings` | `TargetCurrency` | `TWD` | 必須是三碼英文字母 |

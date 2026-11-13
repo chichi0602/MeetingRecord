@@ -172,7 +172,7 @@ public sealed class SystemHealthChecksTests
         settings.TranscriptionProvider = "AzureOpenAI";
 
         // 1.0.36：部署改用 gpt-6.1-sol，出貨的單價表沒有它時金額會變「—」。
-        foreach (var (model, transcriptionModel) in new[] { ("gpt-6.1-sol", "gpt-transcribe"), ("gpt-5.6-sol", "gpt-transcribe"), ("gpt-4o-mini", "gpt-4o-transcribe") })
+        foreach (var (model, transcriptionModel) in new[] { ("gpt-6.1-sol", "gpt-transcribe"), ("gpt-5.6-sol", "gpt-transcribe"), ("gpt-4o-mini", "gpt-4o-transcribe"), ("gpt-6.1-sol", "gpt-4o-transcribe-diarize") })
         {
             provider.Model = model;
             provider.TranscriptionModel = transcriptionModel;

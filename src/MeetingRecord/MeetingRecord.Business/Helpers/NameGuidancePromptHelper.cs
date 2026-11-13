@@ -32,6 +32,16 @@ public static class NameGuidancePromptHelper
     /// </summary>
     public const string ReduceReminder = "\n\n（再次提醒：人名與專有名詞請依開頭名單的正確寫法。）";
 
+    /// <summary>
+    /// 逐字稿有講者代號時（1.1.63，見 <c>TranscriptSpeakerLabels</c>）附在提示詞最前面的說明。
+    /// 沒講清楚的話，模型會把「講者 A」當成人名列進出席人員，或把不同段的 A 當成同一人。
+    /// </summary>
+    public const string SpeakerLabelNote =
+        "【逐字稿的講者代號】\n"
+        + "逐字稿每行開頭的「講者 A：」「講者 B：」是語音辨識自動標的代號，不是人名，"
+        + "而且每約 5 分鐘重新編號——不同段落的同一代號不一定是同一人。"
+        + "能從內容判斷出是誰時才寫出名字；判斷不出就寫「未標示」，不要把代號當成出席人員或負責人。\n\n";
+
     private const string Heading = "【本次會議的專有名詞與人名對照】";
 
     /// <summary>

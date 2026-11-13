@@ -13,8 +13,11 @@ public static class MeetingMediaPolicy
     /// <summary>
     /// 轉錄時每段的長度（秒）。FFmpeg 依它切段（<c>FfmpegMediaConverter.SegmentSeconds</c>），
     /// 畫面的費用說明也用它算分鐘數，兩邊同一個來源，改常數時文案不會偷偷過期。
+    /// ⚠️ 真正的限制不是檔案大小，而是轉錄模型的<b>輸出長度</b>：gpt-4o-transcribe 單次最多輸出約 2000 token
+    /// （中文約 2000 多字），超過的部分會被靜默截掉、API 不回錯誤。以前每段 15 分鐘，
+    /// 講話密集時每段都停在句子中間、後半段整個不見；改成 5 分鐘（約 1500 字）才留得出餘裕。不要再拉長。
     /// </summary>
-    public const int TranscriptionSegmentSeconds = 900;
+    public const int TranscriptionSegmentSeconds = 300;
 
     /// <summary>單一影音檔上限：1GB。</summary>
     public const long MaxUploadFileSize = 1024L * 1024L * 1024L;

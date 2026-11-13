@@ -13,7 +13,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 /// 為什麼「一律切段」：語音轉錄 API 有單檔大小上限（Azure OpenAI 為 25MB），
 /// 而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，
 /// 不必為「檔案夠小就不切」多維護一個分支。
-/// 15 分鐘 @ 32kbps 約 3.6MB，遠低於上限。
+/// 5 分鐘 @ 32kbps 約 1.2MB，遠低於上限。
 /// </para>
 /// </summary>
 public class FfmpegMediaConverter : IMediaConverter

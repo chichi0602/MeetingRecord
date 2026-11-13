@@ -144,7 +144,8 @@
    斷點刻意用 1400px 而不是 1200px：側邊欄收合是 .page 上的 runtime class
    （--sidebar-width 300px→64px），媒體查詢量的是視窗寬、看不到這 236px 的差，
    所以同一個視窗寬度下無法區分展開與收合。取保守值，配合表格的 ScrollX，
-   誤判成單欄也只是要橫向捲動，不會壞版。 */
+   誤判成單欄也只是要橫向捲動，不會壞版。
+   1.1.60：斷點改成 1480px，理由見下方「欄位左右留白收窄」那段的約束。 */
 .todo-view-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
@@ -152,7 +153,7 @@
     align-items: start;
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1480px) {
     .todo-view-body {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -323,7 +324,7 @@ button.todo-view-pill:focus-visible {
    單欄時面板是疊在表格「下面」的，量「面板頂到視窗底」會得到幾乎沒有高度的結果，
    所以退回 0.4.66 的固定上限：小清單一樣自己捲，只是整頁要捲一段才看得到面板——
    兩塊都要完整塞進一個畫面，在這個寬度下本來就辦不到。 */
-@media (max-width: 1400px) {
+@media (max-width: 1480px) {
     .todo-view-owner-panel {
         max-height: none;
     }
@@ -404,7 +405,11 @@ button.todo-view-pill:focus-visible {
       降到 870 之後雙欄從 1401px 起就塞得下。
 
    ⚠️ 要加欄位或把欄寬調回去，記得同時檢查 ScrollX 還塞不塞得進雙欄：
-      雙欄時表格容器寬 ≈ 視窗寬 − 514，斷點 1400px ⇒ 最窄是 887px。 */
+      雙欄時表格容器寬 ≈ 視窗寬 − 514，所以雙欄斷點至少要是 ScrollX + 514。
+
+   ⚠️ 1.1.60 復發過一次：1.0.44～1.0.53 加了「異動紀錄」「新增子項目」兩顆圖示與多選勾選欄，
+      ScrollX 從 870 長到 966，但斷點還停在 1400（最窄 887px），1401～1480px 又出現陰影線。
+      欄寬已經是依內容實測的最小值，所以改成把斷點拉到 966 + 514 = 1480px。 */
 .todo-view-table-wrap ::deep .ant-table-thead > tr > th,
 .todo-view-table-wrap ::deep .ant-table-tbody > tr > td {
     padding-left: 8px;

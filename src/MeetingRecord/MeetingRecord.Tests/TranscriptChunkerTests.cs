@@ -33,7 +33,7 @@ public sealed class TranscriptChunkerTests
     [Fact]
     public void Split_ShouldPreferSegmentBoundaries_WhenTranscriptExceedsLimit()
     {
-        // 轉錄產出的逐字稿以 "\n\n" 接合每個 15 分鐘分段，優先在這個邊界切開。
+        // 轉錄產出的逐字稿以 "\n\n" 接合每個 5 分鐘分段，優先在這個邊界切開。
         var transcript = string.Join("\n\n", new string('甲', 40), new string('乙', 40), new string('丙', 40));
 
         var result = TranscriptChunker.Split(transcript, maxChars: 100);

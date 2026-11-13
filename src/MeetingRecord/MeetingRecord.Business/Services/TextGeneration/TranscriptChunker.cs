@@ -11,7 +11,7 @@ namespace MeetingRecord.Business.Services.TextGeneration;
 public static class TranscriptChunker
 {
     /// <summary>
-    /// 轉錄產出的逐字稿以此字串接合每個 15 分鐘分段
+    /// 轉錄產出的逐字稿以此字串接合每個 5 分鐘分段
     /// （見 <c>TranscriptionJobRunner.SegmentSeparator</c>），切段時優先沿用這個邊界。
     /// </summary>
     public const string SegmentSeparator = "\n\n";

@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.23
+- 文件版本：2.24
 - 文件狀態：已實作
-- 現行系統版本：1.1.53
+- 現行系統版本：1.1.60
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/11/12
+- 最後核對日期：2026/11/13
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -18,7 +18,7 @@
 
 ```
 建立會議紀錄 ─► 上傳影音檔（≤1GB）─► 背景佇列
-                                        └─► FFmpeg 抽音軌／轉 mp3／切 15 分鐘分段
+                                        └─► FFmpeg 抽音軌／轉 mp3／切 5 分鐘分段
                                               └─► 逐段 Azure OpenAI 轉錄 ─► 串接 ─► 逐字稿 .txt ─► 畫面預覽
 ```
 
@@ -165,7 +165,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 5. 經 `AiCallGateway.TranscribeAsync`（1.0.29 起；記用量帳本與 AI 對話紀錄，關聯說明「會議 #N〈標題〉語音轉錄 i/n」，同一個音檔共用 ThreadKey；對話紀錄只記檔名、時長、分段與轉出的文字，不存音訊）由 `AzureOpenAiTranscriptionProvider` 逐段 `POST {Endpoint}/openai/deployments/{TranscriptionModel}/audio/transcriptions?api-version={...}`（`api-key` 標頭、`multipart/form-data`、`response_format=text`）。api-version 未設定時用內建的 `2025-03-01-preview`（1.0.37）。轉錄刻意不走 v1：實測 v1 轉錄路徑打 `gpt-transcribe` 部署回 404。
 6. 各段文字以空行接合、轉成繁體（1.0.41，見上方「逐字稿一律繁體」）後寫入逐字稿檔，狀態轉為「已完成」；重跑時**新檔寫入成功後才刪舊檔**。1.0.29 起同時寫入 `Meeting.MediaDurationSeconds`（各段時長加總，儀表板「會議時數」讀這一欄）；重新上傳影音時清空。
 
-> **為什麼一律切段**：Azure OpenAI 的音訊轉錄有單檔 25MB 上限，而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，不必為「檔案夠小就不切」多維護一個分支；15 分鐘 @32kbps 約 3.6MB，遠低於上限，同時順帶解決長會議的時長問題。
+> **為什麼一律切段**：Azure OpenAI 的音訊轉錄有單檔 25MB 上限，而上傳端允許到 1GB。固定切段讓長會議與短錄音走同一條路徑，不必為「檔案夠小就不切」多維護一個分支；5 分鐘 @32kbps 約 1.2MB，遠低於上限，同時順帶解決長會議的時長問題。
 
 ### 背景佇列與失敗語意
 

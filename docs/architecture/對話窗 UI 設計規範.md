@@ -1,10 +1,10 @@
 ﻿# 對話窗 UI 設計規範
 
-- 文件版本：1.24
+- 文件版本：1.25
 - 文件狀態：已實作
-- 現行系統版本：1.1.53
+- 現行系統版本：1.1.60
 - 首次實作版本：0.4.118
-- 最後核對日期：2026/11/12
+- 最後核對日期：2026/11/13
 
 ## 摘要
 
@@ -27,7 +27,7 @@
 | 類型 | 判準 | 尺寸／版型 | 本文件適用章節 |
 |---|---|---|---|
 | **表單對話窗** | 內含 `EditForm`／`AntDesign.Form`，使用者要輸入或修改記錄 | `form-modal-compact`／`-standard`／`-large`／`meeting-view-modal` 四擇一 | 二～七 |
-| 選取型對話窗 | 只有下拉選取、沒有自由輸入（產生會議紀錄、歸屬到專案） | `form-modal-compact` | 二～四、六 |
+| 選取型對話窗 | 只有下拉選取、沒有自由輸入（產生會議紀錄、歸屬到專案） | `form-modal-compact`；產生會議紀錄 1.1.60 起改 `form-modal-large`＋`meeting-draft-request-modal` | 二～四、六 |
 | 唯讀明細窗 | 只是攤開來看（關於、專案附件、待辦詳情） | `Footer="null"`，掛尺寸 class | 二～四 |
 | **全螢幕工作窗** | 長時間停留的工作面板（會議紀錄編修、AI 問答） | `meeting-view-modal`（＋`ai-chat-modal`） | 十一 |
 | **二次確認框** | `ModalService.ConfirmAsync`，一句話、兩顆按鈕 | 吃基準線，不掛尺寸 class | 八 |
@@ -80,6 +80,7 @@
 | `.meeting-view-modal` | `width: 96vw; max-width: 96vw; top: 2vh`；`.meeting-view-modal .ant-modal-content { max-height: 96vh }` | 影音上傳、左右分欄編輯器、AI 問答 |
 | `.ai-chat-modal`（疊加用） | `.ai-chat-modal .ant-modal-content { height: 96vh }` | AI 問答，見第十一節 |
 | `.markdown-editor-modal`（疊加用） | `.ant-modal-body` 改成 flex column、`gap: 12px`、`overflow: hidden`；1.0.40 起 `.ant-modal-content { height: 96vh }` | 會議紀錄與逐字稿視窗，見第十一節 |
+| `.meeting-draft-request-modal`（疊加用，1.1.60） | `.meeting-draft-request-modal .ant-modal-content { height: 92vh }` | 產生會議紀錄。只有四個欄位，高度隨內容縮時對話框太矮，「所屬專案」「與會人員」的下拉清單往下展開會被 `.ant-modal-content` 的 `overflow: hidden` 切掉；固定高度讓清單有地方展開。⚠️ 其他含下拉選單的矮對話窗（例如歸屬到專案）清單太長時也會被切掉 |
 
 ### 4.1 各對話窗使用的尺寸（現況）
 
@@ -89,7 +90,7 @@
 | 關於 | `Web.Client/Components/Layout/AppShell.razor` | `form-modal-compact` |
 | 分類維護 | `Web.Client/Pages/Categories/CategoryPage.razor` | `form-modal-compact` |
 | 團隊維護 | `Web.Client/Pages/Teams/TeamPage.razor` | `form-modal-compact` |
-| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Web.Client/Pages/Meetings/MeetingPage.razor` | `form-modal-compact` |
+| 產生會議紀錄（1.0.48 前標題「AI 轉會議紀錄」） | `Web.Client/Pages/Meetings/MeetingPage.razor` | `form-modal-large meeting-draft-request-modal`（1.1.60 前是 `form-modal-compact`） |
 | 歸屬到專案 | `Web.Client/Pages/Meetings/MeetingPage.razor` | `form-modal-compact` |
 | 使用者維護 | `Web.Client/Pages/Admins/MyUserPage.razor` | `form-modal-standard` |
 | 提示詞範本維護 | `Web.Client/Pages/PromptTemplates/PromptTemplatePage.razor` | `form-modal-standard` |

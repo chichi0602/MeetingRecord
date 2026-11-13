@@ -62,10 +62,10 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
 
         var meeting = await context.Meeting.AsNoTracking().SingleAsync();
         Assert.Equal(TranscriptionStatus.Completed, meeting.TranscriptionStatus);
-        Assert.Equal(1500d, meeting.MediaDurationSeconds);   // 15 分＋10 分
+        Assert.Equal(480d, meeting.MediaDurationSeconds);   // 5 分＋3 分
 
         var ledger = await context.AiUsageLog.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
-        Assert.Equal([900d, 600d], ledger.Select(x => x.AudioSeconds!.Value));
+        Assert.Equal([300d, 180d], ledger.Select(x => x.AudioSeconds!.Value));
         Assert.All(ledger, row => Assert.Equal(7, row.UserId));
 
         Assert.Equal(2, callLog.Entries.Count);
@@ -166,7 +166,7 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
                 })
                 .ToList();
 
-            return Task.FromResult(new MediaSegmentSet(workingDirectory, segments, TimeSpan.FromSeconds(1500)));
+            return Task.FromResult(new MediaSegmentSet(workingDirectory, segments, TimeSpan.FromSeconds(480)));
         }
     }
 

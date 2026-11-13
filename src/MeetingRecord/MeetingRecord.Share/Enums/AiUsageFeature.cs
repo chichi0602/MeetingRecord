@@ -24,7 +24,7 @@ public enum AiUsageFeature
     /// </summary>
     MeetingDraftChunkSummary = 1,
 
-    /// <summary>語音轉錄。一個音檔會有 <b>N 次</b>，N 是以 15 分鐘切出來的段數。</summary>
+    /// <summary>語音轉錄。一個音檔會有 <b>N 次</b>，N 是以 5 分鐘切出來的段數。</summary>
     Transcription = 2,
 
     /// <summary>AI 問答。提問與「重新產生答案」各算一次。</summary>

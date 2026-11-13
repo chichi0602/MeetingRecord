@@ -102,6 +102,17 @@ public sealed class TranscriptionRequestTests
     }
 
     [Fact]
+    public void SegmentSeconds_ShouldStayWithinTranscriptionOutputLimit()
+    {
+        // gpt-4o-transcribe 單次輸出上限約 2000 token（中文約 2000 多字），超過的部分會被靜默截掉、不回錯誤。
+        // 實測 15 分鐘一段時，每段停在 1800～2400 字、句子講到一半（1.1.60 修正）。
+        // 講話最密的會議約每分鐘 300 字，5 分鐘約 1500 字，才留得出餘裕；不要再把段落拉長。
+        Assert.True(
+            FfmpegMediaConverter.SegmentSeconds <= 300,
+            $"SegmentSeconds = {FfmpegMediaConverter.SegmentSeconds}，超過 300 秒會讓每段逐字稿被截斷。");
+    }
+
+    [Fact]
     public void BuildSegmentArguments_ShouldQuotePathsSoSpacesSurvive()
     {
         var arguments = FfmpegMediaConverter.BuildSegmentArguments(

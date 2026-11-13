@@ -1,10 +1,10 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.9
+- 文件版本：2.10
 - 文件狀態：已實作
-- 現行系統版本：1.1.53
+- 現行系統版本：1.1.60
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/11/12
+- 最後核對日期：2026/11/13
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|
 | 會議紀錄生成（最終整理，reduce） | 0 | token | `MeetingDraftJobRunner` | 1 |
 | 逐字稿分段摘要（map） | 1 | token | `MeetingDraftJobRunner` | N（逐字稿切段數） |
-| 語音轉錄 | 2 | 音訊秒數 | `TranscriptionJobRunner` | N（音檔每 15 分鐘一段） |
+| 語音轉錄 | 2 | 音訊秒數 | `TranscriptionJobRunner` | N（音檔每 5 分鐘一段） |
 | AI 問答 | 3 | token | `AiChatService` | 提問與「修改後重新產生」各 1 |
 | 待辦事項擷取 | 4 | token | `TodoExtractionService` | 1 |
 | AI 日誌分析（0.4.121） | 5 | token | `DiagnosticAiService`（監控與診斷 → 日誌檢視） | 1（不帶會議／專案，「對象」為「—」） |

@@ -151,6 +151,14 @@
         height: 96vh !important;
     }
 
+    /* 產生會議紀錄（1.1.60）：欄位只有四個，高度隨內容縮的話對話框只有六百多 px，
+       「所屬專案」「與會人員」的下拉清單往下展開就被 .ant-modal-content 的 overflow: hidden 切掉。
+       固定吃滿高度，讓下拉清單有地方展開（使用者要求盡量滿版）。
+       用 92vh 不用 96vh：沿用基準線的 top: 4vh，4 ＋ 92 ＝ 96vh。 */
+    .meeting-draft-request-modal .ant-modal-content {
+        height: 92vh !important;
+    }
+
     /* 「標題與按鈕固定、只有內容區捲動」現在由上面的基準線負責，
        不必再為每一級各寫一次。
 

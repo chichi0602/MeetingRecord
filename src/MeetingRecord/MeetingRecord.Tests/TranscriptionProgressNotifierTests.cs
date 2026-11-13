@@ -43,7 +43,7 @@ public sealed class TranscriptionProgressNotifierTests
     [Fact]
     public void CalculatePercent_SingleSegmentFile_ShouldJumpFromSliceToFull()
     {
-        // 15 分鐘以下的音檔只有一段，所以進度必然是 5% → 100%，中間沒有東西可報。
+        // 5 分鐘以下的音檔只有一段，所以進度必然是 5% → 100%，中間沒有東西可報。
         Assert.Equal(TranscriptionProgressNotifier.ConvertingPercent,
             TranscriptionProgressNotifier.CalculatePercent(TranscriptionPhase.Converting, 0, 0));
         Assert.Equal(100, TranscriptionProgressNotifier.CalculatePercent(TranscriptionPhase.Transcribing, 1, 1));

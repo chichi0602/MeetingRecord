@@ -220,7 +220,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITranscriptionProvider, AzureOpenAiTranscriptionProvider>();
         services.AddScoped<TranscriptionJobRunner>();
 
-        // 轉錄是長時間請求（單段 15 分鐘音訊），預設的 100 秒逾時明顯不夠。
+        // 轉錄是長時間請求（單段 5 分鐘音訊），預設的 100 秒逾時明顯不夠。
         services.AddHttpClient(AzureOpenAiTranscriptionProvider.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromMinutes(10);

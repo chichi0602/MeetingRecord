@@ -121,7 +121,7 @@ public class TranscriptionJobRunner
 
             using var segments = await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
 
-            // 每一段各自的秒數：轉錄按時長計費，而最後一段通常不是整整 15 分鐘。
+            // 每一段各自的秒數：轉錄按時長計費，而最後一段通常不是整整 5 分鐘。
             // 全部算成整段會把費用高估。
             var segmentSeconds = MediaDurationParser.SplitSegmentSeconds(
                 segments.TotalDuration,
@@ -144,7 +144,7 @@ public class TranscriptionJobRunner
 
                 // 記帳與 AI 對話紀錄由 gateway 處理（失敗時音檔多半已上傳、已計費，照樣記）。
                 // ⚠️ gateway 在呼叫結束時就記帳，所以下面兩個 continue（指令洩漏被丟棄、整段無人說話）不會漏記——
-                //    那一次轉錄照樣花了錢。轉錄每段一筆（每 15 分鐘一段），按時長計費。
+                //    那一次轉錄照樣花了錢。轉錄每段一筆（每 5 分鐘一段），按時長計費。
                 string segmentText;
                 await using (var segmentStream = File.OpenRead(segmentPath))
                 {

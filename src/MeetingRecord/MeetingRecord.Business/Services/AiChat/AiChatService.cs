@@ -738,7 +738,10 @@ public class AiChatService
             .FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken)
             ?? throw new InvalidOperationException($"找不到 Id 為 {meetingId} 的會議紀錄，可能已被刪除。");
 
-        var transcript = await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken);
+        // 1.1.64：使用者標示過的講者換成真名，問「某人說了什麼」才答得出來。
+        var transcript = TranscriptSpeakerLabels.ApplyNames(
+            await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken),
+            TranscriptSpeakerLabels.ParseNames(meeting.SpeakerNames));
 
         var sources = new List<ChatSource>
         {

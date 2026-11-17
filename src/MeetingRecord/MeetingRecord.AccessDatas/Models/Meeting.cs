@@ -114,6 +114,13 @@ public class Meeting
     /// </summary>
     public string? DraftAttendees { get; set; }
 
+    /// <summary>
+    /// 1.1.64：逐字稿講者編號對到的真名，JSON 物件，例如 <c>{"1":"王小明"}</c>。
+    /// 逐字稿檔案本身不改（永遠是「講者 1：」），讀取時才套用，所以名字可以一直改。
+    /// ⚠️ 重新轉錄後編號會重配，轉錄完成時清空。
+    /// </summary>
+    public string? SpeakerNames { get; set; }
+
     public DateTime? DraftStartedAt { get; set; }
 
     public DateTime? DraftCompletedAt { get; set; }

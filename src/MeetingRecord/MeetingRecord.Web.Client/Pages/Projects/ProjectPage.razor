@@ -704,8 +704,16 @@ else
                          CanCopyTranscript="@draftCanCopyTranscript"
                          OnCopyTranscript="OnCopyTranscriptAsync"
                          OnDownloadTranscript="OnDownloadTranscriptAsync"
+                         CanNameSpeakers="@draftCanNameSpeakers"
+                         OnNameSpeakers="@(() => speakerModalVisible = true)"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
+
+    @* 1.1.64：逐字稿的「標示講者」，名字欄位可從這個專案的與會人員名冊挑。 *@
+    <SpeakerNamingModal @bind-Visible="speakerModalVisible"
+                        Load="@(() => ProjectApi.GetSpeakersAsync(selectedProjectId, draftMeetingId))"
+                        Save="@(names => ProjectApi.UpdateSpeakersAsync(selectedProjectId, draftMeetingId, names))"
+                        OnSaved="OnSpeakersSavedAsync" />
 
     <Modal Title="@("專案附件")"
            Class="form-modal-standard"

@@ -59,6 +59,35 @@ public class MeetingTranscriptDto
     public string Text { get; set; } = string.Empty;
 }
 
+/// <summary>「標示講者」的一位講者（1.1.64）：編號、目前對到的名字、幾句他說的話。</summary>
+public class MeetingSpeakerDto
+{
+    /// <summary>整場對齊的編號（"1"～"4"），逐字稿裡是「講者 1：」。</summary>
+    public string Label { get; set; } = string.Empty;
+
+    public string? Name { get; set; }
+
+    public List<string> Samples { get; set; } = [];
+}
+
+/// <summary>「標示講者」視窗的資料（<c>GET api/v1/Meeting/{id}/speakers</c>）。</summary>
+public class MeetingSpeakersDto
+{
+    public List<MeetingSpeakerDto> Speakers { get; set; } = [];
+
+    /// <summary>會議所屬專案的與會人員名冊，給名字欄位挑；未歸屬專案時是空的。</summary>
+    public List<string> Participants { get; set; } = [];
+
+    /// <summary>逐字稿有沒有字母代號（只在該段有效、不能對照）。</summary>
+    public bool HasSegmentLabels { get; set; }
+}
+
+/// <summary>儲存講者對照（<c>PUT api/v1/Meeting/{id}/speakers</c>）。鍵是編號，值留空代表不對照。</summary>
+public class MeetingSpeakerNamesDto
+{
+    public Dictionary<string, string> Names { get; set; } = [];
+}
+
 /// <summary>會議頁可選的專案（產生會議紀錄、歸屬專案用），附與會人員名冊。</summary>
 public class MeetingProjectOptionDto
 {

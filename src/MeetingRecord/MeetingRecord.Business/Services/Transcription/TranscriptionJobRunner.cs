@@ -40,9 +40,13 @@ public class TranscriptionJobRunner
     private readonly AiCallGateway gateway;
     private readonly ILogger<TranscriptionJobRunner> logger;
     private readonly IMediaSegmentSplitter? segmentSplitter;
+    private readonly IAudioClipCutter? clipCutter;
 
     /// <param name="segmentSplitter">
     /// 1.1.61：疑似被截斷的段落用它對半切再重轉。選擇性參數——沒有註冊時（例如端對端測試的假轉檔）照常轉錄、只是少這道保險。
+    /// </param>
+    /// <param name="clipCutter">
+    /// 1.1.64：剪講者的聲音參考，讓整場的講者代號一致。選擇性參數——沒有註冊時照舊每段各自標字母。
     /// </param>
     public TranscriptionJobRunner(
         BackendDBContext context,
@@ -53,9 +57,11 @@ public class TranscriptionJobRunner
         ITranscriptionProgressNotifier progressNotifier,
         AiCallGateway gateway,
         ILogger<TranscriptionJobRunner> logger,
-        IMediaSegmentSplitter? segmentSplitter = null)
+        IMediaSegmentSplitter? segmentSplitter = null,
+        IAudioClipCutter? clipCutter = null)
     {
         this.segmentSplitter = segmentSplitter;
+        this.clipCutter = clipCutter;
         this.context = context;
         this.mediaConverter = mediaConverter;
         this.transcriptionProviders = transcriptionProviders;
@@ -142,6 +148,11 @@ public class TranscriptionJobRunner
                 segments.SegmentFullPaths.Count,
                 FfmpegMediaConverter.SegmentSeconds);
 
+            // 1.1.64：會分講者的供應商帶聲音參考，讓整場的講者代號一致（見 SpeakerAlignmentSession）。
+            var alignment = provider is ISpeakerAwareTranscriptionProvider { SupportsSpeakers: true } && clipCutter is not null
+                ? new SpeakerAlignmentSession()
+                : null;
+
             var transcript = new StringBuilder();
             for (var index = 0; index < segments.SegmentFullPaths.Count; index++)
             {
@@ -167,6 +178,7 @@ public class TranscriptionJobRunner
                     segments.SegmentFullPaths.Count,
                     label: string.Empty,
                     depth: 0,
+                    alignment,
                     cancellationToken);
 
                 // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
@@ -192,6 +204,9 @@ public class TranscriptionJobRunner
                 cancellationToken);
 
             meeting.TranscriptRelativePath = transcriptRelativePath;
+
+            // 1.1.64：新逐字稿的講者編號是重新配發的，舊的真名對照不能沿用。
+            meeting.SpeakerNames = null;
 
             // 1.0.29：會議自己記時長（儀表板「會議時數」讀這一欄）；以前是加總帳本的轉錄秒數，但帳本可以被清除了。
             meeting.MediaDurationSeconds = segmentSeconds.Count > 0 ? segmentSeconds.Sum() : null;
@@ -261,6 +276,7 @@ public class TranscriptionJobRunner
         int segmentCount,
         string label,
         int depth,
+        SpeakerAlignmentSession? alignment,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -268,22 +284,23 @@ public class TranscriptionJobRunner
         // 記帳與 AI 對話紀錄由 gateway 處理（失敗時音檔多半已上傳、已計費，照樣記）。
         // ⚠️ gateway 在呼叫結束時就記帳，所以下面回空字串的分支（指令洩漏被丟棄、整段無人說話）不會漏記——
         //    那一次轉錄照樣花了錢。轉錄每段一筆（約每 5 分鐘一段），按時長計費。
-        string segmentText;
-        await using (var segmentStream = File.OpenRead(segmentPath))
+        var segmentContext = callContext with
         {
-            segmentText = await gateway.TranscribeAsync(
-                provider,
-                callContext with
-                {
-                    RelatedInfo = $"會議 #{meeting.Id}〈{meeting.Title}〉語音轉錄 {segmentNumber}/{segmentCount}{label}",
-                },
-                segmentStream,
-                Path.GetFileName(segmentPath),
-                seconds,
-                isDurationEstimated,
-                segmentNumber,
-                segmentCount,
-                cancellationToken);
+            RelatedInfo = $"會議 #{meeting.Id}〈{meeting.Title}〉語音轉錄 {segmentNumber}/{segmentCount}{label}",
+        };
+
+        string segmentText;
+        if (alignment is { IsDisabled: false } && provider is ISpeakerAwareTranscriptionProvider speakerAware)
+        {
+            segmentText = await TranscribeAlignedAsync(
+                speakerAware, segmentContext, meeting.Id, segmentPath, seconds, isDurationEstimated,
+                segmentNumber, segmentCount, alignment, cancellationToken);
+        }
+        else
+        {
+            segmentText = await TranscribePlainAsync(
+                provider, segmentContext, segmentPath, seconds, isDurationEstimated,
+                segmentNumber, segmentCount, cancellationToken);
         }
 
         // 沒有可辨識語音時，供應商可能不回空字串，而是把自己的系統指令當成結果吐回來。
@@ -344,6 +361,7 @@ public class TranscriptionJobRunner
                 segmentCount,
                 $"{label}（{(half == 0 ? "前半" : "後半")}）",
                 depth + 1,
+                alignment,
                 cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(text))
@@ -353,6 +371,122 @@ public class TranscriptionJobRunner
         }
 
         return string.Join("\n", parts);
+    }
+
+    private async Task<string> TranscribePlainAsync(
+        ITranscriptionProvider provider,
+        AiCallContext segmentContext,
+        string segmentPath,
+        double? seconds,
+        bool isDurationEstimated,
+        int segmentNumber,
+        int segmentCount,
+        CancellationToken cancellationToken)
+    {
+        await using var segmentStream = File.OpenRead(segmentPath);
+        return await gateway.TranscribeAsync(
+            provider,
+            segmentContext,
+            segmentStream,
+            Path.GetFileName(segmentPath),
+            seconds,
+            isDurationEstimated,
+            segmentNumber,
+            segmentCount,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 1.1.64 整場對齊：帶上目前所有的聲音參考轉錄這段；這段出現還沒有參考的講者，
+    /// 就從這段音檔剪他最長的一句登記成新參考，並把他在這段的字母改成配發的編號。
+    ///
+    /// <para>
+    /// 帶參考被拒（400，例如 Azure 不支援這兩個參數）時停用對齊、不帶參考重送這段，
+    /// 這場之後照舊每段各自標字母——寧可沒有對齊，也不要整場轉錄失敗。
+    /// </para>
+    /// </summary>
+    private async Task<string> TranscribeAlignedAsync(
+        ISpeakerAwareTranscriptionProvider provider,
+        AiCallContext segmentContext,
+        int meetingId,
+        string segmentPath,
+        double? seconds,
+        bool isDurationEstimated,
+        int segmentNumber,
+        int segmentCount,
+        SpeakerAlignmentSession alignment,
+        CancellationToken cancellationToken)
+    {
+        DiarizedTranscription result;
+        try
+        {
+            await using var segmentStream = File.OpenRead(segmentPath);
+            result = await gateway.TranscribeWithSpeakersAsync(
+                provider,
+                segmentContext,
+                segmentStream,
+                Path.GetFileName(segmentPath),
+                alignment.References,
+                seconds,
+                isDurationEstimated,
+                segmentNumber,
+                segmentCount,
+                cancellationToken);
+        }
+        catch (AiProviderHttpException ex) when (ex.StatusCode == 400 && alignment.References.Count > 0)
+        {
+            logger.LogWarning(
+                ex,
+                "Transcription rejected speaker references; disabling speaker alignment for this meeting. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}",
+                meetingId,
+                segmentNumber,
+                segmentCount);
+            alignment.Disable();
+
+            return await TranscribePlainAsync(
+                provider, segmentContext, segmentPath, seconds, isDurationEstimated,
+                segmentNumber, segmentCount, cancellationToken);
+        }
+
+        var renames = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (speaker, start, clipSeconds) in alignment.PlanNewReferences(result.Segments))
+        {
+            try
+            {
+                var clipPath = await clipCutter!.CutWavClipAsync(segmentPath, start, clipSeconds, cancellationToken);
+                if (clipPath is null)
+                {
+                    continue;
+                }
+
+                var bytes = await File.ReadAllBytesAsync(clipPath, cancellationToken);
+                renames[speaker] = alignment.Register("data:audio/wav;base64," + Convert.ToBase64String(bytes));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // 剪不出參考只是這位講者少了對齊，不影響這段的逐字稿。
+                logger.LogWarning(
+                    ex,
+                    "Could not cut speaker reference clip. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}, Speaker={Speaker}",
+                    meetingId,
+                    segmentNumber,
+                    segmentCount,
+                    speaker);
+            }
+        }
+
+        if (renames.Count > 0)
+        {
+            logger.LogInformation(
+                "Registered speaker references. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}, Total={Total}",
+                meetingId,
+                segmentNumber,
+                segmentCount,
+                alignment.References.Count);
+        }
+
+        var segments = SpeakerAlignmentSession.Relabel(result.Segments, renames);
+        return DiarizedTranscriptFormatter.Format(segments, result.FallbackText);
     }
 
     /// <summary>

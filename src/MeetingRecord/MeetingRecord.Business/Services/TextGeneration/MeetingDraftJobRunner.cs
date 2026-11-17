@@ -136,7 +136,10 @@ public class MeetingDraftJobRunner
             var provider = ResolveProvider();
             var template = await ResolveTemplateContentAsync(meeting.DraftPromptTemplateId, cancellationToken);
 
-            var transcript = await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken);
+            // 1.1.64：使用者標示過的講者換成真名，模型直接照用。
+            var transcript = TranscriptSpeakerLabels.ApplyNames(
+                await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken),
+                TranscriptSpeakerLabels.ParseNames(meeting.SpeakerNames));
             if (string.IsNullOrWhiteSpace(transcript))
             {
                 throw new InvalidOperationException("找不到逐字稿內容，或逐字稿為空白，無法產生會議紀錄。");

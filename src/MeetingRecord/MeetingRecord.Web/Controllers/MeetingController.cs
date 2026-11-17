@@ -205,6 +205,23 @@ public class MeetingController(
     public Task<ActionResult<ApiResult>> UpdateDraft(int id, [FromBody] MeetingDraftContentDto request)
         => RunAsync(id, () => meetingService.UpdateDraftAsync(id, request.Content), "會議紀錄已儲存。");
 
+    /// <summary>「標示講者」視窗的資料：整場對齊的講者、目前的對照、範例句子與專案名冊（1.1.64）。</summary>
+    [HttpGet("{id}/speakers")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<MeetingSpeakersDto>>> Speakers(int id)
+    {
+        var speakers = await meetingService.GetSpeakersAsync(id);
+        return speakers is null
+            ? NotFound(ApiResult<MeetingSpeakersDto>.NotFoundResult(string.Format(NotFoundMessage, id)))
+            : Ok(ApiResult<MeetingSpeakersDto>.SuccessResult(speakers));
+    }
+
+    /// <summary>儲存講者對照（逐字稿檔案不改，讀取時才套用）。</summary>
+    [HttpPut("{id}/speakers")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]
+    public Task<ActionResult<ApiResult>> UpdateSpeakers(int id, [FromBody] MeetingSpeakerNamesDto request)
+        => RunAsync(id, () => meetingService.UpdateSpeakerNamesAsync(id, request.Names), "講者名字已儲存。");
+
     /// <summary>把會議歸屬到專案（之後跟著專案的可見範圍走）。</summary>
     [HttpPut("{id}/project")]
     [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]

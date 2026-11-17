@@ -11,9 +11,9 @@ namespace MeetingRecord.Business.Services.Transcription;
 ///
 /// 連線資訊一律取自 <see cref="LlmSettings"/>（禁止直接讀 IConfiguration）；
 /// 部署名稱取 <see cref="LlmProviderSettings.TranscriptionModel"/>，例如 gpt-4o-transcribe。
-/// 部署名稱含 <c>diarize</c> 時改要講者（見 <see cref="IsDiarizeModel"/>）。
+/// 部署名稱含 <c>diarize</c> 時改要講者（見 <see cref="IsDiarizeModel"/>）；1.1.64 起可帶聲音參考讓整場代號一致。
 /// </summary>
-public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
+public class AzureOpenAiTranscriptionProvider : ISpeakerAwareTranscriptionProvider
 {
     /// <summary>具名 HttpClient 名稱，逾時在 DI 註冊處拉長（轉錄為長時間請求）。</summary>
     public const string HttpClientName = "AzureOpenAiTranscription";
@@ -40,7 +40,32 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
     public string ModelName =>
         llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel ?? string.Empty;
 
+    /// <summary>1.1.64：部署會分講者時，才能帶聲音參考讓整場代號一致。</summary>
+    public bool SupportsSpeakers => IsDiarizeModel(ModelName);
+
     public async Task<string> TranscribeAsync(Stream audio, string fileName, CancellationToken cancellationToken)
+    {
+        var (body, isDiarize) = await SendAsync(audio, fileName, references: [], cancellationToken);
+        return isDiarize ? DiarizedTranscriptFormatter.Format(body) : body.Trim();
+    }
+
+    public async Task<DiarizedTranscription> TranscribeWithSpeakersAsync(
+        Stream audio,
+        string fileName,
+        IReadOnlyList<SpeakerReference> references,
+        CancellationToken cancellationToken)
+    {
+        var (body, isDiarize) = await SendAsync(audio, fileName, references, cancellationToken);
+        return isDiarize
+            ? DiarizedTranscriptFormatter.Parse(body)
+            : new DiarizedTranscription([], body.Trim());
+    }
+
+    private async Task<(string Body, bool IsDiarize)> SendAsync(
+        Stream audio,
+        string fileName,
+        IReadOnlyList<SpeakerReference> references,
+        CancellationToken cancellationToken)
     {
         var settings = llmSettings.Value;
         var provider = settings.GetTranscriptionProvider()
@@ -72,6 +97,13 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
         if (isDiarize)
         {
             content.Add(new StringContent("auto"), "chunking_strategy");
+
+            // 1.1.64：已知講者的聲音參考（最多 4 份），認得的講者回傳參考的名稱，整場代號才會一致。
+            foreach (var reference in references)
+            {
+                content.Add(new StringContent(reference.Name), "known_speaker_names[]");
+                content.Add(new StringContent(reference.DataUrl), "known_speaker_references[]");
+            }
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri) { Content = content };
@@ -79,7 +111,10 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
 
         var httpClient = httpClientFactory.CreateClient(HttpClientName);
 
-        logger.LogDebug("Sending Azure OpenAI transcription request. FileName={FileName}", fileName);
+        logger.LogDebug(
+            "Sending Azure OpenAI transcription request. FileName={FileName}, SpeakerReferences={SpeakerReferences}",
+            fileName,
+            references.Count);
         using var response = await httpClient.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
@@ -96,7 +131,7 @@ public class AzureOpenAiTranscriptionProvider : ITranscriptionProvider
                     "語音轉錄", (int)response.StatusCode, response.ReasonPhrase, body, provider.TranscriptionModel, provider.Endpoint, modelKey));
         }
 
-        return isDiarize ? DiarizedTranscriptFormatter.Format(body) : body.Trim();
+        return (body, isDiarize);
     }
 
     /// <summary>

@@ -21,7 +21,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 /// 決定切點，以 <c>-segment_times</c> 切。找不到停頓或量不到時長時，退回固定每 <see cref="SegmentSeconds"/> 秒一刀。
 /// </para>
 /// </summary>
-public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter
+public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAudioClipCutter
 {
     /// <summary>每個分段的長度（秒）。</summary>
     public const int SegmentSeconds = MeetingRecord.Share.Helpers.MeetingMediaPolicy.TranscriptionSegmentSeconds;
@@ -188,6 +188,46 @@ public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter
             splitPoint);
 
         return [(halves[0], splitPoint), (halves[1], total - splitPoint)];
+    }
+
+    public async Task<string?> CutWavClipAsync(
+        string sourceFullPath,
+        double startSeconds,
+        double seconds,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ffmpegPath) || !File.Exists(sourceFullPath) || seconds <= 0)
+        {
+            return null;
+        }
+
+        var directory = Path.GetDirectoryName(sourceFullPath)!;
+        var outputPath = Path.Combine(directory, $"{Path.GetFileNameWithoutExtension(sourceFullPath)}_ref_{Guid.NewGuid():N}.wav");
+        await RunFfmpegAsync(BuildClipArguments(sourceFullPath, outputPath, startSeconds, seconds), cancellationToken);
+
+        return File.Exists(outputPath) ? outputPath : null;
+    }
+
+    /// <summary>
+    /// 剪一小段 16kHz 單聲道的 PCM wav 當講者聲音參考（1.1.64）。抽成純函式以便單元測試。
+    /// <c>-ss</c> 放在 <c>-i</c> 前面是輸入端快速定位，FFmpeg 會解碼到準確的位置再開始輸出。
+    /// </summary>
+    internal static string BuildClipArguments(string sourceFullPath, string outputPath, double startSeconds, double seconds)
+    {
+        return string.Join(' ',
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel", "error",
+            "-nostats",
+            "-y",
+            "-ss", FormatSeconds(Math.Max(0, startSeconds)),
+            "-t", FormatSeconds(seconds),
+            "-i", Quote(sourceFullPath),
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-c:a", "pcm_s16le",
+            Quote(outputPath));
     }
 
     /// <summary>

@@ -98,6 +98,12 @@ public sealed class ProjectApi(ApiClient api)
     public Task<ApiResult<MeetingTranscriptDto>> GetTranscriptAsync(int projectId, int meetingId)
         => api.GetAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/transcript", ClientJsonContext.Default.MeetingTranscriptResult);
 
+    public Task<ApiResult<MeetingSpeakersDto>> GetSpeakersAsync(int projectId, int meetingId)
+        => api.GetAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers", ClientJsonContext.Default.MeetingSpeakersResult);
+
+    public Task<ApiResult<object>> UpdateSpeakersAsync(int projectId, int meetingId, Dictionary<string, string> names)
+        => api.PutAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);
+
     public Task<ApiDownload> DownloadTranscriptAsync(int projectId, int meetingId)
         => api.DownloadAsync(new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/{projectId}/meetings/{meetingId}/transcript/file"));
 

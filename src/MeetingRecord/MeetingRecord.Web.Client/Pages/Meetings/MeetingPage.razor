@@ -459,8 +459,16 @@ else
                          CanCopyTranscript="@draftCanCopyTranscript"
                          OnCopyTranscript="OnCopyTranscriptAsync"
                          OnDownloadTranscript="OnDownloadTranscriptAsync"
+                         CanNameSpeakers="@draftCanNameSpeakers"
+                         OnNameSpeakers="@(() => speakerModalVisible = true)"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
+
+    @* 1.1.64：逐字稿的「標示講者」。 *@
+    <SpeakerNamingModal @bind-Visible="speakerModalVisible"
+                        Load="@(() => MeetingApi.GetSpeakersAsync(draftMeetingId))"
+                        Save="@(names => MeetingApi.UpdateSpeakersAsync(draftMeetingId, names))"
+                        OnSaved="OnSpeakersSavedAsync" />
 
     <AiChatModal @bind-Visible="aiChatVisible"
                  Scope="AiChatScope.Meeting"

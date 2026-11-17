@@ -1297,16 +1297,137 @@ public class MeetingService
     /// </summary>
     public async Task<string?> ReadTranscriptAsync(int meetingId, CancellationToken cancellationToken = default)
     {
+        var source = await FindTranscriptSourceAsync(meetingId, cancellationToken);
+        if (source is null)
+        {
+            return null;
+        }
+
+        // 1.1.64：「講者 1：」換成使用者標示的真名（檔案本身不改）。
+        var text = await fileStore.ReadTranscriptAsync(source.TranscriptRelativePath, cancellationToken);
+        return text is null ? null : TranscriptSpeakerLabels.ApplyNames(text, TranscriptSpeakerLabels.ParseNames(source.SpeakerNames));
+    }
+
+    /// <summary>
+    /// 「標示講者」視窗的資料（1.1.64）：逐字稿裡整場對齊的講者、目前的對照、幾句他說的話，
+    /// 加上所屬專案的與會人員名冊。看不到的會議回 null。
+    /// </summary>
+    public async Task<MeetingRecord.Dtos.Meetings.MeetingSpeakersDto?> GetSpeakersAsync(int meetingId, CancellationToken cancellationToken = default)
+    {
+        var source = await FindTranscriptSourceAsync(meetingId, cancellationToken);
+        if (source is null)
+        {
+            return null;
+        }
+
+        var text = await fileStore.ReadTranscriptAsync(source.TranscriptRelativePath, cancellationToken);
+        var names = TranscriptSpeakerLabels.ParseNames(source.SpeakerNames);
+
+        return new MeetingRecord.Dtos.Meetings.MeetingSpeakersDto
+        {
+            Speakers = TranscriptSpeakerLabels.ListAlignedSpeakers(text)
+                .Select(label => new MeetingRecord.Dtos.Meetings.MeetingSpeakerDto
+                {
+                    Label = label,
+                    Name = names.GetValueOrDefault(label),
+                    Samples = TranscriptSpeakerLabels.SampleLines(text, label).ToList(),
+                })
+                .ToList(),
+            Participants = TagStringHelper.ToList(source.Participants),
+            HasSegmentLabels = TranscriptSpeakerLabels.HasSegmentLabels(text),
+        };
+    }
+
+    /// <summary>
+    /// 儲存講者對照（1.1.64）。只接受逐字稿裡真的有的編號；名字留空代表不對照。
+    /// 守門比照 <see cref="UpdateDraftAsync"/>：看得到這場會議、專案沒有封存。
+    /// </summary>
+    public async Task<VerifyRecordResult> UpdateSpeakerNamesAsync(
+        int meetingId,
+        IReadOnlyDictionary<string, string>? names,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            CleanTrackingHelper.Clean<Meeting>(context);
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+            if (meeting is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到要修改的會議紀錄。");
+            }
+
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
+            {
+                Logger.LogWarning("Speaker names update denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "SpeakerNamesUpdate");
+                return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
+            }
+
+            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
+
+            var text = await fileStore.ReadTranscriptAsync(meeting.TranscriptRelativePath, cancellationToken);
+            var labels = TranscriptSpeakerLabels.ListAlignedSpeakers(text).ToHashSet(StringComparer.Ordinal);
+            var cleaned = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (label, rawName) in names ?? new Dictionary<string, string>())
+            {
+                var name = rawName?.Trim() ?? string.Empty;
+                if (name.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!labels.Contains(label))
+                {
+                    return VerifyRecordResultFactory.Build(false, labels.Count == 0
+                        ? "這份逐字稿沒有可以標示的講者，請先重新轉錄。"
+                        : $"逐字稿裡沒有「講者 {label}」。");
+                }
+
+                if (!TranscriptSpeakerLabels.IsValidName(name))
+                {
+                    return VerifyRecordResultFactory.Build(
+                        false, $"「{name}」不能當講者名字：最多 {TranscriptSpeakerLabels.MaxNameLength} 字，不能有換行或全形冒號。");
+                }
+
+                cleaned[label] = name;
+            }
+
+            meeting.SpeakerNames = TranscriptSpeakerLabels.SerializeNames(cleaned);
+            meeting.UpdatedAt = DateTime.Now;
+            await context.SaveChangesAsync(cancellationToken);
+            CleanTrackingHelper.Clean<Meeting>(context);
+
+            await AuditAsync(AuditActions.MeetingSpeakerNamesUpdate, meetingId, $"title={meeting.Title}; speakers={cleaned.Count}");
+            Logger.LogInformation("Meeting speaker names updated. MeetingId={MeetingId}, Count={Count}", meetingId, cleaned.Count);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            context.ChangeTracker.Clear();
+            Logger.LogError(ex, "Failed to update meeting speaker names. MeetingId={MeetingId}", meetingId);
+            return VerifyRecordResultFactory.Build(false, "儲存講者名字失敗。", ex);
+        }
+    }
+
+    private sealed record TranscriptSource(string? TranscriptRelativePath, string? SpeakerNames, string? Participants);
+
+    private async Task<TranscriptSource?> FindTranscriptSourceAsync(int meetingId, CancellationToken cancellationToken)
+    {
         IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking()
             .Where(x => x.Id == meetingId);
 
         dataSource = (await projectAccess.GetAsync()).Filter(dataSource);
 
-        var relativePath = await dataSource
-            .Select(x => x.TranscriptRelativePath)
+        return await dataSource
+            .Select(x => new TranscriptSource(
+                x.TranscriptRelativePath,
+                x.SpeakerNames,
+                x.Project == null ? null : x.Project.Participants))
             .FirstOrDefaultAsync(cancellationToken);
-
-        return await fileStore.ReadTranscriptAsync(relativePath, cancellationToken);
     }
 
     /// <summary>取得某專案底下的會議紀錄（歷史清單）。</summary>

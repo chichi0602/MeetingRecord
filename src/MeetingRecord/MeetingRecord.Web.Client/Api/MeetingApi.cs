@@ -43,6 +43,12 @@ public sealed class MeetingApi(ApiClient api)
     public Task<ApiResult<MeetingTranscriptDto>> GetTranscriptAsync(int id)
         => api.GetAsync($"{BaseUrl}/{id}/transcript", ClientJsonContext.Default.MeetingTranscriptResult);
 
+    public Task<ApiResult<MeetingSpeakersDto>> GetSpeakersAsync(int id)
+        => api.GetAsync($"{BaseUrl}/{id}/speakers", ClientJsonContext.Default.MeetingSpeakersResult);
+
+    public Task<ApiResult<object>> UpdateSpeakersAsync(int id, Dictionary<string, string> names)
+        => api.PutAsync($"{BaseUrl}/{id}/speakers", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);
+
     /// <summary>逐字稿 .txt（伺服器寫稽核）。</summary>
     public Task<ApiDownload> DownloadTranscriptAsync(int id)
         => api.DownloadAsync(new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/{id}/transcript/file"));

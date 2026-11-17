@@ -142,6 +142,11 @@ public partial class MarkdownEditorModal : IDisposable
 
     [Parameter] public EventCallback OnDownloadTranscript { get; set; }
 
+    /// <summary>1.1.64：逐字稿頁籤的「標示講者」（要有編修權限）。視窗與存檔交給父層做。</summary>
+    [Parameter] public bool CanNameSpeakers { get; set; }
+
+    [Parameter] public EventCallback OnNameSpeakers { get; set; }
+
     private const string DraftTab = "draft";
 
     private const string TranscriptTab = "transcript";

@@ -1,0 +1,80 @@
+/* 1.1.64「標示講者」視窗。 */
+.speaker-naming {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.speaker-naming-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--oat-ink-mid);
+}
+
+.speaker-naming-error {
+    color: #c0392b;
+}
+
+.speaker-naming-empty,
+.speaker-naming-intro,
+.speaker-naming-note {
+    margin: 0;
+    color: var(--oat-ink-mid);
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+.speaker-naming-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 左：編號，中：範例句子，右：名字。窄螢幕時名字掉到下一行。 */
+.speaker-naming-row {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) 180px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+}
+
+@media (max-width: 640px) {
+    .speaker-naming-row {
+        grid-template-columns: 64px minmax(0, 1fr);
+    }
+
+    .speaker-naming-input {
+        grid-column: 1 / -1;
+    }
+}
+
+.speaker-naming-label {
+    font-weight: 600;
+    color: var(--oat-ink);
+}
+
+.speaker-naming-samples {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.speaker-naming-sample {
+    overflow: hidden;
+    color: var(--oat-ink-soft);
+    font-size: 0.82rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.speaker-naming-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}

@@ -185,6 +185,8 @@ public partial class ProjectPage : IDisposable
     private bool draftCanSwitchToEdit;
     private string? draftTranscript;
     private bool draftCanCopyTranscript;
+    private bool draftCanNameSpeakers;
+    private bool speakerModalVisible;
     private int draftMeetingId;
 
     /// <summary>目前選取專案的附件。由 <see cref="ReloadProjectContextAsync"/> 載入。</summary>
@@ -767,10 +769,20 @@ public partial class ProjectPage : IDisposable
         draftTranscript = current.HasTranscript ? (await ProjectApi.GetTranscriptAsync(selectedProjectId, draftMeetingId)).Data?.Text : null;
         draftCanCopyTranscript = CanExport;
 
+        // 1.1.64：標示講者算編修，條件比照會議紀錄的編修（專案項目 edit、專案不是唯讀）。
+        draftCanNameSpeakers = current.HasTranscript && CanEdit && !IsReadOnlyProject;
+
         // 1.0.48：和上方 AI 區塊同一組條件（專案項目 edit、專案不是唯讀）；生成中、沒有逐字稿時不出現。
         draftCanGenerate = current.CanGenerateDraft && CanEdit && !IsReadOnlyProject;
 
         draftModalVisible = true;
+    }
+
+    /// <summary>標示講者存好了：重讀逐字稿，畫面才會換成真名。</summary>
+    private async Task OnSpeakersSavedAsync()
+    {
+        draftTranscript = (await ProjectApi.GetTranscriptAsync(selectedProjectId, draftMeetingId)).Data?.Text ?? draftTranscript;
+        NotifySuccess("講者名字已儲存。");
     }
 
     /// <summary>

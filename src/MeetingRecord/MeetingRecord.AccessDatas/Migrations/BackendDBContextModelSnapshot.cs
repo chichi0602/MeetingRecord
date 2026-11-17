@@ -416,6 +416,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<int?>("ProjectId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SpeakerNames")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("TEXT");

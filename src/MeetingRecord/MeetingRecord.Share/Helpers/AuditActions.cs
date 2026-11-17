@@ -102,6 +102,7 @@ public static class AuditActions
     public const string MeetingDetachProject = "Meeting.DetachProject";
     public const string MeetingDraftRequest = "Meeting.DraftRequest";
     public const string MeetingDraftUpdate = "Meeting.DraftUpdate";
+    public const string MeetingSpeakerNamesUpdate = "Meeting.SpeakerNamesUpdate";
     public const string MeetingExportPdf = "Meeting.ExportPdf";
     public const string MeetingTranscriptDownload = "Meeting.TranscriptDownload";
     public const string MeetingTranscriptCopy = "Meeting.TranscriptCopy";
@@ -237,6 +238,7 @@ public static class AuditActions
         [MeetingDetachProject] = "會議移出專案",
         [MeetingDraftRequest] = "產生會議紀錄",
         [MeetingDraftUpdate] = "編修會議紀錄",
+        [MeetingSpeakerNamesUpdate] = "標示逐字稿講者",
         [MeetingExportPdf] = "匯出會議紀錄 PDF",
         [MeetingTranscriptDownload] = "下載逐字稿",
         [MeetingTranscriptCopy] = "複製逐字稿",

@@ -133,6 +133,33 @@ public sealed class ProjectMeetingController(
         return result.Success ? Ok(ApiResult.SuccessResult("會議紀錄已儲存。")) : BadRequest(ApiResult.FailureResult(result.Message));
     }
 
+    /// <summary>「標示講者」視窗的資料（1.1.64）。</summary>
+    [HttpGet("meetings/{meetingId:int}/speakers")]
+    [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<MeetingSpeakersDto>>> Speakers(int projectId, int meetingId)
+    {
+        var speakers = await FindMeetingAsync(projectId, meetingId) is null
+            ? null
+            : await meetingService.GetSpeakersAsync(meetingId);
+        return speakers is null
+            ? NotFound(ApiResult<MeetingSpeakersDto>.NotFoundResult(MeetingNotFound))
+            : Ok(ApiResult<MeetingSpeakersDto>.SuccessResult(speakers));
+    }
+
+    /// <summary>儲存講者對照（逐字稿檔案不改，讀取時才套用）。</summary>
+    [HttpPut("meetings/{meetingId:int}/speakers")]
+    [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)]
+    public async Task<ActionResult<ApiResult>> UpdateSpeakers(int projectId, int meetingId, [FromBody] MeetingSpeakerNamesDto request)
+    {
+        if (await FindMeetingAsync(projectId, meetingId) is null)
+        {
+            return NotFound(ApiResult.NotFoundResult(MeetingNotFound));
+        }
+
+        var result = await meetingService.UpdateSpeakerNamesAsync(meetingId, request.Names);
+        return result.Success ? Ok(ApiResult.SuccessResult("講者名字已儲存。")) : BadRequest(ApiResult.FailureResult(result.Message));
+    }
+
     /// <summary>
     /// 從專案移除（只限上傳者與管理者、封存唯讀，服務層把關）。權限同 Server 專案頁：專案項目的「修改」或「刪除」任一。
     /// </summary>

@@ -181,6 +181,7 @@ public sealed class MeetingApiTests(ApiTestApplicationFactory factory) : IClassF
             await client.PostAsync($"/api/v1/Meeting/{id}/retranscribe", null),
             await client.PostAsJsonAsync($"/api/v1/Meeting/{id}/draft", new MeetingDraftRequestDto { PromptTemplateId = 1 }),
             await client.PutAsJsonAsync($"/api/v1/Meeting/{id}/draft", new MeetingDraftContentDto { Content = "x" }),
+            await client.PutAsJsonAsync($"/api/v1/Meeting/{id}/speakers", new MeetingSpeakerNamesDto { Names = { ["1"] = "王小明" } }),
             await client.GetAsync($"/api/v1/Meeting/{id}/transcript/file"),
             await client.PostAsJsonAsync($"/api/v1/Meeting/{id}/draft/pdf", new MeetingPdfRequestDto()),
         })
@@ -194,6 +195,39 @@ public sealed class MeetingApiTests(ApiTestApplicationFactory factory) : IClassF
         // 看得到：逐字稿全文可以讀。
         using var text = await client.GetAsync($"/api/v1/Meeting/{id}/transcript");
         Assert.Equal(HttpStatusCode.OK, text.StatusCode);
+    }
+
+    /// <summary>1.1.64 標示講者：存了對照之後，逐字稿讀出來就是真名；檔案本身不改，所以可以再改。</summary>
+    [Fact]
+    public async Task Speakers_ShouldListAlignedSpeakers_AndApplyNamesOnRead()
+    {
+        var world = await SeedAsync(withTranscript: "講者 1：大家好\n講者 2：開始吧\n\n講者 1：散會");
+        using var member = await LoginAsync(world.MemberAccount);
+        var id = world.ProjectMeetingId;
+
+        using var speakersResponse = await member.GetAsync($"/api/v1/Meeting/{id}/speakers");
+        var speakers = (await ReadAsync<MeetingSpeakersDto>(speakersResponse)).Data!;
+        Assert.Equal(["1", "2"], speakers.Speakers.Select(x => x.Label));
+        Assert.Equal(["大家好", "散會"], speakers.Speakers[0].Samples);
+
+        using (var saved = await member.PutAsJsonAsync($"/api/v1/Meeting/{id}/speakers", new MeetingSpeakerNamesDto { Names = { ["1"] = " 王小明 ", ["2"] = "" } }))
+        {
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        }
+
+        using var transcriptResponse = await member.GetAsync($"/api/v1/Meeting/{id}/transcript");
+        Assert.Equal("王小明：大家好\n講者 2：開始吧\n\n王小明：散會", (await ReadAsync<MeetingTranscriptDto>(transcriptResponse)).Data!.Text);
+
+        // 逐字稿裡沒有的編號、不合格的名字都擋下。
+        using (var unknown = await member.PutAsJsonAsync($"/api/v1/Meeting/{id}/speakers", new MeetingSpeakerNamesDto { Names = { ["3"] = "陳美玲" } }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+        }
+
+        using (var colon = await member.PutAsJsonAsync($"/api/v1/Meeting/{id}/speakers", new MeetingSpeakerNamesDto { Names = { ["1"] = "王：小明" } }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, colon.StatusCode);
+        }
     }
 
     private sealed record World(string UploaderAccount, string MemberAccount, int TeamId, int ProjectId, int ProjectMeetingId, int UnassignedMeetingId, string Category);

@@ -45,10 +45,10 @@
     {
         @* 純文字、保留換行、可以選取複製。不走 Markdown：逐字稿不是 Markdown，硬轉會把行首的 - 或 # 誤當格式。 *@
         <div class="markdown-editor markdown-editor-readonly">
-            @* 1.1.63：diarize 轉錄的逐字稿有「講者 A：」代號，每段各自編號，要講清楚不是同一人。 *@
+            @* 1.1.63：diarize 轉錄的逐字稿有「講者 A：」代號。1.1.64 起數字編號整場同一人，字母只在該段有效。 *@
             @if (TranscriptSpeakerLabels.HasLabels(Transcript))
             {
-                <div class="markdown-editor-speaker-hint">講者代號由語音辨識自動標示，每約 5 分鐘重新編號，不同段落的「講者 A」不一定是同一人。</div>
+                <div class="markdown-editor-speaker-hint">講者代號由語音辨識自動標示：「講者 1～4」整場是同一人，可按「標示講者」填入真名；字母代號（講者 A）只在約 5 分鐘那一段內有效。</div>
             }
             <div class="markdown-editor-pane markdown-editor-transcript">@Transcript</div>
         </div>
@@ -154,6 +154,15 @@
     }
 
     <div class="markdown-editor-actions">
+        @if (IsTranscriptTabActive && CanNameSpeakers)
+        {
+            <Button OnClick="@(() => OnNameSpeakers.InvokeAsync())">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="record_voice_over" />
+                    <span>標示講者</span>
+                </span>
+            </Button>
+        }
         @if (IsTranscriptTabActive && CanCopyTranscript)
         {
             <Button OnClick="OnCopyTranscriptAsync">

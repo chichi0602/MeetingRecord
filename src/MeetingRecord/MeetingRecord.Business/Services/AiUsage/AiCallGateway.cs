@@ -166,6 +166,48 @@ public class AiCallGateway
         int segmentCount,
         CancellationToken cancellationToken)
     {
+        return await TranscribeCoreAsync(
+            provider, context, fileName, audioSeconds, isDurationEstimated, segmentIndex, segmentCount,
+            () => provider.TranscribeAsync(audio, fileName, cancellationToken),
+            text => text,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 1.1.64：帶聲音參考的分講者轉錄，回傳每句的講者與時間（整場對齊用）。
+    /// 記帳、額度、對話紀錄與 <see cref="TranscribeAsync"/> 完全相同；對話紀錄記的是轉成文字後的結果，不存聲音參考。
+    /// </summary>
+    public async Task<DiarizedTranscription> TranscribeWithSpeakersAsync(
+        ISpeakerAwareTranscriptionProvider provider,
+        AiCallContext context,
+        Stream audio,
+        string fileName,
+        IReadOnlyList<SpeakerReference> references,
+        double? audioSeconds,
+        bool isDurationEstimated,
+        int segmentIndex,
+        int segmentCount,
+        CancellationToken cancellationToken)
+    {
+        return await TranscribeCoreAsync(
+            provider, context, fileName, audioSeconds, isDurationEstimated, segmentIndex, segmentCount,
+            () => provider.TranscribeWithSpeakersAsync(audio, fileName, references, cancellationToken),
+            result => result.ToText(),
+            cancellationToken);
+    }
+
+    private async Task<T> TranscribeCoreAsync<T>(
+        ITranscriptionProvider provider,
+        AiCallContext context,
+        string fileName,
+        double? audioSeconds,
+        bool isDurationEstimated,
+        int segmentIndex,
+        int segmentCount,
+        Func<Task<T>> call,
+        Func<T, string> toText,
+        CancellationToken cancellationToken)
+    {
         await EnsureQuotaAsync(context, cancellationToken);
 
         var callId = Guid.NewGuid();
@@ -180,10 +222,10 @@ public class AiCallGateway
             SegmentCount = segmentCount,
         };
 
-        string text;
+        T result;
         try
         {
-            text = await provider.TranscribeAsync(audio, fileName, cancellationToken);
+            result = await call();
         }
         catch (Exception ex)
         {
@@ -198,9 +240,9 @@ public class AiCallGateway
         await RecordAsync(
             provider.ProviderName, provider.ModelName, context, callId, stopwatch,
             AiUsageOutcome.Succeeded, tokens: null, audioSeconds, isDurationEstimated,
-            request, text, isPartial: false, exception: null);
+            request, toText(result), isPartial: false, exception: null);
 
-        return text;
+        return result;
     }
 
     private async Task EnsureQuotaAsync(AiCallContext context, CancellationToken cancellationToken)

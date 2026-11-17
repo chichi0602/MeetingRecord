@@ -22,7 +22,7 @@ public sealed class AiCallGatewayUsageTests
     /// <c>gateway.GenerateAsync(</c>，用變數名稱區分；呼叫端一律把 gateway 欄位命名為 gateway。
     /// </summary>
     private static readonly Regex DirectProviderCall = new(
-        @"\b(?!gateway\b)\w+\.(GenerateAsync|TranscribeAsync)\(",
+        @"\b(?!gateway\b)\w+\.(GenerateAsync|TranscribeAsync|TranscribeWithSpeakersAsync)\(",
         RegexOptions.Compiled);
 
     [Fact]

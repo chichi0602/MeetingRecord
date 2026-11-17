@@ -166,6 +166,8 @@ public partial class MeetingPage : IDisposable
     private bool draftCanSwitchToEdit;
     private string? draftTranscript;
     private bool draftCanCopyTranscript;
+    private bool draftCanNameSpeakers;
+    private bool speakerModalVisible;
     private bool isSavingDraft;
 
     /// <summary>目前視窗對應的會議。</summary>
@@ -1194,10 +1196,20 @@ public partial class MeetingPage : IDisposable
         draftTranscript = current.HasTranscript ? (await MeetingApi.GetTranscriptAsync(IdOf(current))).Data?.Text : null;
         draftCanCopyTranscript = CanExport;
 
+        // 1.1.64：標示講者算編修，規則比照會議紀錄：已歸屬專案的到專案項目頁標（那裡有與會人員名冊）。
+        draftCanNameSpeakers = current.HasTranscript && IsUnassigned(current) && CanEdit;
+
         // 1.0.48：產生／重新產生從這個視窗進（列上的「AI 轉會議紀錄」已拿掉）。生成中、沒有逐字稿時不出現。
         draftCanGenerate = current.CanGenerateDraft && CanEdit;
 
         draftModalVisible = true;
+    }
+
+    /// <summary>標示講者存好了：重讀逐字稿，畫面才會換成真名。</summary>
+    private async Task OnSpeakersSavedAsync()
+    {
+        draftTranscript = (await MeetingApi.GetTranscriptAsync(draftMeetingId)).Data?.Text ?? draftTranscript;
+        NotifySuccess("講者名字已儲存。");
     }
 
     /// <summary>

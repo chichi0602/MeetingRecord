@@ -1,0 +1,86 @@
+@using MeetingRecord.Dtos.Meetings
+
+@* 1.1.64「標示講者」：把逐字稿整場對齊的講者編號（講者 1～4）對到真名。
+   名字欄位用原生 input 加 datalist：可以從專案名冊挑，也可以直接打名冊沒有的人。
+   讀取與存檔都交給父層（會議頁、專案頁打的 API 不同），這個元件不注入任何 API。 *@
+<Modal Title="標示講者"
+       Class="form-modal-standard"
+       Visible="@Visible"
+       Keyboard="true"
+       MaskClosable="false"
+       Footer="null"
+       OnCancel="CloseAsync">
+    <div class="speaker-naming">
+        @if (isLoading)
+        {
+            <div class="speaker-naming-loading">
+                <Spin />
+                <span>讀取逐字稿的講者…</span>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="speaker-naming-error">@errorMessage</div>
+        }
+        else if (speakers.Count == 0)
+        {
+            <div class="speaker-naming-empty">
+                這份逐字稿沒有可以標示的講者。<br />
+                要使用會分講者的轉錄模型「重新轉錄」，逐字稿才會出現整場一致的「講者 1～4」。
+            </div>
+        }
+        else
+        {
+            <p class="speaker-naming-intro">
+                看每位講者說過的話，判斷是誰後填入名字（可從名冊挑，也可直接輸入）；留空就維持「講者 N」。
+                逐字稿、下載的 .txt、之後產生的會議紀錄與 AI 問答都會改用這裡的名字，之後也可以再改。
+            </p>
+
+            <datalist id="@RosterId">
+                @foreach (var participant in participants)
+                {
+                    <option value="@participant"></option>
+                }
+            </datalist>
+
+            <div class="speaker-naming-list">
+                @foreach (var speaker in speakers)
+                {
+                    <div class="speaker-naming-row">
+                        <div class="speaker-naming-label">講者 @speaker.Label</div>
+                        <div class="speaker-naming-samples">
+                            @foreach (var sample in speaker.Samples)
+                            {
+                                <div class="speaker-naming-sample">「@sample」</div>
+                            }
+                        </div>
+                        <input class="ant-input speaker-naming-input"
+                               list="@RosterId"
+                               maxlength="@TranscriptSpeakerLabels.MaxNameLength"
+                               placeholder="填入名字"
+                               @bind="speaker.Name"
+                               @bind:event="oninput" />
+                    </div>
+                }
+            </div>
+
+            @if (hasSegmentLabels)
+            {
+                <p class="speaker-naming-note">
+                    逐字稿裡還有字母代號（講者 A 等）：那些只在約 5 分鐘那一段內有效，不能整場對照，所以不列在這裡。
+                </p>
+            }
+        }
+    </div>
+
+    <div class="speaker-naming-actions">
+        <Button OnClick="CloseAsync">取消</Button>
+        @if (speakers.Count > 0)
+        {
+            <Button Type="ButtonType.Primary"
+                    Loading="@isSaving"
+                    Disabled="@isSaving"
+                    OnClick="SaveAsync">儲存</Button>
+        }
+    </div>
+</Modal>

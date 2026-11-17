@@ -126,6 +126,12 @@
     gap: 6px;
 }
 
+/* 1.1.65：與會人員下拉底下的「輸入框 ＋ 加入」。 */
+.project-view-attendee-add {
+    display: flex;
+    gap: 6px;
+}
+
 .project-view-ai-field-grow {
     /* 0.4.71 加了第四個欄位（與會人員），基準寬度從 320 收到 260，
        否則在 1440 這種常見寬度下整列一定換行。 */

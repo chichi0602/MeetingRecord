@@ -1163,6 +1163,7 @@ public class MeetingService
         try
         {
             CleanTrackingHelper.Clean<Meeting>(context);
+            CleanTrackingHelper.Clean<Project>(context);
             var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
             if (meeting is null)
             {
@@ -1206,9 +1207,11 @@ public class MeetingService
 
             // ⚠️ 這個 if 同樣不能省：x.Id == effectiveProjectId 在 null 時是 lifted comparison、
             // 恆為 false，查不到任何列就會讓「不指定專案」一律回「找不到指定的專案項目」。
+            // 1.1.65：要追蹤——送出時會把名冊沒有的與會者補進 Project.Participants。
+            Project? project = null;
             if (effectiveProjectId is not null)
             {
-                var project = await context.Project.AsNoTracking()
+                project = await context.Project
                     .FirstOrDefaultAsync(x => x.Id == effectiveProjectId, cancellationToken);
                 if (project is null || !access.CanViewProject(project.Id))
                 {
@@ -1241,6 +1244,10 @@ public class MeetingService
             // ToStored 已負責 trim／去空／忽略大小寫去重／保順序／全空回 null。
             // Take 的唯一理由是界定提示詞大小，不是權限。
             meeting.DraftAttendees = TagStringHelper.ToStored((attendees ?? []).Take(MaxDraftAttendees));
+
+            // 1.1.65：與會者可以在送出時直接輸入，名冊沒有的人補進專案名冊，和會議同一次存檔。
+            var rosterAdded = project is null ? 0 : MergeIntoRoster(project, TagStringHelper.ToList(meeting.DraftAttendees));
+
             meeting.DraftStatus = DraftStatus.Pending;
             meeting.DraftError = null;
             meeting.DraftStartedAt = null;
@@ -1248,6 +1255,7 @@ public class MeetingService
             meeting.UpdatedAt = DateTime.Now;
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
+            CleanTrackingHelper.Clean<Project>(context);
 
             // 先登錄進度再入列，理由同轉錄：背景工作要等輪到才知道，先登錄畫面才立刻看得到「排隊中」。
             draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
@@ -1255,7 +1263,7 @@ public class MeetingService
             await AuditAsync(
                 AuditActions.MeetingDraftRequest,
                 meetingId,
-                $"title={meeting.Title}; projectId={effectiveProjectId}; template={template.Name}; attendees={TagStringHelper.ToList(meeting.DraftAttendees).Count}");
+                $"title={meeting.Title}; projectId={effectiveProjectId}; template={template.Name}; attendees={TagStringHelper.ToList(meeting.DraftAttendees).Count}; rosterAdded={rosterAdded}");
             return VerifyRecordResultFactory.Build(true);
         }
         catch (Exception ex)
@@ -1265,6 +1273,25 @@ public class MeetingService
             Logger.LogError(ex, "Failed to request meeting draft. MeetingId={MeetingId}", meetingId);
             return VerifyRecordResultFactory.Build(false, "排入會議紀錄生成失敗。", ex);
         }
+    }
+
+    /// <summary>
+    /// 把名冊沒有的與會者接在專案名冊後面（忽略大小寫比對，保留原順序），回傳補了幾位。
+    /// 沒有新名字時不動專案，避免無謂更新 UpdatedAt。
+    /// </summary>
+    private static int MergeIntoRoster(Project project, IReadOnlyCollection<string> attendees)
+    {
+        var roster = TagStringHelper.ToList(project.Participants);
+        var known = new HashSet<string>(roster, StringComparer.OrdinalIgnoreCase);
+        var added = attendees.Where(known.Add).ToList();
+        if (added.Count == 0)
+        {
+            return 0;
+        }
+
+        project.Participants = TagStringHelper.ToStored(roster.Concat(added));
+        project.UpdatedAt = DateTime.Now;
+        return added.Count;
     }
 
     /// <summary>

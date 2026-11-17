@@ -115,11 +115,24 @@ public partial class ProjectPage : IDisposable
     /// <summary>本次生成勾選的實際與會者。每次換專案或換逐字稿都重來，不持久化。</summary>
     private List<string> selectedAttendees = [];
 
-    /// <summary>目前專案的與會人員名冊。名冊是空的時候選擇器會停用但不隱藏。</summary>
+    /// <summary>目前專案的與會人員名冊。</summary>
     private List<string> AvailableParticipants => SelectedProject?.Participants ?? [];
 
+    /// <summary>
+    /// 1.1.65：這次在「AI 轉會議紀錄」直接輸入、名冊還沒有的人。送出成功時伺服器才補進名冊，
+    /// 所以換專案就清掉（名冊是專案私有的）。
+    ///
+    /// ⚠️ 1.1.66：這些人**不放進下拉**，在輸入框下方自己畫標籤，送出時再和勾選合併。
+    /// 1.1.65 把新名字同時加成 SelectOption 又設進 Values，AntDesign Select 收到 Values 時新選項還沒註冊，
+    /// 把找不到的值丟掉並經 OnSelectedItemsChanged 回寫——名字就這樣沒送出去（實測「蔡醫師」）。
+    /// </summary>
+    private List<string> extraAttendees = [];
+
+    /// <summary>「與會人員」下方輸入框的暫存值，按「加入」才進清單。</summary>
+    private string attendeeDraft = string.Empty;
+
     private string AttendeePlaceholder
-        => AvailableParticipants.Count == 0 ? "此專案尚未設定與會人員" : "勾選本次到場的人";
+        => AvailableParticipants.Count == 0 ? "名冊還沒有人，可在下方加入" : "勾選本次到場的人";
 
     /// <summary>
     /// 產生會議紀錄的費用說明。刻意不講「幾次 API 呼叫」：逐字稿較長時會先分段，
@@ -522,6 +535,7 @@ public partial class ProjectPage : IDisposable
             // 名冊、逐字稿選擇是專案私有的，換專案一定要清掉。
             selectedTranscriptId = 0;
             selectedAttendees = [];
+            extraAttendees = [];
         }
 
         await ReloadProjectContextAsync();
@@ -544,7 +558,16 @@ public partial class ProjectPage : IDisposable
         var projectId = selectedProjectId;
 
         // 附件另外撈：專案選擇器的清單不帶附件，而畫面一次只顯示一個專案。
-        projectFiles = (await ProjectApi.GetAsync(projectId)).Data?.Files ?? [];
+        var detail = (await ProjectApi.GetAsync(projectId)).Data;
+        projectFiles = detail?.Files ?? [];
+
+        // 1.1.65：送出 AI 轉會議紀錄時伺服器可能補了名冊，用單筆的最新名冊蓋過清單裡那份；
+        // 補進去的人已經在名冊，這次輸入的暫存可以清掉。
+        if (detail is not null && SelectedProject is { } selected)
+        {
+            selected.Participants = detail.Participants;
+            extraAttendees = [.. extraAttendees.Where(x => !detail.Participants.Contains(x, StringComparer.OrdinalIgnoreCase))];
+        }
 
         var meetings = await ProjectApi.GetMeetingsAsync(projectId);
         if (!meetings.Success)
@@ -573,6 +596,7 @@ public partial class ProjectPage : IDisposable
 
         // 名冊可能被別人改過（或被自己在「修改專案」裡刪掉），把已不存在的勾選剔除，
         // 否則會把名冊上沒有的名字餵給模型。
+        // 這次新輸入的人在 extraAttendees，不在下拉裡，不受這裡影響。
         selectedAttendees = [.. selectedAttendees.Where(x => AvailableParticipants.Contains(x))];
     }
 
@@ -583,6 +607,7 @@ public partial class ProjectPage : IDisposable
 
         // 名冊是專案私有的，換專案一定要清掉——否則會把 A 專案的人名餵給 B 專案的會議。
         selectedAttendees = [];
+        extraAttendees = [];
 
         logger.LogInformation("Project selection changed. ProjectId={ProjectId}", projectId);
 
@@ -631,6 +656,39 @@ public partial class ProjectPage : IDisposable
     {
         selectedAttendees = values?.ToList() ?? [];
     }
+
+    /// <summary>
+    /// 1.1.65：名冊沒有的人直接輸入、按「加入」；送出成功時伺服器補進專案名冊。理由同 <see cref="AddTo"/>，刻意不用 SelectMode.Tags。
+    /// 名冊已有的名字（忽略大小寫）改成勾選名冊裡那一個——那個選項早就在下拉裡，設進 Values 不會被丟掉。
+    /// </summary>
+    private void OnAddAttendee()
+    {
+        var value = (attendeeDraft ?? string.Empty).Trim();
+        attendeeDraft = string.Empty;
+        if (value.Length == 0)
+        {
+            return;
+        }
+
+        var inRoster = AvailableParticipants.FirstOrDefault(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase));
+        if (inRoster is not null)
+        {
+            if (!selectedAttendees.Contains(inRoster))
+            {
+                selectedAttendees = [.. selectedAttendees, inRoster];
+            }
+
+            return;
+        }
+
+        if (!extraAttendees.Contains(value, StringComparer.OrdinalIgnoreCase))
+        {
+            extraAttendees = [.. extraAttendees, value];
+        }
+    }
+
+    private void OnRemoveExtraAttendee(string person)
+        => extraAttendees = [.. extraAttendees.Where(x => x != person)];
 
     #endregion
 
@@ -721,7 +779,8 @@ public partial class ProjectPage : IDisposable
             {
                 PromptTemplateId = selectedPromptTemplateId,
                 ProjectId = selectedProjectId,
-                Attendees = selectedAttendees,
+                // 1.1.66：下拉勾選的 ＋ 這次新加的（不在下拉裡），送出成功時新加的會補進名冊。
+                Attendees = [.. selectedAttendees.Concat(extraAttendees).Distinct(StringComparer.OrdinalIgnoreCase)],
             });
 
             if (!result.Success)
@@ -1436,6 +1495,7 @@ public partial class ProjectPage : IDisposable
             selectedProjectId = savedId;
             selectedTranscriptId = 0;
             selectedAttendees = [];
+            extraAttendees = [];
             await ReloadAsync();
             await ProjectApi.SaveLastSelectedAsync(savedId);
         }

@@ -381,7 +381,7 @@ else
                         @key="@($"attendees-{draftRequestOpenCount}-{draftRequestProjectId}")"
                         Values="draftRequestAttendees"
                         OnSelectedItemsChanged="OnDraftRequestAttendeesChanged"
-                        Disabled="@(draftRequestProjectId <= 0 || DraftRequestParticipants.Count == 0)"
+                        Disabled="@(draftRequestProjectId <= 0)"
                         Placeholder="@DraftRequestAttendeePlaceholder"
                         MaxTagCount="3"
                         AllowClear EnableSearch
@@ -391,6 +391,34 @@ else
                         <SelectOption TItemValue="string" TItem="string" Value="@person">@person</SelectOption>
                     }
                 </Select>
+                @* 1.1.65：名冊沒有的人在這裡加入，送出成功時補進專案名冊。
+                   ⚠️ stopPropagation：中文輸入法用 Enter 選字，不擋的話會觸發對話框的 Enter 送出。
+                   按鈕不依輸入框內容停用（Input 失焦才回寫，理由同「修改專案」的「新增」鈕）。 *@
+                @if (draftRequestProjectId > 0)
+                {
+                    <div class="meeting-draft-request-attendee-add" @onkeydown:stopPropagation="true">
+                        <Input @bind-Value="draftRequestAttendeeDraft" Size="@InputSize.Small" Placeholder="名冊沒有的人，輸入後按加入" />
+                        <Button Size="@ButtonSize.Small" OnClick="OnAddDraftRequestAttendee">加入</Button>
+                    </div>
+                    @* 1.1.66：新加的人不放進下拉，自己畫標籤，送出時再合併。 *@
+                    @if (draftRequestExtraAttendees.Count > 0)
+                    {
+                        <div class="meeting-draft-request-tag-list">
+                            @foreach (var person in draftRequestExtraAttendees)
+                            {
+                                var current = person;
+                                <span class="meeting-draft-request-tag">
+                                    <span>@current</span>
+                                    <button type="button"
+                                            title="@($"移除 {current}")"
+                                            aria-label="@($"移除 {current}")"
+                                            @onclick="@(() => OnRemoveDraftRequestExtraAttendee(current))">×</button>
+                                </span>
+                            }
+                        </div>
+                    }
+                    <span class="meeting-draft-request-label">新加的人送出後會存進專案名冊。</span>
+                }
             </div>
         </div>
         <p class="meeting-draft-request-note">

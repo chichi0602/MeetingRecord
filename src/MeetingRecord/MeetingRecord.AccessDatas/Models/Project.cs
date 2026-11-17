@@ -46,6 +46,7 @@ public class Project
     /// <summary>
     /// 常用與會人員名冊。是「這個專案常出現的人」的長期清單，不是某一場會議的實到名單——
     /// 每次產生會議紀錄時從這裡勾選實際到場的人，勾選結果存在 <c>Meeting.DraftAttendees</c>。
+    /// 1.1.65 起送出時也可以直接輸入名冊沒有的人，送出成功就補進這份名冊（<c>MeetingService.RequestDraftAsync</c>）。
     ///
     /// ⚠️ 儲存格式同 <see cref="GlossaryTerms"/>。
     /// </summary>

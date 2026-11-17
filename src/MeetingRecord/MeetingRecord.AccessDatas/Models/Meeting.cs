@@ -104,7 +104,7 @@ public class Meeting
     public string? DraftPromptTemplateName { get; set; }
 
     /// <summary>
-    /// 本次生成勾選的實際與會者快照。從專案的 <c>Project.Participants</c> 名冊挑，
+    /// 本次生成勾選的實際與會者快照。從專案的 <c>Project.Participants</c> 名冊挑或自行輸入（1.1.65 起新名字會補進名冊），
     /// 會連同專案的常用名詞一起餵給模型校正聽錯的人名。
     ///
     /// 刻意只快照這一份、不快照常用名詞：與會者的語意本來就是「本次」，必須定格；

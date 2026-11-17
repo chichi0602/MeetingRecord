@@ -238,7 +238,10 @@ else
                             </span>
                         </div>
 
-                        @* 本次實到者：從專案名冊挑，不是 Tags 模式——這裡只准選名冊裡有的人。
+                        @* 本次實到者：從專案名冊挑，名冊沒有的人在下方輸入框「加入」（1.1.65），
+                           送出成功時伺服器補進名冊。
+                           ⚠️ 新加的人不放進下拉，自己畫標籤（1.1.66，理由見 extraAttendees 的註解）。
+                           ⚠️ 輸入仍刻意不用 SelectMode.Tags（中文輸入法殘留注音，見「修改專案」名單欄位的註解）。
                            ⚠️ @key 綁專案：切換專案時外部把選取清空，但 SelectBase 在「新專案沒有選項」
                            的情況下會直接 return，舊的標籤會留在畫面上。 *@
                         <div class="project-view-ai-field">
@@ -247,7 +250,6 @@ else
                                     @key="@($"attendees-{selectedProjectId}")"
                                     Values="selectedAttendees"
                                     OnSelectedItemsChanged="OnSelectedAttendeesChanged"
-                                    Disabled="@(AvailableParticipants.Count == 0)"
                                     Placeholder="@AttendeePlaceholder"
                                     MaxTagCount="2"
                                     AllowClear EnableSearch
@@ -257,10 +259,28 @@ else
                                     <SelectOption TItemValue="string" TItem="string" Value="@person">@person</SelectOption>
                                 }
                             </Select>
-                            @if (AvailableParticipants.Count == 0)
+                            <div class="project-view-attendee-add">
+                                <Input @bind-Value="attendeeDraft" Size="@InputSize.Small" Placeholder="名冊沒有的人" />
+                                @* 不依輸入框內容停用：理由同「修改專案」的「新增」鈕（Input 失焦才回寫）。 *@
+                                <Button Size="@ButtonSize.Small" OnClick="OnAddAttendee">加入</Button>
+                            </div>
+                            @if (extraAttendees.Count > 0)
                             {
-                                <span class="project-view-hint">可在「修改專案」中設定名冊。</span>
+                                <div class="project-view-tag-list">
+                                    @foreach (var person in extraAttendees)
+                                    {
+                                        var current = person;
+                                        <span class="project-view-tag">
+                                            <span>@current</span>
+                                            <button type="button"
+                                                    title="@($"移除 {current}")"
+                                                    aria-label="@($"移除 {current}")"
+                                                    @onclick="@(() => OnRemoveExtraAttendee(current))">×</button>
+                                        </span>
+                                    }
+                                </div>
                             }
+                            <span class="project-view-hint">新加的人送出後會存進專案名冊。</span>
                         </div>
 
                         <div class="project-view-ai-field">

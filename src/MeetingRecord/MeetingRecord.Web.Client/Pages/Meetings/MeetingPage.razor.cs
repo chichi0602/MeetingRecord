@@ -134,6 +134,16 @@ public partial class MeetingPage : IDisposable
     private int draftRequestPromptTemplateId;
     private int draftRequestProjectId;
     private List<string> draftRequestAttendees = [];
+
+    /// <summary>
+    /// 1.1.65：這次直接輸入、名冊還沒有的人；送出成功時伺服器補進專案名冊。開啟或換專案就清掉。
+    /// ⚠️ 1.1.66：不放進下拉，自己畫標籤、送出時再合併——同時新增 SelectOption 又設進 Values 時，
+    /// AntDesign Select 會把還沒註冊的值丟掉並回寫（理由詳見 ProjectPage 的 extraAttendees）。
+    /// </summary>
+    private List<string> draftRequestExtraAttendees = [];
+
+    /// <summary>「與會人員」下方輸入框的暫存值。</summary>
+    private string draftRequestAttendeeDraft = string.Empty;
     private bool draftRequestHasDraft;
 
     /// <summary>已歸屬的逐字稿重新產生時不得改歸屬，下拉要預選並鎖住。</summary>
@@ -188,7 +198,7 @@ public partial class MeetingPage : IDisposable
 
     private string DraftRequestAttendeePlaceholder => draftRequestProjectId <= 0
         ? "請先選擇專案"
-        : DraftRequestParticipants.Count == 0 ? "此專案尚未設定與會人員" : "勾選本次到場的人";
+        : DraftRequestParticipants.Count == 0 ? "名冊還沒有人，可在下方加入" : "勾選本次到場的人";
 
     #endregion
 
@@ -976,15 +986,55 @@ public partial class MeetingPage : IDisposable
         draftRequestLockedProject = meeting.ProjectId is not null;
         draftRequestProjectId = meeting.ProjectId ?? 0;
         draftRequestAttendees = [];
+        draftRequestExtraAttendees = [];
+        draftRequestAttendeeDraft = string.Empty;
         draftRequestOpenCount++;
         draftRequestVisible = true;
     }
 
-    /// <summary>名冊是專案私有的，換專案一定要清掉已勾選的與會者。</summary>
-    private void OnDraftRequestProjectChanged() => draftRequestAttendees = [];
+    /// <summary>名冊是專案私有的，換專案一定要清掉已勾選與新輸入的與會者。</summary>
+    private void OnDraftRequestProjectChanged()
+    {
+        draftRequestAttendees = [];
+        draftRequestExtraAttendees = [];
+    }
 
     private void OnDraftRequestAttendeesChanged(IEnumerable<string>? values)
         => draftRequestAttendees = values?.ToList() ?? [];
+
+    /// <summary>
+    /// 1.1.65：名冊沒有的人直接輸入、按「加入」；送出成功時伺服器補進專案名冊。
+    /// 刻意不用 SelectMode.Tags（中文輸入法殘留注音，理由見 ProjectPage 的名單欄位）。
+    /// 名冊已有的名字（忽略大小寫）改成勾選名冊裡那一個——那個選項早就在下拉裡，設進 Values 不會被丟掉。
+    /// </summary>
+    private void OnAddDraftRequestAttendee()
+    {
+        var value = (draftRequestAttendeeDraft ?? string.Empty).Trim();
+        draftRequestAttendeeDraft = string.Empty;
+        if (value.Length == 0 || draftRequestProjectId <= 0)
+        {
+            return;
+        }
+
+        var inRoster = DraftRequestParticipants.FirstOrDefault(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase));
+        if (inRoster is not null)
+        {
+            if (!draftRequestAttendees.Contains(inRoster))
+            {
+                draftRequestAttendees = [.. draftRequestAttendees, inRoster];
+            }
+
+            return;
+        }
+
+        if (!draftRequestExtraAttendees.Contains(value, StringComparer.OrdinalIgnoreCase))
+        {
+            draftRequestExtraAttendees = [.. draftRequestExtraAttendees, value];
+        }
+    }
+
+    private void OnRemoveDraftRequestExtraAttendee(string person)
+        => draftRequestExtraAttendees = [.. draftRequestExtraAttendees.Where(x => x != person)];
 
     /// <summary>
     /// 「產生會議紀錄」對話框的 Enter 送出。
@@ -1051,7 +1101,8 @@ public partial class MeetingPage : IDisposable
             {
                 PromptTemplateId = draftRequestPromptTemplateId,
                 ProjectId = draftRequestProjectId > 0 ? draftRequestProjectId : null,
-                Attendees = draftRequestAttendees,
+                // 1.1.66：下拉勾選的 ＋ 這次新加的（不在下拉裡），送出成功時新加的會補進名冊。
+                Attendees = [.. draftRequestAttendees.Concat(draftRequestExtraAttendees).Distinct(StringComparer.OrdinalIgnoreCase)],
             });
 
             if (!result.Success)

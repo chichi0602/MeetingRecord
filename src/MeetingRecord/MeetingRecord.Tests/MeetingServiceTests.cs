@@ -1081,6 +1081,68 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task RequestDraftAsync_ShouldAppendNewAttendeesToProjectRoster()
+    {
+        // 1.1.65：送出時直接輸入的與會者補進專案名冊；已在名冊的（忽略大小寫）不重複，順序保留。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        await SetRosterAsync(fixture, project.Id, "\n王小明\nAmy\n");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id, ["amy", "陳美玲", "王小明", "李大華"]);
+
+        Assert.True(result.Success);
+        var saved = await fixture.Context.Project.AsNoTracking().SingleAsync(x => x.Id == project.Id);
+        Assert.Equal("\n王小明\nAmy\n陳美玲\n李大華\n", saved.Participants);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldLeaveRosterUntouched_WhenAllAttendeesKnown()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        await SetRosterAsync(fixture, project.Id, "\n王小明\n陳美玲\n");
+        var before = (await fixture.Context.Project.AsNoTracking().SingleAsync(x => x.Id == project.Id)).UpdatedAt;
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+
+        await fixture.CreateService().RequestDraftAsync(meeting.Id, project.Id, template.Id, ["陳美玲"]);
+
+        var saved = await fixture.Context.Project.AsNoTracking().SingleAsync(x => x.Id == project.Id);
+        Assert.Equal("\n王小明\n陳美玲\n", saved.Participants);
+        Assert.Equal(before, saved.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldNotTouchRoster_WhenRejected()
+    {
+        // 被拒絕（這裡用停用的提示詞）時名冊不能被改到：送出成功才寫進名冊。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("客戶訪談專案");
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        await fixture.Context.PromptTemplate.Where(x => x.Id == template.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEnabled, false));
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var service = fixture.CreateService();
+
+        var result = await service.RequestDraftAsync(meeting.Id, project.Id, template.Id, ["陳美玲"]);
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.False(result.Success);
+        var saved = await fixture.Context.Project.AsNoTracking().SingleAsync(x => x.Id == project.Id);
+        Assert.Null(saved.Participants);
+    }
+
+    private static async Task SetRosterAsync(MeetingServiceFixture fixture, int projectId, string roster)
+    {
+        await fixture.Context.Project.Where(x => x.Id == projectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Participants, roster));
+        fixture.Context.ChangeTracker.Clear();
+    }
+
+    [Fact]
     public async Task ArchivedProject_MemberCannotAttachOrEditDrafts_AdminCan()
     {
         // 1.0.46：已完成＝封存，一般使用者唯讀；管理者不受限。

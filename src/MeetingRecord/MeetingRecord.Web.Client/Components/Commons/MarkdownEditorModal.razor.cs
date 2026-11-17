@@ -147,6 +147,11 @@ public partial class MarkdownEditorModal : IDisposable
 
     [Parameter] public EventCallback OnNameSpeakers { get; set; }
 
+    /// <summary>1.1.67：唯讀時底部的「複製連結」。只有專案頁用（對方要登入且有專案權限才看得到），連結由父層組。</summary>
+    [Parameter] public bool CanShare { get; set; }
+
+    [Parameter] public EventCallback OnShare { get; set; }
+
     private const string DraftTab = "draft";
 
     private const string TranscriptTab = "transcript";

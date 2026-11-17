@@ -384,6 +384,11 @@ else
                                     <CrudActionButton Title="會議紀錄與逐字稿" Icon="article"
                                                       OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
                                 </SpaceItem>
+                                @* 1.1.67：複製直接打開這筆的網址。對方要登入且有這個專案的權限才看得到，條件同上一顆。 *@
+                                <SpaceItem>
+                                    <CrudActionButton Title="複製分享連結" Icon="share"
+                                                      OnClick="@(async () => await OnShareMeetingAsync(IdOf(context)))" />
+                                </SpaceItem>
                             }
                             @if (context.HasDraft && CanExport)
                             {
@@ -726,6 +731,8 @@ else
                          OnDownloadTranscript="OnDownloadTranscriptAsync"
                          CanNameSpeakers="@draftCanNameSpeakers"
                          OnNameSpeakers="@(() => speakerModalVisible = true)"
+                         CanShare="true"
+                         OnShare="@(() => OnShareMeetingAsync(draftMeetingId))"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
 

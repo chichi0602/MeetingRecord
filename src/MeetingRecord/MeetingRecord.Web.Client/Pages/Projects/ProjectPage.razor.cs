@@ -57,6 +57,22 @@ public partial class ProjectPage : IDisposable
 
     [Inject] private FileDownloadInterop fileDownloadInterop { get; set; } = default!;
 
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+
+    /// <summary>
+    /// 1.1.67 分享連結（<c>/projects?projectId=P&amp;meetingId=M</c>）：切到該專案並打開那筆會議紀錄。
+    /// 只是捷徑，不是公開存取——對方要登入（未登入會先導到登入頁並帶回原網址），而且有該專案的權限；
+    /// 看不到的一律當成不存在。處理寫法照 TodoPage 的 todoId。
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "projectId")]
+    public int? SharedProjectId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "meetingId")]
+    public int? SharedMeetingId { get; set; }
+
+    /// <summary>已處理過的分享連結，避免重新設參數時重複開窗。</summary>
+    private (int ProjectId, int MeetingId)? handledShare;
+
     /// <summary>正在匯出的會議 Id；用來顯示 loading 並擋重複點擊。</summary>
     private int? exportingMeetingId;
 
@@ -458,9 +474,89 @@ public partial class ProjectPage : IDisposable
         filterTeamOptions = (await ProjectApi.GetFilterTeamsAsync()).Data ?? [];
 
         // 1.0.51：預設選上次選的專案。已刪除、看不到或不在「使用中」的，ReloadAsync 會照舊退回第一筆。
-        selectedProjectId = (await ProjectApi.GetLastSelectedAsync()).Data?.ProjectId ?? 0;
+        // 1.1.67：從分享連結進來時先選連結的專案，不先載上次那個（後面 OnParametersSetAsync 會再確認看不看得到）。
+        selectedProjectId = SharedProjectId is > 0
+            ? SharedProjectId.Value
+            : (await ProjectApi.GetLastSelectedAsync()).Data?.ProjectId ?? 0;
         await RefreshJobsAsync();
         await ReloadAsync();
+    }
+
+    /// <summary>
+    /// 1.1.67：處理分享連結。Blazor 在 OnInitializedAsync 完成後才呼叫這裡，所以第一次進頁時專案清單已載入；
+    /// 頁面開著時再點另一個連結，元件不會重建、只會重新設參數，也走這裡。
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(RoleMessage)
+            || SharedProjectId is not { } projectId || projectId <= 0
+            || SharedMeetingId is not { } meetingId || meetingId <= 0
+            || handledShare == (projectId, meetingId))
+        {
+            return;
+        }
+
+        handledShare = (projectId, meetingId);
+        var project = projects.FirstOrDefault(x => IdOf(x) == projectId);
+        if (project is null)
+        {
+            _ = messageService.WarningAsync("找不到這個專案，可能已經被刪除或你沒有權限看。");
+            return;
+        }
+
+        // 被範圍或篩選擋掉（例如已完成的專案在「使用中」看不到）時放寬，不然 ReloadAsync 會退回第一筆。
+        if (selectorItems.All(x => x.Id != projectId))
+        {
+            projectScope = ProjectScope.All;
+            teamFilters = [];
+            categoryFilters = [];
+            statusFilters = [];
+        }
+
+        if (selectedProjectId != projectId)
+        {
+            selectedProjectId = projectId;
+            selectedTranscriptId = 0;
+            selectedAttendees = [];
+            extraAttendees = [];
+            await ReloadAsync();
+        }
+
+        var meeting = projectMeetings.FirstOrDefault(x => IdOf(x) == meetingId);
+        if (meeting is null || !(meeting.HasDraft || meeting.HasTranscript))
+        {
+            _ = messageService.WarningAsync("找不到這筆會議紀錄，可能已經從專案移除或你沒有權限看。");
+            return;
+        }
+
+        logger.LogInformation("Opening shared meeting link. ProjectId={ProjectId}, MeetingId={MeetingId}", projectId, meetingId);
+        await OnOpenDraftModalAsync(meeting);
+    }
+
+    /// <summary>
+    /// 1.1.67：複製這筆會議紀錄的分享連結。連結只是捷徑，對方仍要登入並有這個專案的權限。
+    /// 瀏覽器不允許自動複製時，把網址顯示出來讓使用者自己複製。
+    /// </summary>
+    private async Task OnShareMeetingAsync(int meetingId)
+    {
+        if (selectedProjectId <= 0 || meetingId <= 0)
+        {
+            return;
+        }
+
+        var url = $"{NavigationManager.BaseUri}projects?projectId={selectedProjectId}&meetingId={meetingId}";
+        if (await clipboardInterop.CopyTextAsync(url))
+        {
+            NotifySuccess("已複製連結。對方要登入，而且有這個專案的權限才看得到。");
+            return;
+        }
+
+        await modalService.InfoAsync(new ConfirmOptions
+        {
+            // 字串內容不會換行，所以說明放標題、網址單獨放內容，比較好選取。
+            Title = "瀏覽器不允許自動複製，請自行複製這個網址",
+            Content = url,
+        });
     }
 
     /// <summary>

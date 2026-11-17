@@ -178,6 +178,15 @@
                 </span>
             </Button>
         }
+        @if (!CanEdit && CanShare)
+        {
+            <Button OnClick="@(() => OnShare.InvokeAsync())">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="share" />
+                    <span>複製連結</span>
+                </span>
+            </Button>
+        }
         @if (!IsTranscriptTabActive && CanExport && !string.IsNullOrWhiteSpace(editingText))
         {
             <Button Loading="@IsExporting" Disabled="@IsExporting" OnClick="OnExportAsync">

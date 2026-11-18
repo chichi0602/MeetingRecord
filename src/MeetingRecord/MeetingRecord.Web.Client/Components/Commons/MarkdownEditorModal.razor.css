@@ -181,19 +181,23 @@
     min-width: 6em;
 }
 
+/* 1.1.70：照 Chrome 尋找的螢光筆配色——其他符合的字黃色、目前這筆橘色，只標字、不動排版。 */
 .markdown-editor-transcript ::deep .transcript-match {
     padding: 0;
-    background: #fff1b8;
+    border-radius: 2px;
+    background: #ffff00;
     color: inherit;
 }
 
 .markdown-editor-transcript ::deep .transcript-match-active {
-    background: #ffc53d;
-    outline: 1px solid #d48806;
+    background: #ff9632;
 }
 
-/* 逐字稿：純文字、保留換行、可選取。不走 Markdown。 */
+/* 逐字稿：純文字、保留換行、可選取。不走 Markdown。
+   ⚠️ 必須 display: block 蓋掉 .markdown-editor-pane 的 flex column：
+   搜尋時文字被拆成「文字＋<mark>＋文字」多個節點，flex 會把每個節點排成獨立一行（1.1.69 的 bug）。 */
 .markdown-editor-transcript {
+    display: block;
     flex: 1 1 auto;
     padding: 12px 16px;
     background: #ffffff;

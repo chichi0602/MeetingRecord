@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.30
+- 文件版本：2.31
 - 文件狀態：已實作
-- 現行系統版本：1.1.69
+- 現行系統版本：1.1.70
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/11/17
+- 最後核對日期：2026/11/18
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -121,7 +121,7 @@
 - `BackgroundJobDto` 新增 `ProjectId`、`IsMine`、`NeedsSpeakerNames`。
   - 有專案的開 `/projects?projectId=&meetingId=`。
   - 沒有的開 `/meetings?meetingId=`（1.1.69 新增），打開「會議紀錄與逐字稿」；加 `&speakers=1` 改開標示講者。
-- 逐字稿頁籤有搜尋框：即時高亮、「第 i／共 n 筆」、上一筆／下一筆。
+- 逐字稿頁籤有搜尋框：即時在原文中以螢光筆標記（照 Chrome 尋找配色：其他筆黃 `#ffff00`、目前這筆橘 `#ff9632`；**1.1.70 起**修正符合的字被拆成獨立一行——逐字稿容器要 `display: block` 蓋掉 `.markdown-editor-pane` 的 flex）、「第 i／共 n 筆」、上一筆／下一筆。
   - Enter 跳下一筆，輸入法選字的 Enter 不算。
   - 找字用 `TextSearchHelper`。
 

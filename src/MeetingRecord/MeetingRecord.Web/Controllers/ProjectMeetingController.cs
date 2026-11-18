@@ -149,15 +149,20 @@ public sealed class ProjectMeetingController(
     /// <summary>儲存講者對照（逐字稿檔案不改，讀取時才套用）。</summary>
     [HttpPut("meetings/{meetingId:int}/speakers")]
     [HasPermission(MagicObjectHelper.角色_專案項目, PermissionActions.Edit)]
-    public async Task<ActionResult<ApiResult>> UpdateSpeakers(int projectId, int meetingId, [FromBody] MeetingSpeakerNamesDto request)
+    public async Task<ActionResult<ApiResult>> UpdateSpeakers(int projectId, int meetingId, [FromBody] MeetingSpeakerNamesDto request, [FromQuery] bool generate = false)
     {
         if (await FindMeetingAsync(projectId, meetingId) is null)
         {
             return NotFound(ApiResult.NotFoundResult(MeetingNotFound));
         }
 
-        var result = await meetingService.UpdateSpeakerNamesAsync(meetingId, request.Names);
-        return result.Success ? Ok(ApiResult.SuccessResult("講者名字已儲存。")) : BadRequest(ApiResult.FailureResult(result.Message));
+        // 1.1.69：generate=true 時存名字後用上傳時選的提示詞產生會議紀錄（歸屬檢查同 RequestDraft）。
+        var result = generate
+            ? await meetingService.NameSpeakersAndGenerateAsync(meetingId, request.Names, projectId)
+            : await meetingService.UpdateSpeakerNamesAsync(meetingId, request.Names);
+        return result.Success
+            ? Ok(ApiResult.SuccessResult(generate ? "講者名字已儲存，開始產生會議紀錄。" : "講者名字已儲存。"))
+            : BadRequest(ApiResult.FailureResult(result.Message));
     }
 
     /// <summary>

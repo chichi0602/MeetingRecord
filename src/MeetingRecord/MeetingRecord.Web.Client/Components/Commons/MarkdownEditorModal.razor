@@ -50,7 +50,18 @@
             {
                 <div class="markdown-editor-speaker-hint">講者代號由語音辨識自動標示：「講者 1～4」整場是同一人，可按「標示講者」填入真名；字母代號（講者 A）只在約 5 分鐘那一段內有效。</div>
             }
-            <div class="markdown-editor-pane markdown-editor-transcript">@Transcript</div>
+            @* 1.1.69：逐字稿搜尋。輸入框不綁 value（避免中文輸入法組字時被回寫），每次開窗用 @key 重建清空。 *@
+            <div class="markdown-editor-transcript-search">
+                <input class="ant-input markdown-editor-transcript-search-input"
+                       @key="transcriptSearchKey"
+                       placeholder="搜尋逐字稿（Enter 跳下一筆）"
+                       @oninput="OnTranscriptSearchInput"
+                       @onkeydown="OnTranscriptSearchKeyDown" />
+                <span class="markdown-editor-transcript-search-count">@TranscriptMatchText</span>
+                <Button Size="@ButtonSize.Small" Disabled="@(transcriptMatches.Count == 0)" OnClick="@(() => MoveTranscriptMatchAsync(forward: false))">上一筆</Button>
+                <Button Size="@ButtonSize.Small" Disabled="@(transcriptMatches.Count == 0)" OnClick="@(() => MoveTranscriptMatchAsync(forward: true))">下一筆</Button>
+            </div>
+            <div class="markdown-editor-pane markdown-editor-transcript" @ref="transcriptPane">@TranscriptContent</div>
         </div>
     }
     else

@@ -73,14 +73,34 @@
         }
     </div>
 
+    @* 1.1.69：上傳時選了「轉錄完自動產生」、轉完在等標示的會議，多兩顆鈕：存了就產生、或不標直接產生。 *@
+    @if (canGenerate && speakers.Count > 0)
+    {
+        <p class="speaker-naming-note">
+            上傳時有選「轉錄完自動產生會議紀錄」：按「儲存並產生會議紀錄」後就開始產生（會產生費用），會議紀錄會直接用這裡的名字，與會人員也是這些人。
+        </p>
+    }
+
     <div class="speaker-naming-actions">
         <Button OnClick="CloseAsync">取消</Button>
         @if (speakers.Count > 0)
         {
-            <Button Type="ButtonType.Primary"
-                    Loading="@isSaving"
-                    Disabled="@isSaving"
-                    OnClick="SaveAsync">儲存</Button>
+            @if (canGenerate)
+            {
+                <Button Disabled="@isSaving" OnClick="SkipAndGenerateAsync">跳過，直接產生</Button>
+                <Button Disabled="@isSaving" OnClick="SaveAsync">只儲存</Button>
+                <Button Type="ButtonType.Primary"
+                        Loading="@isSaving"
+                        Disabled="@isSaving"
+                        OnClick="SaveAndGenerateAsync">儲存並產生會議紀錄</Button>
+            }
+            else
+            {
+                <Button Type="ButtonType.Primary"
+                        Loading="@isSaving"
+                        Disabled="@isSaving"
+                        OnClick="SaveAsync">儲存</Button>
+            }
         }
     </div>
 </Modal>

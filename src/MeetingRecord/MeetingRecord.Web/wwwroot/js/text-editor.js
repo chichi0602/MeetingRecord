@@ -103,6 +103,18 @@ window.meetingRecordTextEditor = {
         return true;
     },
 
+    // 1.1.69：逐字稿搜尋。把容器裡第 index 個 <mark> 捲到畫面中間（高亮由 C# 畫，這裡只捲動）。
+    scrollToMark: function (container, index) {
+        if (!container) {
+            return;
+        }
+
+        const marks = container.querySelectorAll('mark');
+        if (index >= 0 && index < marks.length) {
+            marks[index].scrollIntoView({ block: 'center' });
+        }
+    },
+
     unbindScrollSync: function (source) {
         const state = source ? scrollSyncStates.get(source) : null;
         if (!state) {

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using MeetingRecord.Business.Services.Other;
 
 namespace MeetingRecord.Business.Services.Transcription;
 
@@ -38,6 +39,7 @@ public enum TranscriptionPhase
 /// <param name="ErrorMessage">失敗訊息。</param>
 /// <param name="CompletedAt">完成或失敗的時間。</param>
 /// <param name="UploadPercent">上傳百分比（0.4.117），只在 <see cref="TranscriptionPhase.Uploading"/> 時有意義。</param>
+/// <param name="Note">1.1.69：完成時的附註（例如「請標示講者」），面板顯示在「已完成」後面。</param>
 public sealed record TranscriptionProgressItem(
     int MeetingId,
     string Title,
@@ -48,7 +50,8 @@ public sealed record TranscriptionProgressItem(
     int TotalSegments,
     string? ErrorMessage,
     DateTime? CompletedAt,
-    int UploadPercent = 0)
+    int UploadPercent = 0,
+    string? Note = null)
 {
     /// <summary>目前進度百分比。</summary>
     public int Percent => Phase == TranscriptionPhase.Uploading
@@ -101,13 +104,20 @@ public interface ITranscriptionProgressNotifier
     void ReportSegment(int meetingId, int completedSegments, int totalSegments);
 
     /// <summary>轉錄完成。</summary>
-    void ReportCompleted(int meetingId);
+    /// <param name="note">1.1.69：附註，例如「請標示講者」（轉完要先標示講者才會自動產生會議紀錄）。</param>
+    void ReportCompleted(int meetingId, string? note = null);
 
     /// <summary>轉錄失敗。</summary>
     void ReportFailed(int meetingId, string message);
 
-    /// <summary>把項目從清單移除（使用者關閉通知）。</summary>
+    /// <summary>把項目從清單移除（系統用：上傳取消、會議刪除）。使用者關閉通知改用 <see cref="DismissFor"/>。</summary>
     void Dismiss(int meetingId);
+
+    /// <summary>1.1.68：只替這個使用者關閉這一趟的通知，其他人照樣看得到，工作照跑。</summary>
+    void DismissFor(int meetingId, int userId);
+
+    /// <summary>這個使用者是否關過這一趟的通知。</summary>
+    bool IsDismissedBy(int meetingId, int userId);
 }
 
 public sealed class TranscriptionProgressNotifier : ITranscriptionProgressNotifier
@@ -115,18 +125,39 @@ public sealed class TranscriptionProgressNotifier : ITranscriptionProgressNotifi
     /// <summary>轉檔階段在整體進度中佔的比重。轉檔沒有進度回呼，只能給一個固定值避免卡在 0%。</summary>
     public const int ConvertingPercent = 5;
 
+    /// <summary>
+    /// 1.1.68：已結束的項目保留多久。以前要等有人按關閉才會從記憶體移除；
+    /// 改成每人各自關閉後項目不再被刪，所以改由時間清掉。
+    /// </summary>
+    public static readonly TimeSpan FinishedRetention = TimeSpan.FromHours(24);
+
     private readonly ConcurrentDictionary<int, TranscriptionProgressItem> items = new();
+
+    private readonly PerUserDismissals dismissals = new();
 
     public event Action? Changed;
 
     public IReadOnlyList<TranscriptionProgressItem> GetSnapshot()
-        => [.. items.Values.OrderBy(x => x.MeetingId)];
+    {
+        var cutoff = DateTime.Now - FinishedRetention;
+        foreach (var expired in items.Values.Where(x => x.CompletedAt < cutoff).ToList())
+        {
+            if (items.TryRemove(expired.MeetingId, out _))
+            {
+                dismissals.Reset(expired.MeetingId);
+            }
+        }
+
+        return [.. items.Values.OrderBy(x => x.MeetingId)];
+    }
 
     public TranscriptionProgressItem? Find(int meetingId)
         => items.TryGetValue(meetingId, out var item) ? item : null;
 
     public void Enqueued(int meetingId, string title, int? projectId, int? createdByUserId)
     {
+        // 新的一趟：之前關過通知的人要能再看到。
+        dismissals.Reset(meetingId);
         items[meetingId] = new TranscriptionProgressItem(
             meetingId,
             title,
@@ -143,6 +174,7 @@ public sealed class TranscriptionProgressNotifier : ITranscriptionProgressNotifi
 
     public void StartUpload(int meetingId, string title, int? projectId, int? createdByUserId)
     {
+        dismissals.Reset(meetingId);
         items[meetingId] = new TranscriptionProgressItem(
             meetingId,
             title,
@@ -187,12 +219,13 @@ public sealed class TranscriptionProgressNotifier : ITranscriptionProgressNotifi
             TotalSegments = totalSegments,
         });
 
-    public void ReportCompleted(int meetingId)
+    public void ReportCompleted(int meetingId, string? note = null)
         => Update(meetingId, item => item with
         {
             Phase = TranscriptionPhase.Completed,
             ErrorMessage = null,
             CompletedAt = DateTime.Now,
+            Note = note,
         });
 
     public void ReportFailed(int meetingId, string message)
@@ -205,11 +238,23 @@ public sealed class TranscriptionProgressNotifier : ITranscriptionProgressNotifi
 
     public void Dismiss(int meetingId)
     {
+        dismissals.Reset(meetingId);
         if (items.TryRemove(meetingId, out _))
         {
             Notify();
         }
     }
+
+    public void DismissFor(int meetingId, int userId)
+    {
+        if (items.ContainsKey(meetingId))
+        {
+            dismissals.Dismiss(meetingId, userId);
+            Notify();
+        }
+    }
+
+    public bool IsDismissedBy(int meetingId, int userId) => dismissals.IsDismissed(meetingId, userId);
 
     /// <summary>
     /// 依階段與段數換算百分比。

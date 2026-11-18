@@ -186,6 +186,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AiCallLogService>();
         services.AddScoped<IAiCallLogRecorder>(sp => sp.GetRequiredService<AiCallLogService>());
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.IAiQuotaService, MeetingRecord.Business.Services.AiUsage.AiQuotaService>();
+        // 1.1.68 成本閘門：轉錄前的預估與「超過剩餘額度就不送出」。
+        services.AddScoped<MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator>();
         services.AddScoped<MeetingRecord.Business.Services.AiUsage.AiCallGateway>();
         // 分塊上傳（1.0.59）：工作階段登記處是全站共用的。
         services.AddSingleton<MeetingRecord.Web.Uploads.ChunkedUploadStore>();
@@ -222,6 +224,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAudioClipCutter, FfmpegMediaConverter>();
         services.AddScoped<ITranscriptionProvider, AzureOpenAiTranscriptionProvider>();
         services.AddScoped<TranscriptionJobRunner>();
+        // 1.1.69：轉錄完自動產生會議紀錄（上傳時選了提示詞）。
+        services.AddScoped<MeetingRecord.Business.Services.TextGeneration.AutoDraftStarter>();
 
         // 轉錄是長時間請求（單段 5 分鐘音訊），預設的 100 秒逾時明顯不夠。
         services.AddHttpClient(AzureOpenAiTranscriptionProvider.HttpClientName, client =>

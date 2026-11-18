@@ -101,8 +101,9 @@ public sealed class ProjectApi(ApiClient api)
     public Task<ApiResult<MeetingSpeakersDto>> GetSpeakersAsync(int projectId, int meetingId)
         => api.GetAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers", ClientJsonContext.Default.MeetingSpeakersResult);
 
-    public Task<ApiResult<object>> UpdateSpeakersAsync(int projectId, int meetingId, Dictionary<string, string> names)
-        => api.PutAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);
+    /// <param name="generate">1.1.69：存好後用上傳時選的提示詞產生會議紀錄。</param>
+    public Task<ApiResult<object>> UpdateSpeakersAsync(int projectId, int meetingId, Dictionary<string, string> names, bool generate = false)
+        => api.PutAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers{(generate ? "?generate=true" : string.Empty)}", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);
 
     public Task<ApiDownload> DownloadTranscriptAsync(int projectId, int meetingId)
         => api.DownloadAsync(new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/{projectId}/meetings/{meetingId}/transcript/file"));

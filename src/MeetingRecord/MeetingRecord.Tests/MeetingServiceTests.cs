@@ -109,6 +109,91 @@ public sealed class MeetingServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_ShouldKeepSpeakerNamesAndAutoDraftFlags()
+    {
+        // 1.1.69 回歸：1.1.64 起有講者對照，但改個標題就會把它清掉（AdapterModel 沒有這欄，存檔時沒沿用）。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("季度檢討");
+        var tracked = await fixture.Context.Meeting.SingleAsync(x => x.Id == existing.Id);
+        tracked.SpeakerNames = "{\"1\":\"王小明\"}";
+        tracked.AutoDraftPromptTemplateId = 5;
+        tracked.AwaitingSpeakerNames = true;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var service = fixture.CreateService();
+
+        var model = await service.GetAsync(existing.Id);
+        model.Title = "季度檢討（修訂）";
+        await service.UpdateAsync(model);
+
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == existing.Id);
+        Assert.Equal("{\"1\":\"王小明\"}", saved.SpeakerNames);
+        Assert.Equal(5, saved.AutoDraftPromptTemplateId);
+        Assert.True(saved.AwaitingSpeakerNames);
+    }
+
+    [Fact]
+    public async Task NameSpeakersAndGenerateAsync_ShouldSaveNamesAndQueueWithSpeakersAsAttendees()
+    {
+        // 1.1.69：轉完在等標示講者的會議，存名字後用上傳時選的提示詞產生；與會人員就是填的講者。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var tracked = await fixture.Context.Meeting.SingleAsync(x => x.Id == meeting.Id);
+        tracked.TranscriptRelativePath = fixture.WriteTranscriptFile("2026/11/speakers.txt", "講者 1：大家好\n講者 2：開始吧");
+        tracked.AutoDraftPromptTemplateId = template.Id;
+        tracked.AwaitingSpeakerNames = true;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var service = fixture.CreateService();
+
+        var result = await service.NameSpeakersAndGenerateAsync(meeting.Id, new Dictionary<string, string> { ["1"] = "王小明", ["2"] = "" });
+
+        Assert.True(result.Success, result.Message);
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == meeting.Id);
+        Assert.Equal(DraftStatus.Pending, saved.DraftStatus);
+        Assert.Equal(template.Id, saved.DraftPromptTemplateId);
+        Assert.Equal("\n王小明\n", saved.DraftAttendees);
+        Assert.False(saved.AwaitingSpeakerNames);
+        Assert.Null(saved.AutoDraftPromptTemplateId);
+        Assert.Equal("王小明", TranscriptSpeakerLabels.ParseNames(saved.SpeakerNames)["1"]);
+        Assert.Equal([meeting.Id], fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task NameSpeakersAndGenerateAsync_WithoutAutoDraft_ShouldSaveNamesButNotQueue()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await fixture.AddCompletedMeetingAsync("需求確認會議");
+        var tracked = await fixture.Context.Meeting.SingleAsync(x => x.Id == meeting.Id);
+        tracked.TranscriptRelativePath = fixture.WriteTranscriptFile("2026/11/speakers2.txt", "講者 1：大家好");
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await fixture.CreateService().NameSpeakersAndGenerateAsync(meeting.Id, new Dictionary<string, string> { ["1"] = "王小明" });
+
+        Assert.False(result.Success);
+        Assert.Contains("沒有設定自動產生", result.Message);
+        Assert.Equal("王小明", TranscriptSpeakerLabels.ParseNames((await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == meeting.Id)).SpeakerNames)["1"]);
+        Assert.Empty(fixture.DraftQueue.Enqueued);
+    }
+
+    [Fact]
+    public async Task GetAsync_SearchShouldAlsoMatchDraftContent()
+    {
+        // 1.1.69：關鍵字也搜會議紀錄內容。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await fixture.AddCompletedMeetingAsync("週會", draftStatus: DraftStatus.Completed);
+        await fixture.Context.Meeting.Where(x => x.Id == meeting.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DraftContent, "決議：下週上線排程系統"));
+        await fixture.AddCompletedMeetingAsync("別的會議");
+
+        var result = await fixture.CreateService().GetAsync(new DataRequest { Search = "排程系統" });
+
+        Assert.Equal(["週會"], result.Result.Select(x => x.Title));
+    }
+
+    [Fact]
     public async Task UpdateAsync_ShouldNotOverwriteMediaAndTranscriptionFields()
     {
         // 畫面上的舊複本不得把背景轉錄剛寫入的狀態蓋掉。
@@ -766,6 +851,39 @@ public sealed class MeetingServiceTests
         Assert.Equal(TranscriptionStatus.Pending, saved.TranscriptionStatus);
         Assert.Null(saved.TranscriptionError);
         Assert.Equal([existing.Id], fixture.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RequeueTranscriptionAsync_ShouldClearStaleCancelMarker()
+    {
+        // 1.1.68：上一趟剛結束時按到「取消」會留下標記；不清的話這次重新轉錄會被 worker 無聲跳過。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var existing = await fixture.AddMeetingAsync("剛轉完又重轉的會議");
+        existing.MediaRelativePath = "2026/08/media.mp3";
+        existing.TranscriptionStatus = TranscriptionStatus.Completed;
+        fixture.Context.Meeting.Update(existing);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        fixture.CancellationRegistry.RequestCancel(BackgroundJobKind.Transcription, existing.Id);
+
+        var result = await fixture.CreateService().RequeueTranscriptionAsync(existing.Id);
+
+        Assert.True(result.Success);
+        Assert.False(fixture.CancellationRegistry.TryConsumePendingCancel(BackgroundJobKind.Transcription, existing.Id));
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldClearStaleCancelMarker()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var template = await fixture.AddPromptTemplateAsync("標準會議紀錄");
+        var meeting = await fixture.AddCompletedMeetingAsync("剛產生完又重產的會議");
+        fixture.CancellationRegistry.RequestCancel(BackgroundJobKind.MeetingDraft, meeting.Id);
+
+        var result = await fixture.CreateService().RequestDraftAsync(meeting.Id, null, template.Id);
+
+        Assert.True(result.Success);
+        Assert.False(fixture.CancellationRegistry.TryConsumePendingCancel(BackgroundJobKind.MeetingDraft, meeting.Id));
     }
 
     [Fact]

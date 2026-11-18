@@ -52,6 +52,8 @@ public partial class MeetingPage : IDisposable
 
     [Inject] private FileDownloadInterop fileDownloadInterop { get; set; } = default!;
 
+    [Inject] private MediaDurationInterop mediaDurationInterop { get; set; } = default!;
+
     /// <summary>啟用中的分類名稱（表單與篩選共用）。</summary>
     private List<string> availableCategories = [];
 
@@ -114,6 +116,66 @@ public partial class MeetingPage : IDisposable
     /// </summary>
     private static readonly string TranscriptionCostNotice =
         $"轉錄會呼叫 Azure OpenAI 語音服務並產生費用：音檔每 {MeetingMediaPolicy.TranscriptionSegmentSeconds / 60} 分鐘切成一段、逐段送出，音檔越長費用越高。";
+
+    /// <summary>
+    /// 1.1.68 成本閘門的確認視窗結果：要加在確認內容後面的預估說明、是否超過提醒門檻、是否一定付不起。
+    /// </summary>
+    private sealed record TranscriptionCostCheck(string Line, bool OverThreshold, string? BlockMessage, string? ThresholdMessage);
+
+    /// <summary>
+    /// 1.1.68 成本閘門：依長度問伺服器預估費用。長度不知道或估不出來時只回一行「無法預估」，不擋。
+    /// 預估超過本月剩餘額度時回 <see cref="TranscriptionCostCheck.BlockMessage"/>：伺服器量到長度後同樣會擋，
+    /// 在這裡先說，使用者就不用等上傳完才看到失敗。
+    /// </summary>
+    private async Task<TranscriptionCostCheck> CheckTranscriptionCostAsync(double? seconds)
+    {
+        const string unknown = "（無法預估這次的費用。）";
+        if (seconds is not { } length || length <= 0)
+        {
+            return new TranscriptionCostCheck(unknown, false, null, null);
+        }
+
+        var minutes = Math.Max(1, (int)Math.Round(length / 60));
+        var result = await MeetingApi.GetTranscriptionEstimateAsync(length);
+        if (!result.Success || result.Data?.EstimatedTwd is not { } estimated)
+        {
+            return new TranscriptionCostCheck($"（約 {minutes} 分鐘，無法預估這次的費用。）", false, null, null);
+        }
+
+        var data = result.Data;
+        var line = $"約 {minutes} 分鐘，預估轉錄費用約 NT${Math.Ceiling(estimated):0}"
+            + (data.RemainingTwd is { } remaining ? $"（本月 AI 額度剩 NT${Math.Floor(remaining):0}）" : string.Empty)
+            + "。";
+
+        if (data.RemainingTwd is { } left && estimated > left)
+        {
+            return new TranscriptionCostCheck(
+                line,
+                false,
+                $"這次預估轉錄費用約 NT${Math.Ceiling(estimated):0}，超過本月剩餘 AI 額度 NT${Math.Floor(left):0}，無法轉錄。請洽管理者調整額度。",
+                null);
+        }
+
+        var overThreshold = data.ConfirmThresholdTwd > 0 && estimated >= data.ConfirmThresholdTwd;
+        return new TranscriptionCostCheck(
+            line,
+            overThreshold,
+            null,
+            overThreshold
+                ? $"這次預估轉錄費用約 NT${Math.Ceiling(estimated):0}，超過提醒門檻 NT${data.ConfirmThresholdTwd}。確定要轉錄嗎？"
+                : null);
+    }
+
+    /// <summary>1.1.68：預估超過提醒門檻時的第二次確認（紅色確認鈕）。</summary>
+    private Task<bool> ConfirmHighCostAsync(string message) => modalService.ConfirmAsync(new ConfirmOptions
+    {
+        Title = "這次轉錄費用較高",
+        Content = message,
+        OkText = "確定轉錄",
+        CancelText = "取消",
+        MaskClosable = false,
+        OkButtonProps = new ButtonProps { Danger = true },
+    });
 
     #region AI 會議紀錄
 
@@ -219,6 +281,42 @@ public partial class MeetingPage : IDisposable
 
     /// <summary>DTO 的 Id 是 <c>int?</c>（新增時沒有）；清單上的一定有值。</summary>
     private static int IdOf(MeetingDto meeting) => meeting.Id ?? 0;
+
+    /// <summary>
+    /// 1.1.69 深連結（<c>/meetings?meetingId=N</c>，右下角完成提示與進度面板用）：打開那筆的「會議紀錄與逐字稿」；
+    /// 帶 <c>&amp;speakers=1</c> 時改開「標示講者」。看不到的照 API 回的錯誤提示。寫法照 TodoPage 的 todoId。
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "meetingId")]
+    public int? LinkedMeetingId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "speakers")]
+    public int? LinkedSpeakers { get; set; }
+
+    private (int MeetingId, bool Speakers)? handledLink;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Blazor 在 OnInitializedAsync 完成後才呼叫這裡；頁面開著時再點另一個連結也會走這裡。
+        if (!string.IsNullOrEmpty(RoleMessage) || LinkedMeetingId is not { } meetingId || meetingId <= 0)
+        {
+            return;
+        }
+
+        var speakers = LinkedSpeakers == 1;
+        if (handledLink == (meetingId, speakers))
+        {
+            return;
+        }
+
+        handledLink = (meetingId, speakers);
+        if (speakers)
+        {
+            OpenSpeakerNaming(new MeetingDto { Id = meetingId });
+            return;
+        }
+
+        await OnOpenDraftModalAsync(new MeetingDto { Id = meetingId });
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -674,13 +772,24 @@ public partial class MeetingPage : IDisposable
             var replacingMedia = CurrentRecord.HasMedia;
             var fileDescription = $"「{pendingMediaFile.Name}」（{MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)}）";
 
+            // 1.1.68 成本閘門：在瀏覽器讀長度、問伺服器預估。一定付不起就不讓上傳（不然傳完才在背景失敗）。
+            var seconds = mediaDropZone?.InputElement is { } durationInput
+                ? await mediaDurationInterop.GetDurationAsync(durationInput)
+                : null;
+            var cost = await CheckTranscriptionCostAsync(seconds);
+            if (cost.BlockMessage is not null)
+            {
+                NotifyError(cost.BlockMessage);
+                return;
+            }
+
             var uploadConfirmOptions = new ConfirmOptions
             {
                 Title = "確認上傳並開始轉錄（會產生費用）",
                 Content = replacingMedia
                     ? $"{fileDescription}會取代現有的「{CurrentRecord.MediaOriginalFileName}」，"
-                      + $"現有音檔與逐字稿會被刪除且無法復原。儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}確定要繼續嗎？"
-                    : $"{fileDescription}儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}確定要繼續嗎？",
+                      + $"現有音檔與逐字稿會被刪除且無法復原。儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}{cost.Line}{AutoDraftCostLine}確定要繼續嗎？"
+                    : $"{fileDescription}儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}{cost.Line}{AutoDraftCostLine}確定要繼續嗎？",
                 OkText = replacingMedia ? "取代並開始轉錄" : "儲存並開始轉錄",
                 CancelText = "取消",
                 MaskClosable = false
@@ -691,7 +800,8 @@ public partial class MeetingPage : IDisposable
                 uploadConfirmOptions.OkButtonProps = new ButtonProps { Danger = true };
             }
 
-            if (!await modalService.ConfirmAsync(uploadConfirmOptions))
+            if (!await modalService.ConfirmAsync(uploadConfirmOptions)
+                || (cost.ThresholdMessage is { } thresholdMessage && !await ConfirmHighCostAsync(thresholdMessage)))
             {
                 logger.LogDebug("Media upload cancelled by user at cost confirmation. MeetingId={MeetingId}", CurrentRecord.Id);
                 return;
@@ -744,7 +854,12 @@ public partial class MeetingPage : IDisposable
         if (pendingMediaFile is { } file && mediaDropZone?.InputElement is { } input)
         {
             // StartAsync 在呼叫 JS 的當下就把檔案交出去了，之後才能重設拖拉區。
-            var startError = await UploadManager.StartAsync(input, file, IdOf(CurrentRecord), deleteMeetingOnCancel: createdInThisSave);
+            var startError = await UploadManager.StartAsync(
+                input,
+                file,
+                IdOf(CurrentRecord),
+                deleteMeetingOnCancel: createdInThisSave,
+                autoDraftPromptTemplateId: autoDraftPromptTemplateId > 0 ? autoDraftPromptTemplateId : null);
             if (startError is not null)
             {
                 NotifyError($"{startError}會議資料已保留，要重新上傳請按這一列的「修改」再選一次檔案。");
@@ -842,7 +957,26 @@ public partial class MeetingPage : IDisposable
 
         pendingMediaFile = file;
         logger.LogInformation("Meeting media file selected. FileName={FileName}, FileSize={FileSize}", file.Name, file.Size);
-        return Task.CompletedTask;
+        return LoadAutoDraftTemplatesAsync();
+    }
+
+    /// <summary>1.1.69：「轉錄完自動產生會議紀錄」要用的提示詞；0＝不自動產生。每次選新檔案都重來。</summary>
+    private int autoDraftPromptTemplateId;
+
+    /// <summary>1.1.69：上傳確認框的一句：選了自動產生時提醒會另外產生費用。</summary>
+    private string AutoDraftCostLine => autoDraftPromptTemplateId > 0 ? "轉錄完會再自動產生會議紀錄（另計費用）。" : string.Empty;
+
+    /// <summary>
+    /// 1.1.69：選了檔案才需要提示詞清單（表單本身不需要）。清單和「產生會議紀錄」對話框共用同一份
+    /// <c>promptTemplates</c>；那個對話框打開時也會重讀，所以這裡讀過一次就好。
+    /// </summary>
+    private async Task LoadAutoDraftTemplatesAsync()
+    {
+        autoDraftPromptTemplateId = 0;
+        if (promptTemplates.Count == 0)
+        {
+            promptTemplates = (await MeetingApi.GetSelectablePromptTemplatesAsync()).Data ?? [];
+        }
     }
 
     /// <summary>底下那個拖拉區。用完檔案之後要呼叫 Reset()，「移除 → 再拖同一個檔案」才會有反應。</summary>
@@ -851,6 +985,7 @@ public partial class MeetingPage : IDisposable
     private void ClearPendingMediaFile()
     {
         pendingMediaFile = null;
+        autoDraftPromptTemplateId = 0;
 
         // ⚠️ 只能在確定不再需要那個檔案之後重建 input。在「剛選完檔案」時重建，會把檔案自己弄丟——見 FileDropZone 的註解。
         mediaDropZone?.Reset();
@@ -911,10 +1046,18 @@ public partial class MeetingPage : IDisposable
             _ => $"這會為「{meeting.Title}」執行一次完整的轉錄。",
         };
 
+        // 1.1.68 成本閘門：有上次量到的長度（轉錄完成過）才估得出來，沒有就只說無法預估。
+        var cost = await CheckTranscriptionCostAsync(meeting.MediaDurationSeconds);
+        if (cost.BlockMessage is not null)
+        {
+            NotifyError(cost.BlockMessage);
+            return;
+        }
+
         var confirmOptions = new ConfirmOptions
         {
             Title = willOverwrite ? "確認重新轉錄（會產生費用）" : "確認執行轉錄（會產生費用）",
-            Content = $"{situation}{TranscriptionCostNotice}確定要繼續嗎？",
+            Content = $"{situation}{TranscriptionCostNotice}{cost.Line}確定要繼續嗎？",
             OkText = willOverwrite ? "覆蓋並重新轉錄" : "開始轉錄",
             CancelText = "取消",
             MaskClosable = false
@@ -925,7 +1068,8 @@ public partial class MeetingPage : IDisposable
             confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
         }
 
-        if (!await modalService.ConfirmAsync(confirmOptions))
+        if (!await modalService.ConfirmAsync(confirmOptions)
+            || (cost.ThresholdMessage is { } thresholdMessage && !await ConfirmHighCostAsync(thresholdMessage)))
         {
             logger.LogDebug("Retry transcription cancelled by user. MeetingId={MeetingId}", meeting.Id);
             return;
@@ -956,6 +1100,7 @@ public partial class MeetingPage : IDisposable
     private void ResetUploadState()
     {
         pendingMediaFile = null;
+        autoDraftPromptTemplateId = 0;
         mediaDropZone?.Reset();
     }
 
@@ -1257,10 +1402,25 @@ public partial class MeetingPage : IDisposable
     }
 
     /// <summary>標示講者存好了：重讀逐字稿，畫面才會換成真名。</summary>
-    private async Task OnSpeakersSavedAsync()
+    private async Task OnSpeakersSavedAsync(bool generated)
     {
+        if (generated)
+        {
+            // 1.1.69：轉完等標示的會議，存好名字就開始產生；清單要重讀，「待標示講者」才會消失、進度才看得到。
+            NotifySuccess("講者名字已儲存，開始產生會議紀錄，完成時會通知你。");
+            await ReloadAsync();
+            return;
+        }
+
         draftTranscript = (await MeetingApi.GetTranscriptAsync(draftMeetingId)).Data?.Text ?? draftTranscript;
         NotifySuccess("講者名字已儲存。");
+    }
+
+    /// <summary>1.1.69：清單上「待標示講者」那顆鈕，直接開標示視窗（不必先開會議紀錄視窗）。</summary>
+    private void OpenSpeakerNaming(MeetingDto meeting)
+    {
+        draftMeetingId = IdOf(meeting);
+        speakerModalVisible = true;
     }
 
     /// <summary>

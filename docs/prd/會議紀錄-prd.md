@@ -1,8 +1,8 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.28
+- 文件版本：2.30
 - 文件狀態：已實作
-- 現行系統版本：1.1.66
+- 現行系統版本：1.1.69
 - 首次實作版本：0.4.27
 - 最後核對日期：2026/11/17
 
@@ -50,7 +50,7 @@
 
 單頁清單 + Modal 表單（WASM 頁 `Web.Client/Pages/Meetings/MeetingPage`，經 `api/v1/Meeting`）：
 
-- 搜尋：關鍵字比對 `Title`、`Description` 或 `MediaOriginalFileName`（`Contains`）。清空搜尋鈕在有輸入時出現。
+- 搜尋：關鍵字比對 `Title`、`Description`、`MediaOriginalFileName`，**1.1.69 起也比對會議紀錄內容 `DraftContent`**（`Contains`；逐字稿存在磁碟上，不做跨會議的逐字稿搜尋）。清空搜尋鈕在有輸入時出現。
 - 工具列：新增、重新整理、**分類過濾（0.4.102 恢復，多選，含任一分類即符合）**、關鍵字、清空搜尋、搜尋。**0.4.35 移除分類過濾與團隊過濾**，團隊過濾沒有恢復。
 - 排序：可排序欄位 `Title`、`MeetingDate`、`TranscriptionStatus`、`CreatedAt`、`UpdatedAt`；預設以 `UpdatedAt` 遞減、再以 `Id` 遞減。
 - 分頁：`PageSize` 取自 `MagicObjectHelper.PageSize`，`RemoteDataSource=true` 由服務端分頁。
@@ -73,7 +73,7 @@
   - 在系統內換頁不中斷上傳；換到伺服器頁（例如登出）、關分頁或重新整理前會先問「上傳還在進行」。上傳中登入失效時導到登入頁，會議資料保留。不提供暫停：伺服器超過 2 分鐘沒收到檔案資料就結束這趟上傳。
   - 取消後服務層刪掉已傳的部分，進度面板標成「已取消上傳。」；取消只作用在寫檔，寫完檔後的存檔與入列不受影響，避免留下已存檔卻沒入列的會議。**1.0.37 起**：取消上傳時，若這筆是這次存檔才新增的會議，連資料列一起刪（`SaveMediaAsync(deleteMeetingOnCancel: true)`，沿用 `DeleteAsync` 的檔案與 AI 對話清理），面板那一筆直接移除，清單該列消失；修改既有會議（含換檔）時取消仍保留會議與舊檔。上傳失敗（非取消）一律保留會議資料，提示改按「修改」再選檔重傳。取消結果看服務層回傳的訊息（`UploadCancelledMessage`／`UploadCancelledAndMeetingDeletedMessage`），從面板取消時發起上傳的分頁也會跳通知；按取消時檔案已寫完會跳「來不及取消」，不會無聲無息或誤報「已排入轉錄」。
 - 操作按鈕：
-  - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制，**1.0.47 起只對上傳者與管理者顯示**；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿）
+  - 重新轉錄（有影音檔且狀態非「待處理」「處理中」時出現，受 `edit` 權限控制，**1.0.47 起只對上傳者與管理者顯示**；**0.4.65 起「已取消」也會出現**——取消不保留進度，只能整個重跑，先前這個狀態沒有出口）。**按下去會先跳費用確認對話框**，文案依狀態分流，已完成才套紅色確認鈕（會刪掉現有逐字稿） **1.1.68 起確認框多一行預估費用**（用 `MeetingDto.MediaDurationSeconds`，也就是上次轉完的長度；沒有就寫無法預估），預估達 `TranscriptionConfirmTwd` 再確認一次，超過本月剩餘額度直接不讓送出。上傳的確認框同樣有這行，長度由瀏覽器讀（`MediaDurationInterop`／`js/media-duration.js`），預估來自 `GET api/v1/Meeting/transcription-estimate?seconds=`（`會議紀錄:create` 或 `edit`）。
   - **產生會議紀錄（0.4.73，`edit`；1.0.48 前是列上的「AI 轉會議紀錄」）**：開對話框（標題「產生會議紀錄」）選提示詞（必填）與所屬專案（**選填**）；選了專案才能從該專案名冊勾選與會人員（**1.1.65 起名冊沒有的人可以在下方輸入框「加入」，以標籤顯示、送出時和勾選合併（1.1.66），送出成功時補進專案名冊**）。按確定會再跳一次費用確認。**1.0.48 起列上不再有這顆鈕**（使用者要求），入口改到下面「會議紀錄與逐字稿」視窗裡的「產生會議紀錄」／「重新產生」
   - **會議紀錄與逐字稿（1.0.40，圖示 `article`，`HasDraft || HasTranscript` 時出現）**：取代原本的「檢視會議紀錄」與「編修會議紀錄」兩顆鈕（使用者反映操作欄太擠、兩顆長得像）。一律先以唯讀開啟共用的 `Components/Commons/MarkdownEditorModal`：
     - 有逐字稿時上方有「會議紀錄｜逐字稿」頁籤；還沒有會議紀錄就直接停在逐字稿頁籤（會議紀錄頁籤顯示「尚未產生會議紀錄。」）。逐字稿以純文字顯示（保留換行，不當 Markdown 渲染），附「複製全文」與「下載 .txt」（UTF-8 含 BOM，記事本開啟不亂碼；檔名 `逐字稿_{標題}_{yyyyMMdd}.txt`，日期取 `TranscriptionCompletedAt ?? UpdatedAt`，見 `MeetingDocumentExporter.BuildTranscriptFileName`）。看逐字稿只要看得到這筆會議；複製與下載要 `會議紀錄:export`。逐字稿**仍不能改**。
@@ -99,6 +99,31 @@
   - ⚠️ **編修時 `Keyboard="false"`**（Esc 不關窗），改過後按「取消」會先跳確認——一整篇打到一半的會議紀錄，按錯一次鍵就沒了。
   - ⚠️ **文字繫結不 debounce（0ms），只有右邊預覽 debounce 250ms**。搜尋、取代、存檔都必須讀到當下的文字（0.4.52 在 AI 問答上踩過「讀到舊值」）；預覽是 `MarkupString`，一變就整串重送，不 debounce 每秒會往下推 100KB。
   - ⚠️ **視窗裡的「下載 PDF」拿的是編輯區當下的內容**，不是資料庫那份——改了字還沒存就按下載，用舊內容產 PDF 會給出一份與畫面不符的檔案且毫無徵兆。
+
+### 轉錄完自動產生會議紀錄（1.1.69）
+
+- 上傳表單選了檔案後，多一個「轉錄完自動產生會議紀錄」下拉（提示詞，預設「不自動產生」）。
+  - 值經上傳工作階段（`UploadSessionRequestDto.AutoDraftPromptTemplateId`）帶進 `SaveMediaAsync`，存成 `Meeting.AutoDraftPromptTemplateId`；提示詞不存在或停用就當成不自動產生。
+  - 上傳的費用確認多一句「轉錄完會再自動產生會議紀錄（另計費用）」。
+- 轉錄完成時（`TranscriptionJobRunner`）：
+  - 逐字稿有「講者 1～4」→ `AwaitingSpeakerNames = true`。進度面板顯示「已完成，請標示講者」，清單的會議紀錄欄顯示「待標示講者」，操作欄多一顆「標示講者並產生會議紀錄」（`record_voice_over`，條件同視窗裡的標示講者：未歸屬、`edit`）。
+  - 沒有講者 → `AutoDraftStarter` 直接替上傳者排入產生。背景沒有登入使用者，所以不走 `RequestDraftAsync` 的資料範圍；檢查提示詞、轉錄狀態、是否產生中、封存專案、額度。排不進去只寫 `DraftError`，轉錄仍是「已完成」。
+- 標示講者視窗在等標示時多「儲存並產生會議紀錄」「跳過，直接產生」「只儲存」。
+  - 前兩者打 `PUT …/speakers?generate=true`（`MeetingService.NameSpeakersAndGenerateAsync`）：存名字後用上傳時選的提示詞走 `RequestDraftAsync`，與會人員＝填的講者名字。
+- `RequestDraftAsync` 任何路徑排入時都清掉 `AwaitingSpeakerNames` 與 `AutoDraftPromptTemplateId`。
+
+### 完成通知與深連結（1.1.69）
+
+- 右下角進度面板：**自己上傳的**轉錄或會議紀錄從進行中變成完成／失敗時，跳一則提示，點了直接打開。
+  - 提示內容：「轉錄完成」「轉錄完成，請標示講者」「會議紀錄已產生」，或失敗原因。
+  - 頁面在背景時，分頁標題前加「(✓) 」（`js/tab-alert.js`）。
+  - 已完成那一列的標題也可以點。
+- `BackgroundJobDto` 新增 `ProjectId`、`IsMine`、`NeedsSpeakerNames`。
+  - 有專案的開 `/projects?projectId=&meetingId=`。
+  - 沒有的開 `/meetings?meetingId=`（1.1.69 新增），打開「會議紀錄與逐字稿」；加 `&speakers=1` 改開標示講者。
+- 逐字稿頁籤有搜尋框：即時高亮、「第 i／共 n 筆」、上一筆／下一筆。
+  - Enter 跳下一筆，輸入法選字的 Enter 不算。
+  - 找字用 `TextSearchHelper`。
 
 ### 轉錄狀態
 

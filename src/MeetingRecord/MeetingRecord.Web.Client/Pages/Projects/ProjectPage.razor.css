@@ -442,3 +442,16 @@
     color: var(--oat-ink);
     font-size: 0.9rem;
 }
+
+/* 1.1.69：歷史會議紀錄的關鍵字篩選。 */
+.project-view-history-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+    .project-view-history-filter input {
+        flex: 0 1 280px;
+    }

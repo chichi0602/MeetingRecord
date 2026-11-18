@@ -55,6 +55,8 @@ public sealed class JobApiTests(ApiTestApplicationFactory factory) : IClassFixtu
             Assert.Equal(BackgroundJobKinds.Transcription, upload.Kind);
             Assert.True(upload.IsUploading);
             Assert.Equal("上傳中", upload.PhaseText);
+            Assert.Equal(mineProjectId, upload.ProjectId);   // 1.1.69：點完成的那一列要知道開哪一頁
+            Assert.False(upload.IsMine);                     // 上傳者不是呼叫者（createdByUserId: null）
             Assert.Contains(jobs, x => x.MeetingId == draft && x.Kind == BackgroundJobKinds.Draft && x.PhaseText == "排隊中");
             Assert.DoesNotContain(jobs, x => x.MeetingId == others);
         }
@@ -150,16 +152,20 @@ public sealed class JobApiTests(ApiTestApplicationFactory factory) : IClassFixtu
                 Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
             }
 
-            Assert.Null(Transcription.Find(mine));
-            Assert.NotNull(Draft.Find(mineDraft));
+            // 1.1.68：只從自己的清單消失，項目本身還在（別人照樣看得到，進度也照樣更新）。
+            Assert.NotNull(Transcription.Find(mine));
+            var afterOne = await GetJobsAsync(client);
+            Assert.DoesNotContain(afterOne, x => x.MeetingId == mine);
+            Assert.Contains(afterOne, x => x.MeetingId == mineDraft);
 
             using (var all = await client.PostAsync("/api/v1/jobs/dismiss-all", null))
             {
                 Assert.Equal(HttpStatusCode.OK, all.StatusCode);
             }
 
-            Assert.Null(Draft.Find(mineDraft));
-            Assert.NotNull(Transcription.Find(others)); // 看不到的不會被「全部關閉」關掉。
+            Assert.DoesNotContain(await GetJobsAsync(client), x => x.MeetingId == mineDraft);
+            Assert.NotNull(Draft.Find(mineDraft));
+            Assert.NotNull(Transcription.Find(others)); // 看不到的不會被「全部關閉」碰到。
         }
         finally
         {
@@ -167,6 +173,54 @@ public sealed class JobApiTests(ApiTestApplicationFactory factory) : IClassFixtu
             Draft.Dismiss(mineDraft);
             Transcription.Dismiss(others);
         }
+    }
+
+    [Fact]
+    public async Task Dismiss_ShouldBePerUser_AndReappearWhenRequeued()
+    {
+        // 1.1.68：以前關閉是全域的，A 一關 B 也看不到，連之後的完成／失敗都不會再出現。
+        var permissions = new[] { PermissionKey.For(MagicObjectHelper.角色_會議紀錄, PermissionActions.View) };
+        var (accountA, projectId, _) = await CreateUserWithProjectsAsync(permissions);
+        var accountB = await CreateTeammateAsync(projectId, permissions);
+        var meetingId = NewMeetingId();
+        Transcription.Enqueued(meetingId, "兩人都看得到的轉錄", projectId, createdByUserId: null);
+        try
+        {
+            using var clientA = await LoginAsync(accountA);
+            using var clientB = await LoginAsync(accountB);
+
+            using (var ok = await clientA.PostAsync($"/api/v1/jobs/{meetingId}/dismiss?kind=Transcription", null))
+            {
+                Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+            }
+
+            Assert.DoesNotContain(await GetJobsAsync(clientA), x => x.MeetingId == meetingId);
+            Assert.Contains(await GetJobsAsync(clientB), x => x.MeetingId == meetingId);
+
+            // A 關掉後工作完成：B 看得到「已完成」。
+            Transcription.ReportCompleted(meetingId);
+            Assert.Contains(await GetJobsAsync(clientB), x => x.MeetingId == meetingId && x.IsCompleted);
+
+            // 同一筆重新排入是新的一趟：A 又看得到。
+            Transcription.Enqueued(meetingId, "兩人都看得到的轉錄", projectId, createdByUserId: null);
+            Assert.Contains(await GetJobsAsync(clientA), x => x.MeetingId == meetingId);
+        }
+        finally
+        {
+            Transcription.Dismiss(meetingId);
+        }
+    }
+
+    /// <summary>建一個和指定專案主責團隊同團隊的使用者。</summary>
+    private async Task<string> CreateTeammateAsync(int projectId, string[] permissions)
+    {
+        var (account, userId) = await TestCookieLogin.CreateUserAsync(factory.Services, Password, permissions);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BackendDBContext>();
+        var teamId = db.ProjectTeam.Where(x => x.ProjectId == projectId && x.IsPrimary).Select(x => x.TeamId).Single();
+        db.UserTeam.Add(new UserTeam { MyUserId = userId, TeamId = teamId });
+        await db.SaveChangesAsync();
+        return account;
     }
 
     /// <summary>通知器是整個測試主機共用的 Singleton，用不會撞到真實資料的大編號。</summary>

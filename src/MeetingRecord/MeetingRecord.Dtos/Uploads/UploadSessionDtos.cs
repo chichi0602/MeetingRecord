@@ -24,6 +24,9 @@ public class UploadSessionRequestDto
 
     /// <summary>這筆會議是這次存檔才新增的：取消上傳時連會議一起刪（1.0.37）。</summary>
     public bool DeleteMeetingOnCancel { get; set; }
+
+    /// <summary>1.1.69：轉錄完自動產生會議紀錄要用的提示詞；null＝不自動產生（只對會議影音檔有意義）。</summary>
+    public int? AutoDraftPromptTemplateId { get; set; }
 }
 
 /// <summary>建立好的上傳工作階段：瀏覽器照 <see cref="ChunkSize"/> 切塊，依序 <c>PUT api/v1/uploads/{uploadId}/chunks/{index}</c>。</summary>

@@ -161,6 +161,37 @@
     font-weight: 600;
 }
 
+/* 1.1.69：逐字稿搜尋列與高亮。<mark> 由 RenderTreeBuilder 畫，不帶 CSS 隔離屬性，所以要用 ::deep。 */
+.markdown-editor-transcript-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px 0;
+}
+
+.markdown-editor-transcript-search-input {
+    flex: 1 1 220px;
+    max-width: 360px;
+}
+
+.markdown-editor-transcript-search-count {
+    color: var(--oat-ink-mid, #6b7a8d);
+    font-size: 0.85rem;
+    min-width: 6em;
+}
+
+.markdown-editor-transcript ::deep .transcript-match {
+    padding: 0;
+    background: #fff1b8;
+    color: inherit;
+}
+
+.markdown-editor-transcript ::deep .transcript-match-active {
+    background: #ffc53d;
+    outline: 1px solid #d48806;
+}
+
 /* 逐字稿：純文字、保留換行、可選取。不走 Markdown。 */
 .markdown-editor-transcript {
     flex: 1 1 auto;

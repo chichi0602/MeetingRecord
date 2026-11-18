@@ -62,7 +62,8 @@ public sealed class MeetingUploadManager
     /// 開始上傳。<paramref name="input"/> 是選檔的 input：JS 在呼叫當下就拿到 File 物件，之後表單重設、元件釋放都不影響這趟上傳。
     /// 建立工作階段被擋下時回原因（呼叫端再補上「會議資料已保留」）；開始了回 null。
     /// </summary>
-    public async Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel)
+    /// <param name="autoDraftPromptTemplateId">1.1.69：轉錄完自動產生會議紀錄要用的提示詞；null＝不自動產生。</param>
+    public async Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null)
     {
         var created = await api.CreateAsync(new UploadSessionRequestDto
         {
@@ -72,6 +73,7 @@ public sealed class MeetingUploadManager
             ContentType = file.ContentType,
             Size = file.Size,
             DeleteMeetingOnCancel = deleteMeetingOnCancel,
+            AutoDraftPromptTemplateId = autoDraftPromptTemplateId,
         });
         if (!created.Success || created.Data is not { } session)
         {

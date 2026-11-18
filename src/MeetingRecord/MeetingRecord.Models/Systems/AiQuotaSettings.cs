@@ -22,4 +22,11 @@ public class AiQuotaSettings
     /// <summary>每位使用者每月上限（新台幣）。0＝不限制。</summary>
     [Range(0, 100_000_000)]
     public int PerUserMonthlyTwd { get; set; }
+
+    /// <summary>
+    /// 1.1.68 成本閘門：單次轉錄預估費用（新台幣）達到這個金額時，上傳／重新轉錄的確認視窗要使用者再確認一次。
+    /// 只是提醒、不擋（擋的是「預估超過本月剩餘額度」）。0＝不提醒。
+    /// </summary>
+    [Range(0, 100_000_000)]
+    public int TranscriptionConfirmTwd { get; set; }
 }

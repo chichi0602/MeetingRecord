@@ -329,13 +329,29 @@ else
                 <span class="project-view-section-count">本專案共 @projectMeetings.Count 份</span>
             </h3>
 
+            @* 1.1.69：歷史清單的關鍵字篩選（來源逐字稿標題、提示詞名稱），純前端。
+               不綁 value：中文輸入法組字時回寫 value 會打斷組字。 *@
+            @if (projectMeetings.Count > 0)
+            {
+                <div class="project-view-history-filter">
+                    <input class="ant-input"
+                           placeholder="篩選標題或提示詞"
+                           @key="@($"history-filter-{selectedProjectId}")"
+                           @oninput="OnHistoryFilterInput" />
+                    @if (!string.IsNullOrEmpty(historyFilter))
+                    {
+                        <span class="project-view-hint">符合 @FilteredProjectMeetings.Count 份</span>
+                    }
+                </div>
+            }
+
             <BatchSelectionBar Count="@selectedMeetings.Count()" Busy="@isBatchDetaching"
                                ActionText="從專案移除所選" Icon="link_off"
                                OnAction="OnBatchDetachAsync" OnClear="@(() => selectedMeetings = [])" />
             <div class="project-view-table-wrap">
                 <Table TItem="MeetingDto"
                        Class="project-view-table"
-                       DataSource="@projectMeetings"
+                       DataSource="@FilteredProjectMeetings"
                        RowKey="x => x.Id"
                        @bind-SelectedRows="selectedMeetings"
                        HidePagination="true">
@@ -356,7 +372,15 @@ else
                             var draftStatus = (DraftStatus)context.DraftStatus;
                             var draftProgress = GetLiveDraftProgress(IdOf(context));
                         }
-                        <span class="project-view-status @DraftStatusCssClass(draftStatus)">@DraftStatusText.Describe(draftStatus)</span>
+                        @if (context.AwaitingSpeakerNames && draftProgress is null)
+                        {
+                            @* 1.1.69：上傳時選了自動產生、轉完有講者 1～4，標示好講者才會產生。 *@
+                            <span class="project-view-status project-view-status-pending">待標示講者</span>
+                        }
+                        else
+                        {
+                            <span class="project-view-status @DraftStatusCssClass(draftStatus)">@DraftStatusText.Describe(draftStatus)</span>
+                        }
                         @if (draftProgress is not null)
                         {
                             <HoverTip Title="@draftProgress.PhaseText">
@@ -384,6 +408,14 @@ else
                                     <CrudActionButton Title="會議紀錄與逐字稿" Icon="article"
                                                       OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
                                 </SpaceItem>
+                                @* 1.1.69：轉完在等標示講者（之後自動產生會議紀錄）。條件同視窗裡的「標示講者」。 *@
+                                @if (context.AwaitingSpeakerNames && CanEdit && !IsReadOnlyProject)
+                                {
+                                    <SpaceItem>
+                                        <CrudActionButton Title="標示講者並產生會議紀錄" Icon="record_voice_over"
+                                                          OnClick="@(() => OpenSpeakerNaming(context))" />
+                                    </SpaceItem>
+                                }
                                 @* 1.1.67：複製直接打開這筆的網址。對方要登入且有這個專案的權限才看得到，條件同上一顆。 *@
                                 <SpaceItem>
                                     <CrudActionButton Title="複製分享連結" Icon="share"
@@ -739,7 +771,7 @@ else
     @* 1.1.64：逐字稿的「標示講者」，名字欄位可從這個專案的與會人員名冊挑。 *@
     <SpeakerNamingModal @bind-Visible="speakerModalVisible"
                         Load="@(() => ProjectApi.GetSpeakersAsync(selectedProjectId, draftMeetingId))"
-                        Save="@(names => ProjectApi.UpdateSpeakersAsync(selectedProjectId, draftMeetingId, names))"
+                        Save="@((names, generate) => ProjectApi.UpdateSpeakersAsync(selectedProjectId, draftMeetingId, names, generate))"
                         OnSaved="OnSpeakersSavedAsync" />
 
     <Modal Title="@("專案附件")"

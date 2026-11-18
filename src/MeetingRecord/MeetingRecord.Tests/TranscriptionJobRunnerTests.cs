@@ -118,7 +118,137 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
         Assert.DoesNotContain("说", saved);
     }
 
-    private TranscriptionJobRunner CreateRunner()
+    [Fact]
+    public async Task Run_EstimateOverRemainingQuota_ShouldFailAfterConvertingButBeforeCalling()
+    {
+        // 1.1.68 成本閘門：長度在轉檔後才知道（8 分鐘 × 0.006 USD × 32 ≈ NT$1.5），剩 NT$1 就不送出，一毛錢都不花。
+        var settings = llmSettings.Value;
+        settings.Pricing["gpt-transcribe"] = new LlmPricingSettings { AudioPerMinute = 0.006m };
+        var rates = new MeetingRecord.Business.Services.AiUsage.ExchangeRateCache();
+        rates.Set(new MeetingRecord.Business.Services.AiUsage.ExchangeRateSnapshot("USD", "TWD", 32m, DateTime.Now));
+        var estimator = new MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator(
+            llmSettings,
+            rates,
+            new StatusAiQuotaService(new MeetingRecord.Dtos.AiUsage.AiQuotaStatus(
+                MeetingRecord.Dtos.AiUsage.AiQuotaScope.Global, 100, 99m, new DateTime(2026, 11, 1), new DateTime(2026, 12, 1))),
+            new StaticOptionsMonitor<AiQuotaSettings>(new AiQuotaSettings { GlobalMonthlyTwd = 100 }),
+            NullLogger<MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator>.Instance);
+        var meetingId = await AddMeetingAsync();
+
+        await CreateRunner(estimator).RunAsync(meetingId, CancellationToken.None, requestedByUserId: 7);
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        Assert.Equal(TranscriptionStatus.Failed, meeting.TranscriptionStatus);
+        Assert.Contains("超過本月剩餘 AI 額度", meeting.TranscriptionError);
+        Assert.Equal(0, provider.CallCount);
+        Assert.False(await context.AiUsageLog.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Run_AutoDraftWithoutSpeakers_ShouldQueueDraftForTheUploader()
+    {
+        // 1.1.69：上傳時選了提示詞、逐字稿沒有講者代號 → 轉完直接排入產生，帳本歸屬上傳者。
+        var templateId = await AddTemplateAsync(enabled: true);
+        var meetingId = await AddMeetingAsync(autoDraftTemplateId: templateId);
+        var queue = new RecordingDraftQueue();
+
+        await CreateRunner(autoDraftStarter: CreateStarter(queue)).RunAsync(meetingId, CancellationToken.None, requestedByUserId: 7, requestedByUserName: "王小明");
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        Assert.Equal(TranscriptionStatus.Completed, meeting.TranscriptionStatus);
+        Assert.Equal(DraftStatus.Pending, meeting.DraftStatus);
+        Assert.Equal(templateId, meeting.DraftPromptTemplateId);
+        Assert.Null(meeting.AutoDraftPromptTemplateId);
+        Assert.False(meeting.AwaitingSpeakerNames);
+        var request = Assert.Single(queue.Requests);
+        Assert.Equal((meetingId, 7, "王小明"), (request.MeetingId, request.RequestedByUserId, request.RequestedByUserName));
+    }
+
+    [Fact]
+    public async Task Run_AutoDraftWithSpeakers_ShouldWaitForSpeakerNames()
+    {
+        // 有「講者 1～4」：先等使用者標示，存檔時才產生（只付一次費用），這裡不能排入。
+        provider.Text = "講者 1：大家好\n講者 2：開始吧";
+        var templateId = await AddTemplateAsync(enabled: true);
+        var meetingId = await AddMeetingAsync(autoDraftTemplateId: templateId);
+        var queue = new RecordingDraftQueue();
+
+        await CreateRunner(autoDraftStarter: CreateStarter(queue)).RunAsync(meetingId, CancellationToken.None, requestedByUserId: 7);
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        Assert.Equal(TranscriptionStatus.Completed, meeting.TranscriptionStatus);
+        Assert.True(meeting.AwaitingSpeakerNames);
+        Assert.Equal(templateId, meeting.AutoDraftPromptTemplateId);
+        Assert.Equal(DraftStatus.NotGenerated, meeting.DraftStatus);
+        Assert.Empty(queue.Requests);
+    }
+
+    [Fact]
+    public async Task Run_AutoDraftWithDisabledTemplate_ShouldKeepTranscriptionCompletedAndExplain()
+    {
+        // 排不進去只寫 DraftError：轉錄已經完成，不能因此變成失敗。
+        var templateId = await AddTemplateAsync(enabled: false);
+        var meetingId = await AddMeetingAsync(autoDraftTemplateId: templateId);
+        var queue = new RecordingDraftQueue();
+
+        await CreateRunner(autoDraftStarter: CreateStarter(queue)).RunAsync(meetingId, CancellationToken.None, requestedByUserId: 7);
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        Assert.Equal(TranscriptionStatus.Completed, meeting.TranscriptionStatus);
+        Assert.Contains("沒有自動產生會議紀錄", meeting.DraftError);
+        Assert.Null(meeting.AutoDraftPromptTemplateId);
+        Assert.Empty(queue.Requests);
+    }
+
+    [Fact]
+    public async Task Run_WithoutAutoDraft_ShouldNotQueueOrWait()
+    {
+        provider.Text = "講者 1：大家好";
+        var meetingId = await AddMeetingAsync();
+        var queue = new RecordingDraftQueue();
+
+        await CreateRunner(autoDraftStarter: CreateStarter(queue)).RunAsync(meetingId, CancellationToken.None);
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        Assert.False(meeting.AwaitingSpeakerNames);
+        Assert.Empty(queue.Requests);
+    }
+
+    private MeetingRecord.Business.Services.TextGeneration.AutoDraftStarter CreateStarter(RecordingDraftQueue queue)
+        => new(
+            context,
+            quota,
+            new MeetingRecord.Business.Services.TextGeneration.MeetingDraftProgressNotifier(),
+            queue,
+            new JobCancellationRegistry(),
+            NullLogger<MeetingRecord.Business.Services.TextGeneration.AutoDraftStarter>.Instance);
+
+    private async Task<int> AddTemplateAsync(bool enabled)
+    {
+        var template = new PromptTemplate { Name = "標準會議紀錄", Content = "{{transcript}}", IsEnabled = enabled };
+        context.PromptTemplate.Add(template);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        return template.Id;
+    }
+
+    private sealed class RecordingDraftQueue : MeetingRecord.Business.Services.TextGeneration.IMeetingDraftQueue
+    {
+        public List<MeetingJobRequest> Requests { get; } = [];
+
+        public ValueTask EnqueueAsync(MeetingJobRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<MeetingJobRequest> DequeueAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException("測試不會消費佇列。");
+    }
+
+    private TranscriptionJobRunner CreateRunner(
+        MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator? costEstimator = null,
+        MeetingRecord.Business.Services.TextGeneration.AutoDraftStarter? autoDraftStarter = null)
     {
         var systemSettings = new SystemSettings();
         systemSettings.ExternalFileSystem.MeetingMediaPath = Path.Combine(rootPath, "media");
@@ -132,10 +262,12 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
             llmSettings,
             new TranscriptionProgressNotifier(),
             TestAiServices.CreateGateway(context, llmSettings, callLog, quota),
-            NullLogger<TranscriptionJobRunner>.Instance);
+            NullLogger<TranscriptionJobRunner>.Instance,
+            costEstimator: costEstimator,
+            autoDraftStarter: autoDraftStarter);
     }
 
-    private async Task<int> AddMeetingAsync()
+    private async Task<int> AddMeetingAsync(int? autoDraftTemplateId = null)
     {
         var meeting = new Meeting
         {
@@ -143,6 +275,7 @@ public sealed class TranscriptionJobRunnerTests : IAsyncDisposable
             MediaRelativePath = "2026/10/a.mp4",
             TranscriptionStatus = TranscriptionStatus.Pending,
             MediaDurationSeconds = null,
+            AutoDraftPromptTemplateId = autoDraftTemplateId,
         };
         context.Meeting.Add(meeting);
         await context.SaveChangesAsync();

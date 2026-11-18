@@ -97,6 +97,13 @@
     border: 1px solid var(--oat-err);
 }
 
+/* 1.1.69：轉完在等標示講者（標好就自動產生會議紀錄）。用提醒色，跟「待處理」同一組。 */
+.meeting-status-awaiting {
+    color: var(--oat-warn);
+    background: var(--oat-warn-bg);
+    border: 1px solid var(--oat-warn);
+}
+
 .meeting-status-error-hint {
     margin-left: 4px;
     color: var(--oat-err);
@@ -215,4 +222,17 @@
     color: var(--oat-ink-mid, #6b7a8d);
     font-size: 13px;
     line-height: 1.4;
+}
+
+/* 1.1.69：上傳表單的「轉錄完自動產生會議紀錄」。 */
+.meeting-view-auto-draft {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.meeting-view-auto-draft-label {
+    color: var(--oat-ink-mid, #6b7a8d);
+    font-size: 13px;
 }

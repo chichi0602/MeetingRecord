@@ -32,6 +32,7 @@ public sealed class TextEditorInterop
     private const string SetScrollTopFunction = "meetingRecordTextEditor.setScrollTop";
     private const string BindScrollSyncFunction = "meetingRecordTextEditor.bindScrollSync";
     private const string UnbindScrollSyncFunction = "meetingRecordTextEditor.unbindScrollSync";
+    private const string ScrollToMarkFunction = "meetingRecordTextEditor.scrollToMark";
 
     private readonly IJSRuntime jsRuntime;
     private readonly ILogger<TextEditorInterop> logger;
@@ -117,6 +118,23 @@ public sealed class TextEditorInterop
         catch (InvalidOperationException ex)
         {
             logger.LogDebug(ex, "Text editor unbindScrollSync skipped.");
+        }
+    }
+
+    /// <summary>1.1.69：逐字稿搜尋，把容器裡第 index 個 &lt;mark&gt; 捲進畫面。</summary>
+    public async Task ScrollToMarkAsync(ElementReference container, int index)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(ScrollToMarkFunction, container, index);
+        }
+        catch (JSException ex)
+        {
+            logger.LogWarning(ex, "Text editor scrollToMark failed.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogDebug(ex, "Text editor scrollToMark skipped.");
         }
     }
 

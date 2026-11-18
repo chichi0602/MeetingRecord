@@ -310,6 +310,7 @@ public partial class MarkdownEditorModal : IDisposable
         {
             // 還沒產生會議紀錄、只有逐字稿時，直接停在逐字稿。
             activeTab = string.IsNullOrWhiteSpace(Content) && HasTranscript ? TranscriptTab : DraftTab;
+            ResetTranscriptSearch();
         }
 
         if (modeChanged && CanEdit)
@@ -319,6 +320,13 @@ public partial class MarkdownEditorModal : IDisposable
 
         wasVisible = Visible;
         wasCanEdit = CanEdit;
+
+        // 1.1.69：逐字稿可能剛換過（例如標示講者後重讀），搜尋結果跟著重算，免得高亮位置錯開。
+        if (!string.IsNullOrEmpty(transcriptSearch))
+        {
+            transcriptMatches = TextSearchHelper.FindAll(Transcript, transcriptSearch);
+            transcriptMatchIndex = transcriptMatches.Count == 0 ? -1 : Math.Clamp(transcriptMatchIndex, 0, transcriptMatches.Count - 1);
+        }
     }
 
     private void LoadContent()
@@ -335,6 +343,99 @@ public partial class MarkdownEditorModal : IDisposable
     }
 
     private void SelectTab(string tab) => activeTab = tab;
+
+    #region 逐字稿搜尋（1.1.69）
+
+    /// <summary>逐字稿頁籤的搜尋字。找字、算位置走 <see cref="TextSearchHelper"/>（有單元測試），JS 只負責捲動。</summary>
+    private string transcriptSearch = string.Empty;
+
+    private IReadOnlyList<TextMatch> transcriptMatches = [];
+
+    private int transcriptMatchIndex = -1;
+
+    /// <summary>每次打開視窗換一個，搜尋框跟著重建、清空（輸入框不綁 value，避免中文輸入法組字時被回寫）。</summary>
+    private int transcriptSearchKey;
+
+    private ElementReference transcriptPane;
+
+    private string TranscriptMatchText => transcriptMatches.Count == 0
+        ? (string.IsNullOrEmpty(transcriptSearch) ? string.Empty : "找不到")
+        : $"第 {transcriptMatchIndex + 1}／共 {transcriptMatches.Count} 筆";
+
+    private async Task OnTranscriptSearchInput(ChangeEventArgs args)
+    {
+        transcriptSearch = args.Value?.ToString()?.Trim() ?? string.Empty;
+        transcriptMatches = TextSearchHelper.FindAll(Transcript, transcriptSearch);
+        transcriptMatchIndex = transcriptMatches.Count > 0 ? 0 : -1;
+        await ScrollToTranscriptMatchAsync();
+    }
+
+    private async Task OnTranscriptSearchKeyDown(KeyboardEventArgs args)
+    {
+        // 輸入法選字的 Enter 不算（IsSubmit 會看 IsComposing）。
+        if (FormKeyboardHelper.IsSubmit(args))
+        {
+            await MoveTranscriptMatchAsync(forward: true);
+        }
+    }
+
+    private async Task MoveTranscriptMatchAsync(bool forward)
+    {
+        transcriptMatchIndex = forward
+            ? TextSearchHelper.NextIndex(transcriptMatchIndex, transcriptMatches.Count)
+            : TextSearchHelper.PreviousIndex(transcriptMatchIndex, transcriptMatches.Count);
+        await ScrollToTranscriptMatchAsync();
+    }
+
+    private async Task ScrollToTranscriptMatchAsync()
+    {
+        if (transcriptMatchIndex < 0)
+        {
+            return;
+        }
+
+        // 先讓這一輪的 <mark> 畫出來再捲。
+        StateHasChanged();
+        await Task.Yield();
+        await TextEditor.ScrollToMarkAsync(transcriptPane, transcriptMatchIndex);
+    }
+
+    private void ResetTranscriptSearch()
+    {
+        transcriptSearch = string.Empty;
+        transcriptMatches = [];
+        transcriptMatchIndex = -1;
+        transcriptSearchKey++;
+    }
+
+    /// <summary>
+    /// 逐字稿內容：沒搜尋時就是純文字；有搜尋時把符合的字包成 &lt;mark&gt;。
+    /// 用 RenderTreeBuilder 而不是 Razor 迴圈：容器是 white-space: pre-wrap，Razor 標記之間的空白會變成看得到的空格與換行。
+    /// </summary>
+    private RenderFragment TranscriptContent => builder =>
+    {
+        var text = Transcript ?? string.Empty;
+        var position = 0;
+        for (var i = 0; i < transcriptMatches.Count; i++)
+        {
+            var match = transcriptMatches[i];
+            if (match.Start < position || match.Start + match.Length > text.Length)
+            {
+                break; // 逐字稿剛換過、匹配位置過期：剩下的照純文字顯示。
+            }
+
+            builder.AddContent(0, text[position..match.Start]);
+            builder.OpenElement(1, "mark");
+            builder.AddAttribute(2, "class", i == transcriptMatchIndex ? "transcript-match transcript-match-active" : "transcript-match");
+            builder.AddContent(3, text.Substring(match.Start, match.Length));
+            builder.CloseElement();
+            position = match.Start + match.Length;
+        }
+
+        builder.AddContent(4, text[position..]);
+    };
+
+    #endregion
 
     private Task OnRequestEditAsync() => OnRequestEdit.InvokeAsync();
 

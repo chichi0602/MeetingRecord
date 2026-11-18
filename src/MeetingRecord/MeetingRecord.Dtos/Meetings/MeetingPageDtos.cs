@@ -80,6 +80,9 @@ public class MeetingSpeakersDto
 
     /// <summary>逐字稿有沒有字母代號（只在該段有效、不能對照）。</summary>
     public bool HasSegmentLabels { get; set; }
+
+    /// <summary>1.1.69：轉錄完在等標示講者、存檔後要自動產生會議紀錄（視窗顯示「儲存並產生會議紀錄」）。</summary>
+    public bool CanGenerate { get; set; }
 }
 
 /// <summary>儲存講者對照（<c>PUT api/v1/Meeting/{id}/speakers</c>）。鍵是編號，值留空代表不對照。</summary>
@@ -104,4 +107,21 @@ public class MeetingPromptOptionDto
     public int Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 1.1.68 成本閘門：轉錄的預估費用。金額是新台幣；估不出來（沒單價、沒匯率）或額度不限制時為 null。
+/// </summary>
+public class MeetingTranscriptionEstimateDto
+{
+    public double Seconds { get; set; }
+
+    /// <summary>預估轉錄費用。以秒按比例計，實際帳單可能以分鐘進位而略高。</summary>
+    public decimal? EstimatedTwd { get; set; }
+
+    /// <summary>達到這個金額要再確認；0＝不提醒。</summary>
+    public int ConfirmThresholdTwd { get; set; }
+
+    /// <summary>本月剩餘額度（全系統與自己兩者較少的那個）。不限制時為 null。</summary>
+    public decimal? RemainingTwd { get; set; }
 }

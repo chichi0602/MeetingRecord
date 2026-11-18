@@ -46,8 +46,13 @@ public sealed class MeetingApi(ApiClient api)
     public Task<ApiResult<MeetingSpeakersDto>> GetSpeakersAsync(int id)
         => api.GetAsync($"{BaseUrl}/{id}/speakers", ClientJsonContext.Default.MeetingSpeakersResult);
 
-    public Task<ApiResult<object>> UpdateSpeakersAsync(int id, Dictionary<string, string> names)
-        => api.PutAsync($"{BaseUrl}/{id}/speakers", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);
+    /// <summary>1.1.68 成本閘門：轉錄的預估費用、提醒門檻與本月剩餘額度。</summary>
+    public Task<ApiResult<MeetingTranscriptionEstimateDto>> GetTranscriptionEstimateAsync(double seconds)
+        => api.GetAsync($"{BaseUrl}/transcription-estimate?seconds={seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}", ClientJsonContext.Default.MeetingTranscriptionEstimateResult);
+
+    /// <param name="generate">1.1.69：存好後用上傳時選的提示詞產生會議紀錄。</param>
+    public Task<ApiResult<object>> UpdateSpeakersAsync(int id, Dictionary<string, string> names, bool generate = false)
+        => api.PutAsync($"{BaseUrl}/{id}/speakers{(generate ? "?generate=true" : string.Empty)}", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);
 
     /// <summary>逐字稿 .txt（伺服器寫稽核）。</summary>
     public Task<ApiDownload> DownloadTranscriptAsync(int id)

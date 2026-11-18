@@ -32,6 +32,12 @@ public class MeetingAdapterModel : ICloneable
 
     public long? MediaFileSize { get; set; }
 
+    /// <summary>影音長度（秒），轉錄完成時寫入。1.1.68 起帶到畫面算重新轉錄的預估費用；存檔時一律沿用資料庫既有值。</summary>
+    public double? MediaDurationSeconds { get; set; }
+
+    /// <summary>1.1.69：轉錄完成、等使用者標示講者後才自動產生會議紀錄。</summary>
+    public bool AwaitingSpeakerNames { get; set; }
+
     public bool HasMedia => !string.IsNullOrWhiteSpace(MediaRelativePath);
 
     #endregion

@@ -24,6 +24,16 @@ public class MeetingDto : MeetingCreateUpdateDto
     public long? MediaFileSize { get; set; }
 
     /// <summary>
+    /// 影音長度（秒）。1.1.68 起帶出來給重新轉錄的預估費用用；只有轉錄完成過才有值（新上傳的檔案在轉錄前不知道長度）。
+    /// </summary>
+    [JsonPropertyName("mediaDurationSeconds")]
+    public double? MediaDurationSeconds { get; set; }
+
+    /// <summary>1.1.69：轉錄完成、等使用者標示講者後才自動產生會議紀錄（清單顯示「待標示講者」）。</summary>
+    [JsonPropertyName("awaitingSpeakerNames")]
+    public bool AwaitingSpeakerNames { get; set; }
+
+    /// <summary>
     /// 轉錄狀態：0 未上傳、1 待處理、2 處理中、3 已完成、4 失敗
     /// </summary>
     [JsonPropertyName("transcriptionStatus")]

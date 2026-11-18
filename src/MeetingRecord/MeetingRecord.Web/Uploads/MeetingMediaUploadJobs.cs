@@ -90,6 +90,7 @@ public sealed class MeetingMediaUploadJobs(IServiceScopeFactory scopeFactory, Ch
                         ContentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType,
                         FileSize = request.Size,
                         Content = session.Stream,
+                        AutoDraftPromptTemplateId = request.AutoDraftPromptTemplateId,
                     },
                     cancellationToken: job.Cancellation.Token,
                     deleteMeetingOnCancel: request.DeleteMeetingOnCancel);

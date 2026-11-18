@@ -53,6 +53,22 @@ public sealed class JobCancellationRegistryTests
         Assert.False(handle.IsCancelledByUser);
     }
 
+    [Fact]
+    public void ClearPendingCancel_ShouldOnlyClearThatKindAndMeeting()
+    {
+        // 1.1.68：入列前呼叫，清掉上一趟殘留的標記。
+        var registry = new JobCancellationRegistry();
+        registry.RequestCancel(BackgroundJobKind.Transcription, 7);
+        registry.RequestCancel(BackgroundJobKind.MeetingDraft, 7);
+        registry.RequestCancel(BackgroundJobKind.Transcription, 8);
+
+        registry.ClearPendingCancel(BackgroundJobKind.Transcription, 7);
+
+        Assert.False(registry.TryConsumePendingCancel(BackgroundJobKind.Transcription, 7));
+        Assert.True(registry.TryConsumePendingCancel(BackgroundJobKind.MeetingDraft, 7));
+        Assert.True(registry.TryConsumePendingCancel(BackgroundJobKind.Transcription, 8));
+    }
+
     #endregion
 
     #region 執行中的取消

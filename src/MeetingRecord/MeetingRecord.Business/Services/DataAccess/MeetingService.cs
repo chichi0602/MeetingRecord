@@ -135,7 +135,9 @@ public class MeetingService
             dataSource = dataSource.Where(x =>
                 x.Title.Contains(search) ||
                 (x.Description ?? string.Empty).Contains(search) ||
-                (x.MediaOriginalFileName ?? string.Empty).Contains(search));
+                (x.MediaOriginalFileName ?? string.Empty).Contains(search) ||
+                // 1.1.69：也搜會議紀錄內容（逐字稿在磁碟上，不能用 SQL 搜）。
+                (x.DraftContent ?? string.Empty).Contains(search));
         }
 
         if (dataRequest.CategoryFilters.Count > 0)
@@ -219,7 +221,8 @@ public class MeetingService
             query = query.Where(x =>
                 x.Title.Contains(request.Keyword) ||
                 (x.Description != null && x.Description.Contains(request.Keyword)) ||
-                (x.MediaOriginalFileName != null && x.MediaOriginalFileName.Contains(request.Keyword)));
+                (x.MediaOriginalFileName != null && x.MediaOriginalFileName.Contains(request.Keyword)) ||
+                (x.DraftContent != null && x.DraftContent.Contains(request.Keyword)));
         }
 
         if (request.TranscriptionStatus.HasValue)
@@ -376,6 +379,12 @@ public class MeetingService
             // DraftAttendees 在 AdapterModel 上根本沒有對應屬性，Mapper 一定產出 null；
             // 不沿用的話，光是在畫面上改個標題就會把與會者快照清掉。
             itemData.DraftAttendees = item.DraftAttendees;
+
+            // 1.1.69：同理，這三個在 AdapterModel 上沒有（或不該由表單改），不沿用就會被清掉。
+            // SpeakerNames 是 1.1.64 漏掉的——改個標題就把標示好的講者名字清光。
+            itemData.SpeakerNames = item.SpeakerNames;
+            itemData.AutoDraftPromptTemplateId = item.AutoDraftPromptTemplateId;
+            itemData.AwaitingSpeakerNames = item.AwaitingSpeakerNames;
 
             // ProjectId 從 0.4.73 起也一併沿用。歸屬的權威路徑已經是
             // AttachToProjectAsync／DetachFromProjectAsync 兩支方法，不再是這張表單；
@@ -672,6 +681,13 @@ public class MeetingService
             // 會議日期沒填就帶入上傳當天；已填的不覆蓋，要更正仍可從畫面編輯。
             meeting.MeetingDate ??= DateTime.Today;
 
+            // 1.1.69：轉錄完自動產生會議紀錄。每次上傳都重設（新檔案是新的一趟）；提示詞不存在或停用就當成不自動產生。
+            meeting.AwaitingSpeakerNames = false;
+            meeting.AutoDraftPromptTemplateId = uploadFile.AutoDraftPromptTemplateId is { } autoTemplateId
+                && await context.PromptTemplate.AsNoTracking().AnyAsync(x => x.Id == autoTemplateId && x.IsEnabled, CancellationToken.None)
+                    ? autoTemplateId
+                    : null;
+
             meeting.UpdatedAt = DateTime.Now;
 
             // ⚠️ 取消只作用在上面的寫檔（使用者按「取消上傳」，1.0.25）。檔案寫完就不再理會取消：
@@ -685,6 +701,9 @@ public class MeetingService
             fileStore.TryDeleteTranscript(previousTranscriptRelativePath);
 
             // 先登錄進度再入列：背景工作要等輪到才會知道這件事，先登錄畫面才立刻看得到「排隊中」。
+            // 1.1.68：入列前清掉這筆殘留的取消標記（工作剛結束時按取消會留下），否則這一趟會被無聲取消。
+            // 一定要在登錄進度之前：登錄後面板才看得到、才按得到取消，那之後留下的標記才是有效的。
+            cancellationRegistry.ClearPendingCancel(BackgroundJobKind.Transcription, meetingId);
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), CancellationToken.None);
 
@@ -902,6 +921,7 @@ public class MeetingService
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);
 
+            cancellationRegistry.ClearPendingCancel(BackgroundJobKind.Transcription, meetingId); // 1.1.68，理由見 SaveMediaAsync
             progressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await transcriptionQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
             await AuditAsync(AuditActions.MeetingRetranscribe, meetingId, $"title={meeting.Title}");
@@ -1245,6 +1265,10 @@ public class MeetingService
             // Take 的唯一理由是界定提示詞大小，不是權限。
             meeting.DraftAttendees = TagStringHelper.ToStored((attendees ?? []).Take(MaxDraftAttendees));
 
+            // 1.1.69：排入產生就不再等標示、也不再自動產生（避免之後重新轉錄又自動產生一次）。
+            meeting.AwaitingSpeakerNames = false;
+            meeting.AutoDraftPromptTemplateId = null;
+
             // 1.1.65：與會者可以在送出時直接輸入，名冊沒有的人補進專案名冊，和會議同一次存檔。
             var rosterAdded = project is null ? 0 : MergeIntoRoster(project, TagStringHelper.ToList(meeting.DraftAttendees));
 
@@ -1258,6 +1282,7 @@ public class MeetingService
             CleanTrackingHelper.Clean<Project>(context);
 
             // 先登錄進度再入列，理由同轉錄：背景工作要等輪到才知道，先登錄畫面才立刻看得到「排隊中」。
+            cancellationRegistry.ClearPendingCancel(BackgroundJobKind.MeetingDraft, meetingId); // 1.1.68，理由見 SaveMediaAsync
             draftProgressNotifier.Enqueued(meetingId, meeting.Title, meeting.ProjectId, meeting.CreatedByUserId);
             await draftQueue.EnqueueAsync(BuildJobRequest(meetingId), cancellationToken);
             await AuditAsync(
@@ -1362,7 +1387,43 @@ public class MeetingService
                 .ToList(),
             Participants = TagStringHelper.ToList(source.Participants),
             HasSegmentLabels = TranscriptSpeakerLabels.HasSegmentLabels(text),
+            CanGenerate = source.CanGenerate,
         };
+    }
+
+    /// <summary>
+    /// 1.1.69：標示講者並產生會議紀錄（上傳時選了「轉錄完自動產生」、轉完在等標示的會議）。
+    /// 先存講者名字，再用上傳時選的提示詞走 <see cref="RequestDraftAsync"/>（權限、額度、封存等檢查都在那裡），
+    /// 與會人員就是這次填的講者名字。名字全空＝「跳過，直接產生」。
+    /// </summary>
+    /// <param name="projectId">專案頁呼叫時帶專案 Id（同 RequestDraftAsync 的歸屬檢查）；會議頁帶 null。</param>
+    public async Task<VerifyRecordResult> NameSpeakersAndGenerateAsync(
+        int meetingId,
+        IReadOnlyDictionary<string, string>? names,
+        int? projectId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var saved = await UpdateSpeakerNamesAsync(meetingId, names, cancellationToken);
+        if (!saved.Success)
+        {
+            return saved;
+        }
+
+        var access = await projectAccess.GetAsync();
+        var templateId = await access.Filter(context.Meeting.AsNoTracking())
+            .Where(x => x.Id == meetingId)
+            .Select(x => x.AutoDraftPromptTemplateId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (templateId is null)
+        {
+            return VerifyRecordResultFactory.Build(false, "講者名字已儲存，但這場會議沒有設定自動產生會議紀錄，請用「產生會議紀錄」手動產生。");
+        }
+
+        var attendees = (names ?? new Dictionary<string, string>())
+            .Values
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+        return await RequestDraftAsync(meetingId, projectId, templateId.Value, attendees, cancellationToken);
     }
 
     /// <summary>
@@ -1440,7 +1501,7 @@ public class MeetingService
         }
     }
 
-    private sealed record TranscriptSource(string? TranscriptRelativePath, string? SpeakerNames, string? Participants);
+    private sealed record TranscriptSource(string? TranscriptRelativePath, string? SpeakerNames, string? Participants, bool CanGenerate = false);
 
     private async Task<TranscriptSource?> FindTranscriptSourceAsync(int meetingId, CancellationToken cancellationToken)
     {
@@ -1453,7 +1514,8 @@ public class MeetingService
             .Select(x => new TranscriptSource(
                 x.TranscriptRelativePath,
                 x.SpeakerNames,
-                x.Project == null ? null : x.Project.Participants))
+                x.Project == null ? null : x.Project.Participants,
+                x.AwaitingSpeakerNames && x.AutoDraftPromptTemplateId != null))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

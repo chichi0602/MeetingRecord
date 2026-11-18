@@ -21,21 +21,27 @@ public sealed class BackgroundJobBoard(
     IJobCancellationRegistry cancellationRegistry,
     ILogger<BackgroundJobBoard> logger)
 {
-    /// <summary>呼叫者看得到的工作；進行中的排前面，再依標題。</summary>
+    /// <summary>呼叫者看得到、而且自己沒關掉的工作；進行中的排前面，再依標題。</summary>
     public async Task<List<BackgroundJobDto>> GetVisibleAsync()
-    {
-        // 每個 API 請求只依序呼叫一次，用請求自己的 DbContext 查即可（1.1.56；以前另開短命 scope）。
-        var access = await projectAccessService.GetAsync();
+        => GetVisible(await projectAccessService.GetAsync(), includeDismissed: false);
 
+    /// <param name="includeDismissed">
+    /// 1.1.68：關閉通知是每人各自的，自己關掉的工作仍然存在、也仍然看得到資料。
+    /// 取消要能動它（工作還在跑），所以取消用 true；面板清單與關閉用 false。
+    /// </param>
+    private List<BackgroundJobDto> GetVisible(ProjectAccess access, bool includeDismissed)
+    {
         var transcriptionJobs = transcriptionNotifier
             .GetSnapshot()
             .Where(x => access.CanViewMeeting(x.ProjectId, x.CreatedByUserId))
-            .Select(FromTranscription);
+            .Where(x => includeDismissed || !transcriptionNotifier.IsDismissedBy(x.MeetingId, access.UserId))
+            .Select(x => MarkMine(FromTranscription(x), x.CreatedByUserId, access.UserId));
 
         var draftJobs = draftNotifier
             .GetSnapshot()
             .Where(x => access.CanViewMeeting(x.ProjectId, x.CreatedByUserId))
-            .Select(FromDraft);
+            .Where(x => includeDismissed || !draftNotifier.IsDismissedBy(x.MeetingId, access.UserId))
+            .Select(x => MarkMine(FromDraft(x), x.CreatedByUserId, access.UserId));
 
         // 進行中的排前面，讓仍在跑的工作不會被一堆已完成的項目擠下去。
         return [.. transcriptionJobs
@@ -50,7 +56,7 @@ public sealed class BackgroundJobBoard(
     /// </summary>
     public async Task<bool> CancelAsync(string kind, int meetingId)
     {
-        var job = (await GetVisibleAsync()).FirstOrDefault(x => x.Kind == kind && x.MeetingId == meetingId);
+        var job = GetVisible(await projectAccessService.GetAsync(), includeDismissed: true).FirstOrDefault(x => x.Kind == kind && x.MeetingId == meetingId);
         if (job is null || !job.CanBeCancelled)
         {
             return false;
@@ -70,40 +76,54 @@ public sealed class BackgroundJobBoard(
         return true;
     }
 
-    /// <summary>關閉一則通知（工作照跑）。看不到的回 false。關閉是全域的：通知器只有一份，比照原本的面板。</summary>
+    /// <summary>
+    /// 關閉一則通知（工作照跑）。看不到的回 false。
+    /// 1.1.68 起**只關自己的**：以前直接刪掉通知器裡的項目，一個人關掉所有人都看不到，
+    /// 連進行中工作之後的完成／失敗也不會再出現。同一筆重新排入時會再出現（新的一趟）。
+    /// </summary>
     public async Task<bool> DismissAsync(string kind, int meetingId)
     {
-        if (!(await GetVisibleAsync()).Any(x => x.Kind == kind && x.MeetingId == meetingId))
+        var access = await projectAccessService.GetAsync();
+        if (!GetVisible(access, includeDismissed: false).Any(x => x.Kind == kind && x.MeetingId == meetingId))
         {
             return false;
         }
 
-        Dismiss(kind, meetingId);
+        Dismiss(kind, meetingId, access.UserId);
         return true;
     }
 
-    /// <summary>關閉呼叫者看得到的全部通知，回關閉的筆數。</summary>
+    /// <summary>關閉呼叫者看得到的全部通知（只關自己的），回關閉的筆數。</summary>
     public async Task<int> DismissAllAsync()
     {
-        var jobs = await GetVisibleAsync();
+        var access = await projectAccessService.GetAsync();
+        var jobs = GetVisible(access, includeDismissed: false);
+        var userId = access.UserId;
         foreach (var job in jobs)
         {
-            Dismiss(job.Kind, job.MeetingId);
+            Dismiss(job.Kind, job.MeetingId, userId);
         }
 
         return jobs.Count;
     }
 
-    private void Dismiss(string kind, int meetingId)
+    private void Dismiss(string kind, int meetingId, int userId)
     {
         if (kind == BackgroundJobKinds.Transcription)
         {
-            transcriptionNotifier.Dismiss(meetingId);
+            transcriptionNotifier.DismissFor(meetingId, userId);
         }
         else
         {
-            draftNotifier.Dismiss(meetingId);
+            draftNotifier.DismissFor(meetingId, userId);
         }
+    }
+
+    /// <summary>1.1.69：標記是不是呼叫者自己上傳的會議（完成提示只對自己的跳）。</summary>
+    private static BackgroundJobDto MarkMine(BackgroundJobDto job, int? createdByUserId, int userId)
+    {
+        job.IsMine = createdByUserId is { } owner && owner == userId;
+        return job;
     }
 
     public static BackgroundJobDto FromTranscription(TranscriptionProgressItem item) => new()
@@ -118,7 +138,7 @@ public sealed class BackgroundJobBoard(
             TranscriptionPhase.Queued => "排隊中",
             TranscriptionPhase.Converting => "轉檔中",
             TranscriptionPhase.Transcribing => $"轉錄中（第 {item.CompletedSegments}/{item.TotalSegments} 段）",
-            TranscriptionPhase.Completed => "已完成",
+            TranscriptionPhase.Completed => string.IsNullOrEmpty(item.Note) ? "已完成" : $"已完成，{item.Note}",
             TranscriptionPhase.Failed => "失敗",
             _ => string.Empty,
         },
@@ -127,6 +147,8 @@ public sealed class BackgroundJobBoard(
         IsFailed = item.Phase == TranscriptionPhase.Failed,
         ErrorMessage = item.ErrorMessage,
         IsUploading = item.Phase == TranscriptionPhase.Uploading,
+        ProjectId = item.ProjectId,
+        NeedsSpeakerNames = item.Phase == TranscriptionPhase.Completed && item.Note == TranscriptionJobRunner.AwaitingSpeakerNamesNote,
     };
 
     public static BackgroundJobDto FromDraft(MeetingDraftProgressItem item) => new()
@@ -149,5 +171,6 @@ public sealed class BackgroundJobBoard(
         IsCompleted = item.Phase == MeetingDraftPhase.Completed,
         IsFailed = item.Phase == MeetingDraftPhase.Failed,
         ErrorMessage = item.ErrorMessage,
+        ProjectId = item.ProjectId,
     };
 }

@@ -86,6 +86,13 @@ public interface IJobCancellationRegistry
     /// </summary>
     bool TryConsumePendingCancel(BackgroundJobKind kind, int meetingId);
 
+    /// <summary>
+    /// 1.1.68：清掉殘留的取消標記。每次排入佇列（登錄進度）之前呼叫。
+    /// 工作剛好結束時按「取消」，<see cref="RequestCancel"/> 找不到執行中的工作就會留下標記，
+    /// 下次重新轉錄／重新產生同一筆時被 worker 當成「已取消」跳過——使用者什麼都沒按就被取消了。
+    /// </summary>
+    void ClearPendingCancel(BackgroundJobKind kind, int meetingId);
+
     /// <summary>登記一次執行，回傳可取消的權杖。用完必須 Dispose。</summary>
     JobCancellationHandle BeginJob(BackgroundJobKind kind, int meetingId, CancellationToken serviceToken);
 }
@@ -110,6 +117,9 @@ public sealed class JobCancellationRegistry : IJobCancellationRegistry
     }
 
     public bool TryConsumePendingCancel(BackgroundJobKind kind, int meetingId)
+        => pendingCancels.TryRemove((kind, meetingId), out _);
+
+    public void ClearPendingCancel(BackgroundJobKind kind, int meetingId)
         => pendingCancels.TryRemove((kind, meetingId), out _);
 
     public JobCancellationHandle BeginJob(BackgroundJobKind kind, int meetingId, CancellationToken serviceToken)

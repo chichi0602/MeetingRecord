@@ -1,8 +1,8 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.16
+- 文件版本：3.17
 - 文件狀態：已實作
-- 現行系統版本：1.1.64
+- 現行系統版本：1.1.69
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
 - 最後核對日期：2026/11/17
 
@@ -134,6 +134,9 @@
    - `/projects`：選定專案，從下拉挑一份轉錄完成的逐字稿與一組提示詞，按「AI 轉會議紀錄」。已被**其他**專案取用的逐字稿呈現為不可選並標示歸屬。**1.0.48 起**歷史清單的「會議紀錄與逐字稿」視窗也有「產生會議紀錄」／「重新產生」：按下去關窗、把那份逐字稿帶進上方 AI 區塊並捲過去，仍要選提示詞再按「AI 轉會議紀錄」送出。
    - `/meetings`（**0.4.73 新增**）：原本是對某一列按「AI 轉會議紀錄」；**1.0.48 起列上那顆移除**，改在「會議紀錄與逐字稿」視窗按「產生會議紀錄」（沒有會議紀錄時，在會議紀錄頁籤的空白說明下方）或「重新產生」（已有時，在底部按鈕列），再開「產生會議紀錄」對話框。對話框裡的「所屬專案」是選填。不必先建立專案。
 2. `MeetingService.RequestDraftAsync` 檢查團隊權限、轉錄狀態、歸屬衝突與是否正在生成，**1.0.29 起再預檢 AI 用量上限**（已達上限直接回「已達 AI 用量上限…」訊息，不改任何狀態），通過後寫入歸屬與提示詞快照、狀態轉 `Pending`，再排入 `IMeetingDraftQueue`。**0.4.73 起 `projectId` 是 `int?`**，語意見下節「歸屬的四種情形」。
+   **1.1.69 起多一條自動路徑**：上傳時選了「轉錄完自動產生會議紀錄」的提示詞（`Meeting.AutoDraftPromptTemplateId`），轉錄完成時：
+   - 逐字稿沒有講者代號 → `AutoDraftStarter` 替上傳者排入（背景沒有登入使用者，不走 `RequestDraftAsync` 的資料範圍；檢查提示詞、轉錄狀態、是否產生中、封存專案、額度，欄位寫法與入列順序照 `RequestDraftAsync`）。排不進去只寫 `DraftError`。
+   - 有「講者 1～4」→ 先設 `AwaitingSpeakerNames`，等使用者在標示視窗按「儲存並產生會議紀錄」（`PUT …/speakers?generate=true` → `NameSpeakersAndGenerateAsync` → `RequestDraftAsync`，與會人員＝講者名字），會議紀錄直接用真名，只付一次產生費用。
 3. `MeetingDraftBackgroundService`（**與轉錄各自獨立的第二條佇列與 worker**）取件，在自己的 DI scope 內執行 `MeetingDraftJobRunner`。
 4. Job runner 讀逐字稿 → `TranscriptChunker.Split` → 多段時逐段摘要（map）→ `PromptVariableHelper.Render` 代入提示詞 → 呼叫 LLM（reduce）→ 寫入 `DraftContent`、狀態轉 `Completed`。 **0.4.71 起**在最前面多一段「專有名詞與人名對照」：由 `NameGuidancePromptHelper.Build` 以專案的 `GlossaryTerms`（即時撈，不快照）與 `Meeting.DraftAttendees`（本次快照）組成，**map 與 reduce 兩階段都注入**——只注入 reduce 的話，長逐字稿的人名在分段摘要時就已經被壓縮掉了。兩份清單都空時回傳空字串，提示詞與 0.4.70 之前逐字元相同。
    **1.0.29 起**所有呼叫經 `AiCallGateway`，記進 AI 對話紀錄（關聯說明「會議 #N〈標題〉分段摘要 i/n」與「會議 #N〈標題〉會議紀錄」）。工作開始時先以 `AdmitAsync` 檢查一次 AI 用量上限：被擋就轉 `Failed`，`DraftError` 寫「已達 AI 用量上限（…），M/d 起恢復；如需提高上限請聯絡系統管理員。」，之後可重新產生；通過後各段不再檢查，一旦開始就做完。

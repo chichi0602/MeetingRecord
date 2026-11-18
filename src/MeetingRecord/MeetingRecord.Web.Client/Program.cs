@@ -54,6 +54,7 @@ builder.Services.AddScoped<MeetingRecord.Web.Client.Uploads.MeetingUploadManager
 
 // 1.1.17：前端互動（剪貼簿、下載、文字編輯器、待辦自動欄寬），類別在 Web.Client/Services（命名空間沿用 MeetingRecord.Web.Services）。
 builder.Services.AddScoped<MeetingRecord.Web.Services.ClipboardInterop>();
+builder.Services.AddScoped<MeetingRecord.Web.Services.MediaDurationInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.FileDownloadInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.TextEditorInterop>();
 builder.Services.AddScoped<MeetingRecord.Web.Services.TodoAutoFitInterop>();

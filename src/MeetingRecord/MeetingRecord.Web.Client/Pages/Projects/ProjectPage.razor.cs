@@ -113,6 +113,31 @@ public partial class ProjectPage : IDisposable
 
     private List<ProjectTranscriptOptionDto> selectableTranscripts = [];
     private List<MeetingDto> projectMeetings = [];
+
+    /// <summary>1.1.69：歷史清單的關鍵字篩選（純前端）。換專案時輸入框用 @key 重建，這裡也跟著清。</summary>
+    private string historyFilter = string.Empty;
+
+    private int historyFilterProjectId;
+
+    private List<MeetingDto> FilteredProjectMeetings
+    {
+        get
+        {
+            if (historyFilterProjectId != selectedProjectId)
+            {
+                historyFilter = string.Empty;
+                historyFilterProjectId = selectedProjectId;
+            }
+
+            return string.IsNullOrEmpty(historyFilter)
+                ? projectMeetings
+                : [.. projectMeetings.Where(x =>
+                    x.Title.Contains(historyFilter, StringComparison.OrdinalIgnoreCase)
+                    || (x.DraftPromptTemplateName ?? string.Empty).Contains(historyFilter, StringComparison.OrdinalIgnoreCase))];
+        }
+    }
+
+    private void OnHistoryFilterInput(ChangeEventArgs args) => historyFilter = args.Value?.ToString()?.Trim() ?? string.Empty;
     private List<MeetingPromptOptionDto> promptTemplates = [];
 
     private int selectedTranscriptId;
@@ -934,10 +959,25 @@ public partial class ProjectPage : IDisposable
     }
 
     /// <summary>標示講者存好了：重讀逐字稿，畫面才會換成真名。</summary>
-    private async Task OnSpeakersSavedAsync()
+    private async Task OnSpeakersSavedAsync(bool generated)
     {
+        if (generated)
+        {
+            // 1.1.69：轉完等標示的會議，存好名字就開始產生；清單要重讀，「待標示講者」才會消失、進度才看得到。
+            NotifySuccess("講者名字已儲存，開始產生會議紀錄，完成時會通知你。");
+            await ReloadProjectContextAsync();
+            return;
+        }
+
         draftTranscript = (await ProjectApi.GetTranscriptAsync(selectedProjectId, draftMeetingId)).Data?.Text ?? draftTranscript;
         NotifySuccess("講者名字已儲存。");
+    }
+
+    /// <summary>1.1.69：清單上「待標示講者」那顆鈕，直接開標示視窗（不必先開會議紀錄視窗）。</summary>
+    private void OpenSpeakerNaming(MeetingDto meeting)
+    {
+        draftMeetingId = IdOf(meeting);
+        speakerModalVisible = true;
     }
 
     /// <summary>

@@ -269,6 +269,38 @@ public sealed partial class ApiIntegrationTests
         }
     }
 
+    /// <summary>
+    /// 1.1.68 成本閘門的預估端點（<c>[HasPermission(會議紀錄, anyOf: create, edit)]</c>）：只在上傳與重新轉錄的確認視窗用到，
+    /// 只有檢視權限要 403 並留稽核；有新增或修改其中之一就成功。
+    /// </summary>
+    [Fact]
+    public async Task MeetingTranscriptionEstimate_ShouldRequireCreateOrEdit()
+    {
+        const string url = "/api/Meeting/transcription-estimate?seconds=600";
+        var page = MagicObjectHelper.角色_會議紀錄;
+
+        using (var anonymous = factory.CreateClient())
+        using (var response = await anonymous.GetAsync(url))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var viewer = await CreateApiUserAsync(PermissionKey.For(page, PermissionActions.View), PermissionKey.For(page, PermissionActions.Delete));
+        using (var client = await CreateBearerClientAsync(viewer))
+        using (var response = await client.GetAsync(url))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+
+        foreach (var action in new[] { PermissionActions.Create, PermissionActions.Edit })
+        {
+            var user = await CreateApiUserAsync(PermissionKey.For(page, action));
+            using var client = await CreateBearerClientAsync(user);
+            using var response = await client.GetAsync(url);
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"只有 {action} 時回 {(int)response.StatusCode}");
+        }
+    }
+
     [Fact]
     public async Task MeetingApi_OtherTeamsProjectMeeting_ShouldBeNotFound_EvenWithFullPermissions()
     {

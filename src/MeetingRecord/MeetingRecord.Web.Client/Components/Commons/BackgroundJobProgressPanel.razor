@@ -29,7 +29,18 @@
                             <span class="job-progress-panel-kind" title="@job.KindText">
                                 <MaterialIcon Theme="@MaterialIcon.Themes.Outlined" Kind="@job.KindIcon" />
                             </span>
-                            <span class="job-progress-panel-name" title="@job.Title">@job.Title</span>
+                            @if (job.IsCompleted)
+                            {
+                                @* 1.1.69：完成的那一列可以點，直接打開那筆會議紀錄（等標示講者的會開標示視窗）。 *@
+                                <button type="button"
+                                        class="job-progress-panel-name job-progress-panel-name-link"
+                                        title="@($"打開「{job.Title}」")"
+                                        @onclick="@(() => Open(job))">@job.Title</button>
+                            }
+                            else
+                            {
+                                <span class="job-progress-panel-name" title="@job.Title">@job.Title</span>
+                            }
                             @if (job.IsCompleted)
                             {
                                 <span class="job-progress-panel-done" aria-label="已完成">

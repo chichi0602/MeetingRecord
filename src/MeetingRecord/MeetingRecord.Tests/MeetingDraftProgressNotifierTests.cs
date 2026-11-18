@@ -171,6 +171,23 @@ public sealed class MeetingDraftProgressNotifierTests
     }
 
     [Fact]
+    public void DismissFor_ShouldOnlyHideForThatUser_AndResetOnRequeue()
+    {
+        // 1.1.68：關閉是每人各自的；項目留著，重新排入（新的一趟）後關過的人又看得到。
+        var notifier = new MeetingDraftProgressNotifier();
+        notifier.Enqueued(1, "甲會議", projectId: null, createdByUserId: null);
+
+        notifier.DismissFor(1, userId: 10);
+
+        Assert.NotNull(notifier.Find(1));
+        Assert.True(notifier.IsDismissedBy(1, 10));
+        Assert.False(notifier.IsDismissedBy(1, 11));
+
+        notifier.Enqueued(1, "甲會議", projectId: null, createdByUserId: null);
+        Assert.False(notifier.IsDismissedBy(1, 10));
+    }
+
+    [Fact]
     public void Report_UnknownMeeting_ShouldBeIgnored()
     {
         // 應用程式重啟後才輪到的殘留工作沒有經過 Enqueued，不該憑空生出沒有標題的項目。

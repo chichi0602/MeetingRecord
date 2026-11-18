@@ -42,6 +42,15 @@ public sealed class BackgroundJobDto
     /// <summary>影音檔還在上傳（取消時要用「上傳」種類，不能用「轉錄」）。</summary>
     public bool IsUploading { get; set; }
 
+    /// <summary>1.1.69：會議所屬專案；點完成的那一列時決定打開專案頁還是會議頁。</summary>
+    public int? ProjectId { get; set; }
+
+    /// <summary>1.1.69：是呼叫者自己上傳的會議。完成提示只對自己的跳，避免同團隊的人一直被打擾。</summary>
+    public bool IsMine { get; set; }
+
+    /// <summary>1.1.69：轉錄完成、要先標示講者才會自動產生會議紀錄。</summary>
+    public bool NeedsSpeakerNames { get; set; }
+
     /// <summary>能不能顯示「取消」：進行中都可以（1.0.37 起上傳中也可以）。</summary>
     [JsonIgnore]
     public bool CanBeCancelled => IsRunning;

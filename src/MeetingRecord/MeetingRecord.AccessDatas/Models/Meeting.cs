@@ -121,6 +121,16 @@ public class Meeting
     /// </summary>
     public string? SpeakerNames { get; set; }
 
+    /// <summary>
+    /// 1.1.69：上傳時選的「轉錄完自動產生會議紀錄」提示詞。null＝不自動產生。
+    /// 逐字稿沒有講者代號時轉完直接排入；有講者 1～4 時先設 <see cref="AwaitingSpeakerNames"/>，等使用者標示完才產生。
+    /// ⚠️ 任何路徑排入產生（<c>MeetingService.RequestDraftAsync</c>、<c>AutoDraftStarter</c>）後清掉，避免重新轉錄又自動產生一次。
+    /// </summary>
+    public int? AutoDraftPromptTemplateId { get; set; }
+
+    /// <summary>1.1.69：轉錄完成、等使用者標示講者後才自動產生會議紀錄。排入產生或重新上傳時清掉。</summary>
+    public bool AwaitingSpeakerNames { get; set; }
+
     public DateTime? DraftStartedAt { get; set; }
 
     public DateTime? DraftCompletedAt { get; set; }

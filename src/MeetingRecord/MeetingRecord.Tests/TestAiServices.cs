@@ -100,3 +100,18 @@ internal sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>
 
     public IDisposable? OnChange(Action<T, string?> listener) => null;
 }
+
+/// <summary>1.1.68：回傳指定狀態清單的假上限服務（成本閘門要算剩餘額度，FakeAiQuotaService 只會回「已達上限」）。</summary>
+internal sealed class StatusAiQuotaService(params AiQuotaStatus[] statuses) : IAiQuotaService
+{
+    public bool Throw { get; init; }
+
+    public Task<AiQuotaStatus?> CheckAsync(int? userId, CancellationToken cancellationToken = default)
+        => Task.FromResult(statuses.FirstOrDefault(x => x.IsReached));
+
+    public Task<IReadOnlyList<AiQuotaStatus>> GetStatusAsync(int? userId, CancellationToken cancellationToken = default)
+        => Throw ? throw new InvalidOperationException("quota down") : Task.FromResult<IReadOnlyList<AiQuotaStatus>>(statuses);
+
+    public Task<IReadOnlyList<AiQuotaUserUsage>> GetTopUsersAsync(int take, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<AiQuotaUserUsage>>([]);
+}

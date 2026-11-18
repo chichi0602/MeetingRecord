@@ -1,10 +1,10 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.11
+- 文件版本：2.12
 - 文件狀態：已實作
-- 現行系統版本：1.1.63
+- 現行系統版本：1.1.68
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/11/13
+- 最後核對日期：2026/11/17
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -202,6 +202,7 @@
 | `ExchangeRateSettings` | `FallbackRate` | `32.0` | 類別預設 null（沒有保底）；有填須 > 0 |
 | `LogRetentionSettings` | `AiUsageLogDays` | `0` | 帳本保留天數；0＝永久，啟用時至少 62（1.0.29） |
 | `AiQuotaSettings` | `GlobalMonthlyTwd`／`PerUserMonthlyTwd` | `0`／`0` | 每月用量上限（新台幣），0＝不限制；改設定檔即生效（1.0.29） |
+| `AiQuotaSettings` | `TranscriptionConfirmTwd` | `0` | 1.1.68 成本閘門：單次轉錄預估費用達此金額要再確認，0＝不提醒；預估超過剩餘額度則不送出（`TranscriptionCostEstimator`） |
 
 各區段都 `ValidateDataAnnotations().ValidateOnStart()`（`Program.cs`）。設定細節見 [日誌與設定檔說明](../operations/日誌與設定檔說明.md) §4.3.0.1（保留期限與上限）、§4.3.3（單價與匯率）。
 

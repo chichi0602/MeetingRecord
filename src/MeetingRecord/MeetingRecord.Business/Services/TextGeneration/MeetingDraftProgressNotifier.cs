@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using MeetingRecord.Business.Services.Other;
 
 namespace MeetingRecord.Business.Services.TextGeneration;
 
@@ -109,8 +110,14 @@ public interface IMeetingDraftProgressNotifier
     /// <summary>生成失敗。</summary>
     void ReportFailed(int meetingId, string message);
 
-    /// <summary>把項目從清單移除（使用者關閉通知）。</summary>
+    /// <summary>把項目從清單移除（系統用）。使用者關閉通知改用 <see cref="DismissFor"/>。</summary>
     void Dismiss(int meetingId);
+
+    /// <summary>1.1.68：只替這個使用者關閉這一趟的通知，其他人照樣看得到，工作照跑。</summary>
+    void DismissFor(int meetingId, int userId);
+
+    /// <summary>這個使用者是否關過這一趟的通知。</summary>
+    bool IsDismissedBy(int meetingId, int userId);
 }
 
 public sealed class MeetingDraftProgressNotifier : IMeetingDraftProgressNotifier
@@ -134,18 +141,36 @@ public sealed class MeetingDraftProgressNotifier : IMeetingDraftProgressNotifier
     /// </summary>
     public const int GeneratingCharacterHalfLife = 900;
 
+    /// <summary>1.1.68：已結束的項目保留多久（理由同 <c>TranscriptionProgressNotifier.FinishedRetention</c>）。</summary>
+    public static readonly TimeSpan FinishedRetention = TimeSpan.FromHours(24);
+
     private readonly ConcurrentDictionary<int, MeetingDraftProgressItem> items = new();
+
+    private readonly PerUserDismissals dismissals = new();
 
     public event Action? Changed;
 
     public IReadOnlyList<MeetingDraftProgressItem> GetSnapshot()
-        => [.. items.Values.OrderBy(x => x.MeetingId)];
+    {
+        var cutoff = DateTime.Now - FinishedRetention;
+        foreach (var expired in items.Values.Where(x => x.CompletedAt < cutoff).ToList())
+        {
+            if (items.TryRemove(expired.MeetingId, out _))
+            {
+                dismissals.Reset(expired.MeetingId);
+            }
+        }
+
+        return [.. items.Values.OrderBy(x => x.MeetingId)];
+    }
 
     public MeetingDraftProgressItem? Find(int meetingId)
         => items.TryGetValue(meetingId, out var item) ? item : null;
 
     public void Enqueued(int meetingId, string title, int? projectId, int? createdByUserId)
     {
+        // 新的一趟：之前關過通知的人要能再看到。
+        dismissals.Reset(meetingId);
         items[meetingId] = new MeetingDraftProgressItem(
             meetingId,
             title,
@@ -228,11 +253,23 @@ public sealed class MeetingDraftProgressNotifier : IMeetingDraftProgressNotifier
 
     public void Dismiss(int meetingId)
     {
+        dismissals.Reset(meetingId);
         if (items.TryRemove(meetingId, out _))
         {
             Notify();
         }
     }
+
+    public void DismissFor(int meetingId, int userId)
+    {
+        if (items.ContainsKey(meetingId))
+        {
+            dismissals.Dismiss(meetingId, userId);
+            Notify();
+        }
+    }
+
+    public bool IsDismissedBy(int meetingId, int userId) => dismissals.IsDismissed(meetingId, userId);
 
     /// <summary>
     /// 依階段、段數與已產生字元數換算百分比。

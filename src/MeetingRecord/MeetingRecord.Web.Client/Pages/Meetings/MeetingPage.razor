@@ -44,7 +44,7 @@ else
                         <SelectOption TItemValue="string" TItem="string" Value="@c">@c</SelectOption>
                     }
                 </Select>
-                <Input class="meeting-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="請輸入搜尋關鍵字" />
+                <Input class="meeting-view-search-input" @bind-Value="searchText" BindOnInput="true" DebounceMilliseconds="0" OnPressEnter="@(async () => await OnSearchAsync())" Placeholder="搜尋標題、描述、檔名、會議紀錄內容" />
                 @* 「清空搜尋」放在「搜尋」前面：它有字才出現，放後面會在失焦那一刻把「搜尋」推開、點擊落空（1.1.19 待辦頁踩過）。 *@
                 @if (!string.IsNullOrWhiteSpace(searchText))
                 {
@@ -136,7 +136,15 @@ else
                         var draftStatus = (DraftStatus)context.DraftStatus;
                         var draftProgress = GetLiveDraftProgress(IdOf(context));
                     }
-                    <span class="meeting-status @GetDraftStatusCssClass(draftStatus)">@DraftStatusText.Describe(draftStatus)</span>
+                    @if (context.AwaitingSpeakerNames && draftProgress is null)
+                    {
+                        @* 1.1.69：上傳時選了自動產生、轉完有講者 1～4，標示好講者才會產生。 *@
+                        <span class="meeting-status meeting-status-awaiting">待標示講者</span>
+                    }
+                    else
+                    {
+                        <span class="meeting-status @GetDraftStatusCssClass(draftStatus)">@DraftStatusText.Describe(draftStatus)</span>
+                    }
                     @if (draftProgress is not null)
                     {
                         <span class="meeting-status-percent">@draftProgress.Percent%</span>
@@ -175,6 +183,14 @@ else
                             <SpaceItem>
                                 <CrudActionButton Title="會議紀錄與逐字稿" Icon="article"
                                                   OnClick="@(async () => await OnOpenDraftModalAsync(context))" />
+                            </SpaceItem>
+                        }
+                        @* 1.1.69：轉完在等標示講者（之後自動產生會議紀錄）。條件同視窗裡的「標示講者」：未歸屬、能編修。 *@
+                        @if (context.AwaitingSpeakerNames && IsUnassigned(context) && CanEdit)
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="標示講者並產生會議紀錄" Icon="record_voice_over"
+                                                  OnClick="@(() => OpenSpeakerNaming(context))" />
                             </SpaceItem>
                         }
                         @* 「AI 轉會議紀錄」1.0.48 起不放在列上：產生與重新產生都從「會議紀錄與逐字稿」視窗裡按。 *@
@@ -306,6 +322,28 @@ else
                                     @if (!IsFormLocked)
                                     {
                                         <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="ClearPendingMediaFile">移除</button>
+                                    }
+                                </div>
+
+                                @* 1.1.69：轉錄完自動產生會議紀錄。逐字稿有講者 1～4 時先請使用者標示講者，存檔時才產生（只付一次費用）。
+                                   SelectOption 子元素理由同其他下拉（DataSource 重新指派時可能畫面空白卻帶著值）。 *@
+                                <div class="meeting-view-auto-draft">
+                                    <span class="meeting-view-auto-draft-label">轉錄完自動產生會議紀錄</span>
+                                    <Select TItem="int" TItemValue="int"
+                                            @bind-Value="autoDraftPromptTemplateId"
+                                            Disabled="@IsFormLocked"
+                                            Style="min-width: 220px;">
+                                        <SelectOption TItemValue="int" TItem="int" Value="0" Label="不自動產生（之後自己按）" />
+                                        @foreach (var template in promptTemplates)
+                                        {
+                                            <SelectOption TItemValue="int" TItem="int" Value="@template.Id" Label="@($"用「{template.Name}」產生")" />
+                                        }
+                                    </Select>
+                                    @if (autoDraftPromptTemplateId > 0)
+                                    {
+                                        <div class="meeting-view-upload-hint">
+                                            轉錄完會自動產生會議紀錄（另計費用）。逐字稿有分講者時，會先請你標示「講者 1～4」是誰，標好才產生。
+                                        </div>
                                     }
                                 </div>
                             }
@@ -495,7 +533,7 @@ else
     @* 1.1.64：逐字稿的「標示講者」。 *@
     <SpeakerNamingModal @bind-Visible="speakerModalVisible"
                         Load="@(() => MeetingApi.GetSpeakersAsync(draftMeetingId))"
-                        Save="@(names => MeetingApi.UpdateSpeakersAsync(draftMeetingId, names))"
+                        Save="@((names, generate) => MeetingApi.UpdateSpeakersAsync(draftMeetingId, names, generate))"
                         OnSaved="OnSpeakersSavedAsync" />
 
     <AiChatModal @bind-Visible="aiChatVisible"

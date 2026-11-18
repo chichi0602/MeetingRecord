@@ -356,6 +356,12 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("AutoDraftPromptTemplateId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AwaitingSpeakerNames")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Categories")
                         .HasColumnType("TEXT");
 

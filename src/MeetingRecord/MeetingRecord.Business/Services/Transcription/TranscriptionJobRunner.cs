@@ -8,7 +8,9 @@ using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.AiUsage;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Business.Services.TextGeneration;
 using MeetingRecord.Share.Enums;
+using MeetingRecord.Share.Helpers;
 
 namespace MeetingRecord.Business.Services.Transcription;
 
@@ -42,6 +44,15 @@ public class TranscriptionJobRunner
     private readonly IMediaSegmentSplitter? segmentSplitter;
     private readonly IAudioClipCutter? clipCutter;
 
+    /// <summary>1.1.68 成本閘門；選填，沿用 segmentSplitter 的做法，既有測試不用改。</summary>
+    private readonly TranscriptionCostEstimator? costEstimator;
+
+    /// <summary>1.1.69 轉錄完自動產生會議紀錄；選填，理由同上。</summary>
+    private readonly AutoDraftStarter? autoDraftStarter;
+
+    /// <summary>1.1.69：轉完要先標示講者時，進度面板「已完成」後面的附註。</summary>
+    public const string AwaitingSpeakerNamesNote = "請標示講者";
+
     /// <param name="segmentSplitter">
     /// 1.1.61：疑似被截斷的段落用它對半切再重轉。選擇性參數——沒有註冊時（例如端對端測試的假轉檔）照常轉錄、只是少這道保險。
     /// </param>
@@ -58,10 +69,14 @@ public class TranscriptionJobRunner
         AiCallGateway gateway,
         ILogger<TranscriptionJobRunner> logger,
         IMediaSegmentSplitter? segmentSplitter = null,
-        IAudioClipCutter? clipCutter = null)
+        IAudioClipCutter? clipCutter = null,
+        TranscriptionCostEstimator? costEstimator = null,
+        AutoDraftStarter? autoDraftStarter = null)
     {
         this.segmentSplitter = segmentSplitter;
         this.clipCutter = clipCutter;
+        this.costEstimator = costEstimator;
+        this.autoDraftStarter = autoDraftStarter;
         this.context = context;
         this.mediaConverter = mediaConverter;
         this.transcriptionProviders = transcriptionProviders;
@@ -148,6 +163,21 @@ public class TranscriptionJobRunner
                 segments.SegmentFullPaths.Count,
                 FfmpegMediaConverter.SegmentSeconds);
 
+            // 1.1.68 成本閘門：長度要到這裡（本機轉檔量完）才知道，而第一段還沒送出、一毛錢都還沒花。
+            // 開工時的 AdmitAsync 只看「是否已達上限」，看不出「這一趟會不會超過」；這裡補上。
+            var totalSeconds = segments.TotalDuration?.TotalSeconds
+                ?? (segmentSeconds.Count > 0 ? segmentSeconds.Sum() : (double?)null);
+            if (costEstimator is not null && totalSeconds is { } seconds
+                && await costEstimator.CheckAffordableAsync(seconds, requestedByUserId, cancellationToken) is { } costMessage)
+            {
+                logger.LogWarning(
+                    "Transcription blocked because the estimated cost exceeds the remaining AI quota. MeetingId={MeetingId}, Seconds={Seconds}",
+                    meetingId,
+                    seconds);
+                await MarkFailedAsync(meeting, costMessage);
+                return;
+            }
+
             // 1.1.64：會分講者的供應商帶聲音參考，讓整場的講者代號一致（見 SpeakerAlignmentSession）。
             var alignment = provider is ISpeakerAwareTranscriptionProvider { SupportsSpeakers: true } && clipCutter is not null
                 ? new SpeakerAlignmentSession()
@@ -208,6 +238,11 @@ public class TranscriptionJobRunner
             // 1.1.64：新逐字稿的講者編號是重新配發的，舊的真名對照不能沿用。
             meeting.SpeakerNames = null;
 
+            // 1.1.69：上傳時選了自動產生、而逐字稿有講者 1～4 → 先等使用者標示講者，存檔時才產生（只付一次費用）。
+            var awaitingSpeakerNames = meeting.AutoDraftPromptTemplateId is not null
+                && TranscriptSpeakerLabels.ListAlignedSpeakers(transcript.ToString()).Count > 0;
+            meeting.AwaitingSpeakerNames = awaitingSpeakerNames;
+
             // 1.0.29：會議自己記時長（儀表板「會議時數」讀這一欄）；以前是加總帳本的轉錄秒數，但帳本可以被清除了。
             meeting.MediaDurationSeconds = segmentSeconds.Count > 0 ? segmentSeconds.Sum() : null;
             meeting.TranscriptionStatus = TranscriptionStatus.Completed;
@@ -226,13 +261,27 @@ public class TranscriptionJobRunner
                 throw;
             }
 
-            progressNotifier.ReportCompleted(meetingId);
+            progressNotifier.ReportCompleted(meetingId, awaitingSpeakerNames ? AwaitingSpeakerNamesNote : null);
 
             // 重跑轉錄時，舊逐字稿在新檔寫入成功後才刪除，避免中途失敗兩份都沒有。
             if (!string.IsNullOrWhiteSpace(previousTranscriptRelativePath)
                 && previousTranscriptRelativePath != transcriptRelativePath)
             {
                 fileStore.TryDeleteTranscript(previousTranscriptRelativePath);
+            }
+
+            // 1.1.69：沒有要等標示的講者 → 直接自動產生會議紀錄。
+            // 排不進去（提示詞停用、額度不足…）只寫 DraftError，轉錄本身已經完成，不能因此變成失敗。
+            if (!awaitingSpeakerNames && meeting.AutoDraftPromptTemplateId is not null && autoDraftStarter is not null)
+            {
+                try
+                {
+                    await autoDraftStarter.StartAsync(meeting, requestedByUserId, requestedByUserName, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Auto draft after transcription failed to start. MeetingId={MeetingId}", meetingId);
+                }
             }
 
             logger.LogInformation(

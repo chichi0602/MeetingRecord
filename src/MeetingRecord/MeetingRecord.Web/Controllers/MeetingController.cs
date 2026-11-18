@@ -219,8 +219,11 @@ public class MeetingController(
     /// <summary>儲存講者對照（逐字稿檔案不改，讀取時才套用）。</summary>
     [HttpPut("{id}/speakers")]
     [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]
-    public Task<ActionResult<ApiResult>> UpdateSpeakers(int id, [FromBody] MeetingSpeakerNamesDto request)
-        => RunAsync(id, () => meetingService.UpdateSpeakerNamesAsync(id, request.Names), "講者名字已儲存。");
+    public Task<ActionResult<ApiResult>> UpdateSpeakers(int id, [FromBody] MeetingSpeakerNamesDto request, [FromQuery] bool generate = false)
+        => generate
+            // 1.1.69：轉錄完等標示講者的會議，存名字後用上傳時選的提示詞產生會議紀錄。
+            ? RunAsync(id, () => meetingService.NameSpeakersAndGenerateAsync(id, request.Names), "講者名字已儲存，開始產生會議紀錄。")
+            : RunAsync(id, () => meetingService.UpdateSpeakerNamesAsync(id, request.Names), "講者名字已儲存。");
 
     /// <summary>把會議歸屬到專案（之後跟著專案的可見範圍走）。</summary>
     [HttpPut("{id}/project")]
@@ -313,6 +316,30 @@ public class MeetingController(
             AuditActions.MeetingExportPdf, targetType: "Meeting", targetId: id.ToString(),
             detail: $"file={fileName}; bytes={pdf.Length}; page=Meeting; via={AuditVia.Api}");
         return File(pdf, PdfContentType, fileName);
+    }
+
+    /// <summary>
+    /// 1.1.68 成本閘門：上傳／重新轉錄前的預估費用、提醒門檻與本月剩餘額度。秒數由畫面讀檔案長度或用上次轉錄的長度。
+    /// 只是給確認視窗用的提示；真正的擋下在轉錄工作量到長度之後（<c>TranscriptionJobRunner</c>）。
+    /// </summary>
+    [HttpGet("transcription-estimate")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, new[] { PermissionActions.Create, PermissionActions.Edit })]
+    public async Task<ActionResult<ApiResult<MeetingTranscriptionEstimateDto>>> TranscriptionEstimate(
+        [FromQuery] double seconds,
+        [FromServices] MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator estimator)
+    {
+        if (double.IsNaN(seconds) || seconds <= 0 || seconds > TimeSpan.FromDays(2).TotalSeconds)
+        {
+            return BadRequest(ApiResult<MeetingTranscriptionEstimateDto>.FailureResult("時長不正確。"));
+        }
+
+        return Ok(ApiResult<MeetingTranscriptionEstimateDto>.SuccessResult(new MeetingTranscriptionEstimateDto
+        {
+            Seconds = seconds,
+            EstimatedTwd = estimator.EstimateTwd(seconds),
+            ConfirmThresholdTwd = estimator.ConfirmThresholdTwd,
+            RemainingTwd = await estimator.GetRemainingTwdAsync(UserClaims.GetUserId(User)),
+        }));
     }
 
     /// <summary>會議頁可選的專案（產生會議紀錄、歸屬專案用），附與會人員名冊；不借用專案頁的權限。</summary>

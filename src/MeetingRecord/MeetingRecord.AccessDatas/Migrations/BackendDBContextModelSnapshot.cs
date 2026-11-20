@@ -422,6 +422,9 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<int?>("ProjectId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SpeakerClips")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("SpeakerNames")
                         .HasColumnType("TEXT");
 
@@ -452,6 +455,51 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.HasIndex("ProjectId");
 
                     b.ToTable("Meeting");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.MeetingDraftVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Attendees")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ContentAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MeetingId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PromptTemplateName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SavedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SavedByName")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SavedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MeetingId", "SavedAt");
+
+                    b.ToTable("MeetingDraftVersion");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.MyUser", b =>
@@ -1002,6 +1050,17 @@ namespace MeetingRecord.AccessDatas.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("MeetingRecord.AccessDatas.Models.MeetingDraftVersion", b =>
+                {
+                    b.HasOne("MeetingRecord.AccessDatas.Models.Meeting", "Meeting")
+                        .WithMany()
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Meeting");
                 });
 
             modelBuilder.Entity("MeetingRecord.AccessDatas.Models.MyUser", b =>

@@ -78,3 +78,17 @@
     gap: 8px;
     margin-top: 16px;
 }
+
+/* 1.1.71：講者試聽。原生播放器，壓矮一點放在範例句子上方。 */
+.speaker-naming-audio {
+    width: 100%;
+    max-width: 320px;
+    height: 32px;
+    margin-bottom: 4px;
+}
+
+.speaker-naming-noclip {
+    margin-bottom: 4px;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+}

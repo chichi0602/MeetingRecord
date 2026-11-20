@@ -89,7 +89,10 @@ public class Meeting
 
     #region AI 會議紀錄草稿
 
-    /// <summary>LLM 產生的會議紀錄內容。落庫且可人工編修；重新生成會覆蓋，不保留版本歷程。</summary>
+    /// <summary>
+    /// LLM 產生的會議紀錄內容。落庫且可人工編修。
+    /// 1.1.71 起重新產生、編修、還原前會先把舊內容留到 <see cref="MeetingDraftVersion"/>（經 <c>MeetingDraftVersionRecorder</c>）。
+    /// </summary>
     public string? DraftContent { get; set; }
 
     public DraftStatus DraftStatus { get; set; } = DraftStatus.NotGenerated;
@@ -120,6 +123,13 @@ public class Meeting
     /// ⚠️ 重新轉錄後編號會重配，轉錄完成時清空。
     /// </summary>
     public string? SpeakerNames { get; set; }
+
+    /// <summary>
+    /// 1.1.71：每位講者的試聽片段（轉錄時剪下當 known_speaker_references 的那一句），JSON 物件，
+    /// 例如 <c>{"1":"2026/11/{guid}_spk1.wav"}</c>，路徑相對於逐字稿根目錄。
+    /// ⚠️ 生命週期跟逐字稿走：重新轉錄換新、重新上傳或刪除會議時刪檔。
+    /// </summary>
+    public string? SpeakerClips { get; set; }
 
     /// <summary>
     /// 1.1.69：上傳時選的「轉錄完自動產生會議紀錄」提示詞。null＝不自動產生。

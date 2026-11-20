@@ -101,6 +101,20 @@ public sealed class ProjectApi(ApiClient api)
     public Task<ApiResult<MeetingSpeakersDto>> GetSpeakersAsync(int projectId, int meetingId)
         => api.GetAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers", ClientJsonContext.Default.MeetingSpeakersResult);
 
+    /// <summary>1.1.71：講者試聽片段的網址，直接給 &lt;audio src&gt;。</summary>
+    public static string SpeakerClipUrl(int projectId, int meetingId, string label)
+        => $"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers/{Uri.EscapeDataString(label)}/clip";
+
+    /// <summary>1.1.71：會議紀錄的舊版清單。</summary>
+    public Task<ApiResult<List<MeetingDraftVersionDto>>> GetDraftVersionsAsync(int projectId, int meetingId)
+        => api.GetAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/draft/versions", ClientJsonContext.Default.MeetingDraftVersionsResult);
+
+    public Task<ApiResult<MeetingDraftVersionDetailDto>> GetDraftVersionAsync(int projectId, int meetingId, int versionId)
+        => api.GetAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/draft/versions/{versionId}", ClientJsonContext.Default.MeetingDraftVersionDetailResult);
+
+    public Task<ApiResult<object>> RestoreDraftVersionAsync(int projectId, int meetingId, int versionId)
+        => api.PostAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/draft/versions/{versionId}/restore", ClientJsonContext.Default.EmptyResult);
+
     /// <param name="generate">1.1.69：存好後用上傳時選的提示詞產生會議紀錄。</param>
     public Task<ApiResult<object>> UpdateSpeakersAsync(int projectId, int meetingId, Dictionary<string, string> names, bool generate = false)
         => api.PutAsync($"{BaseUrl}/{projectId}/meetings/{meetingId}/speakers{(generate ? "?generate=true" : string.Empty)}", new MeetingSpeakerNamesDto { Names = names }, ClientJsonContext.Default.MeetingSpeakerNamesDto, ClientJsonContext.Default.EmptyResult);

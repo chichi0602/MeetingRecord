@@ -236,3 +236,36 @@
     color: var(--oat-ink-mid, #6b7a8d);
     font-size: 13px;
 }
+
+/* 1.1.71：上傳視窗的「錄音」。 */
+.meeting-view-recorder {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+    .meeting-view-recorder .meeting-view-upload-hint {
+        margin-top: 0;
+    }
+
+.meeting-view-recording-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e5484d;
+    animation: meeting-view-recording-blink 1s ease-in-out infinite;
+}
+
+.meeting-view-recording-time {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: #c0392b;
+}
+
+@keyframes meeting-view-recording-blink {
+    50% {
+        opacity: 0.3;
+    }
+}

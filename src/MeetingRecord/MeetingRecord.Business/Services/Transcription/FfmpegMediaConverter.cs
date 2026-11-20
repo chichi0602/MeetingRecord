@@ -62,7 +62,8 @@ public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAud
             // 第一趟只解碼、不輸出，找停頓與時長（1.1.61）。
             var analysisOutput = await RunFfmpegAsync(BuildSilenceDetectArguments(sourceFullPath), cancellationToken);
             var silences = TranscriptionSegmentPlanner.ParseSilences(analysisOutput);
-            var cutPoints = MediaDurationParser.TryParseDuration(analysisOutput) is { } sourceDuration
+            // 1.1.71：檔頭沒有長度（瀏覽器錄音的 webm）時改用解碼完的最後一個 time=，錄音檔才也能切在停頓處。
+            var cutPoints = (MediaDurationParser.TryParseDuration(analysisOutput) ?? MediaDurationParser.TryParseLastProgressTime(analysisOutput)) is { } sourceDuration
                 ? TranscriptionSegmentPlanner.PlanCutPoints(sourceDuration.TotalSeconds, silences, SegmentSeconds)
                 : [];
 
@@ -124,6 +125,12 @@ public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAud
         if (MediaDurationParser.TryParseDuration(ffmpegOutput) is { } parsed)
         {
             return (parsed, false);
+        }
+
+        // 1.1.71：檔頭沒有長度（瀏覽器錄音的 webm）時，解碼完印出的 time= 是實際長度，比用檔案大小推估準。
+        if (MediaDurationParser.TryParseLastProgressTime(ffmpegOutput) is { } decoded)
+        {
+            return (decoded, false);
         }
 
         long totalBytes = 0;

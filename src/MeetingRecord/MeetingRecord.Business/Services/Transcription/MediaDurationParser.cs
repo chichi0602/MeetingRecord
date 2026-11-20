@@ -65,6 +65,43 @@ public static partial class MediaDurationParser
         return new TimeSpan(0, hours, minutes, seconds, milliseconds);
     }
 
+    /// <summary>FFmpeg 結束時的統計行 <c>size=N/A time=00:00:07.00 bitrate=…</c> 裡的時間。</summary>
+    [GeneratedRegex(@"time=\s*(\d+):(\d{2}):(\d{2})(?:\.(\d+))?", RegexOptions.CultureInvariant)]
+    private static partial Regex ProgressTimePattern();
+
+    /// <summary>
+    /// 1.1.71：檔頭沒有長度（<c>Duration: N/A</c>，例如瀏覽器 MediaRecorder 錄的 webm）時，
+    /// 改取 FFmpeg 整個解碼完印出的最後一個 <c>time=</c>——那就是實際解碼到的長度。
+    ///
+    /// <para>
+    /// 實測（FFmpeg 9.0.1）：加了 <c>-nostats</c> 不會印過程中的進度，但結束時的那一行統計仍然會印。
+    /// </para>
+    /// </summary>
+    public static TimeSpan? TryParseLastProgressTime(string? ffmpegOutput)
+    {
+        if (string.IsNullOrWhiteSpace(ffmpegOutput))
+        {
+            return null;
+        }
+
+        var matches = ProgressTimePattern().Matches(ffmpegOutput);
+        if (matches.Count == 0)
+        {
+            return null;
+        }
+
+        var match = matches[^1];
+        var hours = int.Parse(match.Groups[1].ValueSpan, CultureInfo.InvariantCulture);
+        var minutes = int.Parse(match.Groups[2].ValueSpan, CultureInfo.InvariantCulture);
+        var seconds = int.Parse(match.Groups[3].ValueSpan, CultureInfo.InvariantCulture);
+        var milliseconds = match.Groups[4].Success
+            ? int.Parse(match.Groups[4].Value.PadRight(3, '0')[..3], CultureInfo.InvariantCulture)
+            : 0;
+
+        var duration = new TimeSpan(0, hours, minutes, seconds, milliseconds);
+        return duration > TimeSpan.Zero ? duration : null;
+    }
+
     /// <summary>
     /// 把總時長拆成每一段實際的秒數。
     ///

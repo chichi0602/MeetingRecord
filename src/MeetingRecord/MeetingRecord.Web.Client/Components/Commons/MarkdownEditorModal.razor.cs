@@ -152,6 +152,11 @@ public partial class MarkdownEditorModal : IDisposable
 
     [Parameter] public EventCallback OnShare { get; set; }
 
+    /// <summary>1.1.71：唯讀、會議紀錄頁籤時底部多一顆「版本紀錄」。</summary>
+    [Parameter] public bool CanViewVersions { get; set; }
+
+    [Parameter] public EventCallback OnShowVersions { get; set; }
+
     private const string DraftTab = "draft";
 
     private const string TranscriptTab = "transcript";

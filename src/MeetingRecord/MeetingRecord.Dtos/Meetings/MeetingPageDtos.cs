@@ -68,6 +68,9 @@ public class MeetingSpeakerDto
     public string? Name { get; set; }
 
     public List<string> Samples { get; set; } = [];
+
+    /// <summary>1.1.71：有沒有試聽片段（<c>GET …/speakers/{label}/clip</c>）。重新轉錄前的舊逐字稿沒有。</summary>
+    public bool HasClip { get; set; }
 }
 
 /// <summary>「標示講者」視窗的資料（<c>GET api/v1/Meeting/{id}/speakers</c>）。</summary>
@@ -124,4 +127,36 @@ public class MeetingTranscriptionEstimateDto
 
     /// <summary>本月剩餘額度（全系統與自己兩者較少的那個）。不限制時為 null。</summary>
     public decimal? RemainingTwd { get; set; }
+}
+
+/// <summary>1.1.71：會議紀錄的一份舊版（清單用，不含內容）。</summary>
+public class MeetingDraftVersionDto
+{
+    public int Id { get; set; }
+
+    /// <summary>留版的時間。</summary>
+    public DateTime SavedAt { get; set; }
+
+    /// <summary>為什麼留這一版：「重新產生前」「編修前」「還原前」。</summary>
+    public string ReasonText { get; set; } = string.Empty;
+
+    /// <summary>那份內容當初用的提示詞。</summary>
+    public string? PromptTemplateName { get; set; }
+
+    /// <summary>造成這次覆蓋的人。</summary>
+    public string? SavedByName { get; set; }
+
+    /// <summary>那份內容原本產生或最後修改的時間。</summary>
+    public DateTime? ContentAt { get; set; }
+
+    /// <summary>字數。</summary>
+    public int Length { get; set; }
+}
+
+/// <summary>1.1.71：會議紀錄某一份舊版的內容。</summary>
+public class MeetingDraftVersionDetailDto : MeetingDraftVersionDto
+{
+    public string Content { get; set; } = string.Empty;
+
+    public List<string> Attendees { get; set; } = [];
 }

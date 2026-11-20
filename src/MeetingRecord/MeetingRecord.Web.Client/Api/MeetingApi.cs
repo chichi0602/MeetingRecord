@@ -46,6 +46,20 @@ public sealed class MeetingApi(ApiClient api)
     public Task<ApiResult<MeetingSpeakersDto>> GetSpeakersAsync(int id)
         => api.GetAsync($"{BaseUrl}/{id}/speakers", ClientJsonContext.Default.MeetingSpeakersResult);
 
+    /// <summary>1.1.71：講者試聽片段的網址，直接給 &lt;audio src&gt;（同網域，自動帶登入 Cookie）。</summary>
+    public static string SpeakerClipUrl(int id, string label)
+        => $"{BaseUrl}/{id}/speakers/{Uri.EscapeDataString(label)}/clip";
+
+    /// <summary>1.1.71：會議紀錄的舊版清單。</summary>
+    public Task<ApiResult<List<MeetingDraftVersionDto>>> GetDraftVersionsAsync(int id)
+        => api.GetAsync($"{BaseUrl}/{id}/draft/versions", ClientJsonContext.Default.MeetingDraftVersionsResult);
+
+    public Task<ApiResult<MeetingDraftVersionDetailDto>> GetDraftVersionAsync(int id, int versionId)
+        => api.GetAsync($"{BaseUrl}/{id}/draft/versions/{versionId}", ClientJsonContext.Default.MeetingDraftVersionDetailResult);
+
+    public Task<ApiResult<object>> RestoreDraftVersionAsync(int id, int versionId)
+        => api.PostAsync($"{BaseUrl}/{id}/draft/versions/{versionId}/restore", ClientJsonContext.Default.EmptyResult);
+
     /// <summary>1.1.68 成本閘門：轉錄的預估費用、提醒門檻與本月剩餘額度。</summary>
     public Task<ApiResult<MeetingTranscriptionEstimateDto>> GetTranscriptionEstimateAsync(double seconds)
         => api.GetAsync($"{BaseUrl}/transcription-estimate?seconds={seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}", ClientJsonContext.Default.MeetingTranscriptionEstimateResult);

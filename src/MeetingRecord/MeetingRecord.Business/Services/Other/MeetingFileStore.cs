@@ -175,6 +175,40 @@ public class MeetingFileStore
         TryDeleteFile(GetTranscriptFullPath(relativePath));
     }
 
+    /// <summary>
+    /// 1.1.71：存一位講者的試聽片段（WAV），放在逐字稿根目錄、規則同逐字稿。回傳相對路徑。
+    /// </summary>
+    public async Task<string> SaveSpeakerClipAsync(DateTime createdAt, string speaker, byte[] wav, CancellationToken cancellationToken)
+    {
+        var relativePath = BuildRelativePath(createdAt, $"{Guid.NewGuid():N}_spk{speaker}.wav");
+        var fullPath = GetTranscriptFullPath(relativePath);
+
+        EnsureParentDirectory(fullPath);
+        await File.WriteAllBytesAsync(fullPath, wav, cancellationToken);
+        return relativePath;
+    }
+
+    /// <summary>講者試聽片段的實體路徑；檔案不在就回 null。</summary>
+    public string? FindSpeakerClipFullPath(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return null;
+        }
+
+        var fullPath = GetTranscriptFullPath(relativePath);
+        return File.Exists(fullPath) ? fullPath : null;
+    }
+
+    /// <summary>刪除 <c>Meeting.SpeakerClips</c> 記錄的所有片段。失敗只記 Warning。</summary>
+    public void TryDeleteSpeakerClips(IEnumerable<string> relativePaths)
+    {
+        foreach (var relativePath in relativePaths)
+        {
+            TryDeleteTranscript(relativePath);
+        }
+    }
+
     private static string BuildRelativePath(DateTime createdAt, string fileName)
     {
         var year = createdAt.Year.ToString("0000");

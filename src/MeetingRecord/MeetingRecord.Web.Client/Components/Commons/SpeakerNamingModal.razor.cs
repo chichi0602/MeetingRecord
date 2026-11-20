@@ -31,6 +31,9 @@ public partial class SpeakerNamingModal
     /// <summary>存檔成功：父層重新讀逐字稿，畫面才會換成真名。參數是這次有沒有開始產生會議紀錄（1.1.69）。</summary>
     [Parameter] public EventCallback<bool> OnSaved { get; set; }
 
+    /// <summary>1.1.71：講者代號 → 試聽片段網址（給 &lt;audio src&gt;）。沒給就不顯示播放器。</summary>
+    [Parameter] public Func<string, string>? ClipUrl { get; set; }
+
     private sealed class SpeakerRow
     {
         public string Label { get; init; } = string.Empty;
@@ -38,6 +41,8 @@ public partial class SpeakerNamingModal
         public string? Name { get; set; }
 
         public List<string> Samples { get; init; } = [];
+
+        public bool HasClip { get; init; }
     }
 
     private List<SpeakerRow> speakers = [];
@@ -90,7 +95,7 @@ public partial class SpeakerNamingModal
             }
 
             speakers = data.Speakers
-                .Select(x => new SpeakerRow { Label = x.Label, Name = x.Name, Samples = x.Samples })
+                .Select(x => new SpeakerRow { Label = x.Label, Name = x.Name, Samples = x.Samples, HasClip = x.HasClip })
                 .ToList();
             participants = data.Participants;
             hasSegmentLabels = data.HasSegmentLabels;

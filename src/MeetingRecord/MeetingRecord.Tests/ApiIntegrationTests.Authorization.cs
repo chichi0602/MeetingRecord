@@ -273,6 +273,45 @@ public sealed partial class ApiIntegrationTests
     /// 1.1.68 成本閘門的預估端點（<c>[HasPermission(會議紀錄, anyOf: create, edit)]</c>）：只在上傳與重新轉錄的確認視窗用到，
     /// 只有檢視權限要 403 並留稽核；有新增或修改其中之一就成功。
     /// </summary>
+    /// <summary>
+    /// 1.1.71：講者試聽、會議紀錄舊版的端點。試聽回的是檔案、還原要先有版本，不適合放進上面的成功矩陣，
+    /// 這裡只驗權限那一關：未登入 401、只缺它要的那個動作 403。
+    /// </summary>
+    [Theory]
+    [InlineData("GET", "/api/v1/Meeting/1/speakers/1/clip", MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    [InlineData("GET", "/api/v1/Meeting/1/draft/versions", MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    [InlineData("GET", "/api/v1/Meeting/1/draft/versions/1", MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    [InlineData("POST", "/api/v1/Meeting/1/draft/versions/1/restore", MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]
+    [InlineData("GET", "/api/v1/Project/1/meetings/1/speakers/1/clip", MagicObjectHelper.角色_專案項目, PermissionActions.View)]
+    [InlineData("GET", "/api/v1/Project/1/meetings/1/draft/versions", MagicObjectHelper.角色_專案項目, PermissionActions.View)]
+    [InlineData("GET", "/api/v1/Project/1/meetings/1/draft/versions/1", MagicObjectHelper.角色_專案項目, PermissionActions.View)]
+    [InlineData("POST", "/api/v1/Project/1/meetings/1/draft/versions/1/restore", MagicObjectHelper.角色_專案項目, PermissionActions.Edit)]
+    public async Task SpeakerClipAndDraftVersionEndpoints_ShouldRequireLoginAndTheirAction(string method, string url, string page, string action)
+    {
+        using (var anonymous = factory.CreateClient())
+        using (var response = await anonymous.SendAsync(new HttpRequestMessage(new HttpMethod(method), url)))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var everyOtherAction = AllActions.Where(a => a != action).Select(a => PermissionKey.For(page, a)).ToArray();
+        var user = await CreateApiUserAsync(everyOtherAction);
+        using (var client = await CreateBearerClientAsync(user))
+        using (var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), url)))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+
+        // 有這個動作就過得了權限那一關（會議不存在或看不到，回 404／400，不是 403）。
+        var permitted = await CreateApiUserAsync(PermissionKey.For(page, action));
+        using (var client = await CreateBearerClientAsync(permitted))
+        using (var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), url)))
+        {
+            Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+    }
+
     [Fact]
     public async Task MeetingTranscriptionEstimate_ShouldRequireCreateOrEdit()
     {

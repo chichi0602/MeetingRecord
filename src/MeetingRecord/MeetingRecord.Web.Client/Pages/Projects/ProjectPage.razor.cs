@@ -1134,6 +1134,32 @@ public partial class ProjectPage : IDisposable
         }
     }
 
+    /// <summary>1.1.71：版本紀錄視窗。</summary>
+    private bool draftVersionsVisible;
+
+    /// <summary>1.1.71：還原舊版的條件和「編修」一致；不能編修時視窗只能看。</summary>
+    private Func<int, Task<ApiResult<object>>>? DraftRestore => draftCanSwitchToEdit
+        ? versionId => ProjectApi.RestoreDraftVersionAsync(selectedProjectId, draftMeetingId, versionId)
+        : null;
+
+    /// <summary>
+    /// 1.1.71：還原好了。MarkdownEditorModal 只在打開時讀一次 Content，
+    /// 所以先關再重開，畫面才會換成還原的內容。
+    /// </summary>
+    private async Task OnDraftVersionRestoredAsync()
+    {
+        NotifySuccess("已還原這個版本。");
+        draftModalVisible = false;
+        StateHasChanged();
+        await Task.Yield();
+        if (draftMeeting is not null)
+        {
+            await OnOpenDraftModalAsync(draftMeeting);
+        }
+
+        await ReloadProjectContextAsync();
+    }
+
     private async Task OnDraftSavedAsync(string content)
     {
         isSavingDraft = true;

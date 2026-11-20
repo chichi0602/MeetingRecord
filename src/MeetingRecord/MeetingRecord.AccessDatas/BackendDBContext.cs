@@ -45,6 +45,9 @@ public partial class BackendDBContext : DbContext
     /// <summary>待辦的異動紀錄（1.0.44）。一個欄位一列，給專案成員看「誰把什麼改了」。</summary>
     public virtual DbSet<TodoChange> TodoChange { get; set; }
 
+    /// <summary>會議紀錄的舊版（1.1.71）。重新產生、編修、還原前留一份，每場最多 20 份。</summary>
+    public virtual DbSet<MeetingDraftVersion> MeetingDraftVersion { get; set; }
+
     /// <summary>站內通知（1.0.44），右上角鈴鐺。</summary>
     public virtual DbSet<UserNotification> UserNotification { get; set; }
 
@@ -224,6 +227,22 @@ public partial class BackendDBContext : DbContext
             entity.HasOne(x => x.Todo)
                 .WithMany()
                 .HasForeignKey(x => x.TodoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MeetingDraftVersion>(entity =>
+        {
+            // 版本紀錄視窗（某場會議、新到舊）與超過 20 份刪最舊的。
+            entity.HasIndex(x => new { x.MeetingId, x.SavedAt });
+
+            entity.Property(x => x.PromptTemplateName).HasMaxLength(200);
+            entity.Property(x => x.Reason).HasMaxLength(20);
+            entity.Property(x => x.SavedByName).HasMaxLength(100);
+
+            // 會議刪了舊版就沒有意義；全站預設 Restrict，這裡要明寫，否則刪會議會失敗。
+            entity.HasOne(x => x.Meeting)
+                .WithMany()
+                .HasForeignKey(x => x.MeetingId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

@@ -1,0 +1,96 @@
+@using MeetingRecord.Dtos.Meetings
+
+@* 1.1.71「版本紀錄」：重新產生、編修、還原前留下的會議紀錄舊版。左邊清單、右邊預覽，可以還原。
+   讀取與還原都交給父層（會議頁、專案頁打的 API 不同），這個元件不注入任何 API。 *@
+<Modal Title="版本紀錄"
+       Class="form-modal-large draft-versions-modal"
+       Visible="@Visible"
+       Keyboard="true"
+       MaskClosable="false"
+       Footer="null"
+       OnCancel="CloseAsync">
+    <div class="draft-versions">
+        @if (isLoading)
+        {
+            <div class="draft-versions-loading">
+                <Spin />
+                <span>讀取版本紀錄…</span>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(errorMessage) && versions.Count == 0)
+        {
+            <div class="draft-versions-error">@errorMessage</div>
+        }
+        else if (versions.Count == 0)
+        {
+            <div class="draft-versions-empty">
+                還沒有舊版。重新產生、編修或還原會議紀錄之前，系統會自動把當時的內容留一份（每場最多 @MaxVersions 份）。
+            </div>
+        }
+        else
+        {
+            <div class="draft-versions-body">
+                <ul class="draft-versions-list">
+                    @foreach (var version in versions)
+                    {
+                        <li class="draft-versions-item @(version.Id == selected?.Id ? "draft-versions-item-active" : string.Empty)"
+                            @onclick="@(() => SelectAsync(version.Id))">
+                            <div class="draft-versions-item-head">
+                                <span class="draft-versions-item-time">@version.SavedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                                <span class="draft-versions-item-reason">@version.ReasonText</span>
+                            </div>
+                            <div class="draft-versions-item-meta">
+                                @(version.PromptTemplateName ?? "（未記錄提示詞）")
+                                ・@(version.Length) 字
+                                @if (!string.IsNullOrWhiteSpace(version.SavedByName))
+                                {
+                                    <span>・@version.SavedByName</span>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ul>
+
+                <div class="draft-versions-preview">
+                    @if (isLoadingDetail)
+                    {
+                        <div class="draft-versions-loading">
+                            <Spin />
+                        </div>
+                    }
+                    else if (selected is not null)
+                    {
+                        <div class="draft-versions-preview-head">
+                            這是 @selected.SavedAt.ToString("yyyy/MM/dd HH:mm") @selected.ReasonText 的內容
+                            @if (selected.ContentAt is { } contentAt)
+                            {
+                                <span>（原本產生或修改於 @contentAt.ToString("yyyy/MM/dd HH:mm")）</span>
+                            }
+                            @if (selected.Attendees.Count > 0)
+                            {
+                                <div>與會人員：@string.Join("、", selected.Attendees)</div>
+                            }
+                        </div>
+                        @* markdown-content 是 app.css 的全域樣式：MarkupString 的子節點拿不到 scope 屬性。 *@
+                        <div class="markdown-content">@((MarkupString)selectedHtml)</div>
+                    }
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="draft-versions-error">@errorMessage</div>
+            }
+        }
+    </div>
+
+    <div class="draft-versions-actions">
+        <Button OnClick="CloseAsync">關閉</Button>
+        @if (Restore is not null && selected is not null)
+        {
+            <Button Type="ButtonType.Primary"
+                    Loading="@isRestoring"
+                    Disabled="@isRestoring"
+                    OnClick="RestoreAsync">還原這一版</Button>
+        }
+    </div>
+</Modal>

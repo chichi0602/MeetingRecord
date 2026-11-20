@@ -121,6 +121,19 @@ window.meetingRecordChunkUpload = (function () {
             run(file, uploadId, chunkSize, dotnetRef, state);
         },
 
+        // 1.1.71：上傳瀏覽器錄好的聲音（media-recorder.js 留在 JS 端的 Blob），其餘同 start。
+        startRecorded: function (recordingKey, fileName, fileSize, uploadId, chunkSize, dotnetRef) {
+            const blob = window.meetingRecordRecorder ? window.meetingRecordRecorder.take(recordingKey) : null;
+            if (!blob || blob.size !== fileSize) {
+                dotnetRef.invokeMethodAsync("OnFailed", "找不到要上傳的錄音，請重新錄音。").catch(() => { });
+                return;
+            }
+
+            const state = { aborted: false, controller: new AbortController() };
+            active.set(uploadId, state);
+            run(blob, uploadId, chunkSize, dotnetRef, state);
+        },
+
         // 1.1.6：上傳進行中關分頁或重新整理時，請瀏覽器跳出「確定要離開嗎？」。
         // 由第一個上傳開始時打開、最後一個結束時關掉（WASM 端的 MeetingUploadManager 呼叫）。
         setLeaveGuard: function (active) {

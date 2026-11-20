@@ -238,6 +238,11 @@ public class TranscriptionJobRunner
             // 1.1.64：新逐字稿的講者編號是重新配發的，舊的真名對照不能沿用。
             meeting.SpeakerNames = null;
 
+            // 1.1.71：把聲音參考存下來給「標示講者」試聽；舊片段等新的存好才刪。
+            var previousSpeakerClips = TranscriptSpeakerLabels.ParseNames(meeting.SpeakerClips).Values.ToList();
+            var speakerClips = await SaveSpeakerClipsAsync(meeting, alignment, transcript.ToString(), cancellationToken);
+            meeting.SpeakerClips = TranscriptSpeakerLabels.SerializeNames(speakerClips);
+
             // 1.1.69：上傳時選了自動產生、而逐字稿有講者 1～4 → 先等使用者標示講者，存檔時才產生（只付一次費用）。
             var awaitingSpeakerNames = meeting.AutoDraftPromptTemplateId is not null
                 && TranscriptSpeakerLabels.ListAlignedSpeakers(transcript.ToString()).Count > 0;
@@ -258,8 +263,11 @@ public class TranscriptionJobRunner
                 // 存不進去（例如會議剛被刪掉）就沒有任何資料列指向這份逐字稿，
                 // 不刪的話一份機密逐字稿會永遠留在磁碟上（0.4.115）。
                 fileStore.TryDeleteTranscript(transcriptRelativePath);
+                fileStore.TryDeleteSpeakerClips(speakerClips.Values);
                 throw;
             }
+
+            fileStore.TryDeleteSpeakerClips(previousSpeakerClips);
 
             progressNotifier.ReportCompleted(meetingId, awaitingSpeakerNames ? AwaitingSpeakerNamesNote : null);
 
@@ -536,6 +544,45 @@ public class TranscriptionJobRunner
 
         var segments = SpeakerAlignmentSession.Relabel(result.Segments, renames);
         return DiarizedTranscriptFormatter.Format(segments, result.FallbackText);
+    }
+
+    /// <summary>
+    /// 1.1.71：存下最終逐字稿裡真的有出現的講者的聲音參考（WAV），回傳「編號 → 相對路徑」。
+    /// 存不了只記 Warning：試聽是輔助，不能讓已經完成的轉錄因此失敗。
+    /// </summary>
+    private async Task<Dictionary<string, string>> SaveSpeakerClipsAsync(
+        Meeting meeting,
+        SpeakerAlignmentSession? alignment,
+        string transcriptText,
+        CancellationToken cancellationToken)
+    {
+        var saved = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (alignment is null || alignment.References.Count == 0)
+        {
+            return saved;
+        }
+
+        var used = TranscriptSpeakerLabels.ListAlignedSpeakers(transcriptText).ToHashSet(StringComparer.Ordinal);
+        foreach (var reference in alignment.References.Where(x => used.Contains(x.Name)))
+        {
+            const string prefix = "data:audio/wav;base64,";
+            if (!reference.DataUrl.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                var bytes = Convert.FromBase64String(reference.DataUrl[prefix.Length..]);
+                saved[reference.Name] = await fileStore.SaveSpeakerClipAsync(meeting.CreatedAt, reference.Name, bytes, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Could not save speaker clip. MeetingId={MeetingId}, Speaker={Speaker}", meeting.Id, reference.Name);
+            }
+        }
+
+        return saved;
     }
 
     /// <summary>

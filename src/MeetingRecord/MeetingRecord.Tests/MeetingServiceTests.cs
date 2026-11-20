@@ -2030,6 +2030,177 @@ public sealed class MeetingServiceTests
         Assert.Contains($"projectId={project.Id}; draftCleared=true", audits[1].Detail);
     }
 
+    #region 1.1.71 會議紀錄舊版、講者試聽片段
+
+    private static async Task<Meeting> AddMeetingWithDraftAsync(MeetingServiceFixture fixture, string content, int? projectId = null)
+    {
+        var meeting = await fixture.AddCompletedMeetingAsync("需求會議", projectId: projectId, draftStatus: DraftStatus.Completed);
+        var tracked = await fixture.Context.Meeting.SingleAsync(x => x.Id == meeting.Id);
+        tracked.DraftContent = content;
+        tracked.DraftPromptTemplateName = "舊提示詞";
+        tracked.DraftAttendees = TagStringHelper.ToStored(["王小明"]);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        return meeting;
+    }
+
+    [Fact]
+    public async Task UpdateDraftAsync_ShouldKeepPreviousContentAsVersion_OnlyWhenChanged()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await AddMeetingWithDraftAsync(fixture, "第一版");
+        var service = fixture.CreateService();
+
+        Assert.True((await service.UpdateDraftAsync(meeting.Id, "第二版")).Success);
+        Assert.True((await service.UpdateDraftAsync(meeting.Id, "第二版")).Success); // 內容沒變：不留版
+
+        var version = Assert.Single(await fixture.Context.MeetingDraftVersion.AsNoTracking().ToListAsync());
+        Assert.Equal("第一版", version.Content);
+        Assert.Equal(MeetingDraftVersionReasons.Edit, version.Reason);
+        Assert.Equal("舊提示詞", version.PromptTemplateName);
+    }
+
+    [Fact]
+    public async Task RequestDraftAsync_ShouldKeepOldContentWithItsOwnPromptName()
+    {
+        // 舊版要帶它自己的提示詞：留版必須在改寫 DraftPromptTemplateName 之前。
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var template = await fixture.AddPromptTemplateAsync("新提示詞");
+        var meeting = await AddMeetingWithDraftAsync(fixture, "舊的會議紀錄");
+
+        var result = await fixture.CreateService().RequestDraftAsync(meeting.Id, null, template.Id, []);
+
+        Assert.True(result.Success, result.Message);
+        var version = Assert.Single(await fixture.Context.MeetingDraftVersion.AsNoTracking().ToListAsync());
+        Assert.Equal("舊的會議紀錄", version.Content);
+        Assert.Equal("舊提示詞", version.PromptTemplateName);
+        Assert.Equal(MeetingDraftVersionReasons.Regenerate, version.Reason);
+    }
+
+    [Fact]
+    public async Task DraftVersions_ShouldKeepAtMostTwentyPerMeeting()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await AddMeetingWithDraftAsync(fixture, "第 0 版");
+        var service = fixture.CreateService();
+
+        for (var i = 1; i <= MeetingDraftVersion.MaxPerMeeting + 2; i++)
+        {
+            Assert.True((await service.UpdateDraftAsync(meeting.Id, $"第 {i} 版")).Success);
+        }
+
+        var versions = await fixture.Context.MeetingDraftVersion.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
+        Assert.Equal(MeetingDraftVersion.MaxPerMeeting, versions.Count);
+        Assert.Equal("第 2 版", versions[0].Content); // 最舊的兩份（第 0、1 版）被刪掉
+    }
+
+    [Fact]
+    public async Task RestoreDraftVersionAsync_ShouldSwapContentAndKeepCurrentAsVersion()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await AddMeetingWithDraftAsync(fixture, "原本");
+        var service = fixture.CreateService();
+        await service.UpdateDraftAsync(meeting.Id, "改過");
+        var original = await fixture.Context.MeetingDraftVersion.AsNoTracking().SingleAsync();
+
+        var result = await service.RestoreDraftVersionAsync(meeting.Id, original.Id);
+
+        Assert.True(result.Success, result.Message);
+        var saved = await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == meeting.Id);
+        Assert.Equal("原本", saved.DraftContent);
+        var versions = await service.GetDraftVersionsAsync(meeting.Id);
+        Assert.NotNull(versions);
+        Assert.Equal(2, versions!.Count);
+        Assert.Equal("還原前", versions[0].ReasonText);
+        Assert.Equal("改過", (await service.GetDraftVersionAsync(meeting.Id, versions[0].Id))!.Content);
+        Assert.Contains(await ReadAuditsAsync(fixture), x => x.Action == AuditActions.MeetingDraftRestore);
+    }
+
+    [Fact]
+    public async Task RestoreDraftVersionAsync_ShouldRejectWhileGeneratingOrArchived()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案");
+        var meeting = await AddMeetingWithDraftAsync(fixture, "原本", project.Id);
+        var service = fixture.CreateService(isAdmin: false, (await fixture.AddUserAsync("member")).Id);
+        await fixture.CreateService().UpdateDraftAsync(meeting.Id, "改過");
+        var versionId = (await fixture.Context.MeetingDraftVersion.AsNoTracking().SingleAsync()).Id;
+
+        await fixture.Context.Meeting.Where(x => x.Id == meeting.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.DraftStatus, DraftStatus.Pending));
+        Assert.False((await fixture.CreateService().RestoreDraftVersionAsync(meeting.Id, versionId)).Success);
+
+        // 看不到的會議（不是專案團隊成員）：當成不存在，也不能還原。
+        await fixture.Context.Meeting.Where(x => x.Id == meeting.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.DraftStatus, DraftStatus.Completed));
+        Assert.Null(await service.GetDraftVersionsAsync(meeting.Id));
+        Assert.False((await service.RestoreDraftVersionAsync(meeting.Id, versionId)).Success);
+
+        await fixture.Context.Project.Where(x => x.Id == project.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, MeetingRecord.Models.AdapterModel.ProjectAdapterModel.ArchivedStatus));
+        var memberId = (await fixture.AddUserAsync("member2")).Id;
+        await fixture.AddMemberAsync(project.Id, memberId);
+        var archived = await fixture.CreateService(isAdmin: false, memberId).RestoreDraftVersionAsync(meeting.Id, versionId);
+        Assert.False(archived.Success);
+        Assert.Contains("封存", archived.Message);
+        Assert.Equal("改過", (await fixture.Context.Meeting.AsNoTracking().SingleAsync(x => x.Id == meeting.Id)).DraftContent);
+    }
+
+    [Fact]
+    public async Task DetachFromProjectAsync_ShouldDeleteDraftVersions()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var project = await fixture.AddProjectAsync("專案");
+        var meeting = await AddMeetingWithDraftAsync(fixture, "原本", project.Id);
+        var service = fixture.CreateService();
+        await service.UpdateDraftAsync(meeting.Id, "改過");
+
+        Assert.True((await service.DetachFromProjectAsync(meeting.Id, project.Id)).Success);
+
+        Assert.Empty(await fixture.Context.MeetingDraftVersion.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldDeleteDraftVersionsAndSpeakerClips()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await AddMeetingWithDraftAsync(fixture, "原本");
+        var clip = fixture.WriteTranscriptFile("2026/11/clip_spk1.wav", "wav");
+        await fixture.Context.Meeting.Where(x => x.Id == meeting.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.SpeakerClips, $"{{\"1\":\"{clip}\"}}"));
+        var service = fixture.CreateService();
+        await service.UpdateDraftAsync(meeting.Id, "改過");
+
+        Assert.True((await service.DeleteAsync(meeting.Id)).Success);
+
+        Assert.Empty(await fixture.Context.MeetingDraftVersion.AsNoTracking().ToListAsync());
+        Assert.False(File.Exists(Path.Combine(fixture.TranscriptRoot, "2026", "11", "clip_spk1.wav")));
+    }
+
+    [Fact]
+    public async Task GetSpeakerClipPathAsync_ShouldOnlyReturnExistingClipsOfVisibleMeetings()
+    {
+        await using var fixture = await MeetingServiceFixture.CreateAsync();
+        var meeting = await fixture.AddCompletedMeetingAsync("需求會議");
+        var clip = fixture.WriteTranscriptFile("2026/11/visible_spk1.wav", "wav");
+        var tracked = await fixture.Context.Meeting.SingleAsync(x => x.Id == meeting.Id);
+        tracked.TranscriptRelativePath = fixture.WriteTranscriptFile("2026/11/visible.txt", "講者 1：大家好\n講者 2：開始吧");
+        tracked.SpeakerClips = $"{{\"1\":\"{clip}\"}}";
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var service = fixture.CreateService();
+
+        Assert.NotNull(await service.GetSpeakerClipPathAsync(meeting.Id, "1"));
+        Assert.Null(await service.GetSpeakerClipPathAsync(meeting.Id, "2"));
+        var speakers = (await service.GetSpeakersAsync(meeting.Id))!.Speakers;
+        Assert.True(speakers.Single(x => x.Label == "1").HasClip);
+        Assert.False(speakers.Single(x => x.Label == "2").HasClip);
+
+        // 未歸屬專案的會議只有上傳者看得到：別人拿不到片段。
+        var outsider = (await fixture.AddUserAsync("outsider")).Id;
+        Assert.Null(await fixture.CreateService(isAdmin: false, outsider).GetSpeakerClipPathAsync(meeting.Id, "1"));
+    }
+
+    #endregion
+
     /// <summary>草稿編修只記字數，不記內容（會議紀錄全文）。</summary>
     [Fact]
     public async Task Audit_DraftUpdate_ShouldRecordLengthOnly()

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using MeetingRecord.Dtos.Uploads;
 using MeetingRecord.Web.Client.Api;
+using MeetingRecord.Web.Services;
 
 namespace MeetingRecord.Web.Client.Uploads;
 
@@ -63,15 +64,45 @@ public sealed class MeetingUploadManager
     /// 建立工作階段被擋下時回原因（呼叫端再補上「會議資料已保留」）；開始了回 null。
     /// </summary>
     /// <param name="autoDraftPromptTemplateId">1.1.69：轉錄完自動產生會議紀錄要用的提示詞；null＝不自動產生。</param>
-    public async Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null)
+    public Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null)
+        => StartCoreAsync(
+            file.Name,
+            file.ContentType,
+            file.Size,
+            (uploadId, chunkSize, callback) => js.InvokeVoidAsync("meetingRecordChunkUpload.start", input, 0, file.Name, file.Size, uploadId, chunkSize, callback),
+            meetingId,
+            deleteMeetingOnCancel,
+            autoDraftPromptTemplateId);
+
+    /// <summary>
+    /// 1.1.71：上傳瀏覽器錄好的聲音（本體在 JS 端，<c>media-recorder.js</c>）。其餘同 <see cref="StartAsync"/>。
+    /// </summary>
+    public Task<string?> StartRecordingAsync(RecordedAudio audio, string fileName, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null)
+        => StartCoreAsync(
+            fileName,
+            audio.MimeType,
+            audio.Size,
+            (uploadId, chunkSize, callback) => js.InvokeVoidAsync("meetingRecordChunkUpload.startRecorded", audio.Key, fileName, audio.Size, uploadId, chunkSize, callback),
+            meetingId,
+            deleteMeetingOnCancel,
+            autoDraftPromptTemplateId);
+
+    private async Task<string?> StartCoreAsync(
+        string fileName,
+        string contentType,
+        long size,
+        Func<string, int, DotNetObjectReference<ChunkUploadCallback>, ValueTask> startInBrowser,
+        int meetingId,
+        bool deleteMeetingOnCancel,
+        int? autoDraftPromptTemplateId)
     {
         var created = await api.CreateAsync(new UploadSessionRequestDto
         {
             Purpose = UploadPurposes.MeetingMedia,
             MeetingId = meetingId,
-            FileName = file.Name,
-            ContentType = file.ContentType,
-            Size = file.Size,
+            FileName = fileName,
+            ContentType = contentType,
+            Size = size,
             DeleteMeetingOnCancel = deleteMeetingOnCancel,
             AutoDraftPromptTemplateId = autoDraftPromptTemplateId,
         });
@@ -90,7 +121,7 @@ public sealed class MeetingUploadManager
 
         try
         {
-            await js.InvokeVoidAsync("meetingRecordChunkUpload.start", input, 0, file.Name, file.Size, session.UploadId.ToString(), session.ChunkSize, upload.Callback);
+            await startInBrowser(session.UploadId.ToString(), session.ChunkSize, upload.Callback!);
         }
         catch (JSException ex)
         {

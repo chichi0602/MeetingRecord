@@ -168,6 +168,11 @@ else
                         {
                             <CrudActionButton Title="取消上傳" Icon="cancel" Danger OnClick="@(() => OnCancelUploadAsync(IdOf(context)))" />
                         }
+                        else if (CanEdit && GetLiveProgress(IdOf(context)) is { CanBeCancelled: true } otherTabUpload)
+                        {
+                            @* 1.1.71：別的分頁發起的上傳，面板關掉後也要能從清單取消（走面板同一支取消 API）。 *@
+                            <CrudActionButton Title="取消上傳" Icon="cancel" Danger OnClick="@(() => OnCancelJobAsync(context, otherTabUpload))" />
+                        }
                         else
                         {
                             <span class="meeting-view-row-locked">上傳中</span>
@@ -176,6 +181,14 @@ else
                     else
                     {
                     <Space>
+                        @* 1.1.71：轉錄中、產生中也能從清單取消，不必靠右下角面板（面板關掉後就沒有別的入口）。 *@
+                        @if (CanEdit && (GetLiveProgress(IdOf(context)) ?? GetLiveDraftProgress(IdOf(context))) is { CanBeCancelled: true } runningJob)
+                        {
+                            <SpaceItem>
+                                <CrudActionButton Title="@CancelJobTitle(runningJob)" Icon="cancel" Danger
+                                                  OnClick="@(() => OnCancelJobAsync(context, runningJob))" />
+                            </SpaceItem>
+                        }
                         @* 1.0.40 起只有這一顆：檢視、編修、逐字稿（看／複製／下載）都在視窗裡。
                            以前「檢視」「編修」兩顆並排、圖示又像，使用者覺得操作欄太雜。 *@
                         @if (context.HasDraft || context.HasTranscript)
@@ -302,7 +315,7 @@ else
                             <FileDropZone @ref="mediaDropZone"
                                           OnChange="OnMediaFileSelectedAsync"
                                           Accept="@MeetingMediaPolicy.AcceptAttribute"
-                                          Disabled="@(IsFormLocked || !CanChangeMedia)"
+                                          Disabled="@(IsFormLocked || !CanChangeMedia || isRecording)"
                                           Title="把影音檔拖到這裡，或點擊選擇檔案（一次一個）">
                                 @* 「一次一個」要寫出來：單檔模式下一次拖入多個檔案，Chrome 會整個靜默拒絕——
                                    不觸發 change、不報錯，使用者只會覺得「拖進去沒反應」。 *@
@@ -314,6 +327,29 @@ else
                             {
                                 <div class="meeting-view-upload-hint">只有上傳者或管理者可以更換影音檔；其他欄位可以照常修改。</div>
                             }
+                            else if (!IsFormLocked)
+                            {
+                                @* 1.1.71：沒有錄音檔就直接用電腦的麥克風錄，錄好當成選好的檔案。 *@
+                                <div class="meeting-view-recorder">
+                                    @if (isRecording)
+                                    {
+                                        <span class="meeting-view-recording-dot"></span>
+                                        <span class="meeting-view-recording-time">錄音中 @RecordingElapsedText</span>
+                                        <Button Danger Disabled="@isTogglingRecording" OnClick="StopRecordingAsync">停止錄音</Button>
+                                        <span class="meeting-view-upload-hint">錄音時請不要關閉這個視窗或分頁。</span>
+                                    }
+                                    else if (pendingRecording is null)
+                                    {
+                                        <Button Disabled="@isTogglingRecording" OnClick="StartRecordingAsync">
+                                            <span class="btn-icon-label">
+                                                <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="mic" />
+                                                <span>錄音</span>
+                                            </span>
+                                        </Button>
+                                        <span class="meeting-view-upload-hint">沒有錄音檔？直接用電腦的麥克風錄（第一次會請你允許使用麥克風）。</span>
+                                    }
+                                </div>
+                            }
 
                             @if (pendingMediaFile is not null)
                             {
@@ -324,6 +360,21 @@ else
                                         <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="ClearPendingMediaFile">移除</button>
                                     }
                                 </div>
+                            }
+                            else if (pendingRecording is not null)
+                            {
+                                <div class="meeting-view-pending-file">
+                                    待上傳：@pendingRecordingName（@FormatRecordingSeconds(pendingRecordingSeconds)，@MeetingMediaPolicy.FormatFileSize(pendingRecording.Size)）
+                                    @if (!IsFormLocked)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" @onclick="RerecordAsync">重錄</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="RemovePendingRecording">移除</button>
+                                    }
+                                </div>
+                            }
+
+                            @if (HasPendingMedia)
+                            {
 
                                 @* 1.1.69：轉錄完自動產生會議紀錄。逐字稿有講者 1～4 時先請使用者標示講者，存檔時才產生（只付一次費用）。
                                    SelectOption 子元素理由同其他下拉（DataSource 重新指派時可能畫面空白卻帶著值）。 *@
@@ -527,13 +578,23 @@ else
                          OnDownloadTranscript="OnDownloadTranscriptAsync"
                          CanNameSpeakers="@draftCanNameSpeakers"
                          OnNameSpeakers="@(() => speakerModalVisible = true)"
+                         CanViewVersions="@(draftMeeting?.HasDraft == true)"
+                         OnShowVersions="@(() => draftVersionsVisible = true)"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
+
+    @* 1.1.71：會議紀錄的舊版（重新產生、編修、還原前留下的）。 *@
+    <DraftVersionsModal @bind-Visible="draftVersionsVisible"
+                        Load="@(() => MeetingApi.GetDraftVersionsAsync(draftMeetingId))"
+                        LoadDetail="@(versionId => MeetingApi.GetDraftVersionAsync(draftMeetingId, versionId))"
+                        Restore="@DraftRestore"
+                        OnRestored="OnDraftVersionRestoredAsync" />
 
     @* 1.1.64：逐字稿的「標示講者」。 *@
     <SpeakerNamingModal @bind-Visible="speakerModalVisible"
                         Load="@(() => MeetingApi.GetSpeakersAsync(draftMeetingId))"
                         Save="@((names, generate) => MeetingApi.UpdateSpeakersAsync(draftMeetingId, names, generate))"
+                        ClipUrl="@(label => MeetingApi.SpeakerClipUrl(draftMeetingId, label))"
                         OnSaved="OnSpeakersSavedAsync" />
 
     <AiChatModal @bind-Visible="aiChatVisible"

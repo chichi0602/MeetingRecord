@@ -31,6 +31,26 @@ public sealed class MediaDurationParserTests
     }
 
     [Fact]
+    public void TryParseLastProgressTime_ShouldReadFinalStatsLine_WhenHeaderHasNoDuration()
+    {
+        // 1.1.71：瀏覽器 MediaRecorder 錄的 webm 檔頭沒有長度。實測（FFmpeg 9.0.1，-nostats）輸出，一字不改。
+        const string output = """
+            Input #0, matroska,webm, from 't.webm':
+              Duration: N/A, start: 0.000000, bitrate: N/A
+            [Parsed_silencedetect_0 @ 000001] silence_start: 3.2
+            size=N/A time=00:00:07.00 bitrate=N/A speed= 367x elapsed=0:00:00.01
+            """;
+
+        Assert.Null(MediaDurationParser.TryParseDuration(output));
+        var duration = MediaDurationParser.TryParseLastProgressTime(output);
+
+        Assert.NotNull(duration);
+        Assert.Equal(7, duration.Value.TotalSeconds, precision: 2);
+        Assert.Null(MediaDurationParser.TryParseLastProgressTime("Duration: N/A"));
+        Assert.Null(MediaDurationParser.TryParseLastProgressTime("size=N/A time=00:00:00.00 bitrate=N/A"));
+    }
+
+    [Fact]
     public void TryParseDuration_ShouldNotRequireStartField()
     {
         // ⚠️ 這一筆守的是實測發現：真實輸出**沒有 start: 欄位**。

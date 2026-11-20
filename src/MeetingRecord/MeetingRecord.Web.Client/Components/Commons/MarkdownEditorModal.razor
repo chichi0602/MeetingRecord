@@ -207,6 +207,16 @@
                 </span>
             </Button>
         }
+        @* 1.1.71：重新產生、編修、還原前留下的舊版。 *@
+        @if (!CanEdit && !IsTranscriptTabActive && CanViewVersions && !string.IsNullOrWhiteSpace(editingText))
+        {
+            <Button OnClick="@(() => OnShowVersions.InvokeAsync())">
+                <span class="btn-icon-label">
+                    <MaterialIcon Theme="MaterialIcon.Themes.Outlined" Kind="history" />
+                    <span>版本紀錄</span>
+                </span>
+            </Button>
+        }
         @if (!CanEdit && !IsTranscriptTabActive && CanGenerate && !string.IsNullOrWhiteSpace(editingText))
         {
             <Button OnClick="OnGenerateAsync">

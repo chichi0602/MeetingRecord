@@ -110,6 +110,13 @@ public class MeetingService
         return new MeetingJobRequest(meetingId, userId, userName);
     }
 
+    /// <summary>1.1.71：留一份目前的會議紀錄（經 <see cref="MeetingDraftVersionRecorder"/>），記下是誰造成這次覆蓋。</summary>
+    private Task<bool> SnapshotDraftAsync(Meeting meeting, string reason, CancellationToken cancellationToken)
+    {
+        var (userId, userName) = AiUsageAttribution.Resolve(currentUserService.CurrentUser, callerProvider);
+        return MeetingDraftVersionRecorder.SnapshotAsync(context, meeting, reason, userId, userName, cancellationToken);
+    }
+
     #region 查詢
 
     public async Task<DataRequestResult<MeetingAdapterModel>> GetAsync(DataRequest dataRequest)
@@ -383,6 +390,7 @@ public class MeetingService
             // 1.1.69：同理，這三個在 AdapterModel 上沒有（或不該由表單改），不沿用就會被清掉。
             // SpeakerNames 是 1.1.64 漏掉的——改個標題就把標示好的講者名字清光。
             itemData.SpeakerNames = item.SpeakerNames;
+            itemData.SpeakerClips = item.SpeakerClips;
             itemData.AutoDraftPromptTemplateId = item.AutoDraftPromptTemplateId;
             itemData.AwaitingSpeakerNames = item.AwaitingSpeakerNames;
 
@@ -464,6 +472,7 @@ public class MeetingService
 
             var mediaRelativePath = item.MediaRelativePath;
             var transcriptRelativePath = item.TranscriptRelativePath;
+            var speakerClips = TranscriptSpeakerLabels.ParseNames(item.SpeakerClips).Values.ToList();
 
             CleanTrackingHelper.Clean<Meeting>(context);
             context.Entry(item).State = EntityState.Deleted;
@@ -472,6 +481,7 @@ public class MeetingService
 
             fileStore.TryDeleteMedia(mediaRelativePath);
             fileStore.TryDeleteTranscript(transcriptRelativePath);
+            fileStore.TryDeleteSpeakerClips(speakerClips);
 
             // 0.4.60 起對話存在檔案系統，資料表已移除，Cascade 不會再幫我們清掉它。
             chatStore.TryDelete(AiChatScope.Meeting, id);
@@ -641,6 +651,7 @@ public class MeetingService
 
             var previousMediaRelativePath = meeting.MediaRelativePath;
             var previousTranscriptRelativePath = meeting.TranscriptRelativePath;
+            var previousSpeakerClips = TranscriptSpeakerLabels.ParseNames(meeting.SpeakerClips).Values.ToList();
 
             // 上傳進度也寫進共用通知器（0.4.117）：同一個帳號的其他頁籤、瀏覽器、電腦，
             // 以及看得到這筆會議的其他人，右下角面板與清單都看得到「上傳中 xx%」。
@@ -673,6 +684,7 @@ public class MeetingService
             meeting.MediaFileSize = stored.FileSize;
             meeting.MediaDurationSeconds = null;
             meeting.TranscriptRelativePath = null;
+            meeting.SpeakerClips = null;
             meeting.TranscriptionStatus = TranscriptionStatus.Pending;
             meeting.TranscriptionError = null;
             meeting.TranscriptionStartedAt = null;
@@ -699,6 +711,7 @@ public class MeetingService
             // 新檔案登錄成功後才清掉舊的影音檔與逐字稿。
             fileStore.TryDeleteMedia(previousMediaRelativePath);
             fileStore.TryDeleteTranscript(previousTranscriptRelativePath);
+            fileStore.TryDeleteSpeakerClips(previousSpeakerClips);
 
             // 先登錄進度再入列：背景工作要等輪到才會知道這件事，先登錄畫面才立刻看得到「排隊中」。
             // 1.1.68：入列前清掉這筆殘留的取消標記（工作剛結束時按取消會留下），否則這一趟會被無聲取消。
@@ -1116,6 +1129,9 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, "這筆逐字稿正在產生會議紀錄，請等結束後再移除。");
             }
 
+            // 1.1.71：會議紀錄清掉了，舊版也一起刪（會議回到只有上傳者看得到，留著等於把專案的內容帶走）。
+            context.MeetingDraftVersion.RemoveRange(context.MeetingDraftVersion.Where(x => x.MeetingId == meetingId));
+
             var detachedProjectId = meeting.ProjectId;
             meeting.ProjectId = null;
             meeting.DraftContent = null;
@@ -1257,6 +1273,9 @@ public class MeetingService
                 return VerifyRecordResultFactory.Build(false, quotaMessage);
             }
 
+            // 1.1.71：要改寫提示詞與與會人員之前先留版，舊版才帶得到它自己的提示詞。
+            await SnapshotDraftAsync(meeting, MeetingDraftVersionReasons.Regenerate, cancellationToken);
+
             meeting.ProjectId = effectiveProjectId;
             meeting.DraftPromptTemplateId = template.Id;
             meeting.DraftPromptTemplateName = template.Name;
@@ -1374,6 +1393,7 @@ public class MeetingService
 
         var text = await fileStore.ReadTranscriptAsync(source.TranscriptRelativePath, cancellationToken);
         var names = TranscriptSpeakerLabels.ParseNames(source.SpeakerNames);
+        var clips = TranscriptSpeakerLabels.ParseNames(source.SpeakerClips);
 
         return new MeetingRecord.Dtos.Meetings.MeetingSpeakersDto
         {
@@ -1383,12 +1403,29 @@ public class MeetingService
                     Label = label,
                     Name = names.GetValueOrDefault(label),
                     Samples = TranscriptSpeakerLabels.SampleLines(text, label).ToList(),
+                    HasClip = clips.ContainsKey(label),
                 })
                 .ToList(),
             Participants = TagStringHelper.ToList(source.Participants),
             HasSegmentLabels = TranscriptSpeakerLabels.HasSegmentLabels(text),
             CanGenerate = source.CanGenerate,
         };
+    }
+
+    /// <summary>
+    /// 1.1.71：某位講者試聽片段的實體路徑。看不到的會議、沒有這位講者或檔案不在都回 null（API 回 404）。
+    /// </summary>
+    public async Task<string?> GetSpeakerClipPathAsync(int meetingId, string label, CancellationToken cancellationToken = default)
+    {
+        var source = await FindTranscriptSourceAsync(meetingId, cancellationToken);
+        if (source is null)
+        {
+            return null;
+        }
+
+        return TranscriptSpeakerLabels.ParseNames(source.SpeakerClips).TryGetValue(label, out var relativePath)
+            ? fileStore.FindSpeakerClipFullPath(relativePath)
+            : null;
     }
 
     /// <summary>
@@ -1501,7 +1538,7 @@ public class MeetingService
         }
     }
 
-    private sealed record TranscriptSource(string? TranscriptRelativePath, string? SpeakerNames, string? Participants, bool CanGenerate = false);
+    private sealed record TranscriptSource(string? TranscriptRelativePath, string? SpeakerNames, string? Participants, bool CanGenerate = false, string? SpeakerClips = null);
 
     private async Task<TranscriptSource?> FindTranscriptSourceAsync(int meetingId, CancellationToken cancellationToken)
     {
@@ -1515,7 +1552,8 @@ public class MeetingService
                 x.TranscriptRelativePath,
                 x.SpeakerNames,
                 x.Project == null ? null : x.Project.Participants,
-                x.AwaitingSpeakerNames && x.AutoDraftPromptTemplateId != null))
+                x.AwaitingSpeakerNames && x.AutoDraftPromptTemplateId != null,
+                x.SpeakerClips))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -1534,6 +1572,140 @@ public class MeetingService
             .ToListAsync(cancellationToken);
 
         return MapWithProjectTitle(items);
+    }
+
+    /// <summary>1.1.71：會議紀錄的舊版清單（新到舊）。看不到的會議回 null。</summary>
+    public async Task<List<MeetingRecord.Dtos.Meetings.MeetingDraftVersionDto>?> GetDraftVersionsAsync(
+        int meetingId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await CanViewMeetingAsync(meetingId, cancellationToken))
+        {
+            return null;
+        }
+
+        var versions = await context.MeetingDraftVersion.AsNoTracking()
+            .Where(x => x.MeetingId == meetingId)
+            .OrderByDescending(x => x.SavedAt)
+            .ThenByDescending(x => x.Id)
+            .Select(x => new MeetingRecord.Dtos.Meetings.MeetingDraftVersionDto
+            {
+                Id = x.Id,
+                SavedAt = x.SavedAt,
+                ReasonText = x.Reason,
+                PromptTemplateName = x.PromptTemplateName,
+                SavedByName = x.SavedByName,
+                ContentAt = x.ContentAt,
+                Length = x.Content.Length,
+            })
+            .ToListAsync(cancellationToken);
+
+        versions.ForEach(x => x.ReasonText = MeetingDraftVersionReasons.ToText(x.ReasonText));
+        return versions;
+    }
+
+    /// <summary>1.1.71：某一份舊版的內容。看不到的會議或不屬於這場會議的版本回 null。</summary>
+    public async Task<MeetingRecord.Dtos.Meetings.MeetingDraftVersionDetailDto?> GetDraftVersionAsync(
+        int meetingId,
+        int versionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await CanViewMeetingAsync(meetingId, cancellationToken))
+        {
+            return null;
+        }
+
+        var version = await context.MeetingDraftVersion.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == versionId && x.MeetingId == meetingId, cancellationToken);
+        return version is null
+            ? null
+            : new MeetingRecord.Dtos.Meetings.MeetingDraftVersionDetailDto
+            {
+                Id = version.Id,
+                SavedAt = version.SavedAt,
+                ReasonText = MeetingDraftVersionReasons.ToText(version.Reason),
+                PromptTemplateName = version.PromptTemplateName,
+                SavedByName = version.SavedByName,
+                ContentAt = version.ContentAt,
+                Length = version.Content.Length,
+                Content = version.Content,
+                Attendees = TagStringHelper.ToList(version.Attendees),
+            };
+    }
+
+    /// <summary>
+    /// 1.1.71：還原成某一份舊版。目前的內容先留一版（原因「還原前」），再換成那一版的內容、提示詞與與會人員。
+    /// 檢查比照 <see cref="UpdateDraftAsync"/>：資料範圍、封存唯讀、產生中不能還原。
+    /// </summary>
+    public async Task<VerifyRecordResult> RestoreDraftVersionAsync(
+        int meetingId,
+        int versionId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            CleanTrackingHelper.Clean<Meeting>(context);
+            var meeting = await context.Meeting.FirstOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+            if (meeting is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到要還原的會議紀錄。");
+            }
+
+            var access = await projectAccess.GetAsync();
+            if (!access.CanViewMeeting(meeting.ProjectId, meeting.CreatedByUserId))
+            {
+                Logger.LogWarning("Draft restore denied by project access. MeetingId={MeetingId}", meetingId);
+                await AuditDataScopeDeniedAsync(nameof(Meeting), meetingId, "DraftRestore");
+                return VerifyRecordResultFactory.Build(false, "沒有權限修改這筆會議紀錄。");
+            }
+
+            if (await ProjectArchiveRules.CheckWritableAsync(context, meeting.ProjectId, access) is { } archivedError)
+            {
+                return VerifyRecordResultFactory.Build(false, archivedError);
+            }
+
+            if (meeting.DraftStatus is DraftStatus.Processing or DraftStatus.Pending)
+            {
+                return VerifyRecordResultFactory.Build(false, "這筆會議紀錄正在產生中，請等結束後再還原。");
+            }
+
+            var version = await context.MeetingDraftVersion.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == versionId && x.MeetingId == meetingId, cancellationToken);
+            if (version is null)
+            {
+                return VerifyRecordResultFactory.Build(false, "找不到這個版本，可能已經超過保留份數被刪除。");
+            }
+
+            await SnapshotDraftAsync(meeting, MeetingDraftVersionReasons.Restore, cancellationToken);
+
+            meeting.DraftContent = version.Content;
+            meeting.DraftPromptTemplateName = version.PromptTemplateName;
+            meeting.DraftAttendees = version.Attendees;
+            meeting.DraftStatus = DraftStatus.Completed;
+            meeting.DraftError = null;
+            meeting.UpdatedAt = DateTime.Now;
+            await context.SaveChangesAsync(cancellationToken);
+            CleanTrackingHelper.Clean<Meeting>(context);
+            CleanTrackingHelper.Clean<MeetingDraftVersion>(context);
+
+            await AuditAsync(AuditActions.MeetingDraftRestore, meetingId, $"title={meeting.Title}; versionId={versionId}; savedAt={version.SavedAt:yyyy/MM/dd HH:mm}");
+            Logger.LogInformation("Meeting draft restored. MeetingId={MeetingId}, VersionId={VersionId}", meetingId, versionId);
+            return VerifyRecordResultFactory.Build(true);
+        }
+        catch (Exception ex)
+        {
+            context.ChangeTracker.Clear();
+            Logger.LogError(ex, "Failed to restore meeting draft. MeetingId={MeetingId}, VersionId={VersionId}", meetingId, versionId);
+            return VerifyRecordResultFactory.Build(false, "還原失敗，請稍後再試。", ex);
+        }
+    }
+
+    /// <summary>看得到這場會議嗎（套資料範圍，看不到的當成不存在）。</summary>
+    private async Task<bool> CanViewMeetingAsync(int meetingId, CancellationToken cancellationToken)
+    {
+        IQueryable<Meeting> dataSource = context.Meeting.AsNoTracking().Where(x => x.Id == meetingId);
+        dataSource = (await projectAccess.GetAsync()).Filter(dataSource);
+        return await dataSource.AnyAsync(cancellationToken);
     }
 
     /// <summary>人工編修 AI 產生的會議紀錄草稿。</summary>
@@ -1568,6 +1740,12 @@ public class MeetingService
             if (meeting.DraftStatus == DraftStatus.Processing)
             {
                 return VerifyRecordResultFactory.Build(false, "這筆會議紀錄正在重新產生中，請稍候再編修。");
+            }
+
+            // 1.1.71：內容有變才留版。
+            if (!string.Equals(meeting.DraftContent, content, StringComparison.Ordinal))
+            {
+                await SnapshotDraftAsync(meeting, MeetingDraftVersionReasons.Edit, cancellationToken);
             }
 
             meeting.DraftContent = content;

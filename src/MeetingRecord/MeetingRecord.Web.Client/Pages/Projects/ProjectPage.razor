@@ -765,13 +765,23 @@ else
                          OnNameSpeakers="@(() => speakerModalVisible = true)"
                          CanShare="true"
                          OnShare="@(() => OnShareMeetingAsync(draftMeetingId))"
+                         CanViewVersions="@(draftMeeting?.HasDraft == true)"
+                         OnShowVersions="@(() => draftVersionsVisible = true)"
                          OnExport="OnExportCurrentDraftAsync"
                          OnSave="OnDraftSavedAsync" />
+
+    @* 1.1.71：會議紀錄的舊版（重新產生、編修、還原前留下的）。 *@
+    <DraftVersionsModal @bind-Visible="draftVersionsVisible"
+                        Load="@(() => ProjectApi.GetDraftVersionsAsync(selectedProjectId, draftMeetingId))"
+                        LoadDetail="@(versionId => ProjectApi.GetDraftVersionAsync(selectedProjectId, draftMeetingId, versionId))"
+                        Restore="@DraftRestore"
+                        OnRestored="OnDraftVersionRestoredAsync" />
 
     @* 1.1.64：逐字稿的「標示講者」，名字欄位可從這個專案的與會人員名冊挑。 *@
     <SpeakerNamingModal @bind-Visible="speakerModalVisible"
                         Load="@(() => ProjectApi.GetSpeakersAsync(selectedProjectId, draftMeetingId))"
                         Save="@((names, generate) => ProjectApi.UpdateSpeakersAsync(selectedProjectId, draftMeetingId, names, generate))"
+                        ClipUrl="@(label => ProjectApi.SpeakerClipUrl(selectedProjectId, draftMeetingId, label))"
                         OnSaved="OnSpeakersSavedAsync" />
 
     <Modal Title="@("專案附件")"

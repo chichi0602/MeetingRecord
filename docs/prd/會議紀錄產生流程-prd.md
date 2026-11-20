@@ -1,10 +1,10 @@
 ﻿# 會議紀錄產生流程 PRD
 
-- 文件版本：3.17
+- 文件版本：3.18
 - 文件狀態：已實作
-- 現行系統版本：1.1.69
+- 現行系統版本：1.1.71
 - 首次實作版本：0.4.27（前半段：上傳 → 轉錄 → 逐字稿）／0.4.31（後半段：提示詞 → LLM → 會議紀錄）
-- 最後核對日期：2026/11/17
+- 最後核對日期：2026/11/18
 
 > 本文件描述**跨越多個版本的完整流程**。0.4.27 完成前半段（音檔上傳 → 轉錄 → 逐字稿），詳見 [會議紀錄 PRD](會議紀錄-prd.md)；0.4.31 完成後半段（套用提示詞 → LLM → 會議紀錄），入口在 [專案項目 PRD](專案項目-prd.md) 描述的 `/projects` 頁面。
 
@@ -140,6 +140,7 @@
 3. `MeetingDraftBackgroundService`（**與轉錄各自獨立的第二條佇列與 worker**）取件，在自己的 DI scope 內執行 `MeetingDraftJobRunner`。
 4. Job runner 讀逐字稿 → `TranscriptChunker.Split` → 多段時逐段摘要（map）→ `PromptVariableHelper.Render` 代入提示詞 → 呼叫 LLM（reduce）→ 寫入 `DraftContent`、狀態轉 `Completed`。 **0.4.71 起**在最前面多一段「專有名詞與人名對照」：由 `NameGuidancePromptHelper.Build` 以專案的 `GlossaryTerms`（即時撈，不快照）與 `Meeting.DraftAttendees`（本次快照）組成，**map 與 reduce 兩階段都注入**——只注入 reduce 的話，長逐字稿的人名在分段摘要時就已經被壓縮掉了。兩份清單都空時回傳空字串，提示詞與 0.4.70 之前逐字元相同。
    **1.0.29 起**所有呼叫經 `AiCallGateway`，記進 AI 對話紀錄（關聯說明「會議 #N〈標題〉分段摘要 i/n」與「會議 #N〈標題〉會議紀錄」）。工作開始時先以 `AdmitAsync` 檢查一次 AI 用量上限：被擋就轉 `Failed`，`DraftError` 寫「已達 AI 用量上限（…），M/d 起恢復；如需提高上限請聯絡系統管理員。」，之後可重新產生；通過後各段不再檢查，一旦開始就做完。
+   **1.1.71 起**覆蓋前先留版：`RequestDraftAsync`／`AutoDraftStarter` 在改寫提示詞與與會人員之前，經 `MeetingDraftVersionRecorder` 把目前的會議紀錄留到 `MeetingDraftVersion`（每場最多 20 份）。runner 寫入 `DraftContent` 時舊內容早已留好，失敗或取消時內容沒變，下次也不會重複留。詳見 [會議紀錄 PRD](會議紀錄-prd.md)「會議紀錄保留舊版」。
 5. 失敗一律轉 `Failed` 並寫入 `DraftError`（存失敗狀態時不帶已取消的 `CancellationToken`）。應用程式重啟會把殘留的「生成中」改判為「失敗」。
 
 佇列刻意與轉錄分開：轉錄一筆可能跑數十分鐘，共用單一 worker 會讓草稿生成被長音檔堵住。

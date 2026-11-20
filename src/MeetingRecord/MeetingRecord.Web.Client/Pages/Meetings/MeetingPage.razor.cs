@@ -743,6 +743,13 @@ public partial class MeetingPage : IDisposable
             return;
         }
 
+        // 1.1.71：錄音中按確定——還沒有檔案可以上傳，先請使用者停止錄音。
+        if (isRecording)
+        {
+            NotifyError("請先按「停止錄音」，再按確定。");
+            return;
+        }
+
         // 這次存檔才新增出來的會議，上傳被取消時連會議一起刪（1.0.37）；下面新增成功後 isNewRecordMode 會被改掉，要先記下。
         var createdInThisSave = isNewRecordMode;
 
@@ -767,15 +774,20 @@ public partial class MeetingPage : IDisposable
         // 費用確認必須在主資料存檔「之前」：這顆確定鈕同時做存檔與上傳，
         // 放在存檔之後按取消，會留下一筆存好卻沒有音檔的紀錄，而且「修改成功」已經跳過了。
         // 也不能放在驗證之前——不該為了一張即將驗證失敗的表單問使用者要不要花錢。
-        if (pendingMediaFile is not null)
+        if (HasPendingMedia)
         {
             var replacingMedia = CurrentRecord.HasMedia;
-            var fileDescription = $"「{pendingMediaFile.Name}」（{MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)}）";
+            var fileDescription = pendingMediaFile is not null
+                ? $"「{pendingMediaFile.Name}」（{MeetingMediaPolicy.FormatFileSize(pendingMediaFile.Size)}）"
+                : $"錄音（{FormatRecordingSeconds(pendingRecordingSeconds)}，{MeetingMediaPolicy.FormatFileSize(pendingRecording!.Size)}）";
 
             // 1.1.68 成本閘門：在瀏覽器讀長度、問伺服器預估。一定付不起就不讓上傳（不然傳完才在背景失敗）。
-            var seconds = mediaDropZone?.InputElement is { } durationInput
-                ? await mediaDurationInterop.GetDurationAsync(durationInput)
-                : null;
+            // 1.1.71：錄音檔的檔頭沒有長度，用錄音計時的秒數。
+            var seconds = pendingRecording is not null
+                ? pendingRecordingSeconds
+                : mediaDropZone?.InputElement is { } durationInput
+                    ? await mediaDurationInterop.GetDurationAsync(durationInput)
+                    : null;
             var cost = await CheckTranscriptionCostAsync(seconds);
             if (cost.BlockMessage is not null)
             {
@@ -865,6 +877,22 @@ public partial class MeetingPage : IDisposable
                 NotifyError($"{startError}會議資料已保留，要重新上傳請按這一列的「修改」再選一次檔案。");
             }
         }
+        else if (pendingRecording is { } recording)
+        {
+            // 1.1.71：錄好的聲音。JS 在呼叫當下就取走，之後 ResetUploadState 丟掉鑰匙不影響上傳。
+            var startError = await UploadManager.StartRecordingAsync(
+                recording,
+                pendingRecordingName ?? $"錄音{recording.Extension}",
+                IdOf(CurrentRecord),
+                deleteMeetingOnCancel: createdInThisSave,
+                autoDraftPromptTemplateId: autoDraftPromptTemplateId > 0 ? autoDraftPromptTemplateId : null);
+            if (startError is not null)
+            {
+                // 錄音沒有第二份，丟掉就沒了：先存到使用者電腦，之後可以用選檔上傳。
+                await recorderInterop.SaveToDiskAsync(recording.Key, pendingRecordingName ?? $"錄音{recording.Extension}");
+                NotifyError($"{startError}會議資料已保留；這段錄音沒有上傳成功，已下載到你的電腦，之後可以按這一列的「修改」選這個檔案上傳。");
+            }
+        }
 
         ResetUploadState();
         await ReloadAsync();
@@ -876,7 +904,10 @@ public partial class MeetingPage : IDisposable
     /// 它身上帶著 Stream，序列化出來的東西與使用者選了哪個檔案無關，**所有檔案都會長得一樣**。檔名＋大小才是識別。
     /// </summary>
     private string? DescribePendingMedia()
-        => pendingMediaFile is null ? null : $"{pendingMediaFile.Name}:{pendingMediaFile.Size}";
+        => pendingMediaFile is not null ? $"{pendingMediaFile.Name}:{pendingMediaFile.Size}"
+            : isRecording ? "recording"
+            : pendingRecording is not null ? $"recording:{pendingRecording.Key}"
+            : null;
 
     private async Task OnModalCancelHandleAsync(MouseEventArgs args)
     {
@@ -955,6 +986,7 @@ public partial class MeetingPage : IDisposable
             return Task.CompletedTask;
         }
 
+        DiscardPendingRecording();
         pendingMediaFile = file;
         logger.LogInformation("Meeting media file selected. FileName={FileName}, FileSize={FileSize}", file.Name, file.Size);
         return LoadAutoDraftTemplatesAsync();
@@ -1018,6 +1050,52 @@ public partial class MeetingPage : IDisposable
         if (!await UploadManager.CancelAsync(meetingId))
         {
             NotifySuccess(MeetingUploadManager.UploadTooLateToCancelMessage);
+        }
+    }
+
+    private static string CancelJobTitle(BackgroundJobDto job)
+        => job.IsUploading ? "取消上傳" : job.Kind == BackgroundJobKinds.Draft ? "取消產生會議紀錄" : "取消轉錄";
+
+    /// <summary>
+    /// 1.1.71：清單上取消轉錄、產生會議紀錄，或別的分頁發起的上傳。和右下角面板的「取消」是同一支 API，
+    /// 面板關掉之後這裡就是唯一的入口。結果由背景工作推播帶回，清單會自己重載。
+    /// </summary>
+    private async Task OnCancelJobAsync(MeetingDto meeting, BackgroundJobDto job)
+    {
+        var title = CancelJobTitle(job);
+        var content = job.IsUploading
+            ? $"「{meeting.Title}」的上傳會中止，已上傳的部分會被丟棄。確定要取消嗎？"
+            : job.Kind == BackgroundJobKinds.Draft
+                ? $"「{meeting.Title}」的會議紀錄產生會中止，原本的會議紀錄不受影響。確定要取消嗎？"
+                : $"「{meeting.Title}」的轉錄會中止，之後可以按「重新轉錄」從頭再跑。確定要取消嗎？";
+
+        if (!await modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = title,
+            Content = content,
+            OkText = title,
+            CancelText = "繼續執行",
+            OkButtonProps = new ButtonProps { Danger = true },
+            MaskClosable = false
+        }))
+        {
+            return;
+        }
+
+        logger.LogInformation("Job cancellation requested from list. MeetingId={MeetingId}, Kind={Kind}", meeting.Id, job.Kind);
+        var result = await JobApi.CancelAsync(job.Kind, IdOf(meeting));
+        if (result.Success)
+        {
+            NotifySuccess("已要求取消，狀態稍後會更新。");
+        }
+        else if (result.StatusCode == 404)
+        {
+            NotifySuccess("這項工作已經結束，來不及取消。");
+            await ReloadAsync();
+        }
+        else
+        {
+            NotifyError(result.ErrorMessage ?? result.Message);
         }
     }
 
@@ -1100,6 +1178,7 @@ public partial class MeetingPage : IDisposable
     private void ResetUploadState()
     {
         pendingMediaFile = null;
+        AbandonRecording();
         autoDraftPromptTemplateId = 0;
         mediaDropZone?.Reset();
     }
@@ -1487,6 +1566,32 @@ public partial class MeetingPage : IDisposable
         NotifySuccess($"已下載「{download.FileName}」。");
     }
 
+    /// <summary>1.1.71：版本紀錄視窗。</summary>
+    private bool draftVersionsVisible;
+
+    /// <summary>1.1.71：還原舊版的條件和「編修」一致；不能編修時視窗只能看。</summary>
+    private Func<int, Task<MeetingRecord.Dtos.Commons.ApiResult<object>>>? DraftRestore => draftCanSwitchToEdit
+        ? versionId => MeetingApi.RestoreDraftVersionAsync(draftMeetingId, versionId)
+        : null;
+
+    /// <summary>
+    /// 1.1.71：還原好了。MarkdownEditorModal 只在打開時讀一次 Content，
+    /// 所以先關再重開，畫面才會換成還原的內容。
+    /// </summary>
+    private async Task OnDraftVersionRestoredAsync()
+    {
+        NotifySuccess("已還原這個版本。");
+        draftModalVisible = false;
+        StateHasChanged();
+        await Task.Yield();
+        if (draftMeeting is not null)
+        {
+            await OnOpenDraftModalAsync(draftMeeting);
+        }
+
+        await ReloadAsync();
+    }
+
     private async Task OnDraftSavedAsync(string content)
     {
         isSavingDraft = true;
@@ -1615,6 +1720,7 @@ public partial class MeetingPage : IDisposable
     {
         // 不取消上傳：離開這一頁上傳照樣繼續（1.1.23 起換到其他頁面也不中斷），右下角面板看得到進度。
         disposed = true;
+        AbandonRecording(); // 1.1.71：換頁時還在錄就停掉，不然麥克風會一直開著。
         UploadManager.Changed -= OnUploadsChanged;
         jobSubscription?.Dispose();
     }

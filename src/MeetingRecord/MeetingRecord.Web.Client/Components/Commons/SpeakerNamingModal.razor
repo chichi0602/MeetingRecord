@@ -49,6 +49,18 @@
                     <div class="speaker-naming-row">
                         <div class="speaker-naming-label">講者 @speaker.Label</div>
                         <div class="speaker-naming-samples">
+                            @* 1.1.71：聽一句就知道是誰。片段是轉錄時剪下來當聲音參考的那句，舊逐字稿要重新轉錄才有。 *@
+                            @if (ClipUrl is not null)
+                            {
+                                if (speaker.HasClip)
+                                {
+                                    <audio class="speaker-naming-audio" controls preload="none" src="@ClipUrl(speaker.Label)"></audio>
+                                }
+                                else
+                                {
+                                    <div class="speaker-naming-noclip">重新轉錄後可試聽</div>
+                                }
+                            }
                             @foreach (var sample in speaker.Samples)
                             {
                                 <div class="speaker-naming-sample">「@sample」</div>

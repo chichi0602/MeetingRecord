@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MeetingRecord.AccessDatas;
 using MeetingRecord.AccessDatas.Models;
 using MeetingRecord.Business.Services.AiUsage;
+using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Other;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Share.Enums;
@@ -53,6 +54,11 @@ public sealed class AutoDraftStarter(
         }
 
         var template = await context.PromptTemplate.AsNoTracking().FirstAsync(x => x.Id == templateId, cancellationToken);
+
+        // 1.1.71：重新上傳、轉完自動產生時，原本的會議紀錄會被蓋掉，先留版（改寫提示詞之前）。
+        await MeetingDraftVersionRecorder.SnapshotAsync(
+            context, meeting, MeetingDraftVersionReasons.Regenerate, requestedByUserId, requestedByUserName, cancellationToken);
+
         meeting.DraftPromptTemplateId = template.Id;
         meeting.DraftPromptTemplateName = template.Name;
         meeting.DraftAttendees = null;

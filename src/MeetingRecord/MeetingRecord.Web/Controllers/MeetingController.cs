@@ -44,6 +44,8 @@ public class MeetingController(
     private const string PdfContentType = "application/pdf";
     private const string TranscriptContentType = "text/plain;charset=utf-8";
 
+    private const string SpeakerClipContentType = "audio/wav";
+
     [HttpGet("{id}")]
     [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
     public async Task<ActionResult<ApiResult<MeetingDto>>> GetById(int id)
@@ -224,6 +226,45 @@ public class MeetingController(
             // 1.1.69：轉錄完等標示講者的會議，存名字後用上傳時選的提示詞產生會議紀錄。
             ? RunAsync(id, () => meetingService.NameSpeakersAndGenerateAsync(id, request.Names), "講者名字已儲存，開始產生會議紀錄。")
             : RunAsync(id, () => meetingService.UpdateSpeakerNamesAsync(id, request.Names), "講者名字已儲存。");
+
+    /// <summary>1.1.71：某位講者的試聽片段（WAV，支援 Range）。同網域 &lt;audio src&gt; 會自動帶登入 Cookie；GET 不需要防偽標頭。</summary>
+    [HttpGet("{id}/speakers/{label}/clip")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    public async Task<IActionResult> SpeakerClip(int id, string label)
+    {
+        var path = await meetingService.GetSpeakerClipPathAsync(id, label);
+        return path is null
+            ? NotFound(ApiResult.NotFoundResult("找不到這位講者的試聽片段。"))
+            : PhysicalFile(path, SpeakerClipContentType, enableRangeProcessing: true);
+    }
+
+    /// <summary>1.1.71：會議紀錄的舊版清單（新到舊，不含內容）。</summary>
+    [HttpGet("{id}/draft/versions")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<List<MeetingDraftVersionDto>>>> DraftVersions(int id)
+    {
+        var versions = await meetingService.GetDraftVersionsAsync(id);
+        return versions is null
+            ? NotFound(ApiResult<List<MeetingDraftVersionDto>>.NotFoundResult(string.Format(NotFoundMessage, id)))
+            : Ok(ApiResult<List<MeetingDraftVersionDto>>.SuccessResult(versions));
+    }
+
+    /// <summary>1.1.71：某一份舊版的內容。</summary>
+    [HttpGet("{id}/draft/versions/{versionId:int}")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.View)]
+    public async Task<ActionResult<ApiResult<MeetingDraftVersionDetailDto>>> DraftVersion(int id, int versionId)
+    {
+        var version = await meetingService.GetDraftVersionAsync(id, versionId);
+        return version is null
+            ? NotFound(ApiResult<MeetingDraftVersionDetailDto>.NotFoundResult("找不到這個版本。"))
+            : Ok(ApiResult<MeetingDraftVersionDetailDto>.SuccessResult(version));
+    }
+
+    /// <summary>1.1.71：還原成某一份舊版（目前的內容會先留成一版）。</summary>
+    [HttpPost("{id}/draft/versions/{versionId:int}/restore")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]
+    public Task<ActionResult<ApiResult>> RestoreDraftVersion(int id, int versionId)
+        => RunAsync(id, () => meetingService.RestoreDraftVersionAsync(id, versionId), "已還原這個版本。");
 
     /// <summary>把會議歸屬到專案（之後跟著專案的可見範圍走）。</summary>
     [HttpPut("{id}/project")]

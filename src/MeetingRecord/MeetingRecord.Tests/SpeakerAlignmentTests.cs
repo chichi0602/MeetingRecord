@@ -257,6 +257,48 @@ public sealed class SpeakerAlignmentTests : IAsyncDisposable
         Assert.Equal(2, provider.PlainCalls);
     }
 
+    [Fact]
+    public async Task Run_ShouldSaveSpeakerClips_AndReplaceOldOnesOnRetranscribe()
+    {
+        // 1.1.71：聲音參考存下來給「標示講者」試聽；只存最終逐字稿有出現的講者，重新轉錄時換新、舊檔刪掉。
+        provider.Script.Enqueue(Result(Segment("A", 0, 5, "大家好"), Segment("B", 5, 9, "開始吧")));
+        provider.Script.Enqueue(Result(Segment("1", 0, 4, "第二段")));
+        var meetingId = await AddMeetingAsync();
+
+        await CreateRunner(new FakeClipCutter()).RunAsync(meetingId, CancellationToken.None);
+
+        var meeting = await context.Meeting.AsNoTracking().SingleAsync();
+        var clips = TranscriptSpeakerLabels.ParseNames(meeting.SpeakerClips);
+        Assert.Equal(["1", "2"], clips.Keys.Order());
+        var firstClip = Path.Combine(rootPath, "transcript", clips["1"]);
+        Assert.Equal([9, 9], await File.ReadAllBytesAsync(firstClip));
+
+        // 重新轉錄：這次只有一位講者。
+        await context.Meeting.Where(x => x.Id == meetingId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.TranscriptionStatus, TranscriptionStatus.Pending));
+        provider.Script.Enqueue(Result(Segment("A", 0, 5, "重來")));
+        provider.Script.Enqueue(Result(Segment("1", 0, 4, "第二段")));
+
+        await CreateRunner(new FakeClipCutter()).RunAsync(meetingId, CancellationToken.None);
+
+        var retranscribed = TranscriptSpeakerLabels.ParseNames((await context.Meeting.AsNoTracking().SingleAsync()).SpeakerClips);
+        Assert.Equal(["1"], retranscribed.Keys);
+        Assert.NotEqual(clips["1"], retranscribed["1"]);
+        Assert.False(File.Exists(firstClip));
+        Assert.False(File.Exists(Path.Combine(rootPath, "transcript", clips["2"])));
+    }
+
+    [Fact]
+    public async Task Run_WithoutClipCutter_ShouldNotSaveSpeakerClips()
+    {
+        provider.PlainText = "大家好";
+        var meetingId = await AddMeetingAsync();
+
+        await CreateRunner(clipCutter: null).RunAsync(meetingId, CancellationToken.None);
+
+        Assert.Null((await context.Meeting.AsNoTracking().SingleAsync(x => x.Id == meetingId)).SpeakerClips);
+    }
+
     #endregion
 
     private static DiarizedSegment Segment(string speaker, double start, double end, string text = "話") =>

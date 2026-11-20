@@ -1,0 +1,107 @@
+/* 1.1.71「版本紀錄」視窗：左邊版本清單、右邊預覽。 */
+.draft-versions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.draft-versions-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--oat-ink-mid);
+}
+
+.draft-versions-error {
+    color: #c0392b;
+}
+
+.draft-versions-empty {
+    margin: 0;
+    color: var(--oat-ink-mid);
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+/* ⚠️ 欄寬用 minmax(0, 1fr)：1fr 的最小值是內容寬度，長行會把預覽撐開（見 MarkdownEditorModal 的註解）。 */
+.draft-versions-body {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 12px;
+    height: 65vh;
+}
+
+@media (max-width: 900px) {
+    .draft-versions-body {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(240px, 1fr);
+        height: auto;
+    }
+}
+
+.draft-versions-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow: auto;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+}
+
+.draft-versions-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--oat-200);
+    cursor: pointer;
+}
+
+    .draft-versions-item:hover {
+        background: var(--oat-50, #faf8f4);
+    }
+
+.draft-versions-item-active {
+    background: var(--oat-100, #f3efe7);
+}
+
+.draft-versions-item-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--oat-ink);
+}
+
+.draft-versions-item-reason {
+    font-weight: 400;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+}
+
+.draft-versions-item-meta {
+    margin-top: 2px;
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+}
+
+.draft-versions-preview {
+    overflow: auto;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid var(--oat-200);
+    border-radius: 10px;
+}
+
+.draft-versions-preview-head {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--oat-200);
+    color: var(--oat-ink-mid);
+    font-size: 12px;
+}
+
+.draft-versions-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}

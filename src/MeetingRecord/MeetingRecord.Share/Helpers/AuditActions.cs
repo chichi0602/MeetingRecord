@@ -51,6 +51,7 @@ public static class AuditActions
     #region AI 用量上限、AI 對話紀錄、Token 用量
     public const string AiQuotaBlocked = "Ai.QuotaBlocked";
     public const string AiConnectionTest = "Ai.ConnectionTest";
+    public const string TranscriptionCompare = "Ai.TranscriptionCompare";
     public const string AiCallLogView = "AiCallLog.View";
     public const string AiCallLogDownloadJson = "AiCallLog.DownloadJson";
     public const string AiCallLogExportPdf = "AiCallLog.ExportPdf";
@@ -194,6 +195,7 @@ public static class AuditActions
 
         [AiQuotaBlocked] = "AI 用量上限攔截",
         [AiConnectionTest] = "AI 連線測試",
+        [TranscriptionCompare] = "轉錄比較",
         [AiCallLogView] = "查看 AI 對話紀錄",
         [AiCallLogDownloadJson] = "下載 AI 對話 JSON",
         [AiCallLogExportPdf] = "匯出 AI 對話 PDF",

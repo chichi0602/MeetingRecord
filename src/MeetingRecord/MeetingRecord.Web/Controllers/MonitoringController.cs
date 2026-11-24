@@ -32,6 +32,7 @@ public sealed class MonitoringController(
     ISystemHealthService systemHealthService,
     ILogQueryService logQueryService,
     AiConnectionTestService aiConnectionTestService,
+    TranscriptionComparisonService transcriptionComparisonService,
     DiagnosticAiService diagnosticAiService,
     IPdfRenderer pdfRenderer,
     IAuditActorProvider actorProvider,
@@ -247,6 +248,75 @@ public sealed class MonitoringController(
             targetId: "*",
             detail: $"{summary}; via={AuditVia.Api}");
         return Ok(ApiResult<List<AiConnectionProbeResult>>.SuccessResult(results));
+    }
+
+    /// <summary>轉錄比較頁的初始資料（1.1.72）：目前設定的轉錄部署與有影音檔的會議。</summary>
+    [HttpGet("transcription-compare/meta")]
+    public async Task<ActionResult<ApiResult<TranscriptionCompareMetaDto>>> TranscriptionCompareMeta(CancellationToken cancellationToken)
+        => Ok(ApiResult<TranscriptionCompareMetaDto>.SuccessResult(await transcriptionComparisonService.GetMetaAsync(cancellationToken)));
+
+    /// <summary>轉錄比較的預估費用（1.1.72），給確認框用。</summary>
+    [HttpPost("transcription-compare/estimate")]
+    public ActionResult<ApiResult<TranscriptionCompareEstimateDto>> TranscriptionCompareEstimate([FromBody] TranscriptionCompareRequestDto request)
+        => TranscriptionComparisonService.Validate(request) is { } invalid
+            ? BadRequest(ApiResult<TranscriptionCompareEstimateDto>.FailureResult(invalid))
+            : Ok(ApiResult<TranscriptionCompareEstimateDto>.SuccessResult(transcriptionComparisonService.Estimate(request)));
+
+    /// <summary>
+    /// 轉錄比較（1.1.72，**會產生費用**，確認框在前端）：同一段片段用幾組部署／參數各轉一次。回應是串流（見 <see cref="TranscriptionCompareEventDto"/>）：
+    /// 先一筆片段（含音檔），每組完成一筆結果。剪片段前就失敗回一般的 400；關掉頁面＝中斷請求，還沒跑的組就不跑。
+    /// 不碰會議本身；稽核記會議、片段與各組部署，不記逐字稿內容。
+    /// </summary>
+    [HttpPost("transcription-compare")]
+    public async Task TranscriptionCompare([FromBody] TranscriptionCompareRequestDto request, CancellationToken cancellationToken)
+    {
+        if (TranscriptionComparisonService.Validate(request) is { } invalid)
+        {
+            await new BadRequestObjectResult(ApiResult.FailureResult(invalid)).ExecuteResultAsync(ControllerContext);
+            return;
+        }
+
+        // NdjsonStreamer 逐段傳的是字串：這裡傳事件的序號，再由序號取回事件。
+        var events = new System.Collections.Concurrent.ConcurrentDictionary<int, TranscriptionCompareEventDto>();
+        var outcome = await NdjsonStreamer.RunAsync(
+            this,
+            onDelta => transcriptionComparisonService.RunAsync(
+                request,
+                item =>
+                {
+                    var key = events.Count;
+                    events[key] = item;
+                    onDelta(key.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                },
+                cancellationToken),
+            key => events[int.Parse(key, System.Globalization.CultureInfo.InvariantCulture)],
+            count => new TranscriptionCompareEventDto { Type = TranscriptionCompareEventDto.Done, Index = count },
+            error => new BadRequestObjectResult(ApiResult.FailureResult(DescribeCompareFailure(error))),
+            error => new TranscriptionCompareEventDto { Type = TranscriptionCompareEventDto.Error, Message = DescribeCompareFailure(error) },
+            cancellationToken);
+
+        var variants = string.Join(",", request.Variants.Select(x =>
+            $"{(string.IsNullOrWhiteSpace(x.Deployment) ? "(設定)" : x.Deployment.Trim())}/{(string.IsNullOrWhiteSpace(x.Language) ? "-" : x.Language.Trim())}{(string.IsNullOrWhiteSpace(x.Prompt) ? string.Empty : "/prompt")}"));
+        var results = events.Values.Where(x => x.Type == TranscriptionCompareEventDto.Result).ToList();
+        await auditLogService.WriteForCurrentUserAsync(
+            AuditActions.TranscriptionCompare,
+            success: outcome.Error is null && results.All(x => x.Success),
+            targetType: "Meeting",
+            targetId: request.MeetingId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            detail: $"片段 {request.StartSeconds}s+{request.Seconds}s; 組={variants}; 成功 {results.Count(x => x.Success)}/{request.Variants.Count}"
+                + (outcome.Error is { } error ? $"; 失敗：{error.GetType().Name}" : string.Empty)
+                + $"; via={AuditVia.Api}");
+    }
+
+    private string DescribeCompareFailure(Exception error)
+    {
+        if (error is InvalidOperationException or FileNotFoundException)
+        {
+            return error.Message;
+        }
+
+        logger.LogError(error, "Transcription comparison failed.");
+        return $"轉錄比較失敗：{error.Message}";
     }
 
     /// <summary>資料庫用量（SQLite 檔案、頁面配置、各資料表）。失敗時報表本身帶 <c>errorMessage</c>，同畫面。</summary>

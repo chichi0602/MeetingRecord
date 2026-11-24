@@ -47,6 +47,9 @@ public enum AiUsageFeature
 
     /// <summary>使用說明 AI 助理（1.0.43）：讀使用說明回答操作問題。一次提問一次，每次都會送整份說明（一般使用者不含管理員章節）。</summary>
     HelpAssistant = 9,
+
+    /// <summary>轉錄比較（1.1.72，AI 管理 → 轉錄比較，管理者手動按）。同一段片段用幾組部署／參數各轉一次，以音訊時長計費。</summary>
+    TranscriptionComparison = 10,
 }
 
 /// <summary>功能別的顯示文字與計費單位判斷（UI、日誌與計價共用）。</summary>
@@ -64,6 +67,7 @@ public static class AiUsageFeatureText
         AiUsageFeature.ConnectionTest => "AI 連線測試",
         AiUsageFeature.TranscriptionConnectionTest => "AI 連線測試（轉錄）",
         AiUsageFeature.HelpAssistant => "使用說明 AI 助理",
+        AiUsageFeature.TranscriptionComparison => "轉錄比較",
         _ => "未知",
     };
 
@@ -76,5 +80,5 @@ public static class AiUsageFeatureText
     /// </para>
     /// </summary>
     public static bool IsTokenBased(AiUsageFeature feature)
-        => feature is not (AiUsageFeature.Transcription or AiUsageFeature.TranscriptionConnectionTest);
+        => feature is not (AiUsageFeature.Transcription or AiUsageFeature.TranscriptionConnectionTest or AiUsageFeature.TranscriptionComparison);
 }

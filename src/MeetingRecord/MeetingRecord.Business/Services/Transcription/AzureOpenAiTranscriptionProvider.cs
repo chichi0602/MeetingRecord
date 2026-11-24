@@ -23,22 +23,40 @@ public class AzureOpenAiTranscriptionProvider : ISpeakerAwareTranscriptionProvid
     private readonly IHttpClientFactory httpClientFactory;
     private readonly IOptions<LlmSettings> llmSettings;
     private readonly ILogger<AzureOpenAiTranscriptionProvider> logger;
+    private readonly TranscriptionOverrides? overrides;
 
     public AzureOpenAiTranscriptionProvider(
         IHttpClientFactory httpClientFactory,
         IOptions<LlmSettings> llmSettings,
         ILogger<AzureOpenAiTranscriptionProvider> logger)
+        : this(httpClientFactory, llmSettings, logger, overrides: null)
+    {
+    }
+
+    private AzureOpenAiTranscriptionProvider(
+        IHttpClientFactory httpClientFactory,
+        IOptions<LlmSettings> llmSettings,
+        ILogger<AzureOpenAiTranscriptionProvider> logger,
+        TranscriptionOverrides? overrides)
     {
         this.httpClientFactory = httpClientFactory;
         this.llmSettings = llmSettings;
         this.logger = logger;
+        this.overrides = overrides;
     }
+
+    /// <summary>
+    /// 1.1.72：轉錄比較工具專用——換部署、加語言或提示詞，連線與金鑰照設定。**正式轉錄不用它**，仍只讀設定。
+    /// 回傳新的實例，<see cref="ModelName"/> 也跟著換，帳本才會記在實際打的部署上、用它的單價。
+    /// </summary>
+    public AzureOpenAiTranscriptionProvider WithOverrides(TranscriptionOverrides overrides)
+        => new(httpClientFactory, llmSettings, logger, overrides);
 
     public string ProviderName => AzureOpenAiProviderName;
 
     /// <summary>目前生效的轉錄 deployment 名稱。用量帳本以它查單價。</summary>
     public string ModelName =>
-        llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel ?? string.Empty;
+        NullIfBlank(overrides?.Deployment) ?? llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel ?? string.Empty;
 
     /// <summary>1.1.64：部署會分講者時，才能帶聲音參考讓整場代號一致。</summary>
     public bool SupportsSpeakers => IsDiarizeModel(ModelName);
@@ -79,12 +97,13 @@ public class AzureOpenAiTranscriptionProvider : ISpeakerAwareTranscriptionProvid
         }
 
         var modelKey = AzureDeploymentErrors.ProviderKey(settings.EffectiveTranscriptionProviderName, nameof(LlmProviderSettings.TranscriptionModel));
-        if (string.IsNullOrWhiteSpace(provider.TranscriptionModel))
+        var deployment = NullIfBlank(overrides?.Deployment) ?? provider.TranscriptionModel;
+        if (string.IsNullOrWhiteSpace(deployment))
         {
             throw new InvalidOperationException(AzureDeploymentErrors.MissingDeployment("語音轉錄", modelKey));
         }
 
-        var requestUri = BuildRequestUri(provider.Endpoint, provider.TranscriptionModel, provider.EffectiveTranscriptionApiVersion);
+        var requestUri = BuildRequestUri(provider.Endpoint, deployment, provider.EffectiveTranscriptionApiVersion);
 
         using var content = new MultipartFormDataContent();
         var audioContent = new StreamContent(audio);
@@ -92,8 +111,19 @@ public class AzureOpenAiTranscriptionProvider : ISpeakerAwareTranscriptionProvid
         content.Add(audioContent, "file", fileName);
 
         // 1.1.63：diarize 模型要 diarized_json 才拿得到講者；輸入超過 30 秒時 chunking_strategy 是必填，不帶直接回 400。
-        var isDiarize = IsDiarizeModel(provider.TranscriptionModel);
+        var isDiarize = IsDiarizeModel(deployment);
         content.Add(new StringContent(isDiarize ? "diarized_json" : "text"), "response_format");
+
+        // 1.1.72：只有比較工具會帶。diarize 模型不支援 prompt，一律不送（送了直接 400）。
+        if (NullIfBlank(overrides?.Language) is { } language)
+        {
+            content.Add(new StringContent(language), "language");
+        }
+
+        if (!isDiarize && NullIfBlank(overrides?.Prompt) is { } prompt)
+        {
+            content.Add(new StringContent(prompt), "prompt");
+        }
         if (isDiarize)
         {
             content.Add(new StringContent("auto"), "chunking_strategy");
@@ -128,11 +158,13 @@ public class AzureOpenAiTranscriptionProvider : ISpeakerAwareTranscriptionProvid
             throw new AiProviderHttpException(
                 (int)response.StatusCode,
                 AzureDeploymentErrors.Describe(
-                    "語音轉錄", (int)response.StatusCode, response.ReasonPhrase, body, provider.TranscriptionModel, provider.Endpoint, modelKey));
+                    "語音轉錄", (int)response.StatusCode, response.ReasonPhrase, body, deployment, provider.Endpoint, modelKey));
         }
 
         return (body, isDiarize);
     }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// 部署是不是會分講者的 diarize 模型。Azure 的部署名稱是自訂的，這裡以名稱含 <c>diarize</c> 判斷，
@@ -171,3 +203,11 @@ public class AzureOpenAiTranscriptionProvider : ISpeakerAwareTranscriptionProvid
         return new Uri($"{baseAddress}/openai/deployments/{deployment}/audio/transcriptions?api-version={version}");
     }
 }
+
+/// <summary>
+/// 1.1.72 轉錄比較用的覆寫：空白＝沿用設定（部署）或不送（語言、提示詞）。
+/// </summary>
+/// <param name="Deployment">Azure 部署名稱；名稱含 diarize 時走分講者格式。</param>
+/// <param name="Language">ISO-639-1，例如 <c>zh</c>。</param>
+/// <param name="Prompt">專有名詞提示；diarize 模型不支援，不會送出。</param>
+public sealed record TranscriptionOverrides(string? Deployment, string? Language, string? Prompt);

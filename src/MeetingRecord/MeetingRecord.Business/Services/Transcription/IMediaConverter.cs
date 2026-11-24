@@ -12,6 +12,19 @@ public interface IMediaConverter
 }
 
 /// <summary>
+/// 1.1.72 轉錄比較：剪出一段和正式轉錄同規格的 mp3（16kHz 單聲道 32kbps）。
+/// 另開介面的理由同 <see cref="IMediaSegmentSplitter"/>：測試替換 <see cref="IMediaConverter"/> 時不受影響。
+/// </summary>
+public interface IMediaExcerptCutter
+{
+    /// <summary>剪不出來（來源不存在、起點超過結尾）時回 null。</summary>
+    Task<MediaExcerpt?> CutMp3ExcerptAsync(string sourceFullPath, double startSeconds, double seconds, CancellationToken cancellationToken);
+}
+
+/// <summary>剪出來的片段。<paramref name="Seconds"/> 是實際長度（來源不夠長時比要求的短），轉錄按它計費。</summary>
+public sealed record MediaExcerpt(byte[] Mp3, double Seconds);
+
+/// <summary>
 /// 一次轉檔產生的 mp3 分段集合，Dispose 時刪除整個暫存工作目錄。
 /// </summary>
 public sealed class MediaSegmentSet : IDisposable

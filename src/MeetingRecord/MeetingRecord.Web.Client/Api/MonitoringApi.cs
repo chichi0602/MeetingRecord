@@ -67,6 +67,60 @@ public sealed class MonitoringApi(ApiClient api)
             Content = JsonContent.Create(request, ClientJsonContext.Default.LogAiPdfRequestDto),
         });
 
+    /// <summary>轉錄比較頁的初始資料（1.1.72）。</summary>
+    public Task<ApiResult<TranscriptionCompareMetaDto>> GetTranscriptionCompareMetaAsync()
+        => api.GetAsync($"{Base}/transcription-compare/meta", ClientJsonContext.Default.TranscriptionCompareMetaResult);
+
+    /// <summary>轉錄比較的預估費用（1.1.72）。</summary>
+    public Task<ApiResult<TranscriptionCompareEstimateDto>> EstimateTranscriptionCompareAsync(TranscriptionCompareRequestDto request)
+        => api.PostAsync($"{Base}/transcription-compare/estimate", request,
+            ClientJsonContext.Default.TranscriptionCompareRequestDto, ClientJsonContext.Default.TranscriptionCompareEstimateResult);
+
+    /// <summary>
+    /// 轉錄比較（1.1.72，會產生費用）：逐筆回報事件（片段、每組結果）。失敗丟 <see cref="InvalidOperationException"/>（伺服器原文）；
+    /// 取消＝中斷請求，伺服器還沒跑的組就不跑。
+    /// </summary>
+    public async Task RunTranscriptionCompareAsync(
+        TranscriptionCompareRequestDto request,
+        Action<TranscriptionCompareEventDto> onEvent,
+        CancellationToken cancellationToken)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, $"{Base}/transcription-compare")
+        {
+            Content = JsonContent.Create(request, ClientJsonContext.Default.TranscriptionCompareRequestDto),
+        };
+        using var response = await api.SendStreamingAsync(message, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var failure = await api.ReadFailureAsync(response, cancellationToken);
+            throw new InvalidOperationException(failure.ErrorMessage ?? failure.Message);
+        }
+
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cancellationToken));
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var item = System.Text.Json.JsonSerializer.Deserialize(line, ClientJsonContext.Default.TranscriptionCompareEventDto);
+            switch (item?.Type)
+            {
+                case TranscriptionCompareEventDto.Done:
+                    return;
+                case TranscriptionCompareEventDto.Error:
+                    throw new InvalidOperationException(item.Message ?? "轉錄比較未完成，請稍後再試。");
+                case not null:
+                    onEvent(item);
+                    break;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("連線中斷，沒有收到完整的比較結果，請重新整理後再試。");
+    }
+
     /// <summary>測試 AI 連線（1.1.35）：會產生費用，呼叫前畫面要先確認；稽核由伺服器寫。</summary>
     public Task<ApiResult<List<AiConnectionProbeResult>>> TestAiConnectionAsync()
         => api.PostAsync($"{Base}/ai-connection-test", ClientJsonContext.Default.AiConnectionProbeResults);

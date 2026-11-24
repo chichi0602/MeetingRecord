@@ -143,6 +143,64 @@ public sealed class DiarizedTranscriptionTests
         Assert.False(factory.Fields.ContainsKey("chunking_strategy"));
     }
 
+    [Fact]
+    public async Task Transcribe_WithoutOverrides_ShouldNotSendLanguageOrPrompt()
+    {
+        // 1.1.72：正式轉錄不帶覆寫，表單要和以前一模一樣。
+        var factory = new CapturingFactory("文字");
+        var provider = CreateProvider(factory, "gpt-4o-transcribe");
+
+        using var audio = new MemoryStream([1, 2, 3]);
+        await provider.TranscribeAsync(audio, "part_0000.mp3", CancellationToken.None);
+
+        Assert.Equal(["response_format"], factory.Fields.Keys.Order());
+        Assert.Contains("/deployments/gpt-4o-transcribe/", factory.RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task Transcribe_WithOverrides_ShouldUseDeploymentLanguageAndPrompt()
+    {
+        // 1.1.72 轉錄比較：換部署、指定語言、帶提示詞；ModelName 也要跟著換，帳本才記得對。
+        var factory = new CapturingFactory("文字");
+        var provider = CreateProvider(factory, "gpt-4o-transcribe-diarize")
+            .WithOverrides(new TranscriptionOverrides(" gpt-transcribe ", "zh", "MeetingInk, 病患篩選"));
+
+        using var audio = new MemoryStream([1, 2, 3]);
+        await provider.TranscribeAsync(audio, "excerpt.mp3", CancellationToken.None);
+
+        Assert.Equal("gpt-transcribe", provider.ModelName);
+        Assert.False(provider.SupportsSpeakers);
+        Assert.Contains("/deployments/gpt-transcribe/", factory.RequestUri!.AbsoluteUri);
+        Assert.Equal("text", factory.Fields["response_format"]);
+        Assert.Equal("zh", factory.Fields["language"]);
+        Assert.Equal("MeetingInk, 病患篩選", factory.Fields["prompt"]);
+    }
+
+    [Fact]
+    public async Task Transcribe_DiarizeOverride_ShouldNeverSendPrompt()
+    {
+        // diarize 模型不支援 prompt，送了直接 400。
+        var factory = new CapturingFactory("""{"segments":[]}""");
+        var provider = CreateProvider(factory, "gpt-transcribe")
+            .WithOverrides(new TranscriptionOverrides("gpt-4o-transcribe-diarize", "zh", "專有名詞"));
+
+        using var audio = new MemoryStream([1, 2, 3]);
+        await provider.TranscribeAsync(audio, "excerpt.mp3", CancellationToken.None);
+
+        Assert.Equal("diarized_json", factory.Fields["response_format"]);
+        Assert.Equal("zh", factory.Fields["language"]);
+        Assert.False(factory.Fields.ContainsKey("prompt"));
+    }
+
+    [Fact]
+    public void Overrides_BlankDeployment_ShouldFallBackToConfigured()
+    {
+        var provider = CreateProvider(new CapturingFactory(""), "gpt-4o-transcribe-diarize")
+            .WithOverrides(new TranscriptionOverrides("  ", null, null));
+
+        Assert.Equal("gpt-4o-transcribe-diarize", provider.ModelName);
+    }
+
     private static AzureOpenAiTranscriptionProvider CreateProvider(IHttpClientFactory factory, string transcriptionModel)
     {
         var settings = new LlmSettings { DefaultProvider = "AzureOpenAI", TranscriptionProvider = "AzureOpenAI" };
@@ -163,12 +221,15 @@ public sealed class DiarizedTranscriptionTests
     {
         public Dictionary<string, string> Fields { get; } = [];
 
+        public Uri? RequestUri { get; private set; }
+
         public HttpClient CreateClient(string name) => new(new Handler(this, body), disposeHandler: true);
 
         private sealed class Handler(CapturingFactory owner, string body) : HttpMessageHandler
         {
             protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
+                owner.RequestUri = request.RequestUri;
                 if (request.Content is MultipartFormDataContent multipart)
                 {
                     foreach (var part in multipart)

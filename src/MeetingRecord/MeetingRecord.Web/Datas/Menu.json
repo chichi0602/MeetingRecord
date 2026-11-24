@@ -118,6 +118,12 @@
             "name": "Token 用量",
             "icon": "toll",
             "url": "/token-usage"
+          },
+          {
+            "id": 64,
+            "name": "轉錄比較",
+            "icon": "compare_arrows",
+            "url": "/transcription-compare"
           }
         ]
       }

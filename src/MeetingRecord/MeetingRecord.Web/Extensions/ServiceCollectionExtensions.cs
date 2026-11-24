@@ -222,6 +222,8 @@ public static class ServiceCollectionExtensions
         // 1.1.61：轉錄結果疑似被截斷時把該段對半切再重轉。端對端測試替換掉的是 IMediaConverter，這個照樣是真的 FFmpeg。
         services.AddScoped<IMediaSegmentSplitter, FfmpegMediaConverter>();
         services.AddScoped<IAudioClipCutter, FfmpegMediaConverter>();
+        // 1.1.72：轉錄比較剪片段用。
+        services.AddScoped<IMediaExcerptCutter, FfmpegMediaConverter>();
         services.AddScoped<ITranscriptionProvider, AzureOpenAiTranscriptionProvider>();
         services.AddScoped<TranscriptionJobRunner>();
         // 1.1.69：轉錄完自動產生會議紀錄（上傳時選了提示詞）。
@@ -268,6 +270,9 @@ public static class ServiceCollectionExtensions
 
         // 系統健康監控的「測試 AI 連線」（1.0.35，管理者手動按、會產生極少費用）。
         services.AddScoped<AiConnectionTestService>();
+
+        // 轉錄比較（1.1.72，AI 管理，管理者手動按、會產生費用）。
+        services.AddScoped<TranscriptionComparisonService>();
 
         // 長逐字稿的生成可能耗時數分鐘，預設的 100 秒逾時不夠。
         services.AddHttpClient(AzureOpenAiTextGenerationProvider.HttpClientName, client =>

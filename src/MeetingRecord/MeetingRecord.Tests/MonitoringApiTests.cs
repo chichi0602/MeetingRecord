@@ -28,6 +28,7 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
         "/api/v1/monitoring/log-level",
         "/api/v1/monitoring/health",
         "/api/v1/monitoring/logs/recent-warnings",
+        "/api/v1/monitoring/transcription-compare/meta",
     };
 
     [Theory]
@@ -191,6 +192,62 @@ public sealed class MonitoringApiTests(ApiTestApplicationFactory factory) : ICla
         Assert.False(audit.Success);
         Assert.Equal("LlmSettings", audit.TargetType);
         Assert.EndsWith("via=Api", audit.Detail);
+    }
+
+    /// <summary>
+    /// 1.1.72 轉錄比較：估價與執行只限管理者；條件不合理時回 400，不會剪檔、不會花錢。
+    /// </summary>
+    [Theory]
+    [InlineData("/api/v1/monitoring/transcription-compare/estimate")]
+    [InlineData("/api/v1/monitoring/transcription-compare")]
+    public async Task TranscriptionCompare_ShouldBeAdminOnly_AndRejectInvalidRequests(string url)
+    {
+        var valid = new TranscriptionCompareRequestDto { MeetingId = 1, Seconds = 60, Variants = [new() { Deployment = "gpt-transcribe" }] };
+
+        using (var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false }))
+        using (var response = await anonymous.PostAsJsonAsync(url, valid))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        var (account, _) = await TestCookieLogin.CreateUserAsync(factory.Services, Password, [MagicObjectHelper.角色_會議紀錄]);
+        using (var normal = await LoginAsync(account))
+        using (var denied = await normal.PostAsJsonAsync(url, valid))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        }
+
+        using var client = await LoginAdminAsync();
+        var tooMany = new TranscriptionCompareRequestDto
+        {
+            MeetingId = 1,
+            Seconds = 60,
+            Variants = [.. Enumerable.Range(0, TranscriptionCompareRequestDto.MaxVariants + 1).Select(_ => new TranscriptionCompareVariantDto())],
+        };
+        using (var response = await client.PostAsJsonAsync(url, tooMany))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        using (var response = await client.PostAsJsonAsync(url, new TranscriptionCompareRequestDto { MeetingId = 1, Seconds = 9999, Variants = valid.Variants }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task TranscriptionCompare_MissingMeeting_ShouldFailBeforeSpending()
+    {
+        using var client = await LoginAdminAsync();
+        using var response = await client.PostAsJsonAsync("/api/v1/monitoring/transcription-compare", new TranscriptionCompareRequestDto
+        {
+            MeetingId = int.MaxValue,
+            Seconds = 60,
+            Variants = [new() { Deployment = "gpt-transcribe" }],
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("找不到這場會議", await response.Content.ReadAsStringAsync());
     }
 
     private async Task<HttpClient> LoginAdminAsync()

@@ -21,7 +21,7 @@ namespace MeetingRecord.Business.Services.Transcription;
 /// 決定切點，以 <c>-segment_times</c> 切。找不到停頓或量不到時長時，退回固定每 <see cref="SegmentSeconds"/> 秒一刀。
 /// </para>
 /// </summary>
-public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAudioClipCutter
+public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAudioClipCutter, IMediaExcerptCutter
 {
     /// <summary>每個分段的長度（秒）。</summary>
     public const int SegmentSeconds = MeetingRecord.Share.Helpers.MeetingMediaPolicy.TranscriptionSegmentSeconds;
@@ -213,6 +213,74 @@ public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAud
         await RunFfmpegAsync(BuildClipArguments(sourceFullPath, outputPath, startSeconds, seconds), cancellationToken);
 
         return File.Exists(outputPath) ? outputPath : null;
+    }
+
+    public async Task<MediaExcerpt?> CutMp3ExcerptAsync(
+        string sourceFullPath,
+        double startSeconds,
+        double seconds,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ffmpegPath))
+        {
+            throw new InvalidOperationException($"{MediaSettings.SectionName}:FfmpegPath 未設定，無法剪出片段。");
+        }
+
+        if (!File.Exists(sourceFullPath) || seconds <= 0)
+        {
+            return null;
+        }
+
+        var outputPath = Path.Combine(Path.GetTempPath(), "MeetingRecord", "transcode", $"excerpt_{Guid.NewGuid():N}.mp3");
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        try
+        {
+            var output = await RunFfmpegAsync(BuildExcerptArguments(sourceFullPath, outputPath, startSeconds, seconds), cancellationToken);
+            if (!File.Exists(outputPath))
+            {
+                return null;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(outputPath, cancellationToken);
+
+            // 實際長度：FFmpeg 結束時印的最後一個 time=；讀不到就以 32kbps 位元組回推。
+            var actual = MediaDurationParser.TryParseLastProgressTime(output)?.TotalSeconds
+                ?? MediaDurationParser.EstimateSecondsFromBytes(bytes.LongLength);
+            return actual is > 0 ? new MediaExcerpt(bytes, Math.Min(actual.Value, seconds)) : null;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(outputPath);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// 轉錄比較的片段（1.1.72）：參數同 <see cref="BuildSegmentArguments"/> 的 mp3 規格，結果才和正式轉錄可比。抽成純函式以便單元測試。
+    /// loglevel 用 info：結尾那行 <c>time=</c> 是實際長度的來源。
+    /// </summary>
+    internal static string BuildExcerptArguments(string sourceFullPath, string outputPath, double startSeconds, double seconds)
+    {
+        return string.Join(' ',
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel", "info",
+            "-nostats",
+            "-y",
+            "-ss", FormatSeconds(Math.Max(0, startSeconds)),
+            "-t", FormatSeconds(seconds),
+            "-i", Quote(sourceFullPath),
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-c:a", "libmp3lame",
+            "-b:a", "32k",
+            Quote(outputPath));
     }
 
     /// <summary>

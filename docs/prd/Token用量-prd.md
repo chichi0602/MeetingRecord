@@ -2,9 +2,9 @@
 
 - 文件版本：2.12
 - 文件狀態：已實作
-- 現行系統版本：1.1.68
+- 現行系統版本：1.1.72
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/11/17
+- 最後核對日期：2026/11/20
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -40,6 +40,7 @@
 | AI 連線測試（1.0.35） | 7 | token | `AiConnectionTestService`（系統健康監控 →「測試 AI 連線」，管理者手動按） | 1（一則極短提問） |
 | AI 連線測試（轉錄）（1.0.35） | 8 | 音訊 | `AiConnectionTestService` | 1（1 秒靜音） |
 | 使用說明 AI 助理（1.0.43） | 9 | token | `HelpAssistantService`（使用說明頁頂端「問 AI 助理」，所有有頁面權限的人） | 1（每次提問；都會送約整份使用說明，不帶會議／專案） |
+| 轉錄比較（1.1.72） | 10 | 音訊 | `TranscriptionComparisonService`（AI 管理 →「轉錄比較」，管理者手動按） | 每組條件 1（片段長度計費，帶會議；模型記實際打的部署） |
 
 1.0.29 起呼叫端一律經 `AiCallGateway`，由 gateway 寫帳（見「四、內部系統運作」）。
 
@@ -340,5 +341,6 @@
 - **1.0.31**：頁面升級成完整的分析與管理頁：上限列（接上 1.0.29 的 `GetStatusAsync`／`GetTopUsersAsync`）、篩選（按查詢才套用）、篩選範圍合計卡、六個頁籤（新增元件 `TokenUsageGroupTable`）、明細窗（單價與匯率快照，可跳 AI 對話紀錄）、CSV／PDF 匯出（新增 `TokenUsageReportExporter`）、單筆刪除／清除此日之前／全部清除與 `AiUsage.*` 稽核。本月概況改為固定全部功能、本月，原本的功能下拉與「最近 N 天」下拉拿掉。服務新增 `AiUsageFilter`、`GetReportAsync` 等方法。PRD 由 `AI用量分析-prd.md` 改名為本檔並全文改寫。見 [AI 管理（三）](../changelog/2026-10-15-AI管理Token用量升級.md)。
 - **1.0.36**：出貨的單價表加入 `gpt-6.1-sol`（輸入 $2、輸出 $10／每百萬 token，OpenAI 官方模型頁標準層）。部署改用它之後的呼叫才有金額；之前已記錄、金額為「—」的紀錄不回填。
 - **1.0.43**：新增功能別 `HelpAssistant = 9`（「使用說明 AI 助理」，token 計費），由使用說明頁的「問 AI 助理」經 `AiCallGateway` 寫帳（成功／失敗／取消都記）；功能下拉自動多一項。
+- **1.1.72**：新增功能別 `TranscriptionComparison = 10`（「轉錄比較」，以音訊時長計費，`IsTokenBased` 一併排除），由 AI 管理的「轉錄比較」頁觸發；帳本的模型是那一組實際打的部署（`AzureOpenAiTranscriptionProvider.WithOverrides`），單價也照它查。功能下拉自動多一項。
 
 > 返回 [PRD 主控台](README.md)

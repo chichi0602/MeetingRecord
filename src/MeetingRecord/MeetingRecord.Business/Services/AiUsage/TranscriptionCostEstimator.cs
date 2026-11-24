@@ -32,9 +32,13 @@ public sealed class TranscriptionCostEstimator(
 
     /// <summary>預估轉錄費用（新台幣）。估不出來回 null。</summary>
     public decimal? EstimateTwd(double seconds)
+        => EstimateTwd(seconds, llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel);
+
+    /// <summary>1.1.72 轉錄比較：指定部署的預估費用（新台幣），用那個部署的單價。估不出來回 null。</summary>
+    public decimal? EstimateTwd(double seconds, string? model)
     {
         var settings = llmSettings.Value;
-        var model = settings.GetTranscriptionProvider()?.TranscriptionModel;
+        model = model?.Trim();
         if (string.IsNullOrWhiteSpace(model) || !settings.Pricing.TryGetValue(model, out var price))
         {
             return null;

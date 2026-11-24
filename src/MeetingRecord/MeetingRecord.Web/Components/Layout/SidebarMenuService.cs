@@ -42,7 +42,7 @@ public sealed class SidebarMenuService
     /// 非管理者一律排除、**不看權限**——這些頁面不在權限目錄裡，但 0.4.119 以前「系統健康度」可以勾給角色，
     /// 舊資料庫可能還留著權限列；只靠權限鍵擋，殘留的列就會讓選單冒出來。頁面本身另以 PermissionView.IsAdmin 守門，資料 API 以 [AdminOnly] 擋下。
     /// </summary>
-    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 37, 38, 39, 30, 33, 63, 40 };
+    public static readonly IReadOnlySet<int> AdminOnlyMenuIds = new HashSet<int> { 34, 37, 38, 39, 30, 33, 63, 40, 64 };
 
     /// <summary>
     /// 純分組、本身沒有權限的選單節點 Id（0.4.120：「帳號與權限」35、「監控與診斷」36；1.0.30：「AI 管理」62）：

@@ -52,6 +52,8 @@ public sealed class MenuIconTests
         "psychology",
         "forum",
         "toll",
+        // 轉錄比較（1.1.72）。classic Material Icons 有這個名稱。
+        "compare_arrows",
         // 稽核紀錄（1.0.32，與 NET10-Blazor-Starter 同名）。classic Material Icons 有這個名稱。
         "fact_check",
     };

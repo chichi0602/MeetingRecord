@@ -17,6 +17,7 @@ public sealed class AiManagementMenuRegistrationTests
     private const int AiGroupId = 62;
     private const int AiCallLogId = 63;
     private const int TokenUsageId = 33;
+    private const int TranscriptionCompareId = 64;
 
     [Fact]
     public void MenuJson_AiGroupShouldHoldCallLogsThenTokenUsage()
@@ -29,7 +30,9 @@ public sealed class AiManagementMenuRegistrationTests
         Assert.False(group.Value.TryGetProperty("url", out _));
 
         var children = group.Value.GetProperty("subMenu").EnumerateArray().ToList();
-        Assert.Equal([AiCallLogId, TokenUsageId], children.Select(x => x.GetProperty("id").GetInt32()));
+        Assert.Equal([AiCallLogId, TokenUsageId, TranscriptionCompareId], children.Select(x => x.GetProperty("id").GetInt32()));
+        Assert.Equal("轉錄比較", children[2].GetProperty("name").GetString());
+        Assert.Equal("/transcription-compare", children[2].GetProperty("url").GetString());
 
         // name 是頁面標題（AppShell 依 Menu.json 顯示），與常數一字不差。
         Assert.Equal(MagicObjectHelper.角色_AI對話紀錄, children[0].GetProperty("name").GetString());
@@ -56,6 +59,8 @@ public sealed class AiManagementMenuRegistrationTests
     {
         Assert.Contains(AiCallLogId, SidebarMenuService.AdminOnlyMenuIds);
         Assert.Contains(TokenUsageId, SidebarMenuService.AdminOnlyMenuIds);
+        Assert.Contains(TranscriptionCompareId, SidebarMenuService.AdminOnlyMenuIds);
+        Assert.False(SidebarMenuService.MenuPermissionMap.ContainsKey(TranscriptionCompareId));
         Assert.Contains(AiGroupId, SidebarMenuService.GroupOnlyMenuIds);
         Assert.False(SidebarMenuService.MenuPermissionMap.ContainsKey(TokenUsageId));
         Assert.False(SidebarMenuService.MenuPermissionMap.ContainsKey(AiCallLogId));

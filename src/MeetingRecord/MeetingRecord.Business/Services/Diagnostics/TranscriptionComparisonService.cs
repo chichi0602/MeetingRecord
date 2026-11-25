@@ -34,7 +34,8 @@ public class TranscriptionComparisonService(
     TranscriptionCostEstimator costEstimator,
     CurrentUserService currentUserService,
     ILogger<TranscriptionComparisonService> logger,
-    IAiCallerProvider? callerProvider = null)
+    IAiCallerProvider? callerProvider = null,
+    AzureLlmSpeechTranscriptionProvider? llmSpeechProvider = null)
 {
     /// <summary>候選會議最多列幾場（最新的）。</summary>
     public const int MeetingTake = 200;
@@ -61,6 +62,7 @@ public class TranscriptionComparisonService(
         return new TranscriptionCompareMetaDto
         {
             ConfiguredDeployment = llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel.Trim() ?? string.Empty,
+            LlmSpeechAvailable = llmSpeechProvider?.IsConfigured == true,
             Meetings = meetings,
         };
     }
@@ -70,7 +72,10 @@ public class TranscriptionComparisonService(
     {
         var configured = llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel;
         var costs = request.Variants
-            .Select(x => costEstimator.EstimateTwd(request.Seconds, string.IsNullOrWhiteSpace(x.Deployment) ? configured : x.Deployment))
+            .Select(x => costEstimator.EstimateTwd(
+                request.Seconds,
+                x.Engine == (int)TranscriptionEngine.AzureLlmSpeech ? AzureSpeechSettings.PricingModel
+                : string.IsNullOrWhiteSpace(x.Deployment) ? configured : x.Deployment))
             .ToList();
 
         return new TranscriptionCompareEstimateDto
@@ -91,6 +96,22 @@ public class TranscriptionComparisonService(
         if (request.Seconds is < TranscriptionCompareRequestDto.MinSeconds or > TranscriptionCompareRequestDto.MaxSeconds)
         {
             return $"片段長度要在 {TranscriptionCompareRequestDto.MinSeconds}～{TranscriptionCompareRequestDto.MaxSeconds} 秒之間。";
+        }
+
+        // 1.1.73：引擎要認得；LLM Speech 分講者時講者上限要在 API 允許的範圍。
+        foreach (var variant in request.Variants)
+        {
+            if (!Enum.IsDefined(typeof(TranscriptionEngine), variant.Engine))
+            {
+                return "轉錄引擎不正確。";
+            }
+
+            if (variant.Engine == (int)TranscriptionEngine.AzureLlmSpeech
+                && variant.Diarize
+                && variant.MaxSpeakers is < AzureSpeechSettings.MinSpeakers or > AzureSpeechSettings.MaxSpeakers)
+            {
+                return $"講者上限要在 {AzureSpeechSettings.MinSpeakers}～{AzureSpeechSettings.MaxSpeakers} 之間。";
+            }
         }
 
         return request.StartSeconds < 0 ? "起點不可小於 0。" : null;
@@ -117,8 +138,29 @@ public class TranscriptionComparisonService(
             throw new InvalidOperationException("這場會議沒有影音檔。");
         }
 
-        var provider = transcriptionProviders.OfType<AzureOpenAiTranscriptionProvider>().FirstOrDefault()
-            ?? throw new InvalidOperationException("轉錄比較目前只支援 Azure OpenAI 的語音轉錄。");
+        var usesLlmSpeech = request.Variants.Any(x => x.Engine == (int)TranscriptionEngine.AzureLlmSpeech);
+        var usesOpenAi = request.Variants.Any(x => x.Engine == (int)TranscriptionEngine.AzureOpenAI);
+        var provider = transcriptionProviders.OfType<AzureOpenAiTranscriptionProvider>().FirstOrDefault();
+        if (usesOpenAi && provider is null)
+        {
+            throw new InvalidOperationException("轉錄比較的 Azure OpenAI 組需要 Azure OpenAI 的語音轉錄。");
+        }
+
+        if (usesLlmSpeech && llmSpeechProvider?.IsConfigured != true)
+        {
+            throw new InvalidOperationException("尚未設定 Azure LLM Speech（TranscriptionSettings:AzureSpeech 的 Endpoint 與 ApiKey）。");
+        }
+
+        // LLM Speech 的片語清單和正式轉錄一樣：專案名稱＋與會人員名冊。
+        IReadOnlyList<string> phrases = [];
+        if (usesLlmSpeech && meeting.ProjectId is { } projectId)
+        {
+            var project = await context.Project.AsNoTracking()
+                .Where(x => x.Id == projectId)
+                .Select(x => new { x.Title, x.Participants })
+                .FirstOrDefaultAsync(cancellationToken);
+            phrases = TranscriptionOptionsResolver.BuildPhrases(project?.Title, project?.Participants);
+        }
 
         if (!await RunLock.WaitAsync(TimeSpan.Zero, cancellationToken))
         {
@@ -144,15 +186,27 @@ public class TranscriptionComparisonService(
             for (var i = 0; i < request.Variants.Count; i++)
             {
                 var variant = request.Variants[i];
-                var configured = provider.WithOverrides(new TranscriptionOverrides(variant.Deployment, variant.Language, variant.Prompt));
+                ITranscriptionProvider configured;
+                string label;
+                if (variant.Engine == (int)TranscriptionEngine.AzureLlmSpeech)
+                {
+                    configured = llmSpeechProvider!.WithOptions(new LlmSpeechOptions(variant.Diarize, variant.MaxSpeakers, phrases));
+                    label = TranscriptionEngineText.Describe(variant.Engine, variant.Diarize);
+                }
+                else
+                {
+                    configured = provider!.WithOverrides(new TranscriptionOverrides(variant.Deployment, variant.Language, variant.Prompt));
+                    label = configured.ModelName;
+                }
+
                 var callContext = new AiCallContext(
                     AiUsageFeature.TranscriptionComparison,
                     userId,
                     userName,
                     MeetingId: meeting.Id,
-                    RelatedInfo: $"轉錄比較：會議 #{meeting.Id}〈{meeting.Title}〉{range}，第 {i + 1} 組 {configured.ModelName}");
+                    RelatedInfo: $"轉錄比較：會議 #{meeting.Id}〈{meeting.Title}〉{range}，第 {i + 1} 組 {label}");
 
-                onEvent(await TranscribeVariantAsync(i, configured, callContext, excerpt, cancellationToken));
+                onEvent(await TranscribeVariantAsync(i, configured, label, callContext, excerpt, cancellationToken));
             }
 
             return request.Variants.Count;
@@ -165,12 +219,13 @@ public class TranscriptionComparisonService(
 
     private async Task<TranscriptionCompareEventDto> TranscribeVariantAsync(
         int index,
-        AzureOpenAiTranscriptionProvider provider,
+        ITranscriptionProvider provider,
+        string label,
         AiCallContext callContext,
         MediaExcerpt excerpt,
         CancellationToken cancellationToken)
     {
-        var result = new TranscriptionCompareEventDto { Type = TranscriptionCompareEventDto.Result, Index = index, Deployment = provider.ModelName };
+        var result = new TranscriptionCompareEventDto { Type = TranscriptionCompareEventDto.Result, Index = index, Deployment = label };
         var stopwatch = Stopwatch.StartNew();
         try
         {

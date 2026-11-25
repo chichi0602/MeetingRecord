@@ -24,6 +24,15 @@ public class TranscriptionCompareRequestDto
 /// <summary>一組比較條件。空白＝沿用設定（部署）或不送（語言、提示詞）。</summary>
 public class TranscriptionCompareVariantDto
 {
+    /// <summary>1.1.73：0＝Azure OpenAI（用下面的部署、語言、提示詞），1＝Azure LLM Speech（用分講者與講者上限）。</summary>
+    public int Engine { get; set; }
+
+    /// <summary>1.1.73：LLM Speech 要不要分講者。</summary>
+    public bool Diarize { get; set; } = true;
+
+    /// <summary>1.1.73：LLM Speech 分講者時的講者上限（2～35）。</summary>
+    public int? MaxSpeakers { get; set; }
+
     public string Deployment { get; set; } = string.Empty;
 
     /// <summary>ISO-639-1，例如 zh；空白＝不指定。</summary>
@@ -51,6 +60,9 @@ public class TranscriptionCompareMeetingDto
 public class TranscriptionCompareMetaDto
 {
     public string ConfiguredDeployment { get; set; } = string.Empty;
+
+    /// <summary>1.1.73：Azure LLM Speech 設定好了（Endpoint 與 ApiKey）。</summary>
+    public bool LlmSpeechAvailable { get; set; }
 
     public List<TranscriptionCompareMeetingDto> Meetings { get; set; } = [];
 }

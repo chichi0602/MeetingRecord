@@ -117,6 +117,51 @@ public partial class MeetingPage : IDisposable
     private static readonly string TranscriptionCostNotice =
         $"轉錄會呼叫 Azure OpenAI 語音服務並產生費用：音檔每 {MeetingMediaPolicy.TranscriptionSegmentSeconds / 60} 分鐘切成一段、逐段送出，音檔越長費用越高。";
 
+    /// <summary>1.1.73：依選的引擎說明費用怎麼算；沒有選項（設定還沒載入）時沿用 Azure OpenAI 的說法。</summary>
+    private static string TranscriptionCostNoticeFor(TranscriptionOptionsDto? options)
+        => options?.Engine == (int)TranscriptionEngine.AzureLlmSpeech
+            ? "轉錄會呼叫 Azure LLM Speech 並產生費用：整個音檔一次送出，按音檔長度計費，音檔越長費用越高。"
+            : TranscriptionCostNotice;
+
+    /// <summary>1.1.73：上傳／重新轉錄確認時可選的引擎與預設值。載入失敗時為 null（不帶選項＝照設定的部署）。</summary>
+    private TranscriptionOptionsMetaDto? transcriptionMeta;
+
+    /// <summary>上傳表單目前選的轉錄方式。</summary>
+    private TranscriptionOptionsDto transcriptionChoice = new();
+
+    /// <summary>
+    /// 載入引擎選項並重設成預設值。講者上限的預設值看會議歸屬的專案，所以每次開表單都要重載。
+    /// 載入失敗只記 Log：不帶選項就是照設定的部署轉錄，不能因此不讓上傳。
+    /// </summary>
+    private async Task LoadTranscriptionOptionsAsync(int? projectId)
+    {
+        try
+        {
+            var result = await MeetingApi.GetTranscriptionOptionsAsync(projectId);
+            transcriptionMeta = result.Success ? result.Data : null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to load transcription options. ProjectId={ProjectId}", projectId);
+            transcriptionMeta = null;
+        }
+
+        transcriptionChoice = transcriptionMeta is null ? new() : TranscriptionOptionsPicker.CreateDefault(transcriptionMeta);
+    }
+
+    /// <summary>清單「已完成」下面的小字：引擎、分講者、耗時。</summary>
+    private static string DescribeTranscriptionRun(MeetingDto meeting)
+    {
+        var text = TranscriptionEngineText.Describe(meeting.TranscriptionEngine, meeting.TranscriptionDiarize);
+        if (meeting.TranscriptionElapsedSeconds is { } seconds)
+        {
+            var span = TimeSpan.FromSeconds(seconds);
+            text += span.TotalMinutes >= 1 ? $" · {(int)span.TotalMinutes} 分 {span.Seconds} 秒" : $" · {span.Seconds} 秒";
+        }
+
+        return text;
+    }
+
     /// <summary>
     /// 1.1.68 成本閘門的確認視窗結果：要加在確認內容後面的預估說明、是否超過提醒門檻、是否一定付不起。
     /// </summary>
@@ -127,7 +172,7 @@ public partial class MeetingPage : IDisposable
     /// 預估超過本月剩餘額度時回 <see cref="TranscriptionCostCheck.BlockMessage"/>：伺服器量到長度後同樣會擋，
     /// 在這裡先說，使用者就不用等上傳完才看到失敗。
     /// </summary>
-    private async Task<TranscriptionCostCheck> CheckTranscriptionCostAsync(double? seconds)
+    private async Task<TranscriptionCostCheck> CheckTranscriptionCostAsync(double? seconds, TranscriptionOptionsDto? options = null)
     {
         const string unknown = "（無法預估這次的費用。）";
         if (seconds is not { } length || length <= 0)
@@ -136,7 +181,7 @@ public partial class MeetingPage : IDisposable
         }
 
         var minutes = Math.Max(1, (int)Math.Round(length / 60));
-        var result = await MeetingApi.GetTranscriptionEstimateAsync(length);
+        var result = await MeetingApi.GetTranscriptionEstimateAsync(length, options);
         if (!result.Success || result.Data?.EstimatedTwd is not { } estimated)
         {
             return new TranscriptionCostCheck($"（約 {minutes} 分鐘，無法預估這次的費用。）", false, null, null);
@@ -547,7 +592,7 @@ public partial class MeetingPage : IDisposable
 
     #region 新增 / 修改 / 刪除
 
-    private Task OnAddAsync()
+    private async Task OnAddAsync()
     {
         CurrentRecord = NewRecord();
         ResetUploadState();
@@ -556,10 +601,10 @@ public partial class MeetingPage : IDisposable
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingMedia());
         modalVisible = true;
         logger.LogInformation("Opened create modal for meeting.");
-        return Task.CompletedTask;
+        await LoadTranscriptionOptionsAsync(null);
     }
 
-    private Task OnEditAsync(MeetingDto meeting)
+    private async Task OnEditAsync(MeetingDto meeting)
     {
         isNewRecordMode = false;
         modalTitle = "修改會議紀錄";
@@ -568,7 +613,7 @@ public partial class MeetingPage : IDisposable
         formSnapshot = FormDirtyHelper.Capture(CurrentRecord, DescribePendingMedia());
         modalVisible = true;
         logger.LogInformation("Opened edit modal for meeting. MeetingId={MeetingId}, Title={Title}", meeting.Id, meeting.Title);
-        return Task.CompletedTask;
+        await LoadTranscriptionOptionsAsync(meeting.ProjectId);
     }
 
     /// <summary>編輯前複製一份（取消時不影響清單）。表單只改中繼資料，其他欄位照抄給畫面判斷用。</summary>
@@ -788,20 +833,24 @@ public partial class MeetingPage : IDisposable
                 : mediaDropZone?.InputElement is { } durationInput
                     ? await mediaDurationInterop.GetDurationAsync(durationInput)
                     : null;
-            var cost = await CheckTranscriptionCostAsync(seconds);
+            var selectedTranscription = transcriptionMeta is null ? null : transcriptionChoice;
+            var cost = await CheckTranscriptionCostAsync(seconds, selectedTranscription);
             if (cost.BlockMessage is not null)
             {
                 NotifyError(cost.BlockMessage);
                 return;
             }
 
+            // 1.1.73：寫出這次選的轉錄方式，確認時看得到。
+            var engineLine = selectedTranscription is null ? string.Empty : $"轉錄方式：{TranscriptionOptionsPicker.Describe(selectedTranscription)}。";
+            var costNotice = TranscriptionCostNoticeFor(selectedTranscription);
             var uploadConfirmOptions = new ConfirmOptions
             {
                 Title = "確認上傳並開始轉錄（會產生費用）",
                 Content = replacingMedia
                     ? $"{fileDescription}會取代現有的「{CurrentRecord.MediaOriginalFileName}」，"
-                      + $"現有音檔與逐字稿會被刪除且無法復原。儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}{cost.Line}{AutoDraftCostLine}確定要繼續嗎？"
-                    : $"{fileDescription}儲存後會立刻自動排入背景轉錄：{TranscriptionCostNotice}{cost.Line}{AutoDraftCostLine}確定要繼續嗎？",
+                      + $"現有音檔與逐字稿會被刪除且無法復原。儲存後會立刻自動排入背景轉錄：{engineLine}{costNotice}{cost.Line}{AutoDraftCostLine}確定要繼續嗎？"
+                    : $"{fileDescription}儲存後會立刻自動排入背景轉錄：{engineLine}{costNotice}{cost.Line}{AutoDraftCostLine}確定要繼續嗎？",
                 OkText = replacingMedia ? "取代並開始轉錄" : "儲存並開始轉錄",
                 CancelText = "取消",
                 MaskClosable = false
@@ -871,7 +920,8 @@ public partial class MeetingPage : IDisposable
                 file,
                 IdOf(CurrentRecord),
                 deleteMeetingOnCancel: createdInThisSave,
-                autoDraftPromptTemplateId: autoDraftPromptTemplateId > 0 ? autoDraftPromptTemplateId : null);
+                autoDraftPromptTemplateId: autoDraftPromptTemplateId > 0 ? autoDraftPromptTemplateId : null,
+                transcription: transcriptionMeta is null ? null : transcriptionChoice);
             if (startError is not null)
             {
                 NotifyError($"{startError}會議資料已保留，要重新上傳請按這一列的「修改」再選一次檔案。");
@@ -885,7 +935,8 @@ public partial class MeetingPage : IDisposable
                 pendingRecordingName ?? $"錄音{recording.Extension}",
                 IdOf(CurrentRecord),
                 deleteMeetingOnCancel: createdInThisSave,
-                autoDraftPromptTemplateId: autoDraftPromptTemplateId > 0 ? autoDraftPromptTemplateId : null);
+                autoDraftPromptTemplateId: autoDraftPromptTemplateId > 0 ? autoDraftPromptTemplateId : null,
+                transcription: transcriptionMeta is null ? null : transcriptionChoice);
             if (startError is not null)
             {
                 // 錄音沒有第二份，丟掉就沒了：先存到使用者電腦，之後可以用選檔上傳。
@@ -1124,45 +1175,103 @@ public partial class MeetingPage : IDisposable
             _ => $"這會為「{meeting.Title}」執行一次完整的轉錄。",
         };
 
-        // 1.1.68 成本閘門：有上次量到的長度（轉錄完成過）才估得出來，沒有就只說無法預估。
-        var cost = await CheckTranscriptionCostAsync(meeting.MediaDurationSeconds);
-        if (cost.BlockMessage is not null)
+        // 1.1.73：選引擎與分講者要表單，改開自己的視窗；預設帶這場上次的選擇（能用的話）。
+        await LoadTranscriptionOptionsAsync(meeting.ProjectId);
+        retranscribeChoice = transcriptionMeta is null ? new() : PreviousChoiceOrDefault(meeting, transcriptionMeta);
+        retranscribeMeeting = meeting;
+        retranscribeWillOverwrite = willOverwrite;
+        retranscribeSituation = situation;
+        retranscribeTitle = willOverwrite ? "確認重新轉錄（會產生費用）" : "確認執行轉錄（會產生費用）";
+        retranscribeOkText = willOverwrite ? "覆蓋並重新轉錄" : "開始轉錄";
+        await RefreshRetranscribeCostAsync();
+
+        // 1.1.68 成本閘門：一定付不起就不開視窗。
+        if (retranscribeCost?.BlockMessage is { } blockMessage)
         {
-            NotifyError(cost.BlockMessage);
+            NotifyError(blockMessage);
             return;
         }
 
-        var confirmOptions = new ConfirmOptions
-        {
-            Title = willOverwrite ? "確認重新轉錄（會產生費用）" : "確認執行轉錄（會產生費用）",
-            Content = $"{situation}{TranscriptionCostNotice}{cost.Line}確定要繼續嗎？",
-            OkText = willOverwrite ? "覆蓋並重新轉錄" : "開始轉錄",
-            CancelText = "取消",
-            MaskClosable = false
-        };
+        retranscribeVisible = true;
+    }
 
-        if (willOverwrite)
+    #region 重新轉錄視窗（1.1.73）
+
+    private bool retranscribeVisible;
+    private MeetingDto? retranscribeMeeting;
+    private bool retranscribeWillOverwrite;
+    private string retranscribeTitle = string.Empty;
+    private string retranscribeOkText = string.Empty;
+    private string retranscribeSituation = string.Empty;
+    private TranscriptionOptionsDto retranscribeChoice = new();
+    private TranscriptionCostCheck? retranscribeCost;
+
+    private string retranscribeCostText => $"{TranscriptionCostNoticeFor(transcriptionMeta is null ? null : retranscribeChoice)}{retranscribeCost?.Line}";
+
+    /// <summary>上次選的引擎還能用就帶上次的，否則用預設值。</summary>
+    private static TranscriptionOptionsDto PreviousChoiceOrDefault(MeetingDto meeting, TranscriptionOptionsMetaDto meta)
+    {
+        var fallback = TranscriptionOptionsPicker.CreateDefault(meta);
+        if (meeting.TranscriptionDiarize is not { } diarize)
         {
-            confirmOptions.OkButtonProps = new ButtonProps { Danger = true };
+            return fallback;
         }
 
-        if (!await modalService.ConfirmAsync(confirmOptions)
-            || (cost.ThresholdMessage is { } thresholdMessage && !await ConfirmHighCostAsync(thresholdMessage)))
+        var usable = meeting.TranscriptionEngine == (int)TranscriptionEngine.AzureLlmSpeech
+            ? meta.LlmSpeechAvailable
+            : diarize ? meta.OpenAiDiarizeAvailable : meta.OpenAiPlainAvailable;
+        return usable
+            ? new TranscriptionOptionsDto
+            {
+                Engine = meeting.TranscriptionEngine,
+                Diarize = diarize,
+                MaxSpeakers = meeting.TranscriptionMaxSpeakers ?? meta.SuggestedMaxSpeakers,
+            }
+            : fallback;
+    }
+
+    /// <summary>1.1.68 成本閘門：有上次量到的長度（轉錄完成過）才估得出來，沒有就只說無法預估。換引擎時重估。</summary>
+    private async Task RefreshRetranscribeCostAsync()
+        => retranscribeCost = await CheckTranscriptionCostAsync(
+            retranscribeMeeting?.MediaDurationSeconds,
+            transcriptionMeta is null ? null : retranscribeChoice);
+
+    private async Task OnRetranscribeChoiceChangedAsync(TranscriptionOptionsDto choice)
+    {
+        retranscribeChoice = choice;
+        await RefreshRetranscribeCostAsync();
+    }
+
+    private async Task OnRetranscribeOkAsync()
+    {
+        if (retranscribeMeeting is not { } meeting || requeueingMeetingId is not null)
         {
-            logger.LogDebug("Retry transcription cancelled by user. MeetingId={MeetingId}", meeting.Id);
+            return;
+        }
+
+        if (retranscribeCost?.BlockMessage is { } blockMessage)
+        {
+            NotifyError(blockMessage);
+            return;
+        }
+
+        if (retranscribeCost?.ThresholdMessage is { } thresholdMessage && !await ConfirmHighCostAsync(thresholdMessage))
+        {
+            logger.LogDebug("Retry transcription cancelled by user at the high-cost confirmation. MeetingId={MeetingId}", meeting.Id);
             return;
         }
 
         requeueingMeetingId = meeting.Id;
         try
         {
-            var result = await MeetingApi.RetranscribeAsync(IdOf(meeting));
+            var result = await MeetingApi.RetranscribeAsync(IdOf(meeting), transcriptionMeta is null ? null : retranscribeChoice);
             if (!result.Success)
             {
                 NotifyError(MeetingErrorText(result));
                 return;
             }
 
+            retranscribeVisible = false;
             NotifySuccess("已重新排入轉錄佇列，可在右下角的進度面板看到進度。");
             await ReloadAsync();
         }
@@ -1171,6 +1280,8 @@ public partial class MeetingPage : IDisposable
             requeueingMeetingId = null;
         }
     }
+
+    #endregion
 
     /// <summary>
     /// 清掉待上傳的檔案並重建拖拉區。1.1.23 起上傳開始時 JS 已拿到檔案本身，重建拖拉區不影響進行中的上傳。

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using MeetingRecord.Dtos.Meetings;
 using MeetingRecord.Dtos.Uploads;
 using MeetingRecord.Web.Client.Api;
 using MeetingRecord.Web.Services;
@@ -64,7 +65,7 @@ public sealed class MeetingUploadManager
     /// 建立工作階段被擋下時回原因（呼叫端再補上「會議資料已保留」）；開始了回 null。
     /// </summary>
     /// <param name="autoDraftPromptTemplateId">1.1.69：轉錄完自動產生會議紀錄要用的提示詞；null＝不自動產生。</param>
-    public Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null)
+    public Task<string?> StartAsync(ElementReference input, IBrowserFile file, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null, TranscriptionOptionsDto? transcription = null)
         => StartCoreAsync(
             file.Name,
             file.ContentType,
@@ -72,12 +73,13 @@ public sealed class MeetingUploadManager
             (uploadId, chunkSize, callback) => js.InvokeVoidAsync("meetingRecordChunkUpload.start", input, 0, file.Name, file.Size, uploadId, chunkSize, callback),
             meetingId,
             deleteMeetingOnCancel,
-            autoDraftPromptTemplateId);
+            autoDraftPromptTemplateId,
+            transcription);
 
     /// <summary>
     /// 1.1.71：上傳瀏覽器錄好的聲音（本體在 JS 端，<c>media-recorder.js</c>）。其餘同 <see cref="StartAsync"/>。
     /// </summary>
-    public Task<string?> StartRecordingAsync(RecordedAudio audio, string fileName, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null)
+    public Task<string?> StartRecordingAsync(RecordedAudio audio, string fileName, int meetingId, bool deleteMeetingOnCancel, int? autoDraftPromptTemplateId = null, TranscriptionOptionsDto? transcription = null)
         => StartCoreAsync(
             fileName,
             audio.MimeType,
@@ -85,7 +87,8 @@ public sealed class MeetingUploadManager
             (uploadId, chunkSize, callback) => js.InvokeVoidAsync("meetingRecordChunkUpload.startRecorded", audio.Key, fileName, audio.Size, uploadId, chunkSize, callback),
             meetingId,
             deleteMeetingOnCancel,
-            autoDraftPromptTemplateId);
+            autoDraftPromptTemplateId,
+            transcription);
 
     private async Task<string?> StartCoreAsync(
         string fileName,
@@ -94,7 +97,8 @@ public sealed class MeetingUploadManager
         Func<string, int, DotNetObjectReference<ChunkUploadCallback>, ValueTask> startInBrowser,
         int meetingId,
         bool deleteMeetingOnCancel,
-        int? autoDraftPromptTemplateId)
+        int? autoDraftPromptTemplateId,
+        TranscriptionOptionsDto? transcription)
     {
         var created = await api.CreateAsync(new UploadSessionRequestDto
         {
@@ -105,6 +109,7 @@ public sealed class MeetingUploadManager
             Size = size,
             DeleteMeetingOnCancel = deleteMeetingOnCancel,
             AutoDraftPromptTemplateId = autoDraftPromptTemplateId,
+            Transcription = transcription,
         });
         if (!created.Success || created.Data is not { } session)
         {

@@ -269,3 +269,11 @@
         opacity: 0.3;
     }
 }
+
+/* 1.1.73：轉錄完成後的引擎與耗時小字。 */
+.meeting-status-engine {
+    margin-top: 2px;
+    color: #6b7a8d;
+    font-size: 12px;
+    white-space: nowrap;
+}

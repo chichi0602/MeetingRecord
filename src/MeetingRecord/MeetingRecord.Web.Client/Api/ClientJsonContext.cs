@@ -143,6 +143,8 @@ namespace MeetingRecord.Web.Client.Api;
 [JsonSerializable(typeof(ApiResult<List<MeetingDraftVersionDto>>), TypeInfoPropertyName = "MeetingDraftVersionsResult")]
 [JsonSerializable(typeof(ApiResult<MeetingDraftVersionDetailDto>), TypeInfoPropertyName = "MeetingDraftVersionDetailResult")]
 [JsonSerializable(typeof(ApiResult<MeetingTranscriptionEstimateDto>), TypeInfoPropertyName = "MeetingTranscriptionEstimateResult")]
+[JsonSerializable(typeof(TranscriptionOptionsDto))]
+[JsonSerializable(typeof(ApiResult<TranscriptionOptionsMetaDto>), TypeInfoPropertyName = "TranscriptionOptionsMetaResult")]
 [JsonSerializable(typeof(MeetingSpeakerNamesDto))]
 [JsonSerializable(typeof(ApiResult<List<MeetingProjectOptionDto>>), TypeInfoPropertyName = "MeetingProjectOptionsResult")]
 [JsonSerializable(typeof(ApiResult<List<MeetingPromptOptionDto>>), TypeInfoPropertyName = "MeetingPromptOptionsResult")]

@@ -32,6 +32,7 @@ public static class LlmConfigurationInspector
         nameof(LlmProviderSettings.TranscriptionModel),
         nameof(LlmProviderSettings.TranscriptionDeployment),
         nameof(LlmProviderSettings.TranscriptionApiVersion),
+        nameof(LlmProviderSettings.TranscriptionModelNoSpeakers),
 
         // 1.0.28 以前文字生成要填的 api-version。v1 API 不需要，舊設定檔留著也照常啟動（LlmSettingsTests 守門）。
         "ApiVersion",

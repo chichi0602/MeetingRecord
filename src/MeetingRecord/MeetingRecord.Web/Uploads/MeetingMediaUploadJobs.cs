@@ -7,6 +7,7 @@ using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Dtos.Uploads;
 using MeetingRecord.Models.Others;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 
 namespace MeetingRecord.Web.Uploads;
 
@@ -82,6 +83,11 @@ public sealed class MeetingMediaUploadJobs(IServiceScopeFactory scopeFactory, Ch
                 }
 
                 services.GetRequiredService<CurrentUserService>().CurrentUser = user;
+
+                // 1.1.73：建立工作階段時已驗證過；上傳期間設定被改掉而不能用時，退回沿用設定的部署，不讓已傳完的檔案白傳。
+                var (transcription, _) = services.GetRequiredService<TranscriptionOptionsResolver>().Resolve(request.Transcription);
+                transcription ??= new ResolvedTranscriptionOptions(TranscriptionEngine.AzureOpenAI, null, null);
+
                 var result = await services.GetRequiredService<MeetingService>().SaveMediaAsync(
                     job.MeetingId,
                     new MeetingMediaUploadInput
@@ -91,6 +97,9 @@ public sealed class MeetingMediaUploadJobs(IServiceScopeFactory scopeFactory, Ch
                         FileSize = request.Size,
                         Content = session.Stream,
                         AutoDraftPromptTemplateId = request.AutoDraftPromptTemplateId,
+                        TranscriptionEngine = transcription.Engine,
+                        TranscriptionDiarize = transcription.Diarize,
+                        TranscriptionMaxSpeakers = transcription.MaxSpeakers,
                     },
                     cancellationToken: job.Cancellation.Token,
                     deleteMeetingOnCancel: request.DeleteMeetingOnCancel);

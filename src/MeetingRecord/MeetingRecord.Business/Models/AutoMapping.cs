@@ -99,6 +99,7 @@ public class AutoMapping : Profile
             .ForMember(d => d.Categories, o => o.Ignore())
             .ForMember(d => d.CategoryNames, o => o.Ignore())
             .ForMember(d => d.TranscriptionStatus, o => o.MapFrom(s => (int)s.TranscriptionStatus))
+            .ForMember(d => d.TranscriptionEngine, o => o.MapFrom(s => (int)s.TranscriptionEngine))
             .ForMember(d => d.DraftStatus, o => o.MapFrom(s => (int)s.DraftStatus))
             .ForMember(d => d.IsUploader, o => o.Ignore())
             .ForMember(d => d.CanDelete, o => o.Ignore())

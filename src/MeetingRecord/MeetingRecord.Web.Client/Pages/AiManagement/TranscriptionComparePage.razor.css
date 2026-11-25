@@ -139,3 +139,10 @@
     font-family: inherit;
     line-height: 1.8;
 }
+
+/* 1.1.73：LLM Speech 的分講者、講者上限。 */
+.compare-variant-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}

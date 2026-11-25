@@ -62,17 +62,41 @@ else
                 var variant = variants[index];
                 <div class="compare-variant" @key="variant">
                     <span class="compare-variant-no">第 @(index + 1) 組</span>
-                    <Input TValue="string" @bind-Value="variant.Deployment" Placeholder="部署名稱（空白＝目前設定）" Disabled="@isRunning" Style="width: 240px;" />
-                    <Select TItem="string" TItemValue="string" @bind-Value="variant.Language" Disabled="@isRunning" Style="width: 130px;">
+                    @* 1.1.73：可以選 Azure LLM Speech；它沒有部署、語言、提示詞，改成分講者與講者上限。 *@
+                    <Select TItem="int" TItemValue="int" @bind-Value="variant.Engine" Disabled="@isRunning" Style="width: 170px;">
                         <SelectOptions>
-                            <SelectOption TItem="string" TItemValue="string" Value="@string.Empty" Label="不指定語言" />
-                            <SelectOption TItem="string" TItemValue="string" Value="@("zh")" Label="中文（zh）" />
+                            <SelectOption TItem="int" TItemValue="int" Value="0" Label="Azure OpenAI" />
+                            <SelectOption TItem="int" TItemValue="int" Value="1" Label="Azure LLM Speech" Disabled="@(!llmSpeechAvailable)" />
                         </SelectOptions>
                     </Select>
-                    <HoverTip Title="@(IsDiarize(variant) ? "diarize 模型不支援提示詞" : "專有名詞，例如產品名、人名，用逗號分隔")">
-                        <Input TValue="string" @bind-Value="variant.Prompt" Placeholder="提示詞（選填）"
-                               Disabled="@(isRunning || IsDiarize(variant))" Style="width: 260px;" />
-                    </HoverTip>
+                    @if (variant.Engine == 1)
+                    {
+                        <span class="compare-variant-field">
+                            分講者 <Switch @bind-Value="variant.Diarize" Disabled="@isRunning" />
+                        </span>
+                        @if (variant.Diarize)
+                        {
+                            <span class="compare-variant-field">
+                                講者上限
+                                <AntDesign.InputNumber TValue="int?" @bind-Value="variant.MaxSpeakers" Min="2" Max="35" Disabled="@isRunning" Style="width: 80px;" />
+                            </span>
+                        }
+                        <span class="compare-muted">片語清單自動帶專案名稱與與會人員名冊。</span>
+                    }
+                    else
+                    {
+                        <Input TValue="string" @bind-Value="variant.Deployment" Placeholder="部署名稱（空白＝目前設定）" Disabled="@isRunning" Style="width: 240px;" />
+                        <Select TItem="string" TItemValue="string" @bind-Value="variant.Language" Disabled="@isRunning" Style="width: 130px;">
+                            <SelectOptions>
+                                <SelectOption TItem="string" TItemValue="string" Value="@string.Empty" Label="不指定語言" />
+                                <SelectOption TItem="string" TItemValue="string" Value="@("zh")" Label="中文（zh）" />
+                            </SelectOptions>
+                        </Select>
+                        <HoverTip Title="@(IsDiarize(variant) ? "diarize 模型不支援提示詞" : "專有名詞，例如產品名、人名，用逗號分隔")">
+                            <Input TValue="string" @bind-Value="variant.Prompt" Placeholder="提示詞（選填）"
+                                   Disabled="@(isRunning || IsDiarize(variant))" Style="width: 260px;" />
+                        </HoverTip>
+                    }
                     @if (variants.Count > 1)
                     {
                         <CrudActionButton Title="移除這一組" Icon="close" Disabled="@isRunning" OnClick="@(() => RemoveVariant(index))" />

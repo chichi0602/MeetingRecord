@@ -5,11 +5,13 @@ using MeetingRecord.Business.Helpers;
 using MeetingRecord.Business.Services.DataAccess;
 using MeetingRecord.Business.Services.Export;
 using MeetingRecord.Business.Services.Other;
+using MeetingRecord.Business.Services.Transcription;
 using MeetingRecord.Dtos.Commons;
 using MeetingRecord.Dtos.Meetings;
 using MeetingRecord.Dtos.Models;
 using MeetingRecord.Models.AdapterModel;
 using MeetingRecord.Models.Systems;
+using MeetingRecord.Share.Enums;
 using MeetingRecord.Share.Helpers;
 using MeetingRecord.Web.Auth;
 using MeetingRecord.Web.Filters;
@@ -189,8 +191,44 @@ public class MeetingController(
     /// <summary>重新轉錄（只限上傳者與管理者；已排入或轉錄中的會擋下，避免跑兩趟重複計費）。</summary>
     [HttpPost("{id}/retranscribe")]
     [HasPermission(MagicObjectHelper.角色_會議紀錄, PermissionActions.Edit)]
-    public Task<ActionResult<ApiResult>> Retranscribe(int id)
-        => RunAsync(id, () => meetingService.RequeueTranscriptionAsync(id), "已重新排入轉錄。");
+    public async Task<ActionResult<ApiResult>> Retranscribe(
+        int id,
+        [FromBody] TranscriptionOptionsDto? options,
+        [FromServices] TranscriptionOptionsResolver transcriptionOptions)
+    {
+        // 1.1.73：沒帶選項＝沿用這場上次的選擇；帶了就先驗證這個組合能不能用。
+        ResolvedTranscriptionOptions? resolved = null;
+        if (options is not null)
+        {
+            (resolved, var error) = transcriptionOptions.Resolve(options);
+            if (error is not null)
+            {
+                return BadRequest(ApiResult.FailureResult(error));
+            }
+        }
+
+        return await RunAsync(id, () => meetingService.RequeueTranscriptionAsync(id, resolved), "已重新排入轉錄。");
+    }
+
+    /// <summary>
+    /// 1.1.73：上傳／重新轉錄確認時可選的轉錄引擎、分講者與預設值。
+    /// 講者上限的預設值取專案與會人員名冊的人數（看不到的專案當成沒有專案）。
+    /// </summary>
+    [HttpGet("transcription-options")]
+    [HasPermission(MagicObjectHelper.角色_會議紀錄, new[] { PermissionActions.Create, PermissionActions.Edit })]
+    public async Task<ActionResult<ApiResult<TranscriptionOptionsMetaDto>>> TranscriptionOptions(
+        [FromQuery] int? projectId,
+        [FromServices] TranscriptionOptionsResolver transcriptionOptions)
+    {
+        int? participantCount = null;
+        if (projectId is { } pid)
+        {
+            participantCount = (await projectService.GetSelectableAsync())
+                .FirstOrDefault(x => x.Id == pid)?.Participants.Count;
+        }
+
+        return Ok(ApiResult<TranscriptionOptionsMetaDto>.SuccessResult(transcriptionOptions.GetMeta(participantCount)));
+    }
 
     /// <summary>產生（或重新產生）會議紀錄：會花 AI 費用，額度、封存、提示詞與專案的檢查都在服務層。</summary>
     [HttpPost("{id}/draft")]
@@ -367,17 +405,25 @@ public class MeetingController(
     [HasPermission(MagicObjectHelper.角色_會議紀錄, new[] { PermissionActions.Create, PermissionActions.Edit })]
     public async Task<ActionResult<ApiResult<MeetingTranscriptionEstimateDto>>> TranscriptionEstimate(
         [FromQuery] double seconds,
-        [FromServices] MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator estimator)
+        [FromServices] MeetingRecord.Business.Services.AiUsage.TranscriptionCostEstimator estimator,
+        [FromServices] TranscriptionOptionsResolver transcriptionOptions,
+        [FromQuery] int? engine = null,
+        [FromQuery] bool? diarize = null)
     {
         if (double.IsNaN(seconds) || seconds <= 0 || seconds > TimeSpan.FromDays(2).TotalSeconds)
         {
             return BadRequest(ApiResult<MeetingTranscriptionEstimateDto>.FailureResult("時長不正確。"));
         }
 
+        // 1.1.73：依選的引擎與分講者用那個引擎／部署的單價；沒帶就照設定的部署（舊行為）。
+        var estimated = engine is { } selected && Enum.IsDefined(typeof(TranscriptionEngine), selected)
+            ? estimator.EstimateTwd(seconds, transcriptionOptions.PricingModel((TranscriptionEngine)selected, diarize))
+            : estimator.EstimateTwd(seconds);
+
         return Ok(ApiResult<MeetingTranscriptionEstimateDto>.SuccessResult(new MeetingTranscriptionEstimateDto
         {
             Seconds = seconds,
-            EstimatedTwd = estimator.EstimateTwd(seconds),
+            EstimatedTwd = estimated,
             ConfirmThresholdTwd = estimator.ConfirmThresholdTwd,
             RemainingTwd = await estimator.GetRemainingTwdAsync(UserClaims.GetUserId(User)),
         }));

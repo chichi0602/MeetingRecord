@@ -33,6 +33,22 @@ public class MeetingDto : MeetingCreateUpdateDto
     [JsonPropertyName("awaitingSpeakerNames")]
     public bool AwaitingSpeakerNames { get; set; }
 
+    /// <summary>1.1.73：轉錄引擎（0＝Azure OpenAI，1＝Azure LLM Speech）。</summary>
+    [JsonPropertyName("transcriptionEngine")]
+    public int TranscriptionEngine { get; set; }
+
+    /// <summary>1.1.73：要不要分講者；null＝照設定的部署（1.1.72 以前的會議）。</summary>
+    [JsonPropertyName("transcriptionDiarize")]
+    public bool? TranscriptionDiarize { get; set; }
+
+    /// <summary>1.1.73：LLM Speech 分講者時的講者上限。</summary>
+    [JsonPropertyName("transcriptionMaxSpeakers")]
+    public int? TranscriptionMaxSpeakers { get; set; }
+
+    /// <summary>1.1.73：上次轉錄從開始到完成花了幾秒（含轉檔）。</summary>
+    [JsonPropertyName("transcriptionElapsedSeconds")]
+    public double? TranscriptionElapsedSeconds { get; set; }
+
     /// <summary>
     /// 轉錄狀態：0 未上傳、1 待處理、2 處理中、3 已完成、4 失敗
     /// </summary>

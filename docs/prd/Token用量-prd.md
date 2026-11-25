@@ -1,10 +1,10 @@
 ﻿# Token 用量 PRD
 
-- 文件版本：2.12
+- 文件版本：2.13
 - 文件狀態：已實作
-- 現行系統版本：1.1.72
+- 現行系統版本：1.1.73
 - 首次實作版本：0.4.80（帳本與頁面）、1.0.31（升級）
-- 最後核對日期：2026/11/20
+- 最後核對日期：2026/11/24
 
 > 本文件原名 `AI用量分析-prd.md`（1.0.30 前頁面名為「AI 用量分析」），1.0.31 改名並全文改寫成現況。每次呼叫實際送出的內容與回應見 [AI 對話紀錄 PRD](AI對話紀錄-prd.md)。
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|
 | 會議紀錄生成（最終整理，reduce） | 0 | token | `MeetingDraftJobRunner` | 1 |
 | 逐字稿分段摘要（map） | 1 | token | `MeetingDraftJobRunner` | N（逐字稿切段數） |
-| 語音轉錄 | 2 | 音訊秒數 | `TranscriptionJobRunner` | N（音檔每 5 分鐘一段） |
+| 語音轉錄 | 2 | 音訊秒數 | `TranscriptionJobRunner` | N（Azure OpenAI：音檔每 5 分鐘一段；1.1.73 起選 Azure LLM Speech 時整檔 1 列，超過 2 小時才依切段數；模型記 `azure-llm-speech`） |
 | AI 問答 | 3 | token | `AiChatService` | 提問與「修改後重新產生」各 1 |
 | 待辦事項擷取 | 4 | token | `TodoExtractionService` | 1 |
 | AI 日誌分析（0.4.121） | 5 | token | `DiagnosticAiService`（監控與診斷 → 日誌檢視） | 1（不帶會議／專案，「對象」為「—」） |
@@ -40,7 +40,7 @@
 | AI 連線測試（1.0.35） | 7 | token | `AiConnectionTestService`（系統健康監控 →「測試 AI 連線」，管理者手動按） | 1（一則極短提問） |
 | AI 連線測試（轉錄）（1.0.35） | 8 | 音訊 | `AiConnectionTestService` | 1（1 秒靜音） |
 | 使用說明 AI 助理（1.0.43） | 9 | token | `HelpAssistantService`（使用說明頁頂端「問 AI 助理」，所有有頁面權限的人） | 1（每次提問；都會送約整份使用說明，不帶會議／專案） |
-| 轉錄比較（1.1.72） | 10 | 音訊 | `TranscriptionComparisonService`（AI 管理 →「轉錄比較」，管理者手動按） | 每組條件 1（片段長度計費，帶會議；模型記實際打的部署） |
+| 轉錄比較（1.1.72） | 10 | 音訊 | `TranscriptionComparisonService`（AI 管理 →「轉錄比較」，管理者手動按） | 每組條件 1（片段長度計費，帶會議；模型記實際打的部署，LLM Speech 那一組記 `azure-llm-speech`） |
 
 1.0.29 起呼叫端一律經 `AiCallGateway`，由 gateway 寫帳（見「四、內部系統運作」）。
 
@@ -195,7 +195,7 @@
 | 區段 | 鍵 | 現行值 | 說明 |
 |---|---|---|---|
 | `LlmSettings` | `Currency` | `USD` | 定價幣別 |
-| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-4o-transcribe-diarize`（1.1.63）、`gpt-6.1-sol`（1.0.36）、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下 |
+| `LlmSettings` | `Pricing.<deployment>` | `gpt-4o-mini`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`、`gpt-transcribe`、`gpt-4o-transcribe-diarize`（1.1.63）、`azure-llm-speech`（1.1.73）、`gpt-6.1-sol`（1.0.36）、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` | `InputPerMillionTokens`／`OutputPerMillionTokens` 或 `AudioPerMinute`；字典不分大小寫；負數啟動擋下。`azure-llm-speech` 不是 Azure 部署名稱，是 Azure LLM Speech 固定用的計價鍵（`AudioPerMinute` 0.006＝US$0.36／小時） |
 | `ExchangeRateSettings` | `Enabled` | `true` | 總開關；`false` 時整頁退回定價幣別 |
 | `ExchangeRateSettings` | `SourceUrl` | `https://open.er-api.com/v6/latest/USD` | 必須是 http(s) 絕對網址 |
 | `ExchangeRateSettings` | `TargetCurrency` | `TWD` | 必須是三碼英文字母 |
@@ -342,5 +342,6 @@
 - **1.0.36**：出貨的單價表加入 `gpt-6.1-sol`（輸入 $2、輸出 $10／每百萬 token，OpenAI 官方模型頁標準層）。部署改用它之後的呼叫才有金額；之前已記錄、金額為「—」的紀錄不回填。
 - **1.0.43**：新增功能別 `HelpAssistant = 9`（「使用說明 AI 助理」，token 計費），由使用說明頁的「問 AI 助理」經 `AiCallGateway` 寫帳（成功／失敗／取消都記）；功能下拉自動多一項。
 - **1.1.72**：新增功能別 `TranscriptionComparison = 10`（「轉錄比較」，以音訊時長計費，`IsTokenBased` 一併排除），由 AI 管理的「轉錄比較」頁觸發；帳本的模型是那一組實際打的部署（`AzureOpenAiTranscriptionProvider.WithOverrides`），單價也照它查。功能下拉自動多一項。
+- **1.1.73**：影音轉文字稿可選 Azure LLM Speech。出貨的單價表加入計價鍵 `azure-llm-speech`（`AudioPerMinute` 0.006 美元＝每小時 0.36 美元，依 Azure 價格 API 的 Fast Transcription 標準價，LLM Speech 共用此計價項目；2026/9/1 起的每小時 0.10 美元促銷價沒寫結束日，不採用）。LLM Speech 的轉錄在帳本的模型欄記 `azure-llm-speech`，功能別照舊是「語音轉錄」或「轉錄比較」，不新增功能別。分講者有沒有加價官方沒寫，要等第一張帳單核對後再調單價。Azure OpenAI 不分講者時，模型記 `TranscriptionModelNoSpeakers` 設定的部署。見 [變更紀錄](../changelog/2026-11-24-影音轉文字稿可選LLMSpeech.md)。
 
 > 返回 [PRD 主控台](README.md)

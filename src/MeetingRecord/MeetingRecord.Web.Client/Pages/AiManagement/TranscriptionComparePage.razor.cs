@@ -32,6 +32,9 @@ public partial class TranscriptionComparePage : ComponentBase, IDisposable
     private bool isAccessChecked;
     private string? RoleMessage;
     private string configuredDeployment = string.Empty;
+
+    /// <summary>1.1.73：Azure LLM Speech 設定好了才能選。</summary>
+    private bool llmSpeechAvailable;
     private List<TranscriptionCompareMeetingDto> meetings = [];
     private int meetingId;
     private int startMinute;
@@ -72,6 +75,7 @@ public partial class TranscriptionComparePage : ComponentBase, IDisposable
         }
 
         configuredDeployment = meta.Data.ConfiguredDeployment;
+        llmSpeechAvailable = meta.Data.LlmSpeechAvailable;
         meetings = meta.Data.Meetings;
 
         // 預設兩組：目前設定（照正式轉錄送，不帶語言），以及官方建議的 gpt-transcribe 指定中文。
@@ -80,6 +84,12 @@ public partial class TranscriptionComparePage : ComponentBase, IDisposable
             new() { Deployment = configuredDeployment },
             new() { Deployment = "gpt-transcribe", Language = "zh" },
         ];
+
+        // 1.1.73：LLM Speech 設定好了就多帶一組（分講者），三種直接比。
+        if (llmSpeechAvailable)
+        {
+            variants.Add(new() { Engine = 1, Diarize = true, MaxSpeakers = 10 });
+        }
     }
 
     private void AddVariant()
@@ -110,6 +120,9 @@ public partial class TranscriptionComparePage : ComponentBase, IDisposable
             Seconds = seconds,
             Variants = [.. variants.Select(x => new TranscriptionCompareVariantDto
             {
+                Engine = x.Engine,
+                Diarize = x.Diarize,
+                MaxSpeakers = x.Diarize ? x.MaxSpeakers ?? 10 : null,
                 Deployment = x.Deployment?.Trim() ?? string.Empty,
                 Language = x.Language ?? string.Empty,
                 Prompt = IsDiarize(x) ? string.Empty : x.Prompt?.Trim() ?? string.Empty,
@@ -205,6 +218,11 @@ public partial class TranscriptionComparePage : ComponentBase, IDisposable
         }
 
         var variant = sentVariants[index];
+        if (variant.Engine == 1)
+        {
+            return variant.Diarize ? $"講者上限 {variant.MaxSpeakers} 人、zh-TW、片語清單" : "zh-TW、片語清單";
+        }
+
         var parts = new List<string> { string.IsNullOrWhiteSpace(variant.Language) ? "不指定語言" : $"語言 {variant.Language}" };
         if (!string.IsNullOrWhiteSpace(variant.Prompt))
         {

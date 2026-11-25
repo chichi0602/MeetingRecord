@@ -80,9 +80,13 @@ public sealed class TranscriptionCostEstimator(
     /// <summary>
     /// 預估費用超過本月剩餘額度時回傳要寫進失敗原因的訊息；付得起（或估不出來）回 null。
     /// </summary>
-    public async Task<string?> CheckAffordableAsync(double seconds, int? userId, CancellationToken cancellationToken = default)
+    public Task<string?> CheckAffordableAsync(double seconds, int? userId, CancellationToken cancellationToken = default)
+        => CheckAffordableAsync(seconds, userId, llmSettings.Value.GetTranscriptionProvider()?.TranscriptionModel, cancellationToken);
+
+    /// <summary>1.1.73：用這一場實際的引擎／部署的單價（<paramref name="model"/>）判斷。</summary>
+    public async Task<string?> CheckAffordableAsync(double seconds, int? userId, string? model, CancellationToken cancellationToken = default)
     {
-        if (EstimateTwd(seconds) is not { } estimated)
+        if (EstimateTwd(seconds, model) is not { } estimated)
         {
             return null;
         }

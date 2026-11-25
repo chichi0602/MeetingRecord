@@ -66,6 +66,20 @@ public class Meeting
 
     public DateTime? TranscriptionCompletedAt { get; set; }
 
+    /// <summary>1.1.73：這次（或下一次）轉錄用的引擎，上傳／重新轉錄時由使用者選。</summary>
+    public TranscriptionEngine TranscriptionEngine { get; set; } = TranscriptionEngine.AzureOpenAI;
+
+    /// <summary>
+    /// 1.1.73：要不要分講者。null＝沒有指定（1.1.72 以前的會議、或 API 沒帶選項），照設定的部署本身行為。
+    /// </summary>
+    public bool? TranscriptionDiarize { get; set; }
+
+    /// <summary>1.1.73：LLM Speech 分講者時的講者上限（2～35）；其他情況為 null。</summary>
+    public int? TranscriptionMaxSpeakers { get; set; }
+
+    /// <summary>1.1.73：上次轉錄從開始到完成花了幾秒（含轉檔），比較兩種引擎的效率用。</summary>
+    public double? TranscriptionElapsedSeconds { get; set; }
+
     #endregion
 
     #region 專案歸屬（尚未歸屬時為 null）

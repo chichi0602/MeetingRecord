@@ -1,0 +1,23 @@
+.transcription-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.transcription-options-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.transcription-options-label {
+    min-width: 72px;
+    font-weight: 500;
+}
+
+.transcription-options-hint {
+    color: var(--text-secondary, #6b7280);
+    font-size: 12px;
+}

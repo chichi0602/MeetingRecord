@@ -39,12 +39,15 @@ public static partial class TranscriptSpeakerLabels
     public static string Strip(string? text) =>
         string.IsNullOrEmpty(text) ? string.Empty : LabelPattern().Replace(text, string.Empty);
 
-    /// <summary>1.1.64：行首的數字編號（整場對齊的講者），第 1 組是編號，第 2 組是這行的內容。</summary>
-    [GeneratedRegex(@"^講者 (\d{1,2})：(.*)$", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    /// <summary>
+    /// 1.1.64：行首的數字編號（整場對齊的講者），第 1 組是編號，第 2 組是這行的內容。
+    /// 1.1.73 起也認「2-1」：LLM Speech 超過單檔上限切段送出時，第 2 段的講者 1（各段分開編號，可以分開命名）。
+    /// </summary>
+    [GeneratedRegex(@"^講者 (\d{1,2}(?:-\d{1,2})?)：(.*)$", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     private static partial Regex AlignedLinePattern();
 
     /// <summary>只在該段有效的代號（字母、未知），也就是不是數字編號的那些。</summary>
-    [GeneratedRegex(@"^講者 (?!\d{1,2}：)[^：\r\n]{1,12}：", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^講者 (?!\d{1,2}(?:-\d{1,2})?：)[^：\r\n]{1,12}：", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     private static partial Regex SegmentLabelPattern();
 
     /// <summary>逐字稿裡有沒有只在該段有效的代號（1.1.63 的舊逐字稿全部都是；第 5 位以後的講者也是）。</summary>
@@ -62,8 +65,19 @@ public static partial class TranscriptSpeakerLabels
         return AlignedLinePattern().Matches(text)
             .Select(x => x.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
-            .OrderBy(x => int.Parse(x, System.Globalization.CultureInfo.InvariantCulture))
+            .OrderBy(x => SortKey(x).Part)
+            .ThenBy(x => SortKey(x).Speaker)
             .ToList();
+    }
+
+    /// <summary>「3」排成 (0, 3)、「2-1」排成 (2, 1)：沒切段的在前，切段的依段落再依講者。</summary>
+    private static (int Part, int Speaker) SortKey(string label)
+    {
+        var dash = label.IndexOf('-');
+        return dash < 0
+            ? (0, int.Parse(label, System.Globalization.CultureInfo.InvariantCulture))
+            : (int.Parse(label[..dash], System.Globalization.CultureInfo.InvariantCulture),
+               int.Parse(label[(dash + 1)..], System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>

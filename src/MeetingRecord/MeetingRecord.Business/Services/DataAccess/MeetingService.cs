@@ -373,6 +373,10 @@ public class MeetingService
             itemData.TranscriptionError = item.TranscriptionError;
             itemData.TranscriptionStartedAt = item.TranscriptionStartedAt;
             itemData.TranscriptionCompletedAt = item.TranscriptionCompletedAt;
+            itemData.TranscriptionEngine = item.TranscriptionEngine;
+            itemData.TranscriptionDiarize = item.TranscriptionDiarize;
+            itemData.TranscriptionMaxSpeakers = item.TranscriptionMaxSpeakers;
+            itemData.TranscriptionElapsedSeconds = item.TranscriptionElapsedSeconds;
 
             // 草稿同樣由背景工作寫入，畫面上的舊複本不得覆寫。
             itemData.DraftContent = item.DraftContent;
@@ -689,6 +693,12 @@ public class MeetingService
             meeting.TranscriptionError = null;
             meeting.TranscriptionStartedAt = null;
             meeting.TranscriptionCompletedAt = null;
+            meeting.TranscriptionElapsedSeconds = null;
+
+            // 1.1.73：這次上傳選的轉錄方式（建立上傳工作階段時已驗證）。
+            meeting.TranscriptionEngine = uploadFile.TranscriptionEngine;
+            meeting.TranscriptionDiarize = uploadFile.TranscriptionDiarize;
+            meeting.TranscriptionMaxSpeakers = uploadFile.TranscriptionMaxSpeakers;
 
             // 會議日期沒填就帶入上傳當天；已填的不覆蓋，要更正仍可從畫面編輯。
             meeting.MeetingDate ??= DateTime.Today;
@@ -874,7 +884,11 @@ public class MeetingService
     /// 已排入（待處理）或正在轉錄中的紀錄一律拒絕，否則會重複入列、跑兩趟並重複計費。
     /// 佇列不持久化，重啟殘留的「待處理」由 Program.cs 的啟動修復改判為「失敗」後才能從這裡重跑。
     /// </summary>
-    public async Task<VerifyRecordResult> RequeueTranscriptionAsync(int meetingId, CancellationToken cancellationToken = default)
+    /// <param name="options">1.1.73：這次要用的引擎與分講者（呼叫端已驗證）；null＝沿用這場上次的選擇。</param>
+    public async Task<VerifyRecordResult> RequeueTranscriptionAsync(
+        int meetingId,
+        Transcription.ResolvedTranscriptionOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
         Logger.LogInformation("Requeueing transcription. MeetingId={MeetingId}", meetingId);
 
@@ -930,6 +944,13 @@ public class MeetingService
             meeting.TranscriptionError = null;
             meeting.TranscriptionStartedAt = null;
             meeting.TranscriptionCompletedAt = null;
+            if (options is not null)
+            {
+                meeting.TranscriptionEngine = options.Engine;
+                meeting.TranscriptionDiarize = options.Diarize;
+                meeting.TranscriptionMaxSpeakers = options.MaxSpeakers;
+            }
+
             meeting.UpdatedAt = DateTime.Now;
             await context.SaveChangesAsync(cancellationToken);
             CleanTrackingHelper.Clean<Meeting>(context);

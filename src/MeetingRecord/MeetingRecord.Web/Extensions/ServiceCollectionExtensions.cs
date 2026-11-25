@@ -235,6 +235,17 @@ public static class ServiceCollectionExtensions
             client.Timeout = TimeSpan.FromMinutes(10);
         });
 
+        // 1.1.73：使用者選引擎與分講者；LLM Speech 不註冊成 ITranscriptionProvider（引擎是每場會議自己選的）。
+        services.AddScoped<TranscriptionOptionsResolver>();
+        services.AddScoped<AzureLlmSpeechTranscriptionProvider>();
+        // LLM Speech 一次送整個檔案、等全部結果回來，逾時照設定（預設 60 分鐘）。
+        services.AddHttpClient(AzureLlmSpeechTranscriptionProvider.HttpClientName)
+            .ConfigureHttpClient((serviceProvider, client) =>
+            {
+                var minutes = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TranscriptionSettings>>().Value.AzureSpeech.TimeoutMinutes;
+                client.Timeout = TimeSpan.FromMinutes(Math.Max(1, minutes));
+            });
+
         return services;
     }
 
@@ -317,6 +328,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SwaggerSettings>(configuration.GetSection(SwaggerSettings.SectionName));
         services.Configure<CacheSettings>(configuration.GetSection(CacheSettings.SectionName));
         services.Configure<MediaSettings>(configuration.GetSection(MediaSettings.SectionName));
+        services.Configure<TranscriptionSettings>(configuration.GetSection(TranscriptionSettings.SectionName));
         services.Configure<ExportSettings>(configuration.GetSection(ExportSettings.SectionName));
 
         return services;

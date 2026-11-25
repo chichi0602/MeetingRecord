@@ -9,6 +9,13 @@ public interface IMediaConverter
     /// 將任意影音檔轉為多個 mp3 分段。回傳值需以 using 釋放，會一併刪除暫存目錄。
     /// </summary>
     Task<MediaSegmentSet> ConvertToMp3SegmentsAsync(string sourceFullPath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 1.1.73：指定每段的長度上限（秒）。LLM Speech 一次送整個檔案，上限是設定的 <c>MaxFileSeconds</c>（預設 2 小時）。
+    /// 預設實作忽略上限、照固定長度切——測試的假轉檔器不用改。
+    /// </summary>
+    Task<MediaSegmentSet> ConvertToMp3SegmentsAsync(string sourceFullPath, int maxSegmentSeconds, CancellationToken cancellationToken)
+        => ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
 }
 
 /// <summary>

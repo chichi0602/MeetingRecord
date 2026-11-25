@@ -438,8 +438,20 @@ namespace MeetingRecord.AccessDatas.Migrations
                     b.Property<DateTime?>("TranscriptionCompletedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool?>("TranscriptionDiarize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("TranscriptionElapsedSeconds")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("TranscriptionEngine")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("TranscriptionError")
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("TranscriptionMaxSpeakers")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("TranscriptionStartedAt")
                         .HasColumnType("TEXT");

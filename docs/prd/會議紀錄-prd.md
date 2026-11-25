@@ -1,10 +1,10 @@
 ﻿# 會議紀錄 PRD
 
-- 文件版本：2.32
+- 文件版本：2.33
 - 文件狀態：已實作
-- 現行系統版本：1.1.71
+- 現行系統版本：1.1.73
 - 首次實作版本：0.4.27
-- 最後核對日期：2026/11/18
+- 最後核對日期：2026/11/24
 
 > **0.4.103：舊團隊標籤整組刪除。** `Meeting.Teams` 欄位已從資料庫刪除（migration `RemoveLegacyTeamTags`，既有標籤資料一併刪除），連同 `MeetingAdapterModel.Teams`／`TeamsText`（含 `Clone()` 那行）、AutoMapper 的 `Teams` 對應、`MeetingCreateUpdateDto.Teams`（API 舊客戶端送 `teams` 會被忽略）、`DataRequest.TeamFilters` 與 `MeetingService` 的團隊過濾。下文提到 `Teams` 的段落都是歷史紀錄。
 >
@@ -166,6 +166,28 @@
 - 需要 HTTPS（或 localhost）。
 - 錄音的 webm 檔頭沒有長度：FFmpeg 改用解碼完的最後一個 `time=`（`MediaDurationParser.TryParseLastProgressTime`），照樣切在停頓處、照實際長度計費。
 
+### 轉錄引擎與分講者（1.1.73）
+
+- **每次上傳或重新轉錄都可以選**（上傳表單在「轉錄完自動產生會議紀錄」下方；重新轉錄由確認框改成視窗）：
+  - **轉錄引擎**：Azure OpenAI／Azure LLM Speech。
+  - **分講者**：開或關。
+  - **講者上限**：只有 LLM Speech 開分講者時出現，2～35；預設是專案與會人員名冊的人數，沒有專案（或名冊是空的）時用 `TranscriptionSettings:DefaultMaxSpeakers`（10）。
+  - 選項與預設值來自 `GET api/v1/Meeting/transcription-options?projectId=`；重新轉錄的視窗預設帶這場上次的選擇。
+- 確認框多一行「轉錄方式」，預估費用照選的引擎與部署的單價算（`transcription-estimate` 帶 `engine`、`diarize`），換選項時重算。
+- **存在會議上**：`Meeting.TranscriptionEngine`、`TranscriptionDiarize`（null＝1.1.72 以前、照設定的部署）、`TranscriptionMaxSpeakers`；完成時記 `TranscriptionElapsedSeconds`（從開始到完成，含轉檔）。migration `AddMeetingTranscriptionEngine`。清單「已完成」下多一行小字：引擎、有沒有分講者、耗時。
+- **不能用的組合當場擋**：建立上傳工作階段、重新轉錄時由 `TranscriptionOptionsResolver` 驗證（例如沒設定 LLM Speech、Azure OpenAI 的轉錄部署是 diarize 卻沒設 `TranscriptionModelNoSpeakers` 又選了不分講者），回 400 與原因。
+- **失敗不自動換引擎**：會議標成「失敗」並寫原因（例如 LLM Speech 設定被拿掉），使用者用「重新轉錄」自己換。
+- **API 沒帶選項**：上傳照設定的部署轉錄，和 1.1.72 一樣；重新轉錄沿用這場上次的選擇。
+- **Azure OpenAI**：照舊每 5 分鐘一段；分講者用設定的 diarize 部署，不分講者改打 `TranscriptionModelNoSpeakers`（`WithOverrides` 只換部署）。
+- **Azure LLM Speech**：
+  - 一次送整個檔案（Fast Transcription API 開 `enhancedMode`，`Locale` 預設 zh-TW）。
+  - **超過 2 小時**（`MaxFileSeconds`）就在停頓處切段，每段講者各自編號，逐字稿標成「**講者 2-1**」（第 2 段的講者 1），標示講者時可分段命名。
+  - **片語清單**＝專案名稱＋專案與會人員名冊（提示人名與專有名詞）；不送 prompt。
+  - 逐字稿依每句時間每 5 分鐘分一個段落（`\n\n`），後續分段摘要與雜訊過濾照舊。
+  - 不做聲音參考對齊；每位講者剪最長的一句當試聽片段，**所有講者都能命名、都能試聽**（不再只有講者 1～4）。
+  - 帳本模型記 `azure-llm-speech`。
+- 音檔會送到 Speech 資源所在的區域處理（見 [正式部署與安全檢查清單](../operations/正式部署與安全檢查清單.md)）。
+
 ### 轉錄狀態
 
 | 狀態（enum 值）| 意義 | 進入條件 |
@@ -326,6 +348,7 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 - **只設 `DefaultProvider`、不填 `TranscriptionModel` 的部署視為未啟用轉錄**，啟動驗證不會擋。
 - `FfmpegPath` 可填完整路徑，也可只填 `ffmpeg` 走 PATH（0.4.29 起為預設值）。啟動時會驗證存在性：Production 找不到就中止，其他環境記 WARN 後照常啟動。
 - 服務一律以 `IOptions<LlmSettings>` / `IOptions<MediaSettings>` 取設定，**禁止**直接讀 `IConfiguration`。
+- 1.1.73 起：Azure OpenAI 不分講者的部署填 `Providers.<名稱>.TranscriptionModelNoSpeakers`；Azure LLM Speech 與確認框預設值在 `TranscriptionSettings`（`DefaultEngine`＝`AzureLlmSpeech`，沒設定 Speech 時退回 Azure OpenAI；建議轉錄部署填 `gpt-transcribe`、分講者交給 LLM Speech；``DefaultDiarize`、`DefaultMaxSpeakers`、`AzureSpeech:Endpoint／ApiKey／Locale／ApiVersion／MaxFileSeconds／TimeoutMinutes`），單價鍵 `azure-llm-speech`。
 
 ### 未來支援其他 AI 廠商
 
@@ -335,6 +358,8 @@ Azure 的 gpt-transcribe 直接輸出**簡體字**，提示詞管不到；使用
 2. 在 `LlmSettings:Providers` 加一組設定，把 `LlmSettings:TranscriptionProvider` 指向它。
 
 `TranscriptionJobRunner` 由 `IEnumerable<ITranscriptionProvider>` 依名稱挑選，既有程式不需變動。
+
+> 1.1.73 的 `AzureLlmSpeechTranscriptionProvider` 是例外：引擎是每場會議自己選的，所以**刻意不註冊成 `ITranscriptionProvider`**，由 `TranscriptionJobRunner` 依 `Meeting.TranscriptionEngine` 直接取用。
 
 ## 八、驗收與測試
 

@@ -251,6 +251,12 @@ public class LlmProviderSettings
     public string TranscriptionDeployment { get; set; } = string.Empty;
 
     /// <summary>
+    /// 1.1.73：使用者選「不分講者」時用的轉錄部署，例如 <c>gpt-transcribe</c>。
+    /// <see cref="TranscriptionModel"/> 是 diarize 部署（一定分講者）而這欄空白時，Azure OpenAI 就不能選不分講者。
+    /// </summary>
+    public string TranscriptionModelNoSpeakers { get; set; } = string.Empty;
+
+    /// <summary>
     /// 語音轉錄的 api-version 內建值（1.0.28）。轉錄**沒有**改走 v1：實測 v1 的
     /// <c>/openai/v1/audio/transcriptions</c> 打 gpt-transcribe 部署一律回 404 DeploymentNotFound，
     /// 只有 <c>/openai/deployments/{部署}/audio/transcriptions?api-version=…</c> 可用。

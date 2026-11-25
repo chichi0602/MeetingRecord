@@ -129,6 +129,11 @@ else
                             <span class="meeting-status-error-hint">⚠</span>
                         </HoverTip>
                     }
+                    @* 1.1.73：用了哪個引擎、花多久，比較兩種轉錄的效率用。 *@
+                    @if (transcriptionStatus == TranscriptionStatus.Completed && progress is null)
+                    {
+                        <div class="meeting-status-engine">@DescribeTranscriptionRun(context)</div>
+                    }
                 </Column>
                 @* Sortable="false"：服務層的排序白名單沒有 DraftStatus，掛上去只會得到一顆按了沒反應的箭頭。 *@
                 <Column TData="int" DataIndex="@nameof(MeetingDto.DraftStatus)" Title="會議紀錄" Sortable="false">
@@ -393,10 +398,16 @@ else
                                     @if (autoDraftPromptTemplateId > 0)
                                     {
                                         <div class="meeting-view-upload-hint">
-                                            轉錄完會自動產生會議紀錄（另計費用）。逐字稿有分講者時，會先請你標示「講者 1～4」是誰，標好才產生。
+                                            轉錄完會自動產生會議紀錄（另計費用）。逐字稿有分講者時，會先請你標示「講者 1」「講者 2」…是誰，標好才產生。
                                         </div>
                                     }
                                 </div>
+
+                                @* 1.1.73：這次用哪個引擎轉錄、要不要分講者。 *@
+                                @if (transcriptionMeta is not null)
+                                {
+                                    <TranscriptionOptionsPicker Meta="@transcriptionMeta" Value="@transcriptionChoice" Disabled="@IsFormLocked" />
+                                }
                             }
                             else if (CurrentRecord.HasMedia)
                             {
@@ -554,6 +565,26 @@ else
         <p class="meeting-draft-request-note">
             只變更歸屬，不會重新產生會議紀錄，也不會產生任何費用。歸屬後即可抽出待辦事項。
         </p>
+    </Modal>
+
+    @* 1.1.73：重新轉錄要選引擎與分講者，原本的確認框放不下表單，改成這個視窗。 *@
+    <Modal Title="@retranscribeTitle"
+           Class="form-modal-compact"
+           Visible="@retranscribeVisible"
+           Keyboard="true"
+           MaskClosable="false"
+           OkText="@retranscribeOkText"
+           OkButtonProps="@(retranscribeWillOverwrite ? new ButtonProps { Danger = true } : null)"
+           CancelText="@("取消")"
+           ConfirmLoading="@(requeueingMeetingId is not null)"
+           OnOk="OnRetranscribeOkAsync"
+           OnCancel="@(() => retranscribeVisible = false)">
+        <p>@retranscribeSituation</p>
+        @if (transcriptionMeta is not null)
+        {
+            <TranscriptionOptionsPicker Meta="@transcriptionMeta" Value="@retranscribeChoice" ValueChanged="OnRetranscribeChoiceChangedAsync" />
+        }
+        <p class="meeting-draft-request-note">@retranscribeCostText</p>
     </Modal>
 
     @* 檢視與編修 0.4.82 起共用同一個視窗，差別只在 CanEdit。

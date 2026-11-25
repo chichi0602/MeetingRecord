@@ -1,0 +1,107 @@
+@using MeetingRecord.Dtos.Meetings
+@using MeetingRecord.Share.Enums
+
+@* 1.1.73：選轉錄引擎、要不要分講者、講者上限。上傳表單與「重新轉錄」視窗共用。
+   不能用的組合直接停用並寫原因（例如沒設 LLM Speech、Azure OpenAI 沒有不分講者的部署）。 *@
+<div class="transcription-options">
+    <div class="transcription-options-row">
+        <span class="transcription-options-label">轉錄引擎</span>
+        <RadioGroup TValue="int" Value="@Value.Engine" ValueChanged="OnEngineChangedAsync" Disabled="@Disabled">
+            <Radio TValue="int" Value="@((int)TranscriptionEngine.AzureOpenAI)" Disabled="@(!OpenAiAvailable)">Azure OpenAI</Radio>
+            <Radio TValue="int" Value="@((int)TranscriptionEngine.AzureLlmSpeech)" Disabled="@(!Meta.LlmSpeechAvailable)">Azure LLM Speech</Radio>
+        </RadioGroup>
+    </div>
+
+    <div class="transcription-options-row">
+        <span class="transcription-options-label">分講者</span>
+        <Switch Value="@Value.Diarize" ValueChanged="OnDiarizeChangedAsync" Disabled="@(Disabled || !CanToggleDiarize)" />
+        <span class="transcription-options-hint">@DiarizeHint</span>
+    </div>
+
+    @if (IsLlmSpeech && Value.Diarize)
+    {
+        <div class="transcription-options-row">
+            <span class="transcription-options-label">講者上限</span>
+            <AntDesign.InputNumber TValue="int" Value="@(Value.MaxSpeakers ?? Meta.SuggestedMaxSpeakers)" ValueChanged="OnMaxSpeakersChangedAsync"
+                                   Min="@Meta.MinSpeakers" Max="@Meta.MaxSpeakers" Disabled="@Disabled" Style="width: 90px;" />
+            <span class="transcription-options-hint">大約有幾個人發言（@Meta.MinSpeakers～@Meta.MaxSpeakers）；預設是專案與會人員名冊的人數。</span>
+        </div>
+    }
+
+    @if (IsLlmSpeech)
+    {
+        <div class="transcription-options-hint">
+            LLM Speech 一次送整個音檔，講者整場一致；超過 @(Meta.LlmSpeechMaxFileSeconds / 3600.0) 小時會切段送出，講者改標「講者 2-1」（第 2 段的講者 1）。
+            會用專案名稱與與會人員名冊提高人名辨識。
+        </div>
+    }
+    else if (!Meta.LlmSpeechAvailable)
+    {
+        <div class="transcription-options-hint">Azure LLM Speech 尚未設定（管理者要在設定檔填 Endpoint 與 ApiKey）。</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TranscriptionOptionsMetaDto Meta { get; set; } = new();
+
+    [Parameter, EditorRequired] public TranscriptionOptionsDto Value { get; set; } = new();
+
+    /// <summary>選項有變（呼叫端據此重新估費用）。</summary>
+    [Parameter] public EventCallback<TranscriptionOptionsDto> ValueChanged { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>依中繼資料建一份預設選擇。</summary>
+    public static TranscriptionOptionsDto CreateDefault(TranscriptionOptionsMetaDto meta) => new()
+    {
+        Engine = meta.DefaultEngine,
+        Diarize = meta.DefaultDiarize,
+        MaxSpeakers = meta.SuggestedMaxSpeakers,
+    };
+
+    /// <summary>確認框用的一句話，例如「Azure LLM Speech（分講者，最多 6 人）」。</summary>
+    public static string Describe(TranscriptionOptionsDto options)
+        => TranscriptionEngineText.Describe(options.Engine, options.Diarize)
+           + (options.Engine == (int)TranscriptionEngine.AzureLlmSpeech && options.Diarize && options.MaxSpeakers is { } max ? $"，講者上限 {max} 人" : string.Empty);
+
+    private bool IsLlmSpeech => Value.Engine == (int)TranscriptionEngine.AzureLlmSpeech;
+
+    private bool OpenAiAvailable => Meta.OpenAiDiarizeAvailable || Meta.OpenAiPlainAvailable;
+
+    /// <summary>Azure OpenAI 只有其中一種部署時，分講者不能切換。</summary>
+    private bool CanToggleDiarize => IsLlmSpeech || (Meta.OpenAiDiarizeAvailable && Meta.OpenAiPlainAvailable);
+
+    private string DiarizeHint => IsLlmSpeech
+        ? (Value.Diarize ? "逐字稿會標出每句是哪位講者說的。" : "只轉文字，不標講者。")
+        : CanToggleDiarize
+            ? (Value.Diarize ? "用 diarize 部署，逐字稿會標出講者。" : "用不分講者的部署（例如 gpt-transcribe）。")
+            : Meta.OpenAiDiarizeAvailable
+                ? "Azure OpenAI 目前只設定了分講者的部署。"
+                : "Azure OpenAI 目前只設定了不分講者的部署。";
+
+    private Task OnEngineChangedAsync(int engine)
+    {
+        Value.Engine = engine;
+
+        // 換到 Azure OpenAI 而它只能其中一種時，自動對到能用的那種。
+        if (engine == (int)TranscriptionEngine.AzureOpenAI && !CanToggleDiarize)
+        {
+            Value.Diarize = Meta.OpenAiDiarizeAvailable;
+        }
+
+        Value.MaxSpeakers ??= Meta.SuggestedMaxSpeakers;
+        return ValueChanged.InvokeAsync(Value);
+    }
+
+    private Task OnDiarizeChangedAsync(bool diarize)
+    {
+        Value.Diarize = diarize;
+        return ValueChanged.InvokeAsync(Value);
+    }
+
+    private Task OnMaxSpeakersChangedAsync(int value)
+    {
+        Value.MaxSpeakers = Math.Clamp(value, Meta.MinSpeakers, Meta.MaxSpeakers);
+        return ValueChanged.InvokeAsync(Value);
+    }
+}

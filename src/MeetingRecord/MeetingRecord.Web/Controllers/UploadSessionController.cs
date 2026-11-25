@@ -31,7 +31,9 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
     /// </summary>
     [HttpPost]
     [HasPermission(MagicObjectHelper.角色_會議紀錄, new[] { PermissionActions.Create, PermissionActions.Edit })]
-    public async Task<ActionResult<ApiResult<UploadSessionDto>>> Create([FromBody] UploadSessionRequestDto request)
+    public async Task<ActionResult<ApiResult<UploadSessionDto>>> Create(
+        [FromBody] UploadSessionRequestDto request,
+        [FromServices] MeetingRecord.Business.Services.Transcription.TranscriptionOptionsResolver transcriptionOptions)
     {
         if (UserClaims.GetUserId(User) is not { } userId)
         {
@@ -52,6 +54,12 @@ public sealed class UploadSessionController(MeetingService meetingService, Meeti
         if (!check.Success)
         {
             return BadRequest(ApiResult<UploadSessionDto>.FailureResult(check.Message));
+        }
+
+        // 1.1.73：選的轉錄方式在開始傳檔前就驗證，不能用的組合當場說，不要等傳完才在背景失敗。
+        if (transcriptionOptions.Resolve(request.Transcription).Error is { } transcriptionError)
+        {
+            return BadRequest(ApiResult<UploadSessionDto>.FailureResult(transcriptionError));
         }
 
         var job = uploadJobs.Start(userId, request);

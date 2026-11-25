@@ -28,8 +28,17 @@ public sealed class MeetingApi(ApiClient api)
     public Task<ApiResult<int>> CountLinkedTodosAsync(int id)
         => api.GetAsync($"{BaseUrl}/{id}/linked-todos", ClientJsonContext.Default.IntResult);
 
-    public Task<ApiResult<object>> RetranscribeAsync(int id)
-        => api.PostAsync($"{BaseUrl}/{id}/retranscribe", ClientJsonContext.Default.EmptyResult);
+    /// <param name="options">1.1.73：這次的轉錄引擎與分講者；null＝沿用這場上次的選擇。</param>
+    public Task<ApiResult<object>> RetranscribeAsync(int id, TranscriptionOptionsDto? options = null)
+        => options is null
+            ? api.PostAsync($"{BaseUrl}/{id}/retranscribe", ClientJsonContext.Default.EmptyResult)
+            : api.PostAsync($"{BaseUrl}/{id}/retranscribe", options, ClientJsonContext.Default.TranscriptionOptionsDto, ClientJsonContext.Default.EmptyResult);
+
+    /// <summary>1.1.73：確認框可選的轉錄引擎與預設值；<paramref name="projectId"/> 決定講者上限的預設值。</summary>
+    public Task<ApiResult<TranscriptionOptionsMetaDto>> GetTranscriptionOptionsAsync(int? projectId)
+        => api.GetAsync(
+            $"{BaseUrl}/transcription-options{(projectId is { } id ? $"?projectId={id}" : string.Empty)}",
+            ClientJsonContext.Default.TranscriptionOptionsMetaResult);
 
     public Task<ApiResult<object>> RequestDraftAsync(int id, MeetingDraftRequestDto request)
         => api.PostAsync($"{BaseUrl}/{id}/draft", request, ClientJsonContext.Default.MeetingDraftRequestDto, ClientJsonContext.Default.EmptyResult);
@@ -61,8 +70,12 @@ public sealed class MeetingApi(ApiClient api)
         => api.PostAsync($"{BaseUrl}/{id}/draft/versions/{versionId}/restore", ClientJsonContext.Default.EmptyResult);
 
     /// <summary>1.1.68 成本閘門：轉錄的預估費用、提醒門檻與本月剩餘額度。</summary>
-    public Task<ApiResult<MeetingTranscriptionEstimateDto>> GetTranscriptionEstimateAsync(double seconds)
-        => api.GetAsync($"{BaseUrl}/transcription-estimate?seconds={seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}", ClientJsonContext.Default.MeetingTranscriptionEstimateResult);
+    /// <param name="options">1.1.73：用選的引擎／部署的單價估；null＝照設定的部署。</param>
+    public Task<ApiResult<MeetingTranscriptionEstimateDto>> GetTranscriptionEstimateAsync(double seconds, TranscriptionOptionsDto? options = null)
+        => api.GetAsync(
+            $"{BaseUrl}/transcription-estimate?seconds={seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                + (options is null ? string.Empty : $"&engine={options.Engine}&diarize={(options.Diarize ? "true" : "false")}"),
+            ClientJsonContext.Default.MeetingTranscriptionEstimateResult);
 
     /// <param name="generate">1.1.69：存好後用上傳時選的提示詞產生會議紀錄。</param>
     public Task<ApiResult<object>> UpdateSpeakersAsync(int id, Dictionary<string, string> names, bool generate = false)

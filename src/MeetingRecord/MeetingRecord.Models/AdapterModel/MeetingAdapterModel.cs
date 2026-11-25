@@ -38,6 +38,15 @@ public class MeetingAdapterModel : ICloneable
     /// <summary>1.1.69：轉錄完成、等使用者標示講者後才自動產生會議紀錄。</summary>
     public bool AwaitingSpeakerNames { get; set; }
 
+    /// <summary>1.1.73：轉錄引擎、是否分講者、上次轉錄耗時。由上傳／重新轉錄與轉錄工作寫入，存檔時一律沿用資料庫既有值。</summary>
+    public TranscriptionEngine TranscriptionEngine { get; set; }
+
+    public bool? TranscriptionDiarize { get; set; }
+
+    public int? TranscriptionMaxSpeakers { get; set; }
+
+    public double? TranscriptionElapsedSeconds { get; set; }
+
     public bool HasMedia => !string.IsNullOrWhiteSpace(MediaRelativePath);
 
     #endregion

@@ -48,7 +48,7 @@
             @* 1.1.63：diarize 轉錄的逐字稿有「講者 A：」代號。1.1.64 起數字編號整場同一人，字母只在該段有效。 *@
             @if (TranscriptSpeakerLabels.HasLabels(Transcript))
             {
-                <div class="markdown-editor-speaker-hint">講者代號由語音辨識自動標示：「講者 1～4」整場是同一人，可按「標示講者」填入真名；字母代號（講者 A）只在約 5 分鐘那一段內有效。</div>
+                <div class="markdown-editor-speaker-hint">講者代號由語音辨識自動標示：「講者 1」「講者 2」…整場是同一人（「講者 2-1」只在第 2 段內），可按「標示講者」填入真名；字母代號（講者 A）只在約 5 分鐘那一段內有效。</div>
             }
             @* 1.1.69：逐字稿搜尋。輸入框不綁 value（避免中文輸入法組字時被回寫），每次開窗用 @key 重建清空。 *@
             <div class="markdown-editor-transcript-search">

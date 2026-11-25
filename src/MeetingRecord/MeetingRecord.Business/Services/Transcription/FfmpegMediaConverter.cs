@@ -41,8 +41,17 @@ public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAud
         this.logger = logger;
     }
 
-    public async Task<MediaSegmentSet> ConvertToMp3SegmentsAsync(string sourceFullPath, CancellationToken cancellationToken)
+    public Task<MediaSegmentSet> ConvertToMp3SegmentsAsync(string sourceFullPath, CancellationToken cancellationToken)
+        => ConvertToMp3SegmentsAsync(sourceFullPath, SegmentSeconds, cancellationToken);
+
+    /// <summary>1.1.73：每段長度上限由呼叫端決定（LLM Speech 一段最長 2 小時）；切點一樣落在停頓處。</summary>
+    public async Task<MediaSegmentSet> ConvertToMp3SegmentsAsync(string sourceFullPath, int maxSegmentSeconds, CancellationToken cancellationToken)
     {
+        if (maxSegmentSeconds <= 0)
+        {
+            maxSegmentSeconds = SegmentSeconds;
+        }
+
         if (string.IsNullOrWhiteSpace(ffmpegPath))
         {
             throw new InvalidOperationException(
@@ -64,11 +73,11 @@ public class FfmpegMediaConverter : IMediaConverter, IMediaSegmentSplitter, IAud
             var silences = TranscriptionSegmentPlanner.ParseSilences(analysisOutput);
             // 1.1.71：檔頭沒有長度（瀏覽器錄音的 webm）時改用解碼完的最後一個 time=，錄音檔才也能切在停頓處。
             var cutPoints = (MediaDurationParser.TryParseDuration(analysisOutput) ?? MediaDurationParser.TryParseLastProgressTime(analysisOutput)) is { } sourceDuration
-                ? TranscriptionSegmentPlanner.PlanCutPoints(sourceDuration.TotalSeconds, silences, SegmentSeconds)
+                ? TranscriptionSegmentPlanner.PlanCutPoints(sourceDuration.TotalSeconds, silences, maxSegmentSeconds)
                 : [];
 
             var outputPattern = Path.Combine(workingDirectory, SegmentFileNamePattern);
-            var arguments = BuildSegmentArguments(sourceFullPath, outputPattern, SegmentSeconds, cutPoints);
+            var arguments = BuildSegmentArguments(sourceFullPath, outputPattern, maxSegmentSeconds, cutPoints);
 
             var ffmpegOutput = await RunFfmpegAsync(arguments, cancellationToken);
 

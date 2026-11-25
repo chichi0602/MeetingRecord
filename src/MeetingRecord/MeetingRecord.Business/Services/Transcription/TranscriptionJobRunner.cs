@@ -50,6 +50,13 @@ public class TranscriptionJobRunner
     /// <summary>1.1.69 轉錄完自動產生會議紀錄；選填，理由同上。</summary>
     private readonly AutoDraftStarter? autoDraftStarter;
 
+    /// <summary>1.1.73 使用者選的引擎與分講者；選填，理由同上（沒註冊時一律照設定的部署）。</summary>
+    private readonly TranscriptionOptionsResolver? optionsResolver;
+
+    private readonly AzureLlmSpeechTranscriptionProvider? llmSpeechProvider;
+
+    private readonly IOptions<TranscriptionSettings>? transcriptionSettings;
+
     /// <summary>1.1.69：轉完要先標示講者時，進度面板「已完成」後面的附註。</summary>
     public const string AwaitingSpeakerNamesNote = "請標示講者";
 
@@ -71,8 +78,14 @@ public class TranscriptionJobRunner
         IMediaSegmentSplitter? segmentSplitter = null,
         IAudioClipCutter? clipCutter = null,
         TranscriptionCostEstimator? costEstimator = null,
-        AutoDraftStarter? autoDraftStarter = null)
+        AutoDraftStarter? autoDraftStarter = null,
+        TranscriptionOptionsResolver? optionsResolver = null,
+        AzureLlmSpeechTranscriptionProvider? llmSpeechProvider = null,
+        IOptions<TranscriptionSettings>? transcriptionSettings = null)
     {
+        this.optionsResolver = optionsResolver;
+        this.llmSpeechProvider = llmSpeechProvider;
+        this.transcriptionSettings = transcriptionSettings;
         this.segmentSplitter = segmentSplitter;
         this.clipCutter = clipCutter;
         this.costEstimator = costEstimator;
@@ -146,29 +159,37 @@ public class TranscriptionJobRunner
         await context.SaveChangesAsync(cancellationToken);
 
         var previousTranscriptRelativePath = meeting.TranscriptRelativePath;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            var provider = ResolveProvider();
+            // 1.1.73：引擎每場自己選。LLM Speech 一次送整個檔案（超過上限才切段），Azure OpenAI 照舊 5 分鐘一段。
+            var isLlmSpeech = meeting.TranscriptionEngine == TranscriptionEngine.AzureLlmSpeech;
+            var provider = isLlmSpeech ? await ResolveLlmSpeechProviderAsync(meeting, cancellationToken) : ResolveProvider(meeting.TranscriptionDiarize);
+            var maxSegmentSeconds = isLlmSpeech
+                ? transcriptionSettings?.Value.AzureSpeech.MaxFileSeconds ?? FfmpegMediaConverter.SegmentSeconds
+                : FfmpegMediaConverter.SegmentSeconds;
             var sourceFullPath = fileStore.GetMediaFullPath(meeting.MediaRelativePath);
 
             progressNotifier.ReportConverting(meetingId);
 
-            using var segments = await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
+            using var segments = isLlmSpeech
+                ? await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, maxSegmentSeconds, cancellationToken)
+                : await mediaConverter.ConvertToMp3SegmentsAsync(sourceFullPath, cancellationToken);
 
             // 每一段各自的秒數：轉錄按時長計費，而最後一段通常不是整整 5 分鐘。
             // 全部算成整段會把費用高估。1.1.61 起切在停頓處，各段不一樣長，以轉檔器算好的為準。
             var segmentSeconds = segments.SegmentSeconds ?? MediaDurationParser.SplitSegmentSeconds(
                 segments.TotalDuration,
                 segments.SegmentFullPaths.Count,
-                FfmpegMediaConverter.SegmentSeconds);
+                maxSegmentSeconds);
 
             // 1.1.68 成本閘門：長度要到這裡（本機轉檔量完）才知道，而第一段還沒送出、一毛錢都還沒花。
             // 開工時的 AdmitAsync 只看「是否已達上限」，看不出「這一趟會不會超過」；這裡補上。
             var totalSeconds = segments.TotalDuration?.TotalSeconds
                 ?? (segmentSeconds.Count > 0 ? segmentSeconds.Sum() : (double?)null);
             if (costEstimator is not null && totalSeconds is { } seconds
-                && await costEstimator.CheckAffordableAsync(seconds, requestedByUserId, cancellationToken) is { } costMessage)
+                && await costEstimator.CheckAffordableAsync(seconds, requestedByUserId, provider.ModelName, cancellationToken) is { } costMessage)
             {
                 logger.LogWarning(
                     "Transcription blocked because the estimated cost exceeds the remaining AI quota. MeetingId={MeetingId}, Seconds={Seconds}",
@@ -179,9 +200,13 @@ public class TranscriptionJobRunner
             }
 
             // 1.1.64：會分講者的供應商帶聲音參考，讓整場的講者代號一致（見 SpeakerAlignmentSession）。
-            var alignment = provider is ISpeakerAwareTranscriptionProvider { SupportsSpeakers: true } && clipCutter is not null
+            // LLM Speech 一次呼叫內的編號本來就一致，不需要（也不接受）聲音參考。
+            var alignment = !isLlmSpeech && provider is ISpeakerAwareTranscriptionProvider { SupportsSpeakers: true } && clipCutter is not null
                 ? new SpeakerAlignmentSession()
                 : null;
+
+            // 1.1.73：LLM Speech 的試聽片段（講者代號 → wav），轉錄時順手剪好。
+            var llmSpeechClips = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
             var transcript = new StringBuilder();
             for (var index = 0; index < segments.SegmentFullPaths.Count; index++)
@@ -190,26 +215,39 @@ public class TranscriptionJobRunner
 
                 var segmentPath = segments.SegmentFullPaths[index];
                 logger.LogInformation(
-                    "Transcribing segment. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}",
+                    "Transcribing segment. MeetingId={MeetingId}, Segment={Segment}/{SegmentCount}, Engine={Engine}",
                     meetingId,
                     index + 1,
-                    segments.SegmentFullPaths.Count);
+                    segments.SegmentFullPaths.Count,
+                    meeting.TranscriptionEngine);
 
                 var thisSegmentSeconds = index < segmentSeconds.Count ? segmentSeconds[index] : (double?)null;
 
-                var segmentText = await TranscribeSegmentAsync(
-                    provider,
-                    callContext,
-                    meeting,
-                    segmentPath,
-                    thisSegmentSeconds,
-                    segments.IsDurationEstimated,
-                    index + 1,
-                    segments.SegmentFullPaths.Count,
-                    label: string.Empty,
-                    depth: 0,
-                    alignment,
-                    cancellationToken);
+                var segmentText = isLlmSpeech
+                    ? await TranscribeLlmSpeechSegmentAsync(
+                        (AzureLlmSpeechTranscriptionProvider)provider,
+                        callContext,
+                        meeting,
+                        segmentPath,
+                        thisSegmentSeconds,
+                        segments.IsDurationEstimated,
+                        index + 1,
+                        segments.SegmentFullPaths.Count,
+                        llmSpeechClips,
+                        cancellationToken)
+                    : await TranscribeSegmentAsync(
+                        provider,
+                        callContext,
+                        meeting,
+                        segmentPath,
+                        thisSegmentSeconds,
+                        segments.IsDurationEstimated,
+                        index + 1,
+                        segments.SegmentFullPaths.Count,
+                        label: string.Empty,
+                        depth: 0,
+                        alignment,
+                        cancellationToken);
 
                 // 進度必須在 continue 之前回報，否則整段空白（無人說話）的段落會被跳過不計。
                 progressNotifier.ReportSegment(meetingId, index + 1, segments.SegmentFullPaths.Count);
@@ -240,7 +278,7 @@ public class TranscriptionJobRunner
 
             // 1.1.71：把聲音參考存下來給「標示講者」試聽；舊片段等新的存好才刪。
             var previousSpeakerClips = TranscriptSpeakerLabels.ParseNames(meeting.SpeakerClips).Values.ToList();
-            var speakerClips = await SaveSpeakerClipsAsync(meeting, alignment, transcript.ToString(), cancellationToken);
+            var speakerClips = await SaveSpeakerClipsAsync(meeting, CollectClips(alignment, llmSpeechClips), transcript.ToString(), cancellationToken);
             meeting.SpeakerClips = TranscriptSpeakerLabels.SerializeNames(speakerClips);
 
             // 1.1.69：上傳時選了自動產生、而逐字稿有講者 1～4 → 先等使用者標示講者，存檔時才產生（只付一次費用）。
@@ -253,6 +291,7 @@ public class TranscriptionJobRunner
             meeting.TranscriptionStatus = TranscriptionStatus.Completed;
             meeting.TranscriptionError = null;
             meeting.TranscriptionCompletedAt = DateTime.Now;
+            meeting.TranscriptionElapsedSeconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 1);
             meeting.UpdatedAt = DateTime.Now;
             try
             {
@@ -552,37 +591,188 @@ public class TranscriptionJobRunner
     /// </summary>
     private async Task<Dictionary<string, string>> SaveSpeakerClipsAsync(
         Meeting meeting,
-        SpeakerAlignmentSession? alignment,
+        IReadOnlyDictionary<string, byte[]> clips,
         string transcriptText,
         CancellationToken cancellationToken)
     {
         var saved = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (alignment is null || alignment.References.Count == 0)
+        if (clips.Count == 0)
         {
             return saved;
         }
 
         var used = TranscriptSpeakerLabels.ListAlignedSpeakers(transcriptText).ToHashSet(StringComparer.Ordinal);
-        foreach (var reference in alignment.References.Where(x => used.Contains(x.Name)))
+        foreach (var (speaker, bytes) in clips.Where(x => used.Contains(x.Key)))
         {
-            const string prefix = "data:audio/wav;base64,";
-            if (!reference.DataUrl.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
             try
             {
-                var bytes = Convert.FromBase64String(reference.DataUrl[prefix.Length..]);
-                saved[reference.Name] = await fileStore.SaveSpeakerClipAsync(meeting.CreatedAt, reference.Name, bytes, cancellationToken);
+                saved[speaker] = await fileStore.SaveSpeakerClipAsync(meeting.CreatedAt, speaker, bytes, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "Could not save speaker clip. MeetingId={MeetingId}, Speaker={Speaker}", meeting.Id, reference.Name);
+                logger.LogWarning(ex, "Could not save speaker clip. MeetingId={MeetingId}, Speaker={Speaker}", meeting.Id, speaker);
             }
         }
 
         return saved;
+    }
+
+    /// <summary>試聽片段的來源：Azure OpenAI 是整場對齊的聲音參考（data URL），LLM Speech 是轉錄時剪好的 wav。</summary>
+    private static IReadOnlyDictionary<string, byte[]> CollectClips(
+        SpeakerAlignmentSession? alignment,
+        IReadOnlyDictionary<string, byte[]> llmSpeechClips)
+    {
+        if (alignment is null || alignment.References.Count == 0)
+        {
+            return llmSpeechClips;
+        }
+
+        const string prefix = "data:audio/wav;base64,";
+        var clips = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var reference in alignment.References.Where(x => x.DataUrl.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            try
+            {
+                clips[reference.Name] = Convert.FromBase64String(reference.DataUrl[prefix.Length..]);
+            }
+            catch (FormatException)
+            {
+            }
+        }
+
+        return clips;
+    }
+
+    /// <summary>
+    /// 1.1.73：用 LLM Speech 轉一段（通常是整個檔案）。分講者時講者編號在這一段內一致：
+    /// 只有一段標成「講者 1」，切成多段時標成「講者 2-1」（第 2 段的講者 1），各段分開命名。
+    /// 每位講者剪他最長的一句（2～10 秒）當試聽片段。
+    /// </summary>
+    private async Task<string> TranscribeLlmSpeechSegmentAsync(
+        AzureLlmSpeechTranscriptionProvider provider,
+        AiCallContext callContext,
+        Meeting meeting,
+        string segmentPath,
+        double? seconds,
+        bool isDurationEstimated,
+        int segmentNumber,
+        int segmentCount,
+        Dictionary<string, byte[]> clips,
+        CancellationToken cancellationToken)
+    {
+        var segmentContext = callContext with
+        {
+            RelatedInfo = $"會議 #{meeting.Id}〈{meeting.Title}〉語音轉錄（LLM Speech）{segmentNumber}/{segmentCount}",
+        };
+
+        DiarizedTranscription result;
+        await using (var stream = File.OpenRead(segmentPath))
+        {
+            result = await gateway.TranscribeWithSpeakersAsync(
+                provider, segmentContext, stream, Path.GetFileName(segmentPath), [],
+                seconds, isDurationEstimated, segmentNumber, segmentCount, cancellationToken);
+        }
+
+        if (result.Segments.Count == 0)
+        {
+            return result.FallbackText.Trim();
+        }
+
+        var labelled = LabelLlmSpeechSegments(result.Segments, segmentNumber, segmentCount);
+
+        if (clipCutter is not null)
+        {
+            foreach (var (speaker, start, clipSeconds) in PlanLlmSpeechClips(labelled))
+            {
+                try
+                {
+                    var clipPath = await clipCutter.CutWavClipAsync(segmentPath, start, clipSeconds, cancellationToken);
+                    if (clipPath is not null)
+                    {
+                        clips[speaker] = await File.ReadAllBytesAsync(clipPath, cancellationToken);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // 剪不出試聽片段只是少了試聽，不影響逐字稿。
+                    logger.LogWarning(ex, "Could not cut speaker clip. MeetingId={MeetingId}, Speaker={Speaker}", meeting.Id, speaker);
+                }
+            }
+        }
+
+        return AzureLlmSpeechTranscriptionProvider.FormatTranscript(labelled, result.FallbackText, diarize: true).Trim();
+    }
+
+    /// <summary>只有一段時講者代號維持「1」，切成多段時加上段落編號「2-1」。抽成純函式以便測試。</summary>
+    internal static IReadOnlyList<DiarizedSegment> LabelLlmSpeechSegments(
+        IReadOnlyList<DiarizedSegment> segments,
+        int segmentNumber,
+        int segmentCount)
+    {
+        if (segmentCount <= 1)
+        {
+            return segments;
+        }
+
+        return segments
+            .Select(x => x.Speaker == TranscriptSpeakerLabels.UnknownSpeaker ? x : x with { Speaker = $"{segmentNumber}-{x.Speaker}" })
+            .ToList();
+    }
+
+    /// <summary>每位講者挑最長的一句（至少 2 秒，最多取 10 秒）當試聽片段。</summary>
+    internal static IReadOnlyList<(string Speaker, double Start, double Seconds)> PlanLlmSpeechClips(IReadOnlyList<DiarizedSegment> segments)
+        => segments
+            .Where(x => x.Speaker != TranscriptSpeakerLabels.UnknownSpeaker && x.Seconds >= SpeakerAlignmentSession.MinClipSeconds)
+            .GroupBy(x => x.Speaker)
+            .Select(group => group.OrderByDescending(x => x.Seconds).First())
+            .Select(x => (x.Speaker, x.Start!.Value, Math.Min(x.Seconds!.Value, SpeakerAlignmentSession.MaxClipSeconds)))
+            .ToList();
+
+    /// <summary>1.1.73：LLM Speech 帶這一場的選項；片語清單取專案名稱＋與會人員名冊。</summary>
+    private async Task<ITranscriptionProvider> ResolveLlmSpeechProviderAsync(Meeting meeting, CancellationToken cancellationToken)
+    {
+        if (llmSpeechProvider is null || !llmSpeechProvider.IsConfigured)
+        {
+            throw new InvalidOperationException(
+                $"尚未設定 Azure LLM Speech（{TranscriptionSettings.SectionName}:AzureSpeech 的 Endpoint 與 ApiKey），請改用 Azure OpenAI 重新轉錄。");
+        }
+
+        IReadOnlyList<string> phrases = [];
+        if (meeting.ProjectId is { } projectId)
+        {
+            var project = await context.Project.AsNoTracking()
+                .Where(x => x.Id == projectId)
+                .Select(x => new { x.Title, x.Participants })
+                .FirstOrDefaultAsync(cancellationToken);
+            phrases = TranscriptionOptionsResolver.BuildPhrases(project?.Title, project?.Participants);
+        }
+
+        return llmSpeechProvider.WithOptions(new LlmSpeechOptions(
+            meeting.TranscriptionDiarize ?? true,
+            meeting.TranscriptionMaxSpeakers,
+            phrases));
+    }
+
+    /// <summary>
+    /// 1.1.73：Azure OpenAI 依使用者選的分講者換部署（diarize ↔ 不分講者的部署）。
+    /// 沒選（null）或沒註冊 resolver 時照設定的部署。
+    /// </summary>
+    private ITranscriptionProvider ResolveProvider(bool? diarize)
+    {
+        var provider = ResolveProvider();
+        if (diarize is null || optionsResolver is null || provider is not AzureOpenAiTranscriptionProvider azure)
+        {
+            return provider;
+        }
+
+        var deployment = optionsResolver.ResolveOpenAiDeployment(diarize)
+            ?? throw new InvalidOperationException(diarize.Value
+                ? "Azure OpenAI 目前設定的轉錄部署不會分講者，請改選不分講者或 Azure LLM Speech 重新轉錄。"
+                : "Azure OpenAI 沒有設定不分講者的轉錄部署（TranscriptionModelNoSpeakers），請改選分講者或 Azure LLM Speech 重新轉錄。");
+
+        return string.Equals(deployment, azure.ModelName, StringComparison.OrdinalIgnoreCase)
+            ? azure
+            : azure.WithOverrides(new TranscriptionOverrides(deployment, null, null));
     }
 
     /// <summary>

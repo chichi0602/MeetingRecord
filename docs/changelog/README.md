@@ -1,15 +1,16 @@
 ﻿# changelog — 變更紀錄
 
-- 文件版本：7.136
+- 文件版本：7.137
 - 文件狀態：維護中
-- 現行系統版本：1.1.73
+- 現行系統版本：1.1.74
 - 首次實作版本：0.4.23
-- 最後核對日期：2026/11/24
+- 最後核對日期：2026/11/27
 
 本目錄收納改版與變更紀錄。每篇對應一次功能或機制異動，標題含版本號；各篇是**歷史紀錄**，寫成後不隨程式改寫（文中提到的類別或頁面可能已經不存在），能力現況以 [prd/](../prd/README.md) 為準。
 
 | 變更（版本）| 文件 |
 |------|------|
+| 版號規則補充：修正回合也要 Patch +1、日期一起改成當天（寫進 CLAUDE.md，跟著 repo 走，別的開發者的 Claude 也會照做）；部署一定要覆蓋 `appsettings.json` 並重啟網站，「關於」才會顯示新版號（1.1.74）| [2026-11-27-版號修正回合也加一與部署覆蓋設定檔](2026-11-27-版號修正回合也加一與部署覆蓋設定檔.md) |
 | 影音轉文字稿可選 Azure LLM Speech 與分講者：上傳表單與重新轉錄視窗可選引擎（Azure OpenAI／Azure LLM Speech）、分講者與講者上限，會議記下引擎與轉錄耗時（migration `AddMeetingTranscriptionEngine`）；LLM Speech 一次送整檔（超過 2 小時在停頓處切段、講者標「講者 2-1」），片語清單帶專案名稱與名冊，逐字稿每 5 分鐘分段；Azure OpenAI 不分講者用新設定 `TranscriptionModelNoSpeakers`；新設定區段 `TranscriptionSettings`、單價 `azure-llm-speech`；轉錄比較頁也能選 LLM Speech（1.1.73）| [2026-11-24-影音轉文字稿可選LLMSpeech](2026-11-24-影音轉文字稿可選LLMSpeech.md) |
 | 轉錄比較工具：AI 管理新增「轉錄比較」頁（管理者），同一段片段（30 秒～5 分鐘）用最多 4 組部署／語言／提示詞各轉一次並排比較，附原音、字數、英文占比與費用，不碰會議本身；`AzureOpenAiTranscriptionProvider.WithOverrides`、功能別 `TranscriptionComparison = 10`。起因是 diarize 逐字稿被反映太精簡、夾英文，且 diarize 2027/02/26 下線（1.1.72）| [2026-11-20-轉錄比較工具](2026-11-20-轉錄比較工具.md) |
 | 講者試聽、會議紀錄保留舊版與瀏覽器錄音：轉錄時剪的講者聲音參考存成 `Meeting.SpeakerClips`，「標示講者」每位可播放；重新產生、編修、還原前把舊內容留到 `MeetingDraftVersion`（每場最多 20 份，`MeetingDraftVersionRecorder`），視窗多「版本紀錄」可預覽與還原；上傳視窗多「錄音」（MediaRecorder，錄好走原本的上傳與轉錄），FFmpeg 讀不到長度時改用解碼完的 `time=`（migration `AddMeetingDraftVersionsAndSpeakerClips`，1.1.71）| [2026-11-18-講者試聽保留舊版與瀏覽器錄音](2026-11-18-講者試聽保留舊版與瀏覽器錄音.md) |

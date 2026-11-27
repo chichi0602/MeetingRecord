@@ -66,6 +66,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 
 * 每次產生出一個建置內容後，appsettings.json 內的版本編號，都要把**最後一碼（Patch）加 1**（例：`0.4.0 → 0.4.1`，不進位、不分異動性質），並且在 commit message 中說明版本編號的變更。
+  * **修正回合也算**：使用者回報問題、修好之後，同樣要再 +1，不能等到 commit 才加一次（所以一個 commit 可能跨好幾號，commit message 寫區間 `版本號 a → b`）。
+  * **括號內日期一起改成當天**（`Major.Minor.Patch (YYYY/MM/DD)`，台北時間）。
+  * 每次回覆使用者前，先確認版號已 +1、日期是今天，並在回覆中說「版本號 x → y」。
 
 * 所有文件都要採用 UTF-8 繁體中文編碼，並且不能夠有亂碼存在（`docs/` 下 `.md` 須**含 BOM**，CI 以 `scripts/Test-DocsEncoding.ps1` 遞迴強制）
 
@@ -88,5 +91,5 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **角色＝能做什麼，團隊＝誰的資料，分類＝什麼資料**（0.4.102），三者不要混用。資料權限一律經 `ProjectAccessService`：每個專案有 1 個主責團隊（必填）＋0～多個協作團隊（`ProjectTeam.IsPrimary`），使用者所屬團隊（`UserTeam`）與主責＋協作有交集才看得到，**沒有公開專案**；非管理者的主責限自己的團隊、協作可選任何團隊（`ProjectAccess.ResolveProjectTeams`，寫入走 `ProjectTeamWriter`）；會議、待辦、附件、AI 問答跟著專案走；未歸屬專案的會議只有上傳者看得到；管理者看全部。分類只是標籤、不影響可見性。服務層一律套（1.1.24 起已沒有 Repository，API 也呼叫同一個服務），看不到的當成不存在。儀表板是刻意的例外（全公司彙總、不放明細）。
 - 頁面編輯前先複製一份再綁表單（`Clone()` 或另建表單模型）；服務層 Update/Delete 前以 `CleanTrackingHelper` 清除追蹤（一個 API 請求一個 `DbContext`）。
 - 新增頁面：頁面放 `Web.Client/Pages`（WASM）、資料走新的 API Controller（`[HasPermission]` 或 `[AdminOnly]`，並有未登入 401／無權限 403 的 L2 測試）；頁面權限採**宣告式**：`Menu.json`（每項唯一 `id`）＋ `SidebarMenuService.MenuPermissionMap`（`id→權限鍵`）＋ `MagicObjectHelper` 權限鍵常數；以 id 對應、重排 `Menu.json` 不錯位（舊「位置索引三處同步」已移除）。頁面按鈕用 `PermissionView`，擋下時呼叫 `PageAccessApi.RecordPageDeniedAsync`。
-- 單一版本來源 `SystemSettings.SystemInformation.SystemVersion`（每次異動一律 Patch +1，例：`0.4.0 → 0.4.1`；格式 `Major.Minor.Patch (YYYY/MM/DD)`）。
+- 單一版本來源 `SystemSettings.SystemInformation.SystemVersion`（每次異動一律 Patch +1，修正回合也算，例：`0.4.0 → 0.4.1`；格式 `Major.Minor.Patch (YYYY/MM/DD)`，日期一起改成當天）。部署時一定要覆蓋 `appsettings.json`，否則「關於」會停在舊版號。
 - `docs/*.md` 須 UTF-8 **含 BOM**（`scripts/Test-DocsEncoding.ps1` 遞迴檢查）。
